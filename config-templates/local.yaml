@@ -1,0 +1,13 @@
+# Local aiplane config template. Copy with:
+#   aiplane config init --template local
+#
+# The copied file lives at .aiplane/config.yaml by default and is ignored by git.
+# Use it for machine/user-specific settings. Do not put secrets here.
+
+# Optional editable profiles directory. If null, aiplane uses AIPLANE_PROFILES_DIR
+# when set, otherwise the repo-local profiles/ directory.
+profiles_dir: null
+
+# Reserved for future defaults. Current commands still default to local-dev unless
+# --profile is passed explicitly.
+default_profile: local-dev

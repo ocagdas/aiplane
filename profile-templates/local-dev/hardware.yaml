@@ -1,0 +1,250 @@
+active: local_auto
+selected:
+  origin: local_auto
+  custom: false
+  values:
+    machine_tag: local_auto
+    provider: local
+    placement: same_host
+    substrate: native
+    type: local
+    cpu: auto
+    cpu_architecture: auto
+    cpu_cores: auto
+    cpu_threads: auto
+    memory_gb: auto
+    gpu: auto
+    gpu_vendor: auto
+    gpu_model: auto
+    gpu_count: auto
+    vram_gb: auto
+    total_vram_gb: auto
+    memory_architecture: discrete_or_system
+    notes: Discover this machine automatically
+machine_schema:
+  machine_tag: human-readable stock or custom machine label
+  provider: local, onprem, azure, aws, gcp, other
+  stock_sku: vendor SKU or instance type, such as Standard_NC40ads_H100_v5 or RTX_4090_workstation
+  placement: same_host, workstation, vm, container, kubernetes, managed_api
+  substrate: native, venv, conda, docker, compose, kubernetes, vm
+  cpu_architecture: x86_64, arm64, or auto
+  cpu_cores: physical or allocated CPU cores
+  cpu_threads: hardware or allocated CPU threads
+  memory_gb: system RAM available to the runtime
+  memory_bandwidth_gbps: optional memory bandwidth when known
+  gpu_vendor: nvidia, amd, apple, intel, none, or mixed
+  gpu_model: GPU model name or auto
+  gpu_count: visible or allocated GPU count
+  gpu_indices: optional list of physical GPU indices to use
+  vram_gb: per-runtime usable discrete GPU VRAM; use max single GPU unless model parallelism is configured
+  total_vram_gb: total visible VRAM across GPUs
+  unified_memory_gb: unified CPU/GPU memory pool when applicable
+  accelerator_apis: cuda, rocm, metal, vulkan, openvino, cpu
+  os: linux, windows, macos, or auto
+  notes: free-form operator notes
+hardware_profiles:
+  local_auto:
+    machine_tag: local_auto
+    provider: local
+    placement: same_host
+    substrate: native
+    type: local
+    cpu: auto
+    cpu_architecture: auto
+    cpu_cores: auto
+    cpu_threads: auto
+    memory_gb: auto
+    gpu: auto
+    gpu_vendor: auto
+    gpu_model: auto
+    gpu_count: auto
+    vram_gb: auto
+    total_vram_gb: auto
+    memory_architecture: discrete_or_system
+    configurable_options:
+      cpu: auto or explicit core count
+      memory_gb: auto or explicit system RAM
+      gpu: auto, none, discrete, integrated
+      vram_gb: auto or explicit VRAM
+    notes: Discover this machine automatically
+  cpu_laptop:
+    machine_tag: cpu_laptop
+    provider: local
+    placement: same_host
+    substrate: native
+    type: local
+    cpu: auto
+    cpu_architecture: auto
+    cpu_cores: auto
+    cpu_threads: auto
+    memory_gb: 8-32
+    gpu: none
+    gpu_vendor: none
+    gpu_model: none
+    gpu_count: 0
+    vram_gb: 0
+    total_vram_gb: 0
+    memory_architecture: system
+    configurable_options:
+      cpu: auto or explicit core count
+      memory_gb: 8-32 or actual RAM
+    notes: CPU-only laptop or small desktop for tiny local models and cloud endpoints
+  nvidia_consumer_gpu:
+    machine_tag: nvidia_consumer_gpu
+    provider: local_or_onprem
+    placement: workstation
+    substrate: native
+    type: local_or_shared_workstation
+    vendor: nvidia
+    gpu: discrete
+    gpu_vendor: nvidia
+    gpu_model: RTX-class
+    gpu_count: 1
+    vram_gb: 8-24
+    total_vram_gb: 8-24
+    memory_architecture: discrete
+    configurable_options:
+      vram_gb: 8-24 or actual VRAM
+      gpu_index: optional physical GPU index
+      memory_gb: optional system RAM
+    notes: RTX-class local GPU workstation for small/medium local models
+  nvidia_workstation_gpu:
+    machine_tag: nvidia_workstation_gpu
+    provider: local_or_onprem
+    placement: workstation
+    substrate: native
+    stock_sku: nvidia_workstation_or_datacenter
+    type: local_or_shared_workstation
+    vendor: nvidia
+    gpu: discrete
+    gpu_vendor: nvidia
+    gpu_model: RTX Ada/A-series/H-series
+    gpu_count: 1
+    vram_gb: 24-80
+    total_vram_gb: 24-80
+    memory_architecture: discrete
+    accelerator_apis: [cuda]
+    configurable_options:
+      vram_gb: 24-80 or actual VRAM
+      total_vram_gb: actual total visible VRAM when multiple GPUs are available
+      gpu_count: visible or allocated GPU count
+      gpu_indices: optional physical GPU indices
+      memory_gb: optional system RAM
+    notes: Workstation/datacenter NVIDIA GPU for larger local models
+  nvidia_dgx_spark_style:
+    machine_tag: nvidia_dgx_spark_style
+    provider: local_or_onprem
+    placement: workstation
+    substrate: native
+    stock_sku: nvidia_unified_memory_workstation
+    type: local_or_shared_workstation
+    vendor: nvidia
+    gpu: integrated_or_workstation
+    gpu_vendor: nvidia
+    gpu_model: unified-memory NVIDIA AI workstation
+    gpu_count: 1
+    vram_gb: auto
+    unified_memory_gb: auto
+    memory_architecture: unified
+    accelerator_apis: [cuda]
+    configurable_options:
+      unified_memory_gb: auto or actual unified memory
+      memory_gb: actual system/unified memory
+      gpu_index: optional physical GPU index
+    notes: DGX Spark-style unified-memory AI workstation; configure actual memory
+  amd_consumer_gpu:
+    machine_tag: amd_consumer_gpu
+    provider: local_or_onprem
+    placement: workstation
+    substrate: native
+    stock_sku: amd_radeon_workstation
+    type: local_or_shared_workstation
+    vendor: amd
+    gpu: discrete
+    gpu_vendor: amd
+    gpu_model: Radeon-class
+    gpu_count: 1
+    vram_gb: 8-24
+    total_vram_gb: 8-24
+    memory_architecture: discrete
+    accelerator_apis: [rocm, vulkan]
+    configurable_options:
+      vram_gb: 8-24 or actual VRAM
+      gpu_index: optional physical GPU index
+      runtime: rocm or vulkan where supported
+    notes: Radeon-class local GPU workstation where ROCm/runtime support is available
+  amd_ryzen_ai_max_halo_style:
+    machine_tag: amd_ryzen_ai_max_halo_style
+    provider: local_or_onprem
+    placement: workstation
+    substrate: native
+    stock_sku: amd_ryzen_ai_max_unified_memory
+    type: local_or_shared_workstation
+    vendor: amd
+    gpu: integrated
+    gpu_vendor: amd
+    gpu_model: Ryzen AI Max/Halo-class integrated GPU
+    gpu_count: 1
+    vram_gb: auto
+    unified_memory_gb: auto
+    memory_architecture: unified
+    accelerator_apis: [rocm, vulkan]
+    configurable_options:
+      unified_memory_gb: auto or actual unified memory
+      allocated_vram_gb: firmware or OS configured allocation where applicable
+      memory_gb: actual system/unified memory
+    notes: Ryzen AI Max/Halo-style unified-memory workstation; configure actual memory
+  cloud_gpu_vm:
+    machine_tag: cloud_gpu_vm
+    provider: azure/aws/gcp/onprem
+    placement: vm
+    substrate: vm
+    stock_sku: provider_defined
+    type: cloud_or_shared_workstation
+    vendor: mixed
+    gpu: discrete
+    gpu_vendor: mixed
+    gpu_model: provider_defined
+    gpu_count: provider_defined
+    vram_gb: provider_defined
+    total_vram_gb: provider_defined
+    memory_architecture: discrete
+    configurable_options:
+      provider: azure, aws, gcp, onprem
+      instance_type: provider VM shape
+      endpoint: model server endpoint
+    notes: Azure/AWS/GCP GPU VM or shared workstation endpoint
+  aks_gpu_pool:
+    machine_tag: aks_gpu_pool
+    provider: azure
+    placement: kubernetes
+    substrate: kubernetes
+    stock_sku: node_pool_defined
+    type: cloud_pool
+    vendor: mixed
+    gpu: discrete
+    gpu_vendor: mixed
+    gpu_model: node_pool_defined
+    gpu_count: node_pool_defined
+    vram_gb: node_pool_defined
+    total_vram_gb: node_pool_defined
+    memory_architecture: discrete
+    configurable_options:
+      node_pool: AKS node pool name
+      gpu_sku: Azure GPU VM SKU
+      min_nodes: autoscale minimum
+      max_nodes: autoscale maximum
+    notes: Kubernetes GPU node pool for shared inference services
+self_managed_machines:
+stacks:
+resource_controls:
+  docker:
+    cpus: null
+    memory: null
+    gpus: none
+    devices: []
+  model_server:
+    bind_host: 127.0.0.1
+    port: 11434
+    max_loaded_models: 1
+    per_user_keys: false

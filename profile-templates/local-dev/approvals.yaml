@@ -1,0 +1,2 @@
+risk_based: true
+always_require: [write_file, run_tests, build, lint, docker_exec, git_commit]

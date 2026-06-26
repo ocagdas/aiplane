@@ -1,0 +1,30 @@
+huggingface:
+  description: Hugging Face Hub model repositories with tokenizer, config, and weights
+  typical_runtimes: [transformers, vllm, tgi]
+  online_adapter: huggingface
+  enabled: true
+  origin: default
+huggingface_gguf:
+  description: Hugging Face GGUF repositories commonly served by llama.cpp-style runtimes
+  typical_runtimes: [llamacpp, lmstudio, localai]
+  online_adapter: huggingface_gguf
+  enabled: true
+  origin: default
+local_file:
+  description: User-maintained local/manual model source entries
+  typical_runtimes: [llamacpp, transformers]
+  online_adapter: profile_catalog
+  enabled: false
+  origin: default
+ollama:
+  description: Ollama model library and local pull store
+  typical_runtimes: [ollama]
+  online_adapter: ollama
+  enabled: true
+  origin: default
+piper_voices:
+  description: Piper text-to-speech voice model catalog
+  typical_runtimes: [piper]
+  online_adapter: piper_voices
+  enabled: true
+  origin: default

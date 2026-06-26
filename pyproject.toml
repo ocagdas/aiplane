@@ -1,0 +1,13 @@
+[project]
+name = "aiplane"
+version = "0.1.0"
+description = "Local-first hybrid AI model control plane MVP"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+aiplane = "aiplane.cli:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

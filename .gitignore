@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+.env/
+
+
+# User-created editable profiles. Shipped defaults live in profile-templates/.
+profiles/*
+!profiles/local-dev/
+!profiles/local-dev/*.yaml
+
+# Runtime state
+.agentctl/
+*.log
+*.pid
+
+# Local aiplane machine/user state
+.aiplane/
+
+# Provider/local secrets
+.env.providers
+.env.providers.local
+.env.providers.example
+
+# Editor files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db

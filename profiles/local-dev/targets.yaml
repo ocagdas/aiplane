@@ -1,0 +1,87 @@
+default: aks_gpu_pool
+targets:
+  aks_gpu_pool:
+    type: azure_aks
+    control_cli: az
+    subscription: null
+    resource_group: rg-ai-coding
+    cluster: ai-coding-aks
+    region: uksouth
+    namespace: aiplane-models
+    node_pool: gpu
+    runtime: ollama
+    provider: ollama
+    model_profile: local-dev
+    image: ollama/ollama:latest
+    service_name: ollama
+    service_port: 11434
+    gpu:
+      vendor: nvidia
+      request: 1
+    auth:
+      mode: required
+      secret_name: aiplane-model-endpoint
+    notes: Azure AKS target managed through az first, then kubectl/helm for cluster workloads
+  azure_gpu_vm:
+    type: azure_vm
+    control_cli: az
+    subscription: null
+    resource_group: rg-ai-coding
+    region: uksouth
+    name: ai-coding-gpu-vm
+    image: Ubuntu2204
+    size: Standard_NC24ads_A100_v4
+    admin_user: azureuser
+    ssh_key: ~/.ssh/id_rsa.pub
+    runtime: docker
+    provider: vllm
+    model_profile: local-dev
+    network:
+      public_ip: false
+      open_ports: [22]
+    access:
+      mode: ssh_tunnel
+      endpoint: http://localhost:8000/v1
+      auth: ssh
+    resource_classes:
+      inference_small:
+        purpose: LLM inference and agent coding with 7B-14B models
+        example_sizes: [Standard_NC4as_T4_v3, Standard_NVadsA10_v5]
+        gpu: nvidia
+        notes: lower-cost endpoint for simple coding and smoke benchmarks
+      inference_large:
+        purpose: LLM inference with 30B-70B models
+        example_sizes: [Standard_NC24ads_A100_v4, Standard_ND96asr_v4]
+        gpu: nvidia
+        notes: high VRAM throughput-oriented serving target
+      training_finetune:
+        purpose: fine-tuning, training, and heavier experiment jobs
+        example_sizes: [Standard_NC24ads_A100_v4, Standard_ND96asr_v4, Standard_ND96amsr_A100_v4]
+        gpu: nvidia
+        notes: validate quota, region capacity, storage, and job isolation before use
+      cpu_compile:
+        purpose: compilation, builds, package creation, and repository indexing jobs
+        example_sizes: [Standard_D16s_v5, Standard_F32s_v2, Standard_D32ads_v5]
+        gpu: none
+        notes: CPU-heavy helper VM class, not a model-serving GPU target
+      memory_indexing:
+        purpose: embeddings preprocessing, vector indexing, and memory-heavy analysis
+        example_sizes: [Standard_E32s_v5, Standard_E64s_v5]
+        gpu: optional
+        notes: choose when RAM matters more than accelerator throughput
+    notes: Azure GPU VM target managed through az; validate SKU availability and quota in the selected region
+  gpu_workstation_ssh:
+    type: ssh_tunnel
+    ssh:
+      host: gpu-workstation.example.com
+      user: null
+      port: 22
+    forward:
+      local_host: 127.0.0.1
+      local_port: 11434
+      remote_host: 127.0.0.1
+      remote_port: 11434
+    endpoint: http://localhost:11434/v1
+    auth:
+      mode: ssh
+    notes: Local SSH tunnel to a remote model server; replace host/user before use

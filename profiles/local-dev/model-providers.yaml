@@ -1,0 +1,25 @@
+ollama:
+  description: Ollama model library and local pull store
+  typical_runtimes: [ollama]
+  enabled: true
+  origin: default
+huggingface:
+  description: Hugging Face Hub model repos with tokenizer/config/weights
+  typical_runtimes: [vllm, tgi, transformers]
+  enabled: true
+  origin: default
+huggingface_gguf:
+  description: GGUF model files hosted on Hugging Face or another file store
+  typical_runtimes: [llamacpp, localai, ollama]
+  enabled: true
+  origin: default
+local_file:
+  description: Local model path, usually GGUF, ONNX, checkpoint, or runtime-specific files
+  typical_runtimes: [llamacpp, localai, faster_whisper, piper, diffusers, comfyui]
+  enabled: true
+  origin: default
+piper_voices:
+  description: Piper ONNX voice model files and metadata
+  typical_runtimes: [piper]
+  enabled: true
+  origin: default
