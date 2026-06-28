@@ -47,7 +47,7 @@ Important fields inside each selected row:
 | --- | --- |
 | `name` | The `aiplane` model alias from the profile catalog. |
 | `model` | Provider/runtime-native model id, such as `qwen2.5-coder:7b` or `Qwen/Qwen2.5-Coder-32B-Instruct`. |
-| `provider` | The configured provider/runtime target recorded on the model alias. |
+| `provider` | The configured model source/catalog recorded on the model alias. Some systems, such as Ollama, are both a source and a runtime. |
 | `runtime` | Runtime selected for serving, such as `ollama`, `vllm`, or `llamacpp`. |
 | `endpoint` | Base URL the IDE/tool should call. Override with `--endpoint` for SSH tunnels, LAN endpoints, or gateways. |
 | `supported_runtimes` | Runtimes that can plausibly serve the model. |

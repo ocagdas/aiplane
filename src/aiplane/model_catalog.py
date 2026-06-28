@@ -409,6 +409,47 @@ class ModelCatalog:
         }
 
 
+    def promote_generated(self, name: str, new_name: str | None = None, write: bool = False, keep_generated: bool = False) -> dict[str, Any]:
+        from .config import dump_yaml
+
+        if not name or "/" in name or "\\" in name:
+            raise ValueError("model alias must be a simple name")
+        target = new_name or name
+        if not target or "/" in target or "\\" in target:
+            raise ValueError("target model alias must be a simple name")
+        curated_models = _dict_of_dicts(self.config.get("models", {}))
+        generated_models = _dict_of_dicts(self.generated_config.get("models", {}))
+        if name not in generated_models:
+            raise ValueError(f"generated model not found: {name}")
+        if target in curated_models and target != name:
+            raise ValueError(f"curated model already exists: {target}")
+        promoted = dict(generated_models[name])
+        promoted.pop("imported_by", None)
+        promoted["promoted_from"] = name
+        promoted["curated"] = True
+        if write:
+            curated_models[target] = promoted
+            self.config["models"] = curated_models
+            curated_path = self.profile.root / "models.yaml"
+            curated_path.write_text(dump_yaml(self.config), encoding="utf-8")
+            if not keep_generated:
+                generated_models.pop(name, None)
+                self.generated_config["models"] = generated_models
+                self._write_generated_config()
+        return {
+            "name": "model_catalog_promote",
+            "source": name,
+            "target": target,
+            "write": write,
+            "keep_generated": keep_generated,
+            "promoted": 1 if write else 0,
+            "would_promote": 0 if write else 1,
+            "removed_generated": bool(write and not keep_generated),
+            "path": str(self.profile.root / "models.yaml"),
+            "generated_path": str(self._generated_path()),
+            "model": promoted,
+        }
+
     def clear_imported(self, provider_name: str | None = None, write: bool = False, include_curated: bool = False) -> dict[str, Any]:
         from .config import dump_yaml
 
@@ -1005,7 +1046,7 @@ def _unique_model_alias(models: dict[str, Any], provider_name: str, model_id: st
 
 def _discovered_model_entry(provider_name: str, model_id: str, enable: bool = False, source_metadata: dict[str, Any] | None = None) -> dict[str, Any]:
     params = _parameter_billions(model_id.lower())
-    roles = _roles_for_model_id(model_id)
+    roles = _roles_for_discovered_model(provider_name, model_id, source_metadata or {})
     min_ram, recommended_ram, min_vram, recommended_vram = _resource_guess(params, roles)
     entry: dict[str, Any] = {
         "provider": _preferred_runtime_for_source(provider_name),
@@ -1091,6 +1132,28 @@ def _preferred_runtime_for_source(provider_name: str) -> str:
     if provider_name == "modelscope":
         return "transformers"
     return provider_name
+
+
+def _roles_for_discovered_model(provider_name: str, model_id: str, source_metadata: dict[str, Any]) -> list[str]:
+    pipeline = str(source_metadata.get("pipeline_tag") or "").lower().strip()
+    tags = {str(tag).lower() for tag in source_metadata.get("tags", []) if tag} if isinstance(source_metadata.get("tags"), list) else set()
+    if pipeline in {"feature-extraction", "sentence-similarity"} or "sentence-transformers" in tags:
+        return ["embedding"]
+    if pipeline in {"automatic-speech-recognition", "audio-to-text"}:
+        return ["speech_to_text"]
+    if pipeline in {"text-to-speech"}:
+        return ["text_to_speech"]
+    if pipeline in {"text-to-image", "image-to-image", "image-to-video", "unconditional-image-generation"}:
+        return ["image_generation"]
+    if pipeline in {"image-classification", "object-detection", "image-segmentation", "zero-shot-image-classification"}:
+        return ["image_classification"]
+    if pipeline in {"visual-question-answering", "image-to-text"}:
+        return ["analysis", "vision"]
+    if pipeline in {"text-generation", "text2text-generation", "conversational"}:
+        return _roles_for_model_id(model_id)
+    if provider_name == "huggingface" and pipeline and not pipeline.startswith("text"):
+        return [pipeline.replace("-", "_")]
+    return _roles_for_model_id(model_id)
 
 
 def _roles_for_model_id(model_id: str) -> list[str]:

@@ -263,7 +263,7 @@ Practical tips:
 ```bash
 aiplane profiles validate
 aiplane tools doctor
-aiplane environment doctor
+aiplane environment doctor --format text
 aiplane runtimes prerequisites all
 aiplane runtimes doctor
 aiplane models doctor

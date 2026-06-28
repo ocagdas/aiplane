@@ -33,16 +33,11 @@ connectable.
 
 ## Core Terms
 
-- **Provider**: a runtime or API that can supply models, such as local Ollama,
-  Ollama Cloud, OpenAI, Anthropic, or Azure OpenAI. A provider knows how models
-  are discovered, authenticated, and called.
-- **Model**: a specific model identifier exposed by a provider, such as
-  `qwen2.5-coder:0.5b` on Ollama or an approved cloud model/deployment.
-- **Profile**: a YAML configuration set for one workflow or target machine. It
-  chooses environment, provider, model, hardware, tools, approvals, and repo
-  policy.
-- **Doctor**: a readiness check. It explains whether a provider/model/profile is
-  usable now by checking services, local models, API keys, and config.
+- **Provider / model source / catalog**: where model identifiers, weights, or deployments come from, such as the Ollama library, Hugging Face Hub, GGUF files, OpenAI, Anthropic, or Azure OpenAI.
+- **Runtime**: software that loads model weights or exposes a model endpoint, such as Ollama, vLLM, TGI, llama.cpp server, LocalAI, Transformers, or LM Studio. Some systems, such as Ollama, are both a source and a runtime.
+- **Model**: a profile-approved alias that maps to a source-native model id or deployment, hardware requirements, task capability scores, and supported runtimes.
+- **Profile**: a YAML configuration set for one workflow or target machine. It chooses environment, providers/sources, models, hardware, tools, approvals, and repo policy.
+- **Doctor**: a readiness check. It explains whether profiles, tools, provider credentials, runtime endpoints, local models, or config look usable now.
 
 ## Installation and Local Setup
 

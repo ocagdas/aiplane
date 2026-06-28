@@ -1,9 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "aiplane"
 version = "0.1.0"
-description = "Local-first hybrid AI model control plane MVP"
+description = "AI control plane for local and self-managed LLM environments"
+readme = "README.md"
+license = { file = "LICENSE" }
 requires-python = ">=3.11"
 dependencies = []
+keywords = ["llm", "ai", "models", "runtimes", "ollama", "vllm", "mcp"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Software Development :: Build Tools",
+]
 
 [project.scripts]
 aiplane = "aiplane.cli:main"
@@ -11,3 +29,6 @@ aiplane = "aiplane.cli:main"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+
+[tool.setuptools.packages.find]
+where = ["src"]

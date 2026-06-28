@@ -112,3 +112,7 @@ Planned next phases:
 3. Keep deployment apply blocked until cloud cost/risk controls are explicit.
 
 The adapter must not bypass `aiplane` policy. Write-capable tools should call the same internal managers used by the CLI.
+
+## Write Tools
+
+Mutating MCP calls are audited through the same local JSONL audit log used by CLI tool execution. Successful write calls record `allowed`; failed write calls record `failed` with the error reason.

@@ -4,6 +4,7 @@ import json
 import sys
 from typing import Any
 
+from .audit import AuditLogger
 from .config import list_profiles, load_profile, resolve_profile_name
 from .hardware import HardwareManager
 from .integrations import IntegrationManager
@@ -12,6 +13,7 @@ from .runtime_catalog import RuntimeCatalog
 from .output import json_dumps
 from .providers import ProviderRegistry
 from .remote import RemoteManager
+from .models import AuditEvent, Profile
 
 
 READ_ONLY_TOOLS: list[dict[str, Any]] = [
@@ -109,6 +111,9 @@ WRITE_TOOLS: list[dict[str, Any]] = [
         "mutates": False,
     },
 ]
+
+
+MUTATING_TOOL_NAMES = {str(tool["name"]) for tool in WRITE_TOOLS if tool.get("mutates")}
 
 
 TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
@@ -345,6 +350,18 @@ class AiplaneMcpServer:
         profile_name = resolve_profile_name(str(arguments.get("profile") or self.default_profile or "") or None, profiles_dir=self.profiles_dir)
         profile = load_profile(profile_name, self.workspace, profiles_dir=self.profiles_dir)
 
+        mutates = name in MUTATING_TOOL_NAMES
+        try:
+            result = self._call_profile_tool(name, arguments, profile)
+        except Exception as exc:
+            if mutates:
+                self._audit(profile, name, "failed", {"arguments": arguments, "error": str(exc)})
+            raise
+        if mutates:
+            self._audit(profile, name, "allowed", {"arguments": arguments})
+        return result
+
+    def _call_profile_tool(self, name: str, arguments: dict[str, Any], profile: Profile) -> Any:
         if name == "aiplane.providers.list":
             return ProviderRegistry(profile).list()
         if name == "aiplane.providers.models":
@@ -415,6 +432,9 @@ class AiplaneMcpServer:
             return RemoteManager(profile).tunnel_stop(str(arguments.get("target") or ""), yes=True)
 
         raise ValueError(f"unknown MCP tool: {name}")
+
+    def _audit(self, profile: Profile, name: str, decision: str, details: dict[str, Any]) -> None:
+        AuditLogger(profile).record(AuditEvent("mcp", profile.name, name, decision, details))
 
     def _initialize_result(self) -> dict[str, Any]:
         return {

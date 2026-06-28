@@ -83,7 +83,7 @@ def _main(argv: list[str] | None = None) -> int:
             "  aiplane models benchmark qwen-tiny --dry-run\n"
             "  aiplane integrations export continue --model qwen-tiny\n"
             "  aiplane mcp serve\n\n"
-            "Docs: docs/index.md"
+            "Docs: docs/user/index.md"
         ),
         formatter_class=HelpFormatter,
     )
@@ -362,6 +362,7 @@ def _main(argv: list[str] | None = None) -> int:
     env_doctor = env_sub.add_parser("doctor", help="Check environment and prerequisite tool readiness", description="Check the active aiplane execution environment plus external CLIs/frameworks used by runtime, cloud, benchmark, container, Kubernetes, and SSH workflows.", formatter_class=HelpFormatter)
     _profile_arg(env_doctor)
     env_doctor.add_argument("--required-only", action="store_true", help="Only check a minimal required set instead of optional benchmark/cloud tools")
+    env_doctor.add_argument("--format", choices=["text", "json"], default="text", help="Output format. Text is the default human-readable aligned table; use json for scripts.")
 
     benchmarks_cmd = _command(
         subparsers,
@@ -455,6 +456,18 @@ def _main(argv: list[str] | None = None) -> int:
     models_clear_cache.add_argument("--provider", help="Only clear aliases from this model provider, such as huggingface or huggingface_gguf")
     models_clear_cache.add_argument("--include-curated", action="store_true", help="Also remove hand-curated/template aliases from models.yaml. By default only generated or refresh-imported aliases are removed.")
     models_clear_cache.add_argument("--dry-run", action="store_true", help="Show alias counts that would be removed without writing models.yaml")
+    models_promote = models_sub.add_parser(
+        "promote",
+        help="Promote a generated model alias into curated models.yaml",
+        description="Copy a reviewed generated/imported alias from models.generated.yaml into curated models.yaml. By default the generated copy is removed after promotion so the curated alias becomes the authoritative profile entry.",
+        formatter_class=HelpFormatter,
+        epilog="Examples:\n  aiplane models promote huggingface-qwen-qwen2-5-coder-7b --dry-run\n  aiplane models promote huggingface-qwen-qwen2-5-coder-7b --as qwen-coder-reviewed",
+    )
+    _profile_arg(models_promote)
+    models_promote.add_argument("name", help="Generated model alias from models.generated.yaml")
+    models_promote.add_argument("--as", dest="new_name", help="Promote under a cleaner curated alias instead of reusing the generated alias")
+    models_promote.add_argument("--keep-generated", action="store_true", help="Keep the generated alias after writing the curated copy")
+    models_promote.add_argument("--dry-run", action="store_true", help="Preview the promotion without editing files")
     models_test = models_sub.add_parser("test", help="Run a small prompt against one model", description="Send a simple analysis/completion/write prompt to a model, or preview the prompt with --dry-run.", formatter_class=HelpFormatter, epilog="Examples:\n  aiplane models test --dry-run qwen-tiny\n  aiplane models test --task analysis --target src/aiplane/model_catalog.py qwen-tiny")
     _profile_arg(models_test)
     models_test.add_argument("--task", choices=["analysis", "completion", "write"], default="analysis", help="Smoke prompt type to run")
@@ -1015,7 +1028,11 @@ def _main(argv: list[str] | None = None) -> int:
             print(_json(manager.use(args.mode), indent=2, sort_keys=True))
             return 0
         if args.environment_command == "doctor":
-            print(_json(ToolchainManager(profile).environment_doctor(include_optional=not args.required_only), indent=2))
+            payload = ToolchainManager(profile).environment_doctor(include_optional=not args.required_only)
+            if args.format == "text":
+                print(_environment_doctor_text(payload))
+            else:
+                print(_json(payload, indent=2))
             return 0
         if args.environment_command == "plan":
             command = args.env_command_args
@@ -1024,7 +1041,7 @@ def _main(argv: list[str] | None = None) -> int:
             if not command:
                 raise ValueError("environment plan requires a command after plan")
             plan = manager.plan(command)
-            print(_json({"mode": plan.mode, "command": plan.command, "cwd": str(plan.cwd), "description": plan.description, "notes": plan.notes}, indent=2))
+            print(_json({"mode": plan.mode, "command": plan.command, "cwd": str(plan.cwd), "description": plan.description}, indent=2))
             return 0
 
     if args.command == "models":
@@ -1090,6 +1107,9 @@ def _main(argv: list[str] | None = None) -> int:
             return 0
         if args.models_command == "clear-cache":
             print(_json(catalog.clear_imported(provider_name=args.provider, write=not args.dry_run, include_curated=args.include_curated), indent=2))
+            return 0
+        if args.models_command == "promote":
+            print(_json(catalog.promote_generated(args.name, new_name=args.new_name, write=not args.dry_run, keep_generated=args.keep_generated), indent=2))
             return 0
         if args.models_command == "benchmark":
             model_name = args.model_name or args.name
@@ -1460,6 +1480,65 @@ def _validate_profile(profile) -> dict[str, object]:
     checks.append({"name": "target:default", "ok": bool(default_target in targets), "detail": default_target})
 
     return {"name": profile.name, "ok": all(bool(check["ok"]) for check in checks if not check.get("warning")), "checks": checks}
+
+
+def _environment_doctor_text(payload: dict[str, object]) -> str:
+    summary = payload.get("summary", {}) if isinstance(payload.get("summary"), dict) else {}
+    rows: list[dict[str, str]] = []
+    for section in ["installed", "missing_installable_by_aiplane", "missing_manual_or_platform_specific"]:
+        values = payload.get(section, [])
+        for item in values if isinstance(values, list) else []:
+            if not isinstance(item, dict):
+                continue
+            needed_for = item.get("needed_for", [])
+            why = ", ".join(str(value) for value in needed_for[:2]) if isinstance(needed_for, list) else str(needed_for or "")
+            rows.append({
+                "name": str(item.get("name") or ""),
+                "kind": "tool",
+                "status": "installed" if item.get("installed") else "missing",
+                "required": str(item.get("requirement") or "optional"),
+                "why": why or str(item.get("description") or ""),
+            })
+    values = payload.get("runtime_prerequisites", [])
+    for item in values if isinstance(values, list) else []:
+        if not isinstance(item, dict):
+            continue
+        purpose = item.get("purpose", [])
+        why = ", ".join(str(value) for value in purpose[:2]) if isinstance(purpose, list) else str(purpose or "")
+        missing_required = item.get("missing_required", [])
+        missing_count = len(missing_required) if isinstance(missing_required, list) else 0
+        rows.append({
+            "name": str(item.get("runtime") or ""),
+            "kind": "runtime",
+            "status": "ready" if item.get("ok") else f"missing {missing_count}",
+            "required": "optional",
+            "why": why,
+        })
+    headers = {"name": "NAME", "kind": "TYPE", "status": "STATUS", "required": "REQUIRED", "why": "WHY"}
+    keys = ["name", "kind", "status", "required", "why"]
+    widths = {key: len(value) for key, value in headers.items()}
+    for row in rows:
+        for key in keys:
+            limit = 52 if key == "why" else 24
+            widths[key] = min(max(widths[key], len(row.get(key, ""))), limit)
+
+    def clipped(value: str, width: int) -> str:
+        return value if len(value) <= width else value[: max(0, width - 3)] + "..."
+
+    lines = [
+        f"environment doctor for profile {payload.get('profile', 'unknown')}",
+        f"tools: {summary.get('tools_installed', 0)}/{summary.get('tools_checked', 0)} installed; runtime prerequisites missing: {summary.get('runtime_prerequisites_missing', 0)}",
+        "",
+        "  ".join(headers[key].ljust(widths[key]) for key in keys),
+    ]
+    for row in rows:
+        lines.append("  ".join(clipped(row[key], widths[key]).ljust(widths[key]) for key in keys))
+    notes = payload.get("notes", [])
+    if isinstance(notes, list) and notes:
+        lines.append("")
+        lines.append("next steps:")
+        lines.extend(f"- {note}" for note in notes[:3])
+    return "\n".join(lines)
 
 
 def _dict_value(value: object) -> dict:

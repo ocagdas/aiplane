@@ -117,6 +117,9 @@ class ToolExecutor:
         self.audit.record(AuditEvent("tool", self.profile.name, action, decision, details))
 
 
+CORE_TOOLCHAIN = ["docker", "openssh-client"]
+
+
 TOOLCHAIN: dict[str, dict[str, object]] = {
     "azure-cli": {
         "command": "az",
@@ -152,6 +155,56 @@ TOOLCHAIN: dict[str, dict[str, object]] = {
             "debian": ["follow https://developer.hashicorp.com/terraform/install for the current signed apt repository setup"],
             "fedora": ["sudo dnf install -y terraform"],
             "macos": ["brew tap hashicorp/tap", "brew install hashicorp/tap/terraform"],
+        },
+    },
+    "pulumi": {
+        "command": "pulumi",
+        "description": "Pulumi for provider-agnostic infrastructure as code using general-purpose languages.",
+        "category": "iac",
+        "needed_for": ["multi-cloud infrastructure plans", "teams preferring Python/TypeScript/Go IaC", "future cloud resource workflows"],
+        "install": {
+            "ubuntu": ["curl -fsSL https://get.pulumi.com | sh"],
+            "debian": ["curl -fsSL https://get.pulumi.com | sh"],
+            "fedora": ["curl -fsSL https://get.pulumi.com | sh"],
+            "linux": ["curl -fsSL https://get.pulumi.com | sh"],
+            "macos": ["brew install pulumi"],
+        },
+    },
+    "vagrant": {
+        "command": "vagrant",
+        "description": "Vagrant for repeatable local VM development and test environments.",
+        "category": "vm",
+        "needed_for": ["local VM workflows", "provider-backed dev boxes", "future Vagrantfile exports"],
+        "install": {
+            "ubuntu": ["follow https://developer.hashicorp.com/vagrant/install for the current signed apt repository setup"],
+            "debian": ["follow https://developer.hashicorp.com/vagrant/install for the current signed apt repository setup"],
+            "fedora": ["follow https://developer.hashicorp.com/vagrant/install for the current rpm repository setup"],
+            "macos": ["brew tap hashicorp/tap", "brew install hashicorp/tap/hashicorp-vagrant"],
+        },
+    },
+    "packer": {
+        "command": "packer",
+        "description": "Packer for building reusable VM or cloud machine images before provisioning.",
+        "category": "image-build",
+        "needed_for": ["golden VM images", "cloud image pipelines", "future Packer template exports"],
+        "install": {
+            "ubuntu": ["follow https://developer.hashicorp.com/packer/install for the current signed apt repository setup"],
+            "debian": ["follow https://developer.hashicorp.com/packer/install for the current signed apt repository setup"],
+            "fedora": ["follow https://developer.hashicorp.com/packer/install for the current rpm repository setup"],
+            "macos": ["brew tap hashicorp/tap", "brew install hashicorp/tap/packer"],
+        },
+    },
+    "devcontainer-cli": {
+        "command": "devcontainer",
+        "description": "Dev Container CLI for reproducible containerized development environments.",
+        "category": "container",
+        "needed_for": ["devcontainer exports", "containerized development shells", "local dependency setup in containers"],
+        "install": {
+            "ubuntu": ["npm install -g @devcontainers/cli"],
+            "debian": ["npm install -g @devcontainers/cli"],
+            "fedora": ["npm install -g @devcontainers/cli"],
+            "linux": ["npm install -g @devcontainers/cli"],
+            "macos": ["npm install -g @devcontainers/cli"],
         },
     },
     "docker": {
@@ -280,7 +333,7 @@ class ToolchainManager:
         return self._tool_row(name)
 
     def environment_doctor(self, include_optional: bool = True) -> dict[str, object]:
-        rows = self.list() if include_optional else [self._tool_row(name) for name in ["docker", "openssh-client"]]
+        rows = self.list() if include_optional else [self._tool_row(name) for name in CORE_TOOLCHAIN]
         runtime_rows = _runtime_prerequisite_rows(self.profile, include_optional=include_optional)
         installable_missing = [row for row in rows if not row["installed"] and row.get("install_mode") == "automated"]
         manual_missing = [row for row in rows if not row["installed"] and row.get("install_mode") != "automated"]
@@ -385,6 +438,7 @@ class ToolchainManager:
             "category": spec.get("category"),
             "description": spec.get("description"),
             "needed_for": spec.get("needed_for", []),
+            "requirement": "mandatory" if name in CORE_TOOLCHAIN else "optional",
             "command": command,
             "installed": bool(path),
             "path": path,

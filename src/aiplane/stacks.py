@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import socket
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -61,8 +63,10 @@ class StackManager:
         machine_name = str(stack.get("machine") or "")
         model = ModelCatalog(self.profile).show(model_name)
         machine = MachineManager(self.profile).show(machine_name)["machine"]
-        runtime_status = RuntimeCatalog(self.profile).runtime_available(runtime)
+        runtime_catalog = RuntimeCatalog(self.profile)
+        runtime_status = runtime_catalog.runtime_available(runtime)
         endpoint = stack.get("endpoint") or _default_endpoint(runtime)
+        preflight = self._preflight(stack, runtime, model_name, endpoint, runtime_catalog)
         steps = [
             {"name": "check machine fit", "action": "aiplane machines recommend", "mutates": False},
             {"name": "install or update runtime", "command": [str(project_root() / "scripts" / "provider_helper.sh"), "--provider", runtime, "--action", "install", "--profile", self.profile.name, "--model", model_name], "mutates": True},
@@ -88,6 +92,7 @@ class StackManager:
             "machine_config": machine,
             "runtime_status": runtime_status,
             "orchestrator_status": OrchestratorCatalog(self.profile).doctor(orchestrator) if orchestrator else None,
+            "preflight": preflight,
             "limits": stack.get("limits", {}),
             "tools": stack.get("tools", {}),
             "steps": steps,
@@ -103,6 +108,9 @@ class StackManager:
             {"name": "runtime_known", "ok": bool(plan["runtime_status"].get("name")), "detail": plan["runtime_status"].get("reason")},
             {"name": "runtime_available_now", "ok": bool(plan["runtime_status"].get("available")), "detail": plan["runtime_status"].get("reason")},
         ]
+        for check in plan.get("preflight", {}).get("checks", []):
+            if isinstance(check, dict):
+                checks.append(check)
         if plan.get("orchestrator"):
             orch = plan.get("orchestrator_status") or {}
             checks.append({"name": "orchestrator_known", "ok": bool(orch.get("name")), "detail": plan.get("orchestrator")})
@@ -155,6 +163,52 @@ class StackManager:
             "tools": stack.get("tools", {}),
             "runtime_status": RuntimeCatalog(self.profile).runtime_available(runtime),
             "orchestrator_status": OrchestratorCatalog(self.profile).doctor(orchestrator) if orchestrator else None,
+        }
+
+    def _preflight(self, stack: dict[str, Any], runtime: str, model: str, endpoint: object, runtime_catalog: RuntimeCatalog) -> dict[str, Any]:
+        checks: list[dict[str, Any]] = []
+        prerequisites = runtime_catalog.prerequisites(runtime)
+        missing_required = prerequisites.get("missing_required", [])
+        checks.append({
+            "name": "runtime_prerequisites",
+            "ok": bool(prerequisites.get("ok")),
+            "detail": "ok" if prerequisites.get("ok") else f"missing required tools: {', '.join(str(row.get('name')) for row in missing_required if isinstance(row, dict))}",
+            "suggested_actions": [f"aiplane runtimes prerequisites {runtime}"],
+        })
+        for port in _host_ports_for_runtime(runtime):
+            available = _port_available(port)
+            checks.append({
+                "name": f"port_available:{port}",
+                "ok": available,
+                "warning": not available,
+                "detail": "available" if available else f"localhost:{port} is already accepting connections; confirm this is the intended runtime",
+            })
+        endpoint_policy = str(stack.get("endpoint_policy") or "private")
+        endpoint_text = str(endpoint or "")
+        if endpoint_policy in {"public", "shared"}:
+            checks.append({
+                "name": "endpoint_auth_policy",
+                "ok": False,
+                "warning": True,
+                "detail": "public/shared endpoints should normally have TLS and authentication before team use",
+            })
+        else:
+            checks.append({"name": "endpoint_auth_policy", "ok": True, "detail": endpoint_policy})
+        if runtime in {"vllm", "tgi", "transformers"} and not (os.environ.get("HF_HOME") or os.environ.get("HUGGINGFACE_HUB_CACHE")):
+            checks.append({
+                "name": "model_cache_path",
+                "ok": False,
+                "warning": True,
+                "detail": "HF_HOME/HUGGINGFACE_HUB_CACHE is not set; large model downloads will use the runtime default cache",
+            })
+        else:
+            checks.append({"name": "model_cache_path", "ok": True, "detail": "configured or not required"})
+        return {
+            "runtime": runtime,
+            "model": model,
+            "endpoint": endpoint_text,
+            "ok": all(bool(check.get("ok")) for check in checks if not check.get("warning")),
+            "checks": checks,
         }
 
     def _export_metadata(self, name: str, stack: dict[str, Any], endpoint: str) -> dict[str, Any]:
@@ -406,6 +460,25 @@ def _ports_for_runtime(runtime: str) -> list[str]:
         "localai": ["8082:8080"],
     }
     return ports.get(runtime, [])
+
+
+def _host_ports_for_runtime(runtime: str) -> list[int]:
+    ports = []
+    for mapping in _ports_for_runtime(runtime):
+        raw = str(mapping).split(":", 1)[0]
+        try:
+            ports.append(int(raw))
+        except ValueError:
+            continue
+    return ports
+
+
+def _port_available(port: int) -> bool:
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=0.2):
+            return False
+    except OSError:
+        return True
 
 
 def _compact_json(value: object) -> str:

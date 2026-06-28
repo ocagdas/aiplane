@@ -26,7 +26,7 @@ from aiplane.hardware import HardwareManager
 from aiplane.integrations import IntegrationManager
 from aiplane.machines import MachineManager
 from aiplane.mcp import AiplaneMcpServer, _read_message, _write_message, mcp_manifest
-from aiplane.model_catalog import ModelCatalog
+from aiplane.model_catalog import ModelCatalog, _discovered_model_entry
 from aiplane.orchestrators import OrchestratorCatalog
 from aiplane.models import Profile
 from aiplane.policy import PolicyEngine
@@ -600,7 +600,7 @@ class MvpTests(unittest.TestCase):
             profile = Profile(
                 name="tmp",
                 root=root,
-                workspace=Path.cwd(),
+                workspace=root,
                 hardware=source.hardware,
                 backends=source.backends,
                 repository=source.repository,
@@ -621,6 +621,43 @@ class MvpTests(unittest.TestCase):
             self.assertIsNotNone(allowed)
             self.assertEqual(allowed["result"]["structuredContent"]["name"], "qwen-small")
             self.assertIn("code_model: qwen-small", (root / "models.yaml").read_text(encoding="utf-8"))
+            events = AuditLogger(profile).tail(1)
+            self.assertEqual(events[0]["event_type"], "mcp")
+            self.assertEqual(events[0]["action"], "aiplane.models.use")
+            self.assertEqual(events[0]["decision"], "allowed")
+
+    def test_mcp_mutating_failures_are_audited(self) -> None:
+        source = load_profile("local-dev", Path.cwd())
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "models.yaml").write_text(agent_config.dump_yaml(json.loads(json.dumps(source.models))), encoding="utf-8")
+            profile = Profile(
+                name="tmp",
+                root=root,
+                workspace=root,
+                hardware=source.hardware,
+                backends=source.backends,
+                repository=source.repository,
+                tools=source.tools,
+                approvals=source.approvals,
+                environment=source.environment,
+                models=json.loads(json.dumps(source.models)),
+                targets=source.targets,
+                orchestrators=source.orchestrators,
+            )
+            with patch("aiplane.mcp.load_profile", return_value=profile):
+                response = AiplaneMcpServer(root).handle_message({
+                    "jsonrpc": "2.0",
+                    "id": 32,
+                    "method": "tools/call",
+                    "params": {"name": "aiplane.models.use", "arguments": {"role": "code_model", "model": "missing-model"}},
+                })
+            self.assertIsNotNone(response)
+            self.assertIn("error", response)
+            events = AuditLogger(profile).tail(1)
+            self.assertEqual(events[0]["event_type"], "mcp")
+            self.assertEqual(events[0]["action"], "aiplane.models.use")
+            self.assertEqual(events[0]["decision"], "failed")
 
     def test_mcp_can_export_non_continue_integrations(self) -> None:
         server = AiplaneMcpServer(Path.cwd())
@@ -1097,8 +1134,12 @@ class MvpTests(unittest.TestCase):
             plan = stacks.plan("qwen_on_h100")
             self.assertEqual(plan["machine"], "azure_h100_test")
             self.assertEqual(plan["model"], "qwen-coder-32b")
+            self.assertIn("preflight", plan)
+            self.assertTrue(any(check["name"] == "runtime_prerequisites" for check in plan["preflight"]["checks"]))
+            self.assertTrue(any(check["name"].startswith("port_available:") for check in plan["preflight"]["checks"]))
             doctor = stacks.doctor("qwen_on_h100")
             self.assertTrue(any(check["name"] == "machine_fit" for check in doctor["checks"]))
+            self.assertTrue(any(check["name"] == "runtime_prerequisites" for check in doctor["checks"]))
             exported = stacks.export("openai-compatible", "qwen_on_h100")
             self.assertEqual(exported["endpoint"], "http://localhost:8000/v1")
 
@@ -1366,6 +1407,80 @@ class MvpTests(unittest.TestCase):
             self.assertIn("curated:", written_text)
             self.assertNotIn("imported-00:", written_text)
 
+
+    def test_discovered_huggingface_image_classifier_does_not_default_to_chat_roles(self) -> None:
+        entry = _discovered_model_entry(
+            "huggingface",
+            "AdamCodd/vit-base-nsfw-detector",
+            enable=True,
+            source_metadata={"pipeline_tag": "image-classification"},
+        )
+        self.assertEqual(entry["roles"], ["image_classification"])
+        self.assertNotIn("chat", entry["roles"])
+        self.assertEqual(entry["preferred_runtime"], "vllm")
+
+    def test_models_promote_generated_moves_alias_to_curated_catalog(self) -> None:
+        source = load_profile("local-dev", Path.cwd())
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            models_config = {"providers": {"ollama": {"runtime": "ollama"}}, "models": {}}
+            generated_config = {
+                "models": {
+                    "generated-qwen": {
+                        "provider": "ollama",
+                        "model": "qwen2.5-coder:0.5b",
+                        "source": "ollama",
+                        "roles": ["chat"],
+                        "enabled": True,
+                        "imported_by": "aiplane_refresh",
+                    }
+                }
+            }
+            (root / "models.yaml").write_text(agent_config.dump_yaml(models_config), encoding="utf-8")
+            (root / "models.generated.yaml").write_text(agent_config.dump_yaml(generated_config), encoding="utf-8")
+            profile = Profile("tmp", root, Path.cwd(), source.hardware, source.backends, source.repository, source.tools, source.approvals, source.environment, models_config, source.targets, source.orchestrators)
+
+            preview = ModelCatalog(profile).promote_generated("generated-qwen", new_name="qwen-reviewed", write=False)
+            self.assertEqual(preview["would_promote"], 1)
+            self.assertIn("generated-qwen", (root / "models.generated.yaml").read_text(encoding="utf-8"))
+
+            written = ModelCatalog(profile).promote_generated("generated-qwen", new_name="qwen-reviewed", write=True)
+            self.assertEqual(written["promoted"], 1)
+            curated_text = (root / "models.yaml").read_text(encoding="utf-8")
+            generated_text = (root / "models.generated.yaml").read_text(encoding="utf-8")
+            self.assertIn("qwen-reviewed:", curated_text)
+            self.assertIn("promoted_from: generated-qwen", curated_text)
+            self.assertNotIn("imported_by", curated_text)
+            self.assertNotIn("generated-qwen:", generated_text)
+
+    def test_models_promote_cli_dry_run(self) -> None:
+        source = load_profile("local-dev", Path.cwd())
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            profiles_dir = root / "profiles"
+            profile_root = profiles_dir / "tmp"
+            profile_root.mkdir(parents=True)
+            for name, data in {
+                "hardware.yaml": source.hardware,
+                "backends.yaml": source.backends,
+                "repository.yaml": source.repository,
+                "tools.yaml": source.tools,
+                "approvals.yaml": source.approvals,
+                "environment.yaml": source.environment,
+                "targets.yaml": source.targets,
+                "orchestrators.yaml": source.orchestrators,
+            }.items():
+                (profile_root / name).write_text(agent_config.dump_yaml(data), encoding="utf-8")
+            (profile_root / "models.yaml").write_text(agent_config.dump_yaml({"providers": {"ollama": {"runtime": "ollama"}}, "models": {}}), encoding="utf-8")
+            (profile_root / "models.generated.yaml").write_text(agent_config.dump_yaml({"models": {"generated-qwen": {"provider": "ollama", "model": "qwen2.5-coder:0.5b", "source": "ollama", "enabled": True}}}), encoding="utf-8")
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = cli_main(["--profiles-dir", str(profiles_dir), "models", "promote", "--profile", "tmp", "generated-qwen", "--as", "qwen-reviewed", "--dry-run"])
+            self.assertEqual(code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(payload["name"], "model_catalog_promote")
+            self.assertEqual(payload["target"], "qwen-reviewed")
+            self.assertEqual(payload["would_promote"], 1)
 
     def test_refresh_verbose_rows_use_model_source_and_runtime_endpoint_names(self) -> None:
         source = load_profile("local-dev", Path.cwd())
@@ -2278,10 +2393,26 @@ class MvpTests(unittest.TestCase):
         self.assertTrue(payload["dry_run"])
         self.assertIn("commands", payload)
 
+    def test_tools_doctor_includes_vm_and_provider_agnostic_iac_tools(self) -> None:
+        stdout = StringIO()
+        with redirect_stdout(stdout):
+            code = cli_main(["tools", "doctor"])
+        self.assertEqual(code, 0)
+        payload = json.loads(stdout.getvalue())
+        tools = {row["name"]: row for row in payload["tools"]}
+        for name in ["opentofu", "terraform", "pulumi", "vagrant", "packer", "devcontainer-cli"]:
+            self.assertIn(name, tools)
+            self.assertEqual(tools[name]["requirement"], "optional")
+        self.assertEqual(tools["opentofu"]["category"], "iac")
+        self.assertEqual(tools["pulumi"]["category"], "iac")
+        self.assertEqual(tools["vagrant"]["category"], "vm")
+        self.assertEqual(tools["packer"]["category"], "image-build")
+        self.assertEqual(tools["devcontainer-cli"]["category"], "container")
+
     def test_environment_doctor_cli_groups_installable_tools(self) -> None:
         stdout = StringIO()
         with redirect_stdout(stdout):
-            code = cli_main(["environment", "doctor", "--required-only"])
+            code = cli_main(["environment", "doctor", "--required-only", "--format", "json"])
         self.assertEqual(code, 0)
         payload = json.loads(stdout.getvalue())
         self.assertEqual(payload["name"], "environment_doctor")
@@ -2295,6 +2426,33 @@ class MvpTests(unittest.TestCase):
         self.assertIn("vllm", runtimes)
         self.assertIn("purpose", runtimes["ollama"])
         self.assertIn("aiplane runtimes prerequisites ollama", runtimes["ollama"]["setup_commands"])
+
+    def test_environment_plan_cli_outputs_execution_plan(self) -> None:
+        stdout = StringIO()
+        with redirect_stdout(stdout):
+            code = cli_main(["environment", "plan", "python", "--version"])
+        self.assertEqual(code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertIn("mode", payload)
+        self.assertIn("command", payload)
+        self.assertIn("cwd", payload)
+        self.assertIn("description", payload)
+        self.assertNotIn("notes", payload)
+
+    def test_environment_doctor_text_format_outputs_human_table(self) -> None:
+        stdout = StringIO()
+        with redirect_stdout(stdout):
+            code = cli_main(["environment", "doctor", "--required-only"])
+        self.assertEqual(code, 0)
+        output = stdout.getvalue()
+        self.assertIn("environment doctor for profile", output)
+        self.assertIn("NAME", output)
+        self.assertIn("TYPE", output)
+        self.assertIn("STATUS", output)
+        self.assertIn("REQUIRED", output)
+        self.assertIn("WHY", output)
+        self.assertIn("mandatory", output)
+        self.assertIn("runtime", output)
 
     def test_benchmark_framework_cli_plans_and_install_dry_run(self) -> None:
         stdout = StringIO()

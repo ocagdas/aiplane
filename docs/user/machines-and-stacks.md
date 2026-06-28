@@ -196,6 +196,8 @@ aiplane stacks plan qwen32b_on_h100
 aiplane stacks doctor qwen32b_on_h100
 ```
 
+Stack plans include preflight checks for runtime prerequisites, likely port conflicts on local endpoints, endpoint auth policy, and model cache-path hints. Doctor output folds those checks into the normal readiness checks so you can catch missing host tools or risky endpoint settings before running lifecycle commands.
+
 ## Stacks
 
 A stack is the operational unit for running or exposing a self-managed AI setup. It binds one optional orchestrator, one runtime, one primary model, one machine, and one access policy.

@@ -20,6 +20,7 @@ venv/
 profiles/*
 !profiles/local-dev/
 !profiles/local-dev/*.yaml
+profiles/local-dev/models.generated.yaml
 
 # Runtime state
 .agentctl/
