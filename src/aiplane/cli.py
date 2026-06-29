@@ -316,7 +316,7 @@ def _main(argv: list[str] | None = None) -> int:
     stacks_setup.add_argument("--orchestrator", help="Optional orchestrator name, such as langgraph, crewai, autogen, or openhands")
     stacks_setup.add_argument("--runtime", required=True, help="Runtime name")
     stacks_setup.add_argument("--model", required=True, help="Configured model alias")
-    stacks_setup.add_argument("--machine", required=True, help="Machine name from aiplane machines list")
+    stacks_setup.add_argument("--machine", required=True, help="Machine name from aiplane machines list; export/import a real machine profile first with hardware export-machine and machines import")
     stacks_setup.add_argument("--access", default="ssh_tunnel", help="Access mode, such as same_host, ssh_tunnel, lan_http, or gateway")
     stacks_setup.add_argument("--endpoint-policy", default="private", help="Endpoint policy label, such as private, vpn, or gateway")
     stacks_setup.add_argument("--endpoint", help="Endpoint URL override")
@@ -463,12 +463,13 @@ def _main(argv: list[str] | None = None) -> int:
         help="Promote a generated model alias into curated models.yaml",
         description="Copy a reviewed generated/imported alias from models.generated.yaml into curated models.yaml. By default the generated copy is removed after promotion so the curated alias becomes the authoritative profile entry.",
         formatter_class=HelpFormatter,
-        epilog="Examples:\n  aiplane models promote huggingface-qwen-qwen2-5-coder-7b --dry-run\n  aiplane models promote huggingface-qwen-qwen2-5-coder-7b --as qwen-coder-reviewed",
+        epilog="Examples:\n  aiplane models promote huggingface-qwen-qwen2-5-coder-7b --dry-run\n  aiplane models promote huggingface-qwen-qwen2-5-coder-7b --as qwen-coder-reviewed\n  aiplane models promote generated-qwen --as qwen-reviewed --overwrite",
     )
     _profile_arg(models_promote)
     models_promote.add_argument("name", help="Generated model alias from models.generated.yaml")
     models_promote.add_argument("--as", dest="new_name", help="Promote under a cleaner curated alias instead of reusing the generated alias")
     models_promote.add_argument("--keep-generated", action="store_true", help="Keep the generated alias after writing the curated copy")
+    models_promote.add_argument("--overwrite", action="store_true", help="Overwrite an existing curated target alias after review. Without this, promotion refuses curated alias collisions.")
     models_promote.add_argument("--dry-run", action="store_true", help="Preview the promotion without editing files")
     models_test = models_sub.add_parser("test", help="Run a small prompt against one model", description="Send a simple analysis/completion/write prompt to a model, or preview the prompt with --dry-run.", formatter_class=HelpFormatter, epilog="Examples:\n  aiplane models test --dry-run qwen-tiny\n  aiplane models test --task analysis --target src/aiplane/model_catalog.py qwen-tiny")
     _profile_arg(models_test)
@@ -772,11 +773,13 @@ def _main(argv: list[str] | None = None) -> int:
         "tools",
         "Check and install external prerequisite CLIs",
         "Inspect and install the small external toolchain aiplane can use for cloud, container, Kubernetes, and remote operations.",
-        "Examples:\n  aiplane tools doctor\n  aiplane tools doctor azure-cli\n  aiplane tools plan vagrant\n  aiplane tools export opentofu\n  aiplane tools install opentofu --dry-run\n  aiplane tools install azure-cli",
+        "Examples:\n  aiplane tools doctor\n  aiplane tools matrix\n  aiplane tools doctor azure-cli\n  aiplane tools plan vagrant\n  aiplane tools export opentofu\n  aiplane tools install opentofu --dry-run\n  aiplane tools install azure-cli",
     )
     tools_sub = tools_cmd.add_subparsers(dest="tools_command", required=True, metavar="command")
     tools_list = tools_sub.add_parser("list", help="List known prerequisite tools", description="List supported external CLIs, categories, install hints, and detected versions.", formatter_class=HelpFormatter)
     _profile_arg(tools_list)
+    tools_matrix = tools_sub.add_parser("matrix", help="Show the tool task matrix", description="Group known external tools by workflow category and show tasks, required/optional status, installability, and starter export availability.", formatter_class=HelpFormatter)
+    _profile_arg(tools_matrix)
     tools_doctor = tools_sub.add_parser("doctor", help="Check external toolchain health", description="Check whether prerequisite tools are installed and whether selected services are reachable, such as Azure login or Docker daemon status.", formatter_class=HelpFormatter)
     _profile_arg(tools_doctor)
     tools_doctor.add_argument("name", nargs="?", help="Optional tool name, such as azure-cli, opentofu, docker, kubectl, helm, openssh-client, or ansible")
@@ -966,6 +969,9 @@ def _main(argv: list[str] | None = None) -> int:
             return 0
         if args.tools_command == "doctor":
             print(_json(manager.doctor(args.name), indent=2))
+            return 0
+        if args.tools_command == "matrix":
+            print(_json(manager.matrix(), indent=2))
             return 0
         if args.tools_command == "plan":
             print(_json(manager.plan(args.name), indent=2))
@@ -1225,7 +1231,7 @@ def _main(argv: list[str] | None = None) -> int:
             print(_json(catalog.clear_imported(provider_name=args.provider, write=not args.dry_run, include_curated=args.include_curated), indent=2))
             return 0
         if args.models_command == "promote":
-            print(_json(catalog.promote_generated(args.name, new_name=args.new_name, write=not args.dry_run, keep_generated=args.keep_generated), indent=2))
+            print(_json(catalog.promote_generated(args.name, new_name=args.new_name, write=not args.dry_run, keep_generated=args.keep_generated, overwrite=args.overwrite), indent=2))
             return 0
         if args.models_command == "benchmark":
             model_name = args.model_name or args.name

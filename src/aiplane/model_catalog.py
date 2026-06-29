@@ -410,7 +410,7 @@ class ModelCatalog:
         }
 
 
-    def promote_generated(self, name: str, new_name: str | None = None, write: bool = False, keep_generated: bool = False) -> dict[str, Any]:
+    def promote_generated(self, name: str, new_name: str | None = None, write: bool = False, keep_generated: bool = False, overwrite: bool = False) -> dict[str, Any]:
         from .config import dump_yaml
 
         if not name or "/" in name or "\\" in name:
@@ -422,8 +422,9 @@ class ModelCatalog:
         generated_models = _dict_of_dicts(self.generated_config.get("models", {}))
         if name not in generated_models:
             raise ValueError(f"generated model not found: {name}")
-        if target in curated_models and target != name:
-            raise ValueError(f"curated model already exists: {target}")
+        target_exists = target in curated_models
+        if target_exists and not overwrite:
+            raise ValueError(f"curated model already exists: {target}; pass overwrite=True or use --overwrite after reviewing the existing alias")
         promoted = dict(generated_models[name])
         promoted.pop("imported_by", None)
         promoted["promoted_from"] = name
@@ -443,6 +444,8 @@ class ModelCatalog:
             "target": target,
             "write": write,
             "keep_generated": keep_generated,
+            "overwrite": overwrite,
+            "target_exists": target_exists,
             "promoted": 1 if write else 0,
             "would_promote": 0 if write else 1,
             "removed_generated": bool(write and not keep_generated),

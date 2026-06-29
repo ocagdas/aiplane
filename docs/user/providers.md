@@ -164,12 +164,13 @@ aiplane models refresh --provider huggingface --limit 10 --dry-run --verbose
 
 `--limit` is the default per-provider maximum. Repeat `--provider-limit PROVIDER=COUNT` to override a particular model provider. For example, use a large Hugging Face limit and a smaller/larger provider-specific limit when refreshing all providers. By default refresh prints provider-level counts only; add `--verbose` to include per-model change rows.
 
-Review generated aliases before making them curated profile entries. Promotion copies one alias from `models.generated.yaml` into `models.yaml`; by default it removes the generated copy so the curated alias becomes authoritative:
+Review generated aliases before making them curated profile entries. Promotion copies one alias from `models.generated.yaml` into `models.yaml`; by default it removes the generated copy so the curated alias becomes authoritative. Promotion refuses to overwrite an existing curated target alias unless you pass `--overwrite` after reviewing the existing entry:
 
 ```bash
 aiplane models promote generated-alias --dry-run
 aiplane models promote generated-alias --as reviewed-alias
 aiplane models promote generated-alias --as reviewed-alias --keep-generated
+aiplane models promote generated-alias --as existing-reviewed-alias --overwrite
 ```
 
 To clear generated model aliases, use `clear-cache`. This operates on refresh/import data in `models.generated.yaml` plus legacy refresh-imported aliases in `models.yaml`; it does not remove or disable model providers from `model-providers.yaml` or `model-providers.user.yaml`. The command reports counts by provider, not every removed alias. By default it keeps hand-curated/template aliases; add `--include-curated` only when you intentionally want to remove curated/template aliases too:

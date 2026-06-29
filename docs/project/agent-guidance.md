@@ -12,6 +12,10 @@ It must not become a coding agent, model runtime, model proxy, IDE extension, or
 
 Treat `aiplane` as a public open-source project that should be worthy of trust, adoption, and contribution. Keep code, documentation, roadmap, implemented features, command coverage, handoff notes, examples, and tests aligned and held to a high standard. Do not let the project drift into a collection of impressive but undocumented, untested, or overstated capabilities.
 
+## Local Direction Notes
+
+If `docs/project/.strategy/` exists in the working tree, read its notes before making roadmap, positioning, release-readiness, or strategy changes. That folder is intentionally gitignored local context; use it for alignment, but do not copy private/local-only positioning details into tracked public docs unless the human owner explicitly asks.
+
 ## Required Maintenance Habit
 
 When changing behavior, update these together in the same change whenever relevant:

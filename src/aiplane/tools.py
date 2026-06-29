@@ -137,7 +137,7 @@ TOOLCHAIN: dict[str, dict[str, object]] = {
         "command": "tofu",
         "description": "OpenTofu for Terraform-compatible repeatable infrastructure provisioning.",
         "category": "iac",
-        "needed_for": ["repeatable infrastructure plans", "self-managed cloud setup", "future VM/AKS provisioning"],
+        "needed_for": ["repeatable infrastructure plans", "self-managed cloud setup", "reviewed VM/AKS provisioning plans"],
         "install": {
             "ubuntu": ["follow https://opentofu.org/docs/intro/install/deb/ for the current signed apt repository setup"],
             "debian": ["follow https://opentofu.org/docs/intro/install/deb/ for the current signed apt repository setup"],
@@ -149,7 +149,7 @@ TOOLCHAIN: dict[str, dict[str, object]] = {
         "command": "terraform",
         "description": "Terraform for users who already standardize on HashiCorp Terraform instead of OpenTofu.",
         "category": "iac",
-        "needed_for": ["repeatable infrastructure plans", "teams standardized on Terraform", "future VM/AKS provisioning"],
+        "needed_for": ["repeatable infrastructure plans", "teams standardized on Terraform", "reviewed VM/AKS provisioning plans"],
         "install": {
             "ubuntu": ["follow https://developer.hashicorp.com/terraform/install for the current signed apt repository setup"],
             "debian": ["follow https://developer.hashicorp.com/terraform/install for the current signed apt repository setup"],
@@ -161,7 +161,7 @@ TOOLCHAIN: dict[str, dict[str, object]] = {
         "command": "pulumi",
         "description": "Pulumi for provider-agnostic infrastructure as code using general-purpose languages.",
         "category": "iac",
-        "needed_for": ["multi-cloud infrastructure plans", "teams preferring Python/TypeScript/Go IaC", "future cloud resource workflows"],
+        "needed_for": ["multi-cloud infrastructure plans", "teams preferring Python/TypeScript/Go IaC", "reviewed cloud resource workflows"],
         "install": {
             "ubuntu": ["curl -fsSL https://get.pulumi.com | sh"],
             "debian": ["curl -fsSL https://get.pulumi.com | sh"],
@@ -174,7 +174,7 @@ TOOLCHAIN: dict[str, dict[str, object]] = {
         "command": "vagrant",
         "description": "Vagrant for repeatable local VM development and test environments.",
         "category": "vm",
-        "needed_for": ["local VM workflows", "provider-backed dev boxes", "future Vagrantfile exports"],
+        "needed_for": ["local VM workflows", "provider-backed dev boxes", "starter Vagrantfile exports"],
         "install": {
             "ubuntu": ["follow https://developer.hashicorp.com/vagrant/install for the current signed apt repository setup"],
             "debian": ["follow https://developer.hashicorp.com/vagrant/install for the current signed apt repository setup"],
@@ -186,7 +186,7 @@ TOOLCHAIN: dict[str, dict[str, object]] = {
         "command": "packer",
         "description": "Packer for building reusable VM or cloud machine images before provisioning.",
         "category": "image-build",
-        "needed_for": ["golden VM images", "cloud image pipelines", "future Packer template exports"],
+        "needed_for": ["golden VM images", "cloud image pipelines", "starter Packer template exports"],
         "install": {
             "ubuntu": ["follow https://developer.hashicorp.com/packer/install for the current signed apt repository setup"],
             "debian": ["follow https://developer.hashicorp.com/packer/install for the current signed apt repository setup"],
@@ -388,6 +388,40 @@ class ToolchainManager:
 
     def list(self) -> list[dict[str, object]]:
         return [self._tool_row(name) for name in sorted(TOOLCHAIN)]
+
+    def matrix(self) -> dict[str, object]:
+        rows = []
+        for row in self.list():
+            name = str(row["name"])
+            workflow = TOOL_WORKFLOWS.get(name, {})
+            rows.append({
+                "name": name,
+                "category": row.get("category"),
+                "task": workflow.get("task") or row.get("category"),
+                "needed_for": row.get("needed_for", []),
+                "requirement": row.get("requirement"),
+                "installed": row.get("installed"),
+                "install_mode": row.get("install_mode"),
+                "installable_by_aiplane": row.get("installable_by_aiplane"),
+                "plan_available": name in TOOL_WORKFLOWS,
+                "export_available": name in TOOL_WORKFLOWS,
+            })
+        categories = []
+        for category in sorted({str(row.get("category") or "uncategorized") for row in rows}):
+            tools = [row for row in rows if str(row.get("category") or "uncategorized") == category]
+            categories.append({"name": category, "tools": tools})
+        return {
+            "name": "tools_matrix",
+            "profile": self.profile.name,
+            "summary": {
+                "tools": len(rows),
+                "mandatory": sum(1 for row in rows if row.get("requirement") == "mandatory"),
+                "optional": sum(1 for row in rows if row.get("requirement") == "optional"),
+                "installable_by_aiplane": sum(1 for row in rows if row.get("installable_by_aiplane")),
+                "exports_available": sum(1 for row in rows if row.get("export_available")),
+            },
+            "categories": categories,
+        }
 
     def tool_status(self, name: str) -> dict[str, object]:
         return self._tool_row(name)

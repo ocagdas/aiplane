@@ -48,11 +48,14 @@ Mandatory means required for the minimal supported path in that workflow, not re
 
 ## Health Checks
 
-Check the full prerequisite set:
+Check the full prerequisite set and inspect the workflow matrix:
 
 ```bash
 aiplane tools doctor
+aiplane tools matrix
 ```
+
+`tools matrix` groups every known external tool by workflow category and shows what it enables, whether it is mandatory or optional, whether `aiplane` can attempt installation, and whether `tools plan`/`tools export` starter artifacts are available.
 
 Check the active aiplane execution environment and group missing tools by whether
 `aiplane` can attempt an install or whether manual/platform-specific work is

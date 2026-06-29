@@ -30,6 +30,9 @@ profiles/local-dev/models.generated.yaml
 # Local aiplane machine/user state
 .aiplane/
 
+# Local project direction notes
+docs/project/.strategy/
+
 # Provider/local secrets
 credentials.yaml
 credentials.local.yaml

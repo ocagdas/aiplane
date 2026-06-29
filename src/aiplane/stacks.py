@@ -260,12 +260,29 @@ class StackManager:
                 "commands": commands,
             }
         results = []
+        failed_step = None
         for item in commands:
             completed = subprocess.run(item["command"], cwd=item.get("cwd") or self.profile.workspace, text=True, capture_output=True, check=False)
-            results.append({"name": item["name"], "command": item["command"], "returncode": completed.returncode, "stdout": completed.stdout[-4000:], "stderr": completed.stderr[-4000:]})
+            row = {"name": item["name"], "command": item["command"], "returncode": completed.returncode, "stdout": completed.stdout[-4000:], "stderr": completed.stderr[-4000:]}
+            results.append(row)
             if completed.returncode != 0:
+                failed_step = row
                 break
-        return {"name": name, "action": action, "dry_run": False, "status": "executed", "results": results}
+        runtime_status_after = RuntimeCatalog(self.profile).runtime_available(runtime)
+        outcome = "completed" if failed_step is None and len(results) == len(commands) else "failed"
+        return {
+            "name": name,
+            "action": action,
+            "dry_run": False,
+            "status": "executed",
+            "outcome": outcome,
+            "steps_total": len(commands),
+            "steps_executed": len(results),
+            "failed_step": failed_step,
+            "runtime_status_after": runtime_status_after,
+            "results": results,
+            "notes": ["Same-host lifecycle execution ran local helper commands directly; runtime_status_after is a best-effort post-action readiness snapshot."],
+        }
 
     def _lifecycle_commands(self, stack_name: str, action: str, runtime: str, model: str, orchestrator: str) -> list[dict[str, Any]]:
         if action == "prepare":

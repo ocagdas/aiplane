@@ -51,6 +51,43 @@ aiplane machines import gpu_box_01.machine.yaml \
   --set gpu_count=1
 ```
 
+## First Local Stack Prerequisite
+
+For a first same-host stack, register the current machine before running `stacks setup`. Hardware templates such as `local_auto` describe capacity patterns, but stack setup expects a named machine entry from `aiplane machines list`.
+
+```bash
+aiplane hardware export-machine --name local_box > local_box.machine.yaml
+aiplane machines import local_box.machine.yaml
+aiplane machines list
+aiplane machines validate local_box
+```
+
+Preview the stack binding first:
+
+```bash
+aiplane stacks setup local_ollama_stack \
+  --runtime ollama \
+  --model qwen-tiny \
+  --machine local_box \
+  --access same_host \
+  --endpoint http://localhost:11434/v1 \
+  --dry-run
+```
+
+Persist the stack only after the preview names the intended runtime, model, machine, access mode, and endpoint:
+
+```bash
+aiplane stacks setup local_ollama_stack \
+  --runtime ollama \
+  --model qwen-tiny \
+  --machine local_box \
+  --access same_host \
+  --endpoint http://localhost:11434/v1
+
+aiplane stacks plan local_ollama_stack
+aiplane stacks doctor local_ollama_stack
+```
+
 ## Remote Profiling Plan
 
 You can plan remote profiling over SSH. This does not run SSH yet; it renders the commands to execute:
@@ -272,6 +309,8 @@ aiplane stacks restart coding_agents
 ```
 
 `start` does not implicitly install or pull models. Use `prepare` first when you want the higher-level install/pull/config path.
+
+For same-host/local stacks, lifecycle commands return structured execution reporting: `status`, `outcome`, `steps_total`, `steps_executed`, `failed_step`, per-step stdout/stderr tails, and a best-effort `runtime_status_after` snapshot. Remote, SSH, Azure, and AKS stacks still return planned commands instead of executing.
 
 Export IDE or packaging artifacts:
 

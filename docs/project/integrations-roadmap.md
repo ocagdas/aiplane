@@ -107,8 +107,6 @@ aiplane chat
 # Planned / not implemented yet:
 aiplane launch --tool continue --model qwen-tiny
 aiplane launch --tool codex --model qwen-tiny
-aiplane quota --provider ollama_cloud
-aiplane quota --provider openai
 aiplane session start --model qwen-tiny
 ```
 
@@ -119,10 +117,6 @@ Future wrappers should:
 - Export the needed environment variables or config snippets.
 - Start the provider-native CLI/tool when available.
 - Record audit/session metadata locally.
-
-Provider quota/cost commands should be provider-specific and best-effort. Local
-Ollama has no cloud quota; Ollama Cloud/OpenAI/Azure may expose account, usage,
-or quota APIs that we can wire later when credentials and policy permit it.
 
 ## Ollama CLI Chat and Launch
 

@@ -1511,6 +1511,28 @@ class MvpTests(unittest.TestCase):
             self.assertNotIn("imported_by", curated_text)
             self.assertNotIn("generated-qwen:", generated_text)
 
+    def test_models_promote_refuses_curated_alias_collision_without_overwrite(self) -> None:
+        source = load_profile("local-dev", Path.cwd())
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            models_config = {
+                "providers": {"ollama": {"runtime": "ollama"}},
+                "models": {"generated-qwen": {"provider": "ollama", "model": "existing", "source": "ollama", "enabled": True}},
+            }
+            generated_config = {
+                "models": {"generated-qwen": {"provider": "ollama", "model": "qwen2.5-coder:0.5b", "source": "ollama", "enabled": True}}
+            }
+            (root / "models.yaml").write_text(agent_config.dump_yaml(models_config), encoding="utf-8")
+            (root / "models.generated.yaml").write_text(agent_config.dump_yaml(generated_config), encoding="utf-8")
+            profile = Profile("tmp", root, Path.cwd(), source.hardware, source.backends, source.repository, source.tools, source.approvals, source.environment, models_config, source.targets, source.orchestrators)
+
+            with self.assertRaises(ValueError):
+                ModelCatalog(profile).promote_generated("generated-qwen", write=False)
+
+            preview = ModelCatalog(profile).promote_generated("generated-qwen", write=False, overwrite=True)
+            self.assertTrue(preview["target_exists"])
+            self.assertTrue(preview["overwrite"])
+
     def test_models_promote_cli_dry_run(self) -> None:
         source = load_profile("local-dev", Path.cwd())
         with tempfile.TemporaryDirectory() as tmp:
@@ -2642,6 +2664,25 @@ class MvpTests(unittest.TestCase):
         self.assertEqual(tools["packer"]["category"], "image-build")
         self.assertEqual(tools["devcontainer-cli"]["category"], "container")
 
+    def test_tools_matrix_cli_groups_tasks_and_capabilities(self) -> None:
+        stdout = StringIO()
+        with redirect_stdout(stdout):
+            code = cli_main(["tools", "matrix"])
+        self.assertEqual(code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["name"], "tools_matrix")
+        self.assertIn("summary", payload)
+        self.assertGreaterEqual(payload["summary"]["mandatory"], 2)
+        categories = {category["name"]: category for category in payload["categories"]}
+        self.assertIn("iac", categories)
+        iac_tools = {tool["name"]: tool for tool in categories["iac"]["tools"]}
+        self.assertTrue(iac_tools["opentofu"]["plan_available"])
+        self.assertTrue(iac_tools["opentofu"]["export_available"])
+        self.assertEqual(iac_tools["opentofu"]["requirement"], "optional")
+        remote_tools = {tool["name"]: tool for tool in categories["remote"]["tools"]}
+        self.assertEqual(remote_tools["openssh-client"]["requirement"], "mandatory")
+        self.assertIn("SSH tunnels", remote_tools["openssh-client"]["needed_for"])
+
     def test_tools_plan_and_export_cli_are_non_mutating_starters(self) -> None:
         stdout = StringIO()
         with redirect_stdout(stdout):
@@ -2955,6 +2996,84 @@ class MvpTests(unittest.TestCase):
         self.assertNotEqual(commands[0][0], "aiplane")
         self.assertIn("--provider", commands[0])
         self.assertIn("ollama", commands[0])
+
+    def test_stack_lifecycle_reports_outcome_and_runtime_snapshot(self) -> None:
+        source = load_profile("local-dev", Path.cwd())
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "hardware.yaml").write_text("", encoding="utf-8")
+            profile = Profile(
+                name="tmp",
+                root=root,
+                workspace=Path.cwd(),
+                hardware=json.loads(json.dumps(source.hardware)),
+                backends=source.backends,
+                repository=source.repository,
+                tools=source.tools,
+                approvals=source.approvals,
+                environment=source.environment,
+                models=source.models,
+                targets=source.targets,
+            )
+            exported = MachineManager(profile).export_machine("local_box")
+            machine_path = root / "local_box.json"
+            machine_path.write_text(json.dumps(exported), encoding="utf-8")
+            MachineManager(profile).import_file(machine_path)
+            stacks = StackManager(profile)
+            stacks.setup("local_stack", orchestrator=None, runtime="ollama", model="qwen-tiny", machine="local_box", access="same_host")
+
+            class Completed:
+                returncode = 0
+                stdout = "ok"
+                stderr = ""
+
+            with patch("aiplane.stacks.subprocess.run", return_value=Completed()):
+                result = stacks.start("local_stack")
+        self.assertEqual(result["status"], "executed")
+        self.assertEqual(result["outcome"], "completed")
+        self.assertEqual(result["steps_total"], 1)
+        self.assertEqual(result["steps_executed"], 1)
+        self.assertIsNone(result["failed_step"])
+        self.assertIn("runtime_status_after", result)
+        self.assertIn("available", result["runtime_status_after"])
+
+    def test_stack_lifecycle_reports_failed_step(self) -> None:
+        source = load_profile("local-dev", Path.cwd())
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "hardware.yaml").write_text("", encoding="utf-8")
+            profile = Profile(
+                name="tmp",
+                root=root,
+                workspace=Path.cwd(),
+                hardware=json.loads(json.dumps(source.hardware)),
+                backends=source.backends,
+                repository=source.repository,
+                tools=source.tools,
+                approvals=source.approvals,
+                environment=source.environment,
+                models=source.models,
+                targets=source.targets,
+            )
+            exported = MachineManager(profile).export_machine("local_box")
+            machine_path = root / "local_box.json"
+            machine_path.write_text(json.dumps(exported), encoding="utf-8")
+            MachineManager(profile).import_file(machine_path)
+            stacks = StackManager(profile)
+            stacks.setup("local_stack", orchestrator=None, runtime="ollama", model="qwen-tiny", machine="local_box", access="same_host")
+
+            class Failed:
+                returncode = 7
+                stdout = ""
+                stderr = "failed"
+
+            with patch("aiplane.stacks.subprocess.run", return_value=Failed()):
+                result = stacks.prepare("local_stack")
+        self.assertEqual(result["status"], "executed")
+        self.assertEqual(result["outcome"], "failed")
+        self.assertEqual(result["steps_total"], 2)
+        self.assertEqual(result["steps_executed"], 1)
+        self.assertEqual(result["failed_step"]["returncode"], 7)
 
     def test_stack_lifecycle_does_not_execute_remote_stack(self) -> None:
         source = load_profile("local-dev", Path.cwd())
