@@ -336,6 +336,7 @@ class ModelCatalog:
             "generated_path": str(generated_path),
             "changes": changes,
             "results": {provider_name: provider_result},
+            "next_steps": _refresh_next_steps(write, changes, provider_name=provider_name),
         }
 
 
@@ -383,6 +384,14 @@ class ModelCatalog:
                     "error": str(exc),
                 }
         rows = list(results.values())
+        changes = {
+            "imported": sum(int(row.get("changes", {}).get("imported", 0)) for row in rows),
+            "would_import": sum(int(row.get("changes", {}).get("would_import", 0)) for row in rows),
+            "updated": sum(int(row.get("changes", {}).get("updated", 0)) for row in rows),
+            "would_update": sum(int(row.get("changes", {}).get("would_update", 0)) for row in rows),
+            "removed": sum(int(row.get("changes", {}).get("removed", 0)) for row in rows),
+            "would_remove": sum(int(row.get("changes", {}).get("would_remove", 0)) for row in rows),
+        }
         return {
             "name": "model_catalog_refresh_all",
             "write": write,
@@ -397,16 +406,10 @@ class ModelCatalog:
             "providers_would_update": sum(1 for row in rows if row.get("status") == "would_update"),
             "providers_failed": sum(1 for row in rows if row.get("status") == "failed"),
             "providers_skipped_empty": len(skipped_providers),
-            "changes": {
-                "imported": sum(int(row.get("changes", {}).get("imported", 0)) for row in rows),
-                "would_import": sum(int(row.get("changes", {}).get("would_import", 0)) for row in rows),
-                "updated": sum(int(row.get("changes", {}).get("updated", 0)) for row in rows),
-                "would_update": sum(int(row.get("changes", {}).get("would_update", 0)) for row in rows),
-                "removed": sum(int(row.get("changes", {}).get("removed", 0)) for row in rows),
-                "would_remove": sum(int(row.get("changes", {}).get("would_remove", 0)) for row in rows),
-            },
+            "changes": changes,
             "results": results,
             "skipped_providers": skipped_providers,
+            "next_steps": _refresh_next_steps(write, changes),
         }
 
 
@@ -452,6 +455,7 @@ class ModelCatalog:
             "path": str(self.profile.root / "models.yaml"),
             "generated_path": str(self._generated_path()),
             "model": promoted,
+            "next_steps": _promote_next_steps(name, target, write, keep_generated),
         }
 
     def clear_imported(self, provider_name: str | None = None, write: bool = False, include_curated: bool = False) -> dict[str, Any]:
@@ -991,6 +995,39 @@ def _capability_average(profile: dict[str, Any]) -> float:
     values = [int(value) for value in scores.values() if isinstance(value, int)]
     return round(sum(values) / len(values), 2) if values else 0.0
 
+
+
+def _refresh_next_steps(write: bool, changes: dict[str, int], provider_name: str | None = None) -> list[str]:
+    provider_flag = f" --provider {provider_name}" if provider_name else ""
+    if not write:
+        steps = [f"Review this dry-run output, then run aiplane models refresh{provider_flag} without --dry-run to write generated aliases."]
+    else:
+        steps = ["Review generated aliases in models.generated.yaml before promoting any of them into curated models.yaml."]
+    if int(changes.get("would_import", 0)) or int(changes.get("imported", 0)):
+        steps.append("Use aiplane models promote GENERATED_ALIAS --dry-run to preview curation of one generated alias.")
+    if int(changes.get("would_update", 0)) or int(changes.get("updated", 0)):
+        steps.append("Inspect updated source metadata before relying on changed capability or runtime-fit fields.")
+    if int(changes.get("would_remove", 0)) or int(changes.get("removed", 0)):
+        steps.append("Confirm stale generated aliases are safe to prune; curated aliases are preserved by normal refresh.")
+    steps.append("Use aiplane models clear-cache --dry-run to preview removing generated refresh/import aliases.")
+    return steps
+
+
+def _promote_next_steps(source: str, target: str, write: bool, keep_generated: bool) -> list[str]:
+    if not write:
+        return [
+            f"Review the promoted model payload, then run aiplane models promote {source} --as {target} without --dry-run to write models.yaml.",
+            "After promotion, run aiplane models defaults or aiplane integrations plan to verify the curated alias is selected where expected.",
+        ]
+    steps = [
+        f"Curated alias {target} was written to models.yaml.",
+        "Run aiplane profiles validate local-dev and aiplane integrations plan for the target tool before using the alias in a workflow.",
+    ]
+    if keep_generated:
+        steps.append(f"Generated alias {source} was kept in models.generated.yaml for comparison.")
+    else:
+        steps.append(f"Generated alias {source} was removed from models.generated.yaml so the curated alias is authoritative.")
+    return steps
 
 
 def _refresh_status(changes: dict[str, int]) -> str:

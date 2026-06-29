@@ -55,7 +55,7 @@ aiplane tools doctor
 aiplane tools matrix
 ```
 
-`tools matrix` groups every known external tool by workflow category and shows what it enables, whether it is mandatory or optional, whether `aiplane` can attempt installation, and whether `tools plan`/`tools export` starter artifacts are available.
+`tools matrix` groups every known external tool by workflow category and shows what it enables, whether it is mandatory or optional, whether `aiplane` can attempt installation, and whether `tools plan`/`tools export` starter artifacts are available. It also includes workflow-level readiness summaries so release review and demos can quickly see which categories are complete, partially ready, or still need setup on the current machine.
 
 Check the active aiplane execution environment and group missing tools by whether
 `aiplane` can attempt an install or whether manual/platform-specific work is
@@ -77,7 +77,7 @@ aiplane environment doctor --format json
 - runtime prerequisite status for common local runtimes;
 - dry-run setup commands to try next, such as `aiplane runtimes install vllm --dry-run`.
 
-Text output is the default human-readable aligned table with tool/runtime name, type, status, mandatory/optional scope, and a short purpose. Use `--format json` for scripts and tests.
+Text output is the default human-readable aligned table with tool/runtime name, type, status, mandatory/optional scope, and a short purpose. Use `--format json` for scripts and tests. Use `tools matrix` when you need a broader workflow map across infrastructure, VM, container, remote, cloud, Kubernetes, and benchmark tools.
 
 Check one tool:
 

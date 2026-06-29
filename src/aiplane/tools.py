@@ -407,9 +407,30 @@ class ToolchainManager:
                 "export_available": name in TOOL_WORKFLOWS,
             })
         categories = []
+        workflows = []
         for category in sorted({str(row.get("category") or "uncategorized") for row in rows}):
             tools = [row for row in rows if str(row.get("category") or "uncategorized") == category]
             categories.append({"name": category, "tools": tools})
+            installed = [row for row in tools if row.get("installed")]
+            missing = [row for row in tools if not row.get("installed")]
+            missing_installable = [row for row in missing if row.get("installable_by_aiplane")]
+            missing_manual = [row for row in missing if not row.get("installable_by_aiplane")]
+            readiness = "complete" if not missing else "partial" if installed else "needs_setup"
+            workflows.append({
+                "name": category,
+                "readiness": readiness,
+                "tools": len(tools),
+                "installed": len(installed),
+                "missing": len(missing),
+                "mandatory": sum(1 for row in tools if row.get("requirement") == "mandatory"),
+                "optional": sum(1 for row in tools if row.get("requirement") == "optional"),
+                "missing_installable_by_aiplane": len(missing_installable),
+                "missing_manual_or_platform_specific": len(missing_manual),
+                "plans_available": sum(1 for row in tools if row.get("plan_available")),
+                "exports_available": sum(1 for row in tools if row.get("export_available")),
+                "primary_tasks": sorted({str(row.get("task")) for row in tools if row.get("task")}),
+                "missing_tools": [str(row["name"]) for row in missing],
+            })
         return {
             "name": "tools_matrix",
             "profile": self.profile.name,
@@ -419,7 +440,12 @@ class ToolchainManager:
                 "optional": sum(1 for row in rows if row.get("requirement") == "optional"),
                 "installable_by_aiplane": sum(1 for row in rows if row.get("installable_by_aiplane")),
                 "exports_available": sum(1 for row in rows if row.get("export_available")),
+                "workflows": len(workflows),
+                "workflows_complete": sum(1 for row in workflows if row.get("readiness") == "complete"),
+                "workflows_partial": sum(1 for row in workflows if row.get("readiness") == "partial"),
+                "workflows_needing_setup": sum(1 for row in workflows if row.get("readiness") == "needs_setup"),
             },
+            "workflows": workflows,
             "categories": categories,
         }
 

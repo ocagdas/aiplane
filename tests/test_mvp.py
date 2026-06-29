@@ -1500,10 +1500,14 @@ class MvpTests(unittest.TestCase):
 
             preview = ModelCatalog(profile).promote_generated("generated-qwen", new_name="qwen-reviewed", write=False)
             self.assertEqual(preview["would_promote"], 1)
+            self.assertIn("next_steps", preview)
+            self.assertIn("without --dry-run", preview["next_steps"][0])
             self.assertIn("generated-qwen", (root / "models.generated.yaml").read_text(encoding="utf-8"))
 
             written = ModelCatalog(profile).promote_generated("generated-qwen", new_name="qwen-reviewed", write=True)
             self.assertEqual(written["promoted"], 1)
+            self.assertIn("next_steps", written)
+            self.assertIn("models.yaml", written["next_steps"][0])
             curated_text = (root / "models.yaml").read_text(encoding="utf-8")
             generated_text = (root / "models.generated.yaml").read_text(encoding="utf-8")
             self.assertIn("qwen-reviewed:", curated_text)
@@ -1561,6 +1565,8 @@ class MvpTests(unittest.TestCase):
             self.assertEqual(payload["name"], "model_catalog_promote")
             self.assertEqual(payload["target"], "qwen-reviewed")
             self.assertEqual(payload["would_promote"], 1)
+            self.assertIn("next_steps", payload)
+            self.assertIn("without --dry-run", payload["next_steps"][0])
 
     def test_refresh_verbose_rows_use_model_source_and_runtime_endpoint_names(self) -> None:
         source = load_profile("local-dev", Path.cwd())
@@ -1643,6 +1649,8 @@ class MvpTests(unittest.TestCase):
             with patch.object(ProviderRegistry, "models", return_value=discovered):
                 preview = ModelCatalog(profile).refresh("huggingface", write=False, verbose=True)
                 self.assertEqual(preview["changes"]["would_update"], 1)
+                self.assertIn("next_steps", preview)
+                self.assertIn("aiplane models refresh --provider huggingface", preview["next_steps"][0])
                 self.assertEqual(preview["results"]["huggingface"]["source_models_to_update"], 1)
                 self.assertEqual(preview["results"]["huggingface"]["profile_curated_models_before_refresh"], 1)
                 self.assertEqual(preview["results"]["huggingface"]["profile_refresh_imported_models_before_refresh"], 0)
@@ -2673,8 +2681,19 @@ class MvpTests(unittest.TestCase):
         self.assertEqual(payload["name"], "tools_matrix")
         self.assertIn("summary", payload)
         self.assertGreaterEqual(payload["summary"]["mandatory"], 2)
+        self.assertIn("workflows", payload)
+        self.assertIn("workflows", payload["summary"])
+        self.assertIn("workflows_complete", payload["summary"])
+        self.assertIn("workflows_partial", payload["summary"])
+        self.assertIn("workflows_needing_setup", payload["summary"])
         categories = {category["name"]: category for category in payload["categories"]}
+        workflows = {workflow["name"]: workflow for workflow in payload["workflows"]}
         self.assertIn("iac", categories)
+        self.assertIn("iac", workflows)
+        self.assertEqual(workflows["iac"]["tools"], len(categories["iac"]["tools"]))
+        self.assertIn(workflows["iac"]["readiness"], {"complete", "partial", "needs_setup"})
+        self.assertIn("provider-agnostic infrastructure provisioning", workflows["iac"]["primary_tasks"])
+        self.assertIn("missing_tools", workflows["iac"])
         iac_tools = {tool["name"]: tool for tool in categories["iac"]["tools"]}
         self.assertTrue(iac_tools["opentofu"]["plan_available"])
         self.assertTrue(iac_tools["opentofu"]["export_available"])
@@ -2682,6 +2701,7 @@ class MvpTests(unittest.TestCase):
         remote_tools = {tool["name"]: tool for tool in categories["remote"]["tools"]}
         self.assertEqual(remote_tools["openssh-client"]["requirement"], "mandatory")
         self.assertIn("SSH tunnels", remote_tools["openssh-client"]["needed_for"])
+        self.assertEqual(workflows["remote"]["mandatory"], 1)
 
     def test_tools_plan_and_export_cli_are_non_mutating_starters(self) -> None:
         stdout = StringIO()

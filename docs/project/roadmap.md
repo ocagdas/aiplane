@@ -1,0 +1,122 @@
+# Project Roadmap
+
+This document is the developer-facing status map. It separates what is implemented from what is in progress, planned, or deferred. For product boundary and architecture direction, see [Strategy](strategy.md).
+
+## Status Labels
+
+- **Implemented**: available in the current CLI, scripts, docs, or tests.
+- **In progress**: partially implemented; useful pieces exist, but the area is not complete.
+- **Planned**: intended direction, but not implemented yet.
+- **Research**: worth investigating before committing to a design.
+- **Deferred**: intentionally not a near-term priority.
+
+## Current Milestone: Early Beta Release Hardening
+
+Goal: make the repository coherent and useful for early open-source users after the history cleanup.
+
+Required outcomes:
+
+1. Keep code, docs, command coverage, roadmap, handoff, implemented behavior, and tests aligned to a high open-source quality bar.
+2. Keep README and user docs focused on current commands and explicit caveats.
+3. Preserve the product boundary: `aiplane` is a control-plane CLI, not an agent, runtime, proxy, or hidden cloud deployment engine.
+4. Keep local/private direction notes in ignored local files only.
+5. Run full tests, profile validation, setup doctor, and representative smoke commands before calling the branch release-ready.
+
+## Implemented
+
+- Profile loading, validation, templates, selected/default profile handling, ignored local config, and external profile directory support.
+- Ignored local credential references with redacted credential inspection commands.
+- Environment planning and doctor checks for system Python, `venv`, Conda, and Docker execution mode.
+- External tool catalog, doctors, guarded install previews, non-mutating plans, and starter exports for Azure CLI, OpenTofu/Terraform, Pulumi, Vagrant, Packer, Docker/Compose, Dev Container CLI, kubectl, Helm, OpenSSH, Ansible, and benchmark helpers.
+- Provider/model catalog foundations for Ollama, Ollama Cloud placeholder, OpenAI-compatible runtimes, OpenAI, Anthropic, Azure OpenAI, Hugging Face, GGUF/local files, and local/open-weight model candidates.
+- Generated provider/model cache flow plus `models promote` as the reviewed path into editable profile YAML.
+- Runtime/source mapping for Ollama, Hugging Face, GGUF/local files, vLLM, TGI, Transformers, llama.cpp, LocalAI, LM Studio, and selected media runtimes.
+- Runtime helper delegation through `aiplane runtimes ...` where supported by `scripts/provider_helper.sh`.
+- Hardware discovery, active hardware selection, machine schema/templates, model-fit checks, and hardware-aware recommendations.
+- Machine inventory commands for import/list/show/validate/recommend, Azure SKU discovery/import, cache list/clear, Azure status, and remote profiling plans.
+- Stack commands for setup/list/show/plan/doctor/status/export plus same-host lifecycle commands `prepare/start/stop/restart`.
+- Stack preflight checks for runtime prerequisites, local port availability, endpoint auth policy, and cache-path hints.
+- Azure target planning and doctor checks for AKS and VM targets, plus a narrow guarded Azure VM apply path.
+- Orchestrator catalog commands for LangGraph, CrewAI, AutoGen, OpenHands, Semantic Kernel, and LlamaIndex Workflows.
+- Agent application templates with non-mutating `agents templates/plan/export` commands.
+- Stack artifact exports for Continue, OpenAI-compatible endpoint config, Dockerfile, Conda YAML, and starter Docker Compose.
+- SSH tunnel plan/start/status/stop for configured remote model endpoints.
+- Model list/show/defaults/use/enable/disable/refresh/promote/clear-cache/pull/test/benchmark/recommend commands.
+- Benchmark framework list/doctor/install/plan helpers for smoke/custom checks, lm-evaluation-harness, vLLM serving benchmarks, and Locust-style load tests.
+- `aiplane run` for single-prompt routing through configured model defaults with dry-run and policy-gated non-local escalation.
+- Integration plan/setup/export for Continue, Cline, Zed, Aider, generic OpenAI-compatible clients, and MCP client snippets.
+- MCP stdio server with read tools and narrow guarded writes for model defaults, hardware selection, runtime preference, model refresh, and SSH tunnel lifecycle.
+- Policy checks, approval handling, secret redaction, JSONL audit foundations, and shared JSON output ordering.
+
+## In Progress
+
+- Provider discovery: Ollama, Hugging Face, Hugging Face GGUF, Piper voices, OpenAI-compatible `/v1/models`, and Azure OpenAI deployment paths exist; richer managed-provider discovery needs hardening.
+- Runtime and stack lifecycle: same-host/local helpers exist; remote execution, endpoint authentication, GPU mapping, service management, and production tuning remain early.
+- Tool integrations: doctors, install previews, plans, and starter exports exist; provider-specific modules/playbooks/templates remain planned.
+- Azure deployment: planning, doctor checks, and narrow VM apply exist; broader AKS/cloud apply needs hardening before expansion.
+- MCP governance: read tools and audited narrow writes exist; broader write tools require explicit risk controls.
+- Benchmarking: smoke/custom tasks and framework planning exist; repeated runs, token metrics, comparison views, and sandboxed grading remain planned.
+- IDE/CLI integration: config export exists; deeper Cursor, JetBrains, Windsurf, Copilot, Codex, and Claude Code integration remains research/planned.
+
+## Planned Next Milestones
+
+1. **Tool/task matrix and setup doctor expansion** - In progress
+   - Keep `environment doctor` as the default human setup check with text output.
+   - Grow doctor scope as new tool families are integrated.
+   - Keep every external tool mapped to the tasks it enables, whether it is mandatory or optional, and whether `aiplane` can attempt installation.
+   - Add workflow-level readiness summaries to `tools matrix` so release review and demos can quickly identify complete, partial, and not-yet-ready tool categories. - Started.
+
+2. **Provider discovery and model import** - In progress
+   - Add richer Azure OpenAI deployment discovery.
+   - Add Anthropic/OpenAI discovery fallbacks where APIs or maintained catalogs allow it.
+   - Keep `models promote` as the reviewed flow from generated provider entry to editable profile model.
+   - Make refresh/promote output explain the safe next step from dry-run discovery to generated aliases to curated model aliases. - Started.
+
+3. **Cloud, VM, and workstation tool integrations** - In progress
+   - Use OpenTofu as the default provider-agnostic IaC target, Terraform as a compatible alternative, and Pulumi as an optional language-native IaC path.
+   - Harden Vagrant, Packer, Ansible, Dev Container, and IaC starter exports into provider-specific workflows.
+   - Keep local install, local VM provisioning, remote VM provisioning, remote PC setup, and cloud provisioning distinct.
+   - Prepare a public demo plan that shows repeatable local, endpoint, MCP, stack, and Azure discovery workflows without unsafe mutation. - Started.
+
+4. **Stack lifecycle hardening**
+   - Improve same-host lifecycle result reporting and status verification after prepare/start.
+   - Add Docker-aware stack lifecycle paths after same-host helper execution is stable.
+   - Keep remote execution boundaries explicit for SSH/Azure/AKS stacks.
+
+5. **Runtime packaging and deployment reproducibility**
+   - Broaden tests for stack export content across runtime/orchestrator combinations.
+   - Add cache mounts, richer GPU flags, environment variables, and auth notes.
+   - Keep image builds, registry pushes, VM creation, and cloud apply explicit and previewable.
+
+6. **IDE, MCP, and agent-tool integrations**
+   - Maintain Continue, Cline, Zed, Aider, generic OpenAI-compatible, and MCP config exports as config-level integrations.
+   - Keep model endpoint export separate from MCP tool export.
+   - Research deeper IDE/tool integrations before adding brittle custom paths.
+
+7. **Endpoint authentication and credential hygiene**
+   - Add first-class plans for reverse proxy or gateway auth in front of public/shared model endpoints.
+   - Support named local credentials for multiple accounts per provider without raw secrets in profiles.
+   - Add stronger secret scanning/readiness checks before public release or generated artifact export.
+
+8. **Benchmark and recommendation quality**
+   - Add repeated benchmark runs, timing/token metrics, and local result summaries.
+   - Add benchmark comparison across models, runtimes, and machines.
+   - Defer automated code execution grading until sandboxing and language runners are designed.
+
+## Planned But Not Implemented
+
+- `aiplane launch` wrappers for Continue, Codex, Claude Code, Cursor, or Ollama `launch`.
+- `aiplane session` active chat/session management.
+- Provider-specific production-ready Vagrant/Packer/OpenTofu/Terraform/Pulumi/Ansible/Dev Container modules and apply workflows.
+- Custom VS Code extension or marketplace publishing.
+- Full custom coding agent, agent orchestrator, autocomplete engine, inference runtime, or general model proxy.
+- Broad cloud deployment apply for AKS/AWS/generic Kubernetes.
+- Production-grade API gateway/auth management for shared endpoints.
+- Arbitrary shell execution through MCP.
+
+## Deferred / Non-Goals
+
+- Replacing Continue, Cline, Cursor, Copilot, Codex CLI, Claude Code, Aider, or similar coding agents.
+- Implementing model inference engines inside `aiplane`.
+- Becoming a general model proxy competing with LiteLLM/OpenRouter-style tools.
+- Hidden IDE policy bypasses or direct model edits without review.

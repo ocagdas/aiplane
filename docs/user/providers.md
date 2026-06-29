@@ -162,9 +162,9 @@ aiplane models refresh --limit 100 --provider-limit huggingface=500 --provider-l
 aiplane models refresh --provider huggingface --limit 10 --dry-run --verbose
 ```
 
-`--limit` is the default per-provider maximum. Repeat `--provider-limit PROVIDER=COUNT` to override a particular model provider. For example, use a large Hugging Face limit and a smaller/larger provider-specific limit when refreshing all providers. By default refresh prints provider-level counts only; add `--verbose` to include per-model change rows.
+`--limit` is the default per-provider maximum. Repeat `--provider-limit PROVIDER=COUNT` to override a particular model provider. For example, use a large Hugging Face limit and a smaller/larger provider-specific limit when refreshing all providers. By default refresh prints provider-level counts only; add `--verbose` to include per-model change rows. Refresh output also includes `next_steps` so dry runs and writes show the safe path from discovery, to generated aliases, to reviewed promotion.
 
-Review generated aliases before making them curated profile entries. Promotion copies one alias from `models.generated.yaml` into `models.yaml`; by default it removes the generated copy so the curated alias becomes authoritative. Promotion refuses to overwrite an existing curated target alias unless you pass `--overwrite` after reviewing the existing entry:
+Review generated aliases before making them curated profile entries. Promotion copies one alias from `models.generated.yaml` into `models.yaml`; by default it removes the generated copy so the curated alias becomes authoritative. Promotion output includes `next_steps` that call out whether the command was a dry run, which file would be or was written, and which validation/export checks to run next. Promotion refuses to overwrite an existing curated target alias unless you pass `--overwrite` after reviewing the existing entry:
 
 ```bash
 aiplane models promote generated-alias --dry-run
@@ -196,6 +196,7 @@ Important output fields:
 - `prune_enabled`: whether missing source ids are allowed to remove generated aliases. Pruning is enabled only after a successful authoritative online/source response. Query results, limit-truncated source windows, and profile-catalog fallback do not prune.
 - `model_changes_count`: number of per-model change rows hidden from the default summary.
 - `model_changes`: shown only with `--verbose`; contains aliases that would be imported/imported, would be updated/updated, or would be removed/removed. In verbose rows, `model.id` is the provider-native model id, `model.source` is the model provider, and `runtime_endpoint` is the configured runtime endpoint such as `ollama`, `vllm`, `transformers`, or `llamacpp`.
+- `next_steps`: command-specific guidance for the safe review flow, such as writing a dry-run refresh, promoting one generated alias, validating the profile, or previewing cache cleanup.
 
 New entries are enabled by default. Use `--disable-new` to import them disabled.
 
