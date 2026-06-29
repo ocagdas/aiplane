@@ -91,8 +91,10 @@ class ModelCatalog:
 
             latest_benchmark = latest_benchmark_summary(self.profile, name)
             supported_runtimes = runtime_catalog.compatible_runtimes_for_entry(model, include_gui=True)
-            runtime_endpoint = serving_provider
+            ownership = ownership_for_model(model, provider)
+            runtime_endpoint = None if ownership == "managed_service" else serving_provider
             configured_runtime_endpoints = [runtime for runtime in supported_runtimes if runtime in self.providers()]
+            runtime_value = None if ownership == "managed_service" else (model.get("preferred_runtime") or provider.get("runtime") or runtime_endpoint)
             rows.append({
                 "name": name,
                 "provider": source_provider,
@@ -100,8 +102,8 @@ class ModelCatalog:
                 "model": model.get("model"),
                 "capability_avg_score": _capability_average(capabilities),
                 "latest_benchmark": latest_benchmark,
-                "ownership": ownership_for_model(model, provider),
-                "runtime": model.get("preferred_runtime") or provider.get("runtime") or runtime_endpoint,
+                "ownership": ownership,
+                "runtime": runtime_value,
                 "supported_runtimes": supported_runtimes,
                 "runtime_endpoint": runtime_endpoint,
                 "configured_runtime_endpoints": configured_runtime_endpoints,
@@ -458,7 +460,7 @@ class ModelCatalog:
             "next_steps": _promote_next_steps(name, target, write, keep_generated),
         }
 
-    def clear_imported(self, provider_name: str | None = None, write: bool = False, include_curated: bool = False) -> dict[str, Any]:
+    def clear_imported(self, provider_name: str | None = None, write: bool = False, include_curated: bool = True) -> dict[str, Any]:
         from .config import dump_yaml
 
         curated_models = _dict_of_dicts(self.config.get("models", {}))
@@ -557,8 +559,6 @@ class ModelCatalog:
             command = ["python", "-m", "aiplane", "providers", "models", "civitai", "--online", "--query", model_id]
         elif source == "modelscope":
             command = ["provider-native-pull", "modelscope", model_id]
-        elif source == "piper_voices":
-            command = ["provider-native-pull", "piper_voices", model_id]
         elif source == "local_file":
             command = ["test", "-f", model_id]
         else:
@@ -577,7 +577,12 @@ class ModelCatalog:
         provider = self.providers().get(provider_name, {})
         model["source"] = model_source(model)
         model["ownership"] = ownership_for_model(model, provider)
-        model["runtime"] = model.get("preferred_runtime") or provider.get("runtime") or provider_name
+        from .runtime_catalog import RuntimeCatalog
+        supported_runtimes = RuntimeCatalog(self.profile).compatible_runtimes_for_entry(model, include_gui=True)
+        runtime_value = None if model["ownership"] == "managed_service" else (model.get("preferred_runtime") or provider.get("runtime") or provider_name)
+        model["runtime"] = runtime_value
+        model["runtime_endpoint"] = None if model["ownership"] == "managed_service" else provider_name
+        model["supported_runtimes"] = supported_runtimes
         model["provider_config"] = provider
         model["capabilities"] = capability_profile(model)
         model["capability_avg_score"] = _capability_average(model["capabilities"])
@@ -751,9 +756,9 @@ def _heuristic_capability_scores(model: dict[str, Any]) -> dict[str, int]:
     params = _parameter_billions(model_id)
     is_cloud = not bool(model.get("local", False))
     is_embedding = "embed" in model_id or "embedding" in roles
-    is_code = any(token in model_id for token in ["coder", "code", "starcoder", "codellama"]) or "completion" in roles
-    is_reasoning = "deepseek-r1" in model_id or "reason" in model_id
-    is_general = any(token in model_id for token in ["llama", "hermes", "gpt", "claude", "qwen2.5"])
+    is_code = any(token in model_id for token in ["coder", "code"]) or "completion" in roles
+    is_reasoning = "reason" in model_id or "reasoning" in roles
+    is_general = "chat" in roles or "generation" in roles
 
     if is_embedding:
         return {
@@ -771,6 +776,14 @@ def _heuristic_capability_scores(model: dict[str, Any]) -> dict[str, int]:
             "audio": 0,
             "video": 0,
         }
+    if "text_to_speech" in roles:
+        return {"text_to_speech": 4, "speech_to_text": 0, "image_generation": 0, "video_generation": 0, "audio": 4, "video": 0}
+    if "speech_to_text" in roles:
+        return {"text_to_speech": 0, "speech_to_text": 4, "image_generation": 0, "video_generation": 0, "audio": 4, "video": 0}
+    if "image_generation" in roles:
+        return {"text_to_speech": 0, "speech_to_text": 0, "image_generation": 4, "video_generation": 0, "audio": 0, "video": 0}
+    if "video_generation" in roles:
+        return {"text_to_speech": 0, "speech_to_text": 0, "image_generation": 2, "video_generation": 4, "audio": 0, "video": 4}
 
     code_base = 1
     if is_code:
@@ -810,13 +823,13 @@ def _heuristic_capability_scores(model: dict[str, Any]) -> dict[str, int]:
 
 
 def _benchmark_refs(model: dict[str, Any]) -> list[str]:
-    model_id = str(model.get("model", "")).lower()
+    roles = {str(role) for role in model.get("roles", []) if role}
     refs = []
-    if any(token in model_id for token in ["coder", "code", "starcoder", "codellama"]):
+    if roles.intersection({"completion", "autocomplete", "analysis", "generation", "refactor"}):
         refs.extend(["HumanEval", "MBPP", "LiveCodeBench", "SWE-bench-style repair tasks"])
-    if "deepseek-r1" in model_id:
-        refs.extend(["AIME", "MATH", "GPQA", "Codeforces", "LiveCodeBench"])
-    if any(token in model_id for token in ["llama", "hermes", "gpt", "claude"]):
+    if "reasoning" in roles:
+        refs.extend(["MATH", "GPQA", "LiveCodeBench"])
+    if "chat" in roles:
         refs.extend(["MMLU/MMLU-Pro", "GPQA", "IFEval", "Arena-style preference evals"])
     if not refs:
         refs.append("catalog heuristic; no specific benchmark reference configured")
@@ -912,6 +925,10 @@ ROLE_CAPABILITY_MAP: dict[str, list[str]] = {
     "analysis": ["code_analysis", "reasoning"],
     "generation": ["code_generation", "general_chat"],
     "refactor": ["debugging_refactor", "code_analysis"],
+    "image_generation": ["image_generation"],
+    "text_to_speech": ["text_to_speech"],
+    "speech_to_text": ["speech_to_text"],
+    "video_generation": ["video_generation", "video"],
 }
 
 CAPABILITY_ALIASES: dict[str, list[str]] = {
@@ -922,8 +939,9 @@ CAPABILITY_ALIASES: dict[str, list[str]] = {
     "chat": ["general_chat"],
     "embedding": ["embedding"],
     "tool_use": ["tool_use"],
-    "stt": ["speech_to_text", "audio"],
-    "tts": ["text_to_speech", "audio"],
+    "stt": ["speech_to_text"],
+    "tts": ["text_to_speech"],
+    "audio": ["audio"],
     "image": ["image_generation", "vision_image_understanding"],
     "video": ["video_generation", "video"],
 }
@@ -1104,14 +1122,16 @@ def _discovered_model_entry(provider_name: str, model_id: str, enable: bool = Fa
     params = _parameter_billions(model_id.lower())
     roles = _roles_for_discovered_model(provider_name, model_id, source_metadata or {})
     min_ram, recommended_ram, min_vram, recommended_vram = _resource_guess(params, roles)
+    preferred_runtime = _preferred_runtime_for_discovered_roles(provider_name, roles)
+    managed_sources = {"openai", "anthropic", "azure_openai", "ollama_cloud", "azure_speech", "elevenlabs"}
     entry: dict[str, Any] = {
-        "provider": _preferred_runtime_for_source(provider_name),
+        "provider": provider_name if provider_name in managed_sources else preferred_runtime,
         "model": model_id,
         "roles": roles,
-        "local": provider_name not in {"openai", "anthropic", "azure_openai", "ollama_cloud"},
+        "local": provider_name not in managed_sources,
         "enabled": enable,
         "source": provider_name,
-        "preferred_runtime": _preferred_runtime_for_source(provider_name),
+        "preferred_runtime": preferred_runtime,
         "notes": "Discovered from model provider and imported into the editable profile catalog.",
         "imported_by": "aiplane_refresh",
         "min_ram_gb": min_ram,
@@ -1119,6 +1139,9 @@ def _discovered_model_entry(provider_name: str, model_id: str, enable: bool = Fa
         "min_vram_gb": min_vram,
         "source_metadata": source_metadata or {},
     }
+    supported_runtimes = _supported_runtimes_for_discovered_roles(roles)
+    if supported_runtimes:
+        entry["supported_runtimes"] = supported_runtimes
     if recommended_vram is not None:
         entry["recommended_vram_gb"] = recommended_vram
     if provider_name == "ollama":
@@ -1129,7 +1152,7 @@ def _discovered_model_entry(provider_name: str, model_id: str, enable: bool = Fa
         entry["pull_command"] = f"python -c \"from huggingface_hub import snapshot_download; snapshot_download('{model_id}')\""
     elif provider_name == "civitai":
         entry["pull_command"] = "download via Civitai model/version API and place checkpoint in the target runtime model directory"
-    if "embedding" in roles:
+    if any(role in roles for role in ["embedding", "text_to_speech", "speech_to_text", "image_generation", "video_generation"]):
         entry["capability_scores"] = _heuristic_capability_scores(entry)
         entry["capability_score_source"] = "catalog_heuristic"
     return entry
@@ -1183,11 +1206,37 @@ def _preferred_runtime_for_source(provider_name: str) -> str:
         return "llamacpp"
     if provider_name == "civitai":
         return "comfyui"
-    if provider_name == "piper_voices":
-        return "piper"
+    if provider_name == "azure_speech":
+        return "azure_speech"
+    if provider_name == "elevenlabs":
+        return "elevenlabs"
     if provider_name == "modelscope":
         return "transformers"
     return provider_name
+
+
+def _preferred_runtime_for_discovered_roles(provider_name: str, roles: list[str]) -> str:
+    role_set = set(roles)
+    if "video_generation" in role_set or "image_generation" in role_set:
+        return "diffusers"
+    if "speech_to_text" in role_set:
+        return "faster_whisper"
+    if "text_to_speech" in role_set:
+        if provider_name in {"azure_speech", "elevenlabs"}:
+            return provider_name
+        return "transformers"
+    return _preferred_runtime_for_source(provider_name)
+
+
+def _supported_runtimes_for_discovered_roles(roles: list[str]) -> list[str]:
+    role_set = set(roles)
+    if "video_generation" in role_set or "image_generation" in role_set:
+        return ["diffusers", "comfyui"]
+    if "speech_to_text" in role_set:
+        return ["faster_whisper", "transformers"]
+    if "text_to_speech" in role_set:
+        return ["transformers"]
+    return []
 
 
 def _roles_for_discovered_model(provider_name: str, model_id: str, source_metadata: dict[str, Any]) -> list[str]:
@@ -1199,8 +1248,10 @@ def _roles_for_discovered_model(provider_name: str, model_id: str, source_metada
         return ["speech_to_text"]
     if pipeline in {"text-to-speech"}:
         return ["text_to_speech"]
-    if pipeline in {"text-to-image", "image-to-image", "image-to-video", "unconditional-image-generation"}:
+    if pipeline in {"text-to-image", "image-to-image", "unconditional-image-generation"}:
         return ["image_generation"]
+    if pipeline in {"image-to-video", "text-to-video", "video-to-video"}:
+        return ["video_generation"]
     if pipeline in {"image-classification", "object-detection", "image-segmentation", "zero-shot-image-classification"}:
         return ["image_classification"]
     if pipeline in {"visual-question-answering", "image-to-text"}:
@@ -1216,11 +1267,15 @@ def _roles_for_model_id(model_id: str) -> list[str]:
     value = model_id.lower()
     if "embed" in value:
         return ["embedding"]
-    if any(token in value for token in ["whisper", "stt", "speech-to-text"]):
+    if any(token in value for token in ["stt", "speech-to-text", "speech_to_text", "automatic-speech-recognition"]):
         return ["speech_to_text"]
     if any(token in value for token in ["tts", "text-to-speech"]):
         return ["text_to_speech"]
-    if any(token in value for token in ["vision", "vl", "llava"]):
+    if any(token in value for token in ["text-to-image", "texttoimage", "image-generation"]):
+        return ["image_generation"]
+    if any(token in value for token in ["text-to-video", "texttovideo", "video-generation", "t2v"]):
+        return ["video_generation"]
+    if any(token in value for token in ["vision", "visual", "image-to-text", "visual-question-answering"]):
         return ["chat", "analysis", "vision"]
     if "coder" in value or "code" in value:
         if "base" in value:
@@ -1232,6 +1287,14 @@ def _roles_for_model_id(model_id: str) -> list[str]:
 def _resource_guess(params: float, roles: list[str]) -> tuple[int, int, int, int | None]:
     if "embedding" in roles:
         return 4, 8, 0, None
+    if "text_to_speech" in roles:
+        return 8, 16, 0, None
+    if "speech_to_text" in roles:
+        return 16, 32, 0, 8
+    if "image_generation" in roles:
+        return 32, 64, 12, 16
+    if "video_generation" in roles:
+        return 64, 128, 8, 16
     if params <= 0:
         return 8, 16, 0, None
     if params <= 2:

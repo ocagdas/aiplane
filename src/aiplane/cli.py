@@ -82,8 +82,8 @@ def _main(argv: list[str] | None = None) -> int:
             "  aiplane profiles list\n"
             "  aiplane providers models ollama\n"
             "  aiplane hardware recommend\n"
-            "  aiplane models benchmark qwen-tiny --dry-run\n"
-            "  aiplane integrations export continue --model qwen-tiny\n"
+            "  aiplane models benchmark MODEL_ALIAS --dry-run\n"
+            "  aiplane integrations export continue --model MODEL_ALIAS\n"
             "  aiplane mcp serve\n\n"
             "Docs: docs/user/index.md"
         ),
@@ -151,7 +151,7 @@ def _main(argv: list[str] | None = None) -> int:
         "run",
         "Route a simple task through local/cloud policy",
         "Route a task through the profile policy and backend selection logic.",
-        "Examples:\n  aiplane run --dry-run 'summarize repo status'\n  aiplane run --model qwen-tiny 'explain this setup'\n  aiplane run --escalate 'needs cloud reasoning'",
+        "Examples:\n  aiplane run --dry-run 'summarize repo status'\n  aiplane run --model MODEL_ALIAS 'explain this setup'\n  aiplane run --escalate 'needs cloud reasoning'",
     )
     _profile_arg(run)
     run.add_argument("--model", help="Model alias to use. If omitted, aiplane selects an enabled local model, or an enabled non-local model with --escalate")
@@ -197,7 +197,7 @@ def _main(argv: list[str] | None = None) -> int:
     _profile_arg(hardware_discover)
     hardware_doctor = hardware_sub.add_parser("doctor", help="Check hardware/model fit", description="Check whether configured local models fit the discovered or selected hardware.", formatter_class=HelpFormatter)
     _profile_arg(hardware_doctor)
-    hardware_doctor.add_argument("--model", help="Optional model alias to check, such as qwen-tiny or qwen-coder-32b")
+    hardware_doctor.add_argument("--model", help="Optional model alias to check, such as a discovered or promoted alias")
     hardware_recommend = hardware_sub.add_parser("recommend", help="Recommend models for active/discovered hardware", description="Return hardware-aware model recommendations, sorted by capability score within recommendation groups.", formatter_class=HelpFormatter)
     _profile_arg(hardware_recommend)
     hardware_recommend.add_argument("--include-not-recommended", action="store_true", help="Also show models below minimum local RAM/VRAM targets")
@@ -213,7 +213,7 @@ def _main(argv: list[str] | None = None) -> int:
         "machines",
         "Manage self-managed machine inventory",
         "Import, list, recommend, and discover self-managed machines that can run local runtimes on local PCs, shared workstations, or cloud VMs.",
-        "Examples:\n  aiplane machines import gpu_box_01.machine.yaml\n  aiplane machines list\n  aiplane machines recommend --model qwen-coder-32b --runtime vllm\n  aiplane machines discover azure --region uksouth --workload inference_large",
+        "Examples:\n  aiplane machines import gpu_box_01.machine.yaml\n  aiplane machines list\n  aiplane machines recommend --model MODEL_ALIAS --runtime vllm\n  aiplane machines discover azure --region uksouth --workload inference_large",
     )
     machines_sub = machines_cmd.add_subparsers(dest="machines_command", required=True, metavar="command")
     machines_list = machines_sub.add_parser("list", help="List imported machines", description="List self-managed machines registered in the profile hardware inventory.", formatter_class=HelpFormatter)
@@ -240,7 +240,7 @@ def _main(argv: list[str] | None = None) -> int:
     machines_import.add_argument("--set", dest="settings", action="append", default=[], help="Override a machine field as key=value, such as memory_gb=128 or vram_gb=48; can be repeated")
     machines_recommend = machines_sub.add_parser("recommend", help="Recommend machines for model/runtime/workload", description="Rank imported machines against a model, runtime, or workload class.", formatter_class=HelpFormatter)
     _profile_arg(machines_recommend)
-    machines_recommend.add_argument("--model", help="Configured model alias, such as qwen-coder-32b")
+    machines_recommend.add_argument("--model", help="Configured model alias, such as a discovered or promoted alias")
     machines_recommend.add_argument("--runtime", help="Runtime name, such as ollama, vllm, llamacpp, or tgi")
     machines_recommend.add_argument("--workload", help="Workload class, such as inference_large, training_finetune, compile_build, or media_generation")
     machines_recommend.add_argument("--limit", type=int, help="Maximum machines to return")
@@ -270,7 +270,7 @@ def _main(argv: list[str] | None = None) -> int:
         "orchestrators",
         "Inspect agent/workflow orchestrator options",
         "List, inspect, and health-check orchestrator frameworks such as LangGraph, CrewAI, AutoGen, and OpenHands. Operational setup happens through stacks.",
-        "Examples:\n  aiplane orchestrators list\n  aiplane orchestrators show langgraph\n  aiplane orchestrators setup langgraph --runtime ollama --model qwen-tiny --dry-run\n  aiplane orchestrators doctor langgraph",
+        "Examples:\n  aiplane orchestrators list\n  aiplane orchestrators show langgraph\n  aiplane orchestrators setup langgraph --runtime ollama --model MODEL_ALIAS --dry-run\n  aiplane orchestrators doctor langgraph",
     )
     orchestrators_sub = orchestrators_cmd.add_subparsers(dest="orchestrators_command", required=True, metavar="command")
     orchestrators_list = orchestrators_sub.add_parser("list", help="List supported orchestrators", description="List known orchestrator frameworks and where they fit. Filter by provider/runtime or group by provider/runtime for discovery.", formatter_class=HelpFormatter, epilog="Examples:\n  aiplane orchestrators list\n  aiplane orchestrators list --provider ollama\n  aiplane orchestrators list --runtime ollama --runtime vllm\n  aiplane orchestrators list --group-by provider")
@@ -281,7 +281,7 @@ def _main(argv: list[str] | None = None) -> int:
     orchestrators_show = orchestrators_sub.add_parser("show", help="Show one orchestrator", description="Show one orchestrator definition and any profile config.", formatter_class=HelpFormatter)
     _profile_arg(orchestrators_show)
     orchestrators_show.add_argument("name", help="Orchestrator name, such as langgraph, crewai, autogen, or openhands")
-    orchestrators_setup = orchestrators_sub.add_parser("setup", help="Configure one orchestrator", description="Write profile-specific orchestrator settings to orchestrators.yaml. Use --dry-run to preview without writing or installing.", formatter_class=HelpFormatter, epilog="Examples:\n  aiplane orchestrators setup langgraph --runtime ollama --model qwen-tiny --dry-run\n  aiplane orchestrators setup langgraph --runtime ollama --model qwen-tiny --approval-mode ask\n  aiplane orchestrators setup langgraph --runtime vllm --model qwen-coder-32b-vllm --endpoint http://localhost:8000/v1 --limit timeout=30m --tool shell=guarded")
+    orchestrators_setup = orchestrators_sub.add_parser("setup", help="Configure one orchestrator", description="Write profile-specific orchestrator settings to orchestrators.yaml. Use --dry-run to preview without writing or installing.", formatter_class=HelpFormatter, epilog="Examples:\n  aiplane orchestrators setup langgraph --runtime ollama --model MODEL_ALIAS --dry-run\n  aiplane orchestrators setup langgraph --runtime ollama --model MODEL_ALIAS --approval-mode ask\n  aiplane orchestrators setup langgraph --runtime vllm --model MODEL_ALIAS --endpoint http://localhost:8000/v1 --limit timeout=30m --tool shell=guarded")
     _profile_arg(orchestrators_setup)
     orchestrators_setup.add_argument("name", help="Orchestrator name, such as langgraph, crewai, autogen, or openhands")
     orchestrators_setup.add_argument("--runtime", help="Runtime to pair with the orchestrator, such as ollama or vllm")
@@ -302,7 +302,7 @@ def _main(argv: list[str] | None = None) -> int:
         "stacks",
         "Plan orchestrator/runtime/model/machine deployments",
         "Bind an optional orchestrator, runtime, model, machine, and access policy into a stack that can be planned, checked, exported, and later deployed.",
-        "Examples:\n  aiplane stacks setup coding_agents --orchestrator langgraph --runtime vllm --model qwen-coder-32b --machine gpu_box_01 --dry-run\n  aiplane stacks plan coding_agents\n  aiplane stacks export continue coding_agents",
+        "Examples:\n  aiplane stacks setup coding_agents --orchestrator langgraph --runtime vllm --model MODEL_ALIAS --machine gpu_box_01 --dry-run\n  aiplane stacks plan coding_agents\n  aiplane stacks export continue coding_agents",
     )
     stacks_sub = stacks_cmd.add_subparsers(dest="stacks_command", required=True, metavar="command")
     stacks_list = stacks_sub.add_parser("list", help="List stacks", description="List configured model/runtime/machine stacks.", formatter_class=HelpFormatter)
@@ -371,7 +371,7 @@ def _main(argv: list[str] | None = None) -> int:
         "benchmarks",
         "Plan/install benchmark frameworks",
         "Inspect optional benchmark frameworks and render commands for aiplane smoke benchmarks, lm-evaluation-harness, vLLM serving benchmarks, and endpoint load tests.",
-        "Examples:\n  aiplane benchmarks list\n  aiplane benchmarks doctor\n  aiplane benchmarks install lm-evaluation-harness --dry-run\n  aiplane benchmarks plan aiplane-smoke --model qwen-tiny",
+        "Examples:\n  aiplane benchmarks list\n  aiplane benchmarks doctor\n  aiplane benchmarks install lm-evaluation-harness --dry-run\n  aiplane benchmarks plan aiplane-smoke --model MODEL_ALIAS",
     )
     benchmarks_sub = benchmarks_cmd.add_subparsers(dest="benchmarks_command", required=True, metavar="command")
     benchmarks_list = benchmarks_sub.add_parser("list", help="List benchmark frameworks", description="List built-in and optional external benchmark frameworks known to aiplane.", formatter_class=HelpFormatter)
@@ -386,7 +386,7 @@ def _main(argv: list[str] | None = None) -> int:
     benchmarks_plan = benchmarks_sub.add_parser("plan", help="Render benchmark command templates", description="Render commands for running one benchmark framework against a selected model/endpoint. This does not execute the benchmark.", formatter_class=HelpFormatter)
     _profile_arg(benchmarks_plan)
     benchmarks_plan.add_argument("name", help="Framework name, such as aiplane-smoke, lm-evaluation-harness, vllm-serving, or locust-load")
-    benchmarks_plan.add_argument("--model", default="qwen-tiny", help="Model alias or provider-native model id to include in the command template")
+    benchmarks_plan.add_argument("--model", default="MODEL_ALIAS", help="Model alias or provider-native model id to include in the command template")
     benchmarks_plan.add_argument("--endpoint", help="OpenAI-compatible endpoint for external benchmark frameworks")
     benchmarks_plan.add_argument("--spec", help="Custom aiplane benchmark spec path for aiplane-smoke")
 
@@ -395,13 +395,13 @@ def _main(argv: list[str] | None = None) -> int:
         "models",
         "List, inspect, test, pull, and benchmark approved models",
         "Work with the approved model catalog in the selected profile.",
-        "Examples:\n  aiplane models list\n  aiplane models show qwen-tiny\n  aiplane models test --dry-run qwen-tiny\n  aiplane models benchmark --task all qwen-tiny\n  aiplane models defaults\n  aiplane models use self_managed_model qwen-small",
+        "Examples:\n  aiplane models list\n  aiplane models show MODEL_ALIAS\n  aiplane models test --dry-run MODEL_ALIAS\n  aiplane models benchmark --task all MODEL_ALIAS\n  aiplane models defaults\n  aiplane models use self_managed_model MODEL_ALIAS",
     )
     models_sub = models_cmd.add_subparsers(dest="models_command", required=True, metavar="command")
     models_defaults = models_sub.add_parser("defaults", help="Show configured default model aliases", description="Show profile-level model defaults used by run and future routing commands.", formatter_class=HelpFormatter)
     _profile_arg(models_defaults)
     models_defaults.add_argument("--group-by", choices=["none", "provider"], default="provider", help="Group defaults by provider; use none for a flat defaults list")
-    models_use = models_sub.add_parser("use", help="Set a default model alias", description="Persist a model alias as a named default, such as chat_model, autocomplete_model, embedding_model, code_model, self_managed_model, completion_model, or reasoning_model.", formatter_class=HelpFormatter, epilog="Example:\n  aiplane models use self_managed_model qwen-small")
+    models_use = models_sub.add_parser("use", help="Set a default model alias", description="Persist a model alias as a named default, such as chat_model, autocomplete_model, embedding_model, code_model, self_managed_model, completion_model, or reasoning_model.", formatter_class=HelpFormatter, epilog="Example:\n  aiplane models use self_managed_model MODEL_ALIAS")
     _profile_arg(models_use)
     models_use.add_argument("role", help="Default role name, such as chat_model, autocomplete_model, embedding_model, code_model, self_managed_model, completion_model, or reasoning_model")
     models_use.add_argument("name", help="Existing model alias to set as the default for ROLE")
@@ -413,7 +413,7 @@ def _main(argv: list[str] | None = None) -> int:
     models_disable.add_argument("name", help="Model alias to disable")
     models_list = models_sub.add_parser("list", help="List approved model aliases", description="List catalog entries with model provider, supported runtimes, configured runtime endpoints, roles, enabled state, and capability scores.", formatter_class=HelpFormatter)
     _profile_arg(models_list)
-    models_list.add_argument("--group-by", choices=["none", "provider", "source", "runtime", "model", "ownership"], default="none", help="Group output by model provider, model source/catalog, supported runtime, or provider-native model id")
+    models_list.add_argument("--group-by", choices=["none", "provider", "provider-kind", "source", "runtime", "model", "ownership"], default="none", help="Group output by model provider, provider ownership/provider, model source/catalog, supported runtime, or provider-native model id")
     models_list.add_argument("--provider", help="Filter by model provider, such as ollama, huggingface, or huggingface_gguf")
     models_list.add_argument("--runtime", help="Filter by supported runtime, such as ollama, vllm, tgi, transformers")
     models_list.add_argument("--source", help="Filter by model source/catalog, such as ollama, huggingface, huggingface_gguf")
@@ -432,18 +432,18 @@ def _main(argv: list[str] | None = None) -> int:
     models_list.add_argument("--limit", type=int, help="Maximum number of rows to print after filtering and sorting")
     models_show = models_sub.add_parser("show", help="Show one model alias", description="Show one model entry, provider config, and capability metadata.", formatter_class=HelpFormatter)
     _profile_arg(models_show)
-    models_show.add_argument("name", help="Model alias from models.yaml, for example qwen-tiny")
+    models_show.add_argument("name", help="Model alias from models.yaml, for example MODEL_ALIAS")
     models_doctor = models_sub.add_parser("doctor", help="Check model/provider readiness", description="Check whether enabled models are usable now: provider reachable, model pulled/listed, keys present.", formatter_class=HelpFormatter)
     _profile_arg(models_doctor)
     models_pull = models_sub.add_parser("pull", help="Plan or run model download", description="Plan a source/catalog-oriented model download. Ollama aliases can be pulled directly; Hugging Face downloads are rendered and can be delegated to runtime helpers.", formatter_class=HelpFormatter)
     _profile_arg(models_pull)
-    models_pull.add_argument("name", nargs="?", help="Configured model alias, for example qwen-tiny or qwen-coder-32b-vllm")
+    models_pull.add_argument("name", nargs="?", help="Configured model alias, for example MODEL_ALIAS or MODEL_ALIAS")
     models_pull.add_argument("--source", help="Model source/catalog, such as ollama, huggingface, huggingface_gguf, local_file")
-    models_pull.add_argument("--model-id", help="Source-native model id when NAME is omitted, such as Qwen/Qwen2.5-Coder-32B-Instruct")
+    models_pull.add_argument("--model-id", help="Source-native model id when NAME is omitted, such as provider/native-model-id")
     models_pull.add_argument("--for-runtime", help="Runtime compatibility intent, such as vllm, tgi, transformers, or llamacpp")
     models_pull.add_argument("--file", help="Optional file inside a source repo, useful for GGUF downloads")
     models_pull.add_argument("--dry-run", action="store_true", help="Print the resolved pull/download command without executing it")
-    models_refresh = models_sub.add_parser("refresh", help="Refresh model-provider model catalog entries", description="Refresh the editable profile catalog from model providers. Providers are model catalogs or artifact sources such as Ollama Library, Hugging Face Hub, GGUF sources, Piper voices, or local files. Runtimes such as vLLM, TGI, llama.cpp, Transformers, and LM Studio are execution engines and are managed under aiplane runtimes. Refresh is online-first where a source adapter exists, then falls back to the profile catalog for sources without an online adapter or temporarily unavailable APIs.", formatter_class=HelpFormatter, epilog="Examples:\n  aiplane models refresh --dry-run\n  aiplane models refresh --provider huggingface --query qwen2.5-coder --limit 500 --dry-run\n  aiplane models refresh --limit 100 --provider-limit huggingface=500 --provider-limit ollama=500 --dry-run\n  aiplane models refresh --provider huggingface --limit 10 --dry-run --verbose\n  aiplane models refresh --disable-new")
+    models_refresh = models_sub.add_parser("refresh", help="Refresh model-provider model catalog entries", description="Refresh the editable profile catalog from model providers. Providers are model catalogs or artifact sources such as Ollama Library, Hugging Face Hub, GGUF sources, Azure Speech voices, or local files. Runtimes such as vLLM, TGI, llama.cpp, Transformers, and LM Studio are execution engines and are managed under aiplane runtimes. Refresh is online-first where a source adapter exists, then falls back to the profile catalog for sources without an online adapter or temporarily unavailable APIs.", formatter_class=HelpFormatter, epilog="Examples:\n  aiplane models refresh --dry-run\n  aiplane models refresh --provider huggingface --query text-generation --limit 500 --dry-run\n  aiplane models refresh --limit 100 --provider-limit huggingface=500 --provider-limit ollama=500 --dry-run\n  aiplane models refresh --provider huggingface --limit 10 --dry-run --verbose\n  aiplane models refresh --disable-new")
     _profile_arg(models_refresh)
     models_refresh.add_argument("--provider", default="all", help="Model provider to refresh, or all to refresh all known model providers")
     models_refresh.add_argument("--dry-run", action="store_true", help="Show which models would be added without writing models.yaml")
@@ -453,17 +453,35 @@ def _main(argv: list[str] | None = None) -> int:
     models_refresh.add_argument("--limit", type=int, default=500, help="Default maximum model ids to read per provider catalog")
     models_refresh.add_argument("--provider-limit", action="append", default=[], metavar="PROVIDER=COUNT", help="Override --limit for one model provider; can be repeated, for example --provider-limit huggingface=25 --provider-limit ollama=500")
     models_refresh.add_argument("--verbose", action="store_true", help="Include per-model change rows. By default refresh prints provider-level counts only.")
-    models_clear_cache = models_sub.add_parser("clear-cache", help="Remove generated model catalog aliases", description="Remove generated refresh/import aliases from models.generated.yaml, plus legacy refresh-imported aliases from models.yaml. Curated/template aliases are kept unless --include-curated is passed. Use --dry-run first to preview.", formatter_class=HelpFormatter, epilog="Examples:\n  aiplane models clear-cache --dry-run\n  aiplane models clear-cache --provider huggingface --dry-run\n  aiplane models clear-cache --provider huggingface --include-curated --dry-run\n  aiplane models clear-cache")
+    models_clear_cache = models_sub.add_parser(
+        "clear-cache",
+        help="Remove model catalog refresh/import aliases",
+        description=(
+            "Remove generated refresh/import aliases from models.generated.yaml plus matching curated/template "
+            "aliases from models.yaml by default. Use --keep-curated to remove only generated or legacy "
+            "refresh-imported aliases. Use --dry-run first to preview."
+        ),
+        formatter_class=HelpFormatter,
+        epilog=(
+            "Examples:\n"
+            "  aiplane models clear-cache --dry-run\n"
+            "  aiplane models clear-cache --provider huggingface --dry-run\n"
+            "  aiplane models clear-cache --provider huggingface --keep-curated --dry-run\n"
+            "  aiplane models clear-cache"
+        ),
+    )
     _profile_arg(models_clear_cache)
     models_clear_cache.add_argument("--provider", help="Only clear aliases from this model provider, such as huggingface or huggingface_gguf")
-    models_clear_cache.add_argument("--include-curated", action="store_true", help="Also remove hand-curated/template aliases from models.yaml. By default only generated or refresh-imported aliases are removed.")
+    curated_clear = models_clear_cache.add_mutually_exclusive_group()
+    curated_clear.add_argument("--include-curated", action="store_true", default=True, help="Remove hand-curated/template aliases from models.yaml too. This is the default and is kept for explicit confirmation/backward-compatible scripts.")
+    curated_clear.add_argument("--keep-curated", action="store_true", help="Keep hand-curated/template aliases in models.yaml; remove only generated or legacy refresh-imported aliases.")
     models_clear_cache.add_argument("--dry-run", action="store_true", help="Show alias counts that would be removed without writing models.yaml")
     models_promote = models_sub.add_parser(
         "promote",
         help="Promote a generated model alias into curated models.yaml",
         description="Copy a reviewed generated/imported alias from models.generated.yaml into curated models.yaml. By default the generated copy is removed after promotion so the curated alias becomes the authoritative profile entry.",
         formatter_class=HelpFormatter,
-        epilog="Examples:\n  aiplane models promote huggingface-qwen-qwen2-5-coder-7b --dry-run\n  aiplane models promote huggingface-qwen-qwen2-5-coder-7b --as qwen-coder-reviewed\n  aiplane models promote generated-qwen --as qwen-reviewed --overwrite",
+        epilog="Examples:\n  aiplane models promote GENERATED_ALIAS --dry-run\n  aiplane models promote GENERATED_ALIAS --as REVIEWED_ALIAS\n  aiplane models promote GENERATED_ALIAS --as REVIEWED_ALIAS --overwrite",
     )
     _profile_arg(models_promote)
     models_promote.add_argument("name", help="Generated model alias from models.generated.yaml")
@@ -471,13 +489,13 @@ def _main(argv: list[str] | None = None) -> int:
     models_promote.add_argument("--keep-generated", action="store_true", help="Keep the generated alias after writing the curated copy")
     models_promote.add_argument("--overwrite", action="store_true", help="Overwrite an existing curated target alias after review. Without this, promotion refuses curated alias collisions.")
     models_promote.add_argument("--dry-run", action="store_true", help="Preview the promotion without editing files")
-    models_test = models_sub.add_parser("test", help="Run a small prompt against one model", description="Send a simple analysis/completion/write prompt to a model, or preview the prompt with --dry-run.", formatter_class=HelpFormatter, epilog="Examples:\n  aiplane models test --dry-run qwen-tiny\n  aiplane models test --task analysis --target src/aiplane/model_catalog.py qwen-tiny")
+    models_test = models_sub.add_parser("test", help="Run a small prompt against one model", description="Send a simple analysis/completion/write prompt to a model, or preview the prompt with --dry-run.", formatter_class=HelpFormatter, epilog="Examples:\n  aiplane models test --dry-run MODEL_ALIAS\n  aiplane models test --task analysis --target src/aiplane/model_catalog.py MODEL_ALIAS")
     _profile_arg(models_test)
     models_test.add_argument("--task", choices=["analysis", "completion", "write"], default="analysis", help="Smoke prompt type to run")
     models_test.add_argument("--target", help="Optional file path used as prompt context for analysis/completion")
     models_test.add_argument("--dry-run", action="store_true", help="Print the prompt without calling the provider")
     models_test.add_argument("name", help="Model alias to test")
-    models_benchmark = models_sub.add_parser("benchmark", help="Run smoke benchmark tasks", description="Run small analysis/completion/generation/reasoning tasks and save a benchmark JSON unless --no-save is used.", formatter_class=HelpFormatter, epilog="Examples:\n  aiplane models benchmark qwen-tiny\n  aiplane models benchmark --task completion --no-save qwen-tiny\n  aiplane models benchmark --dry-run qwen-tiny")
+    models_benchmark = models_sub.add_parser("benchmark", help="Run smoke benchmark tasks", description="Run small analysis/completion/generation/reasoning tasks and save a benchmark JSON unless --no-save is used.", formatter_class=HelpFormatter, epilog="Examples:\n  aiplane models benchmark MODEL_ALIAS\n  aiplane models benchmark --task completion --no-save MODEL_ALIAS\n  aiplane models benchmark --dry-run MODEL_ALIAS")
     _profile_arg(models_benchmark)
     models_benchmark.add_argument("--task", default="all", help="Benchmark task name to run, or all. Built-in tasks: analysis, completion, generation, reasoning")
     models_benchmark.add_argument("--spec", help="Optional JSON/YAML benchmark spec with custom tasks and evaluators")
@@ -493,23 +511,23 @@ def _main(argv: list[str] | None = None) -> int:
         "code",
         "Run simple code analysis/completion/write prompts",
         "Use a configured model for small code tasks. Use --dry-run to inspect prompts before calling a runtime.",
-        "Examples:\n  aiplane code analyze --model qwen-tiny src/aiplane/cli.py --dry-run\n  aiplane code complete --model qwen-tiny --line 20 src/app.py\n  aiplane code write --model qwen-tiny --task 'add email validation' --dry-run",
+        "Examples:\n  aiplane code analyze --model MODEL_ALIAS src/aiplane/cli.py --dry-run\n  aiplane code complete --model MODEL_ALIAS --line 20 src/app.py\n  aiplane code write --model MODEL_ALIAS --task 'add email validation' --dry-run",
     )
     code_sub = code_cmd.add_subparsers(dest="code_command", required=True, metavar="command")
     code_analyze = code_sub.add_parser("analyze", help="Analyze a code file", description="Ask a model to explain a file, identify risk, and suggest an improvement.", formatter_class=HelpFormatter)
     _profile_arg(code_analyze)
-    code_analyze.add_argument("--model", default="qwen-tiny", help="Model alias to use")
+    code_analyze.add_argument("--model", required=True, help="Model alias to use")
     code_analyze.add_argument("--dry-run", action="store_true", help="Print the prompt without calling the provider")
     code_analyze.add_argument("target", help="File path inside the workspace")
     code_complete = code_sub.add_parser("complete", help="Complete code at a line", description="Build a completion prompt using file context around the selected line.", formatter_class=HelpFormatter)
     _profile_arg(code_complete)
-    code_complete.add_argument("--model", default="qwen-tiny", help="Model alias to use")
+    code_complete.add_argument("--model", required=True, help="Model alias to use")
     code_complete.add_argument("--line", type=int, required=True, help="1-based cursor line number")
     code_complete.add_argument("--dry-run", action="store_true", help="Print the prompt without calling the provider")
     code_complete.add_argument("target", help="File path inside the workspace")
     code_write = code_sub.add_parser("write", help="Generate a small code snippet", description="Ask a model to write code for a short task description.", formatter_class=HelpFormatter)
     _profile_arg(code_write)
-    code_write.add_argument("--model", default="qwen-tiny", help="Model alias to use")
+    code_write.add_argument("--model", required=True, help="Model alias to use")
     code_write.add_argument("--task", required=True, help="Code-writing task description")
     code_write.add_argument("--dry-run", action="store_true", help="Print the prompt without calling the provider")
 
@@ -523,7 +541,7 @@ def _main(argv: list[str] | None = None) -> int:
         "  aiplane integrations plan continue --select-best --runtime ollama\n"
         "  aiplane integrations setup continue --dry-run\n"
         "  aiplane integrations export continue\n"
-        "  aiplane integrations export openai-compatible --model qwen-coder-32b-vllm --endpoint http://localhost:8000/v1",
+        "  aiplane integrations export openai-compatible --model MODEL_ALIAS --endpoint http://localhost:8000/v1",
     )
     integrations_sub = integrations_cmd.add_subparsers(dest="integrations_command", required=True, metavar="command")
     integrations_list = integrations_sub.add_parser("list", help="List supported export targets", description="List integration exporters currently supported by aiplane.", formatter_class=HelpFormatter)
@@ -531,14 +549,14 @@ def _main(argv: list[str] | None = None) -> int:
     integrations_roles = integrations_sub.add_parser("roles", help="Show required model roles for a target", description="Show the model roles an integration target can use, plus the capability signals aiplane uses for filtering and ranking.", formatter_class=HelpFormatter, epilog="Examples:\n  aiplane integrations roles continue\n  aiplane integrations roles cline")
     _profile_arg(integrations_roles)
     integrations_roles.add_argument("tool", choices=["continue", "cline", "zed", "aider", "openai-compatible", "vscode-mcp", "continue-mcp", "cline-mcp", "generic-mcp"], help="Integration target to inspect")
-    integrations_plan = integrations_sub.add_parser("plan", help="Plan integration model selection", description="Explain which models/runtimes/endpoints would be used for an integration. This does not write config or start runtimes.", formatter_class=HelpFormatter, epilog="Examples:\n  aiplane integrations plan continue\n  aiplane integrations plan continue --select-best --runtime ollama\n  aiplane integrations plan continue --chat llama-8b --autocomplete qwen-coder-1.5b-base --embedding nomic-embed-text\n  aiplane integrations plan cline --model qwen-coder-32b --endpoint http://localhost:8000/v1\n  aiplane integrations plan aider --select-best --runtime vllm --capability code_generation>=4")
+    integrations_plan = integrations_sub.add_parser("plan", help="Plan integration model selection", description="Explain which models/runtimes/endpoints would be used for an integration. This does not write config or start runtimes.", formatter_class=HelpFormatter, epilog="Examples:\n  aiplane integrations plan continue\n  aiplane integrations plan continue --select-best --runtime ollama\n  aiplane integrations plan continue --chat CHAT_ALIAS --autocomplete AUTOCOMPLETE_ALIAS --embedding EMBEDDING_ALIAS\n  aiplane integrations plan cline --model MODEL_ALIAS --endpoint http://localhost:8000/v1\n  aiplane integrations plan aider --select-best --runtime vllm --capability code_generation>=4")
     _profile_arg(integrations_plan)
     _integration_selection_args(integrations_plan)
     integrations_plan.add_argument("--model", help="Single model alias for one-model targets such as Cline, Zed, Aider, or openai-compatible")
     integrations_plan.add_argument("--endpoint", help="Endpoint override passed through to the plan")
     integrations_plan.add_argument("--api-key-env", help="API key env var override passed through to the plan")
     integrations_plan.add_argument("tool", choices=["continue", "cline", "zed", "aider", "openai-compatible", "vscode-mcp", "continue-mcp", "cline-mcp", "generic-mcp"], help="Integration target to plan")
-    integrations_setup = integrations_sub.add_parser("setup", help="Prepare models/runtimes for an integration", description="Use the integration plan to check/start runtimes and pull selected models. Use --dry-run to preview without executing helper actions.", formatter_class=HelpFormatter, epilog="Examples:\n  aiplane integrations setup continue --dry-run\n  aiplane integrations setup continue\n  aiplane integrations setup continue --select-best --runtime ollama\n  aiplane integrations setup cline --model qwen-coder-32b --runtime vllm --dry-run")
+    integrations_setup = integrations_sub.add_parser("setup", help="Prepare models/runtimes for an integration", description="Use the integration plan to check/start runtimes and pull selected models. Use --dry-run to preview without executing helper actions.", formatter_class=HelpFormatter, epilog="Examples:\n  aiplane integrations setup continue --dry-run\n  aiplane integrations setup continue\n  aiplane integrations setup continue --select-best --runtime ollama\n  aiplane integrations setup cline --model MODEL_ALIAS --runtime vllm --dry-run")
     _profile_arg(integrations_setup)
     _integration_selection_args(integrations_setup)
     integrations_setup.add_argument("--model", help="Single model alias for one-model targets such as Cline, Zed, Aider, or openai-compatible")
@@ -560,7 +578,7 @@ def _main(argv: list[str] | None = None) -> int:
         "agents",
         "Plan and export starter agent applications",
         "Create non-mutating plans and scaffold files for small agent applications that use configured aiplane model endpoints.",
-        "Examples:\n  aiplane agents templates\n  aiplane agents plan repo-helper --framework langgraph --model qwen-tiny\n  aiplane agents export repo-helper --framework langgraph --model qwen-tiny --file agent.py",
+        "Examples:\n  aiplane agents templates\n  aiplane agents plan repo-helper --framework langgraph --model MODEL_ALIAS\n  aiplane agents export repo-helper --framework langgraph --model MODEL_ALIAS --file agent.py",
     )
     agents_sub = agents_cmd.add_subparsers(dest="agents_command", required=True, metavar="command")
     agents_templates = agents_sub.add_parser("templates", help="List starter agent frameworks", description="List agent application scaffold templates supported by aiplane.", formatter_class=HelpFormatter)
@@ -594,7 +612,7 @@ def _main(argv: list[str] | None = None) -> int:
         "chat",
         "Launch provider-native chat for a model",
         "Resolve a model alias and delegate to the provider-native chat CLI. Currently supports local Ollama models.",
-        "Examples:\n  aiplane chat --model qwen-tiny --dry-run\n  aiplane chat --model qwen-tiny",
+        "Examples:\n  aiplane chat --model MODEL_ALIAS --dry-run\n  aiplane chat --model MODEL_ALIAS",
     )
     _profile_arg(chat_cmd)
     chat_cmd.add_argument("--model", help="Model alias to launch. If omitted, uses the profile chat_model default")
@@ -682,7 +700,7 @@ def _main(argv: list[str] | None = None) -> int:
     providers_add.add_argument("name", help="Provider name to add")
     providers_add.add_argument("--description", default="", help="Human-readable provider description")
     providers_add.add_argument("--runtime", action="append", default=[], help="Typical compatible runtime; can be repeated")
-    providers_add.add_argument("--online-adapter", help="Adapter to reuse, such as profile_catalog, huggingface, huggingface_gguf, ollama, civitai, or piper_voices")
+    providers_add.add_argument("--online-adapter", help="Adapter to reuse, such as profile_catalog, huggingface, huggingface_gguf, ollama, civitai, or azure_openai")
     providers_add.add_argument("--disabled", action="store_true", help="Add the provider disabled")
     providers_init = providers_sub.add_parser("init-defaults", help="Write built-in provider defaults", description="Dump aiplane's hardcoded model-provider defaults into model-providers.yaml for this profile. Use --overwrite to reinitialize an existing defaults file.", formatter_class=HelpFormatter)
     _profile_arg(providers_init)
@@ -704,8 +722,8 @@ def _main(argv: list[str] | None = None) -> int:
             "  aiplane runtimes map\n"
             "  aiplane runtimes list\n"
             "  aiplane runtimes models vllm\n"
-            "  aiplane runtimes model qwen-coder-32b-vllm\n"
-            "  aiplane runtimes use qwen-coder-32b-vllm vllm\n"
+            "  aiplane runtimes model MODEL_ALIAS\n"
+            "  aiplane runtimes use MODEL_ALIAS vllm\n"
             "  aiplane runtimes update-installed all --dry-run\n"
             "  aiplane runtimes repull ollama --dry-run"
         ),
@@ -750,14 +768,14 @@ def _main(argv: list[str] | None = None) -> int:
         formatter_class=HelpFormatter,
         epilog=(
             "Examples:\n"
-            "  aiplane runtimes bundle vllm --model qwen-coder-32b-vllm --mode docker --format dockerfile\n"
-            "  aiplane runtimes bundle transformers --model qwen-coder-32b-vllm --mode conda --format conda-yaml\n"
-            "  aiplane runtimes bundle ollama --model qwen-tiny --format json"
+            "  aiplane runtimes bundle vllm --model MODEL_ALIAS --mode docker --format dockerfile\n"
+            "  aiplane runtimes bundle transformers --model MODEL_ALIAS --mode conda --format conda-yaml\n"
+            "  aiplane runtimes bundle ollama --model MODEL_ALIAS --format json"
         ),
     )
     _profile_arg(runtimes_bundle)
     runtimes_bundle.add_argument("runtime", help="Runtime name, such as ollama, vllm, tgi, transformers, llamacpp, localai, faster_whisper, or diffusers")
-    runtimes_bundle.add_argument("--model", default="qwen-tiny", help="Configured model alias to include in the rendered plan")
+    runtimes_bundle.add_argument("--model", required=True, help="Configured model alias to include in the rendered plan")
     runtimes_bundle.add_argument("--mode", choices=["docker", "conda"], default="docker", help="Bundle target mode to plan")
     runtimes_bundle.add_argument("--format", choices=["json", "dockerfile", "conda-yaml"], default="json", help="Output the whole JSON plan or only one rendered file")
     for lifecycle_action in ["configure", "install", "update", "update-installed", "start", "stop", "restart", "status", "pull", "repull", "runtime-list"]:
@@ -765,7 +783,8 @@ def _main(argv: list[str] | None = None) -> int:
         lifecycle = runtimes_sub.add_parser(command_name, help=f"Run provider helper {lifecycle_action.replace('-', ' ')}", description="Delegate runtime lifecycle/download operations to scripts/provider_helper.sh while keeping the operation available through aiplane.", formatter_class=HelpFormatter)
         _profile_arg(lifecycle)
         lifecycle.add_argument("runtime", help="Runtime/provider name, such as ollama, vllm, tgi, transformers, localai, llamacpp, lmstudio, or all where supported")
-        lifecycle.add_argument("--model", default="qwen-tiny", help="Configured model alias, raw runtime model id, direct GGUF URL, or all where supported")
+        lifecycle.add_argument("--model", default="all", help="Configured model alias, raw runtime model id, direct GGUF URL, or all where supported")
+        lifecycle.add_argument("--substrate", choices=["native", "docker"], default="native", help="Runtime substrate for helpers that support more than one path; Ollama supports native and docker")
         lifecycle.add_argument("--dry-run", action="store_true", help="Print the helper command and delegated runtime commands without executing changes")
 
     tools_cmd = _command(
@@ -1228,7 +1247,7 @@ def _main(argv: list[str] | None = None) -> int:
             print(_json(result, indent=2))
             return 0
         if args.models_command == "clear-cache":
-            print(_json(catalog.clear_imported(provider_name=args.provider, write=not args.dry_run, include_curated=args.include_curated), indent=2))
+            print(_json(catalog.clear_imported(provider_name=args.provider, write=not args.dry_run, include_curated=not args.keep_curated), indent=2))
             return 0
         if args.models_command == "promote":
             print(_json(catalog.promote_generated(args.name, new_name=args.new_name, write=not args.dry_run, keep_generated=args.keep_generated, overwrite=args.overwrite), indent=2))
@@ -1450,7 +1469,7 @@ def _main(argv: list[str] | None = None) -> int:
                 if not prerequisites.get("ok"):
                     print(_json(prerequisites, indent=2))
                     return 2
-            completed = _run_provider_helper(args.runtime, helper_action, effective_profile, args.model, dry_run=args.dry_run)
+            completed = _run_provider_helper(args.runtime, helper_action, effective_profile, args.model, substrate=args.substrate, dry_run=args.dry_run)
             if completed.stdout:
                 print(completed.stdout, end="")
             if completed.stderr:
@@ -1483,11 +1502,11 @@ def _main(argv: list[str] | None = None) -> int:
     return 1
 
 
-def _run_provider_helper(runtime: str, action: str, profile: str, model: str, dry_run: bool = False) -> subprocess.CompletedProcess[str]:
+def _run_provider_helper(runtime: str, action: str, profile: str, model: str, substrate: str = "native", dry_run: bool = False) -> subprocess.CompletedProcess[str]:
     helper = Path(__file__).resolve().parents[2] / "scripts" / "provider_helper.sh"
     if not helper.exists():
         raise FileNotFoundError(f"provider helper not found: {helper}")
-    command = [str(helper), "--provider", runtime, "--action", action, "--profile", profile, "--model", model]
+    command = [str(helper), "--provider", runtime, "--action", action, "--profile", profile, "--model", model, "--substrate", substrate]
     if dry_run:
         command.append("--dry-run")
     return subprocess.run(command, cwd=helper.parents[1], text=True, capture_output=True, check=False)
@@ -1582,20 +1601,40 @@ def _group_rows(rows: list[dict[str, object]], key: str) -> dict[str, list[dict[
 def _group_model_rows(profile, rows: list[dict[str, object]], group_by: str) -> dict[str, object]:
     runtime_catalog = RuntimeCatalog(profile)
     models = runtime_catalog._models()
-    grouped: dict[str, list[dict[str, object]]] = {}
+    grouped: dict[str, object] = {}
     for row in rows:
         name = str(row.get("name"))
         model = models.get(name, {})
         if group_by == "source":
             keys = [runtime_catalog.source_for_model(model)]
         elif group_by == "runtime":
-            keys = runtime_catalog.supported_runtimes(name) or ["unknown"]
+            keys = runtime_catalog.supported_runtimes(name) or ["no_runtime"]
         elif group_by == "model":
             keys = [str(row.get("model") or "unknown")]
+        elif group_by == "provider-kind":
+            ownership = str(row.get("ownership") or "unknown")
+            provider = str(row.get("provider") or "unknown")
+            ownership_group = grouped.setdefault(ownership, {})
+            if isinstance(ownership_group, dict):
+                ownership_group.setdefault(provider, []).append(row)
+            continue
         else:
             keys = [str(row.get(group_by) or "unknown")]
         for key in keys:
             grouped.setdefault(key, []).append(row)
+    if group_by == "provider-kind":
+        return {
+            "group_by": group_by,
+            "groups": {
+                ownership: {
+                    provider: sorted(items, key=lambda item: str(item.get("name") or ""))
+                    for provider, items in sorted(providers.items())
+                    if isinstance(items, list)
+                }
+                for ownership, providers in sorted(grouped.items())
+                if isinstance(providers, dict)
+            },
+        }
     return {
         "group_by": group_by,
         "groups": {key: value for key, value in sorted(grouped.items())},
@@ -1661,7 +1700,7 @@ def _environment_doctor_text(payload: dict[str, object]) -> str:
         rows.append({
             "name": str(item.get("runtime") or ""),
             "kind": "runtime",
-            "status": "ready" if item.get("ok") else f"missing {missing_count}",
+            "status": "ready" if item.get("ok") else (f"missing {missing_count}" if missing_count else "needs setup"),
             "required": "optional",
             "why": why,
         })

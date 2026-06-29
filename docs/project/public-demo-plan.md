@@ -22,6 +22,18 @@ Key points to say explicitly:
 
 ## Three-Minute Cut
 
+### Disposable Demo Profile
+
+Use a temporary profile directory for recording so machine imports and stack setup rehearsals do not change `profiles/local-dev`:
+
+```bash
+rm -rf /tmp/aiplane-demo-profiles /tmp/demo-local-cpu.machine.yaml
+PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles profiles create demo --template local-dev
+PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles profiles validate demo
+```
+
+Use `--profiles-dir /tmp/aiplane-demo-profiles --profile demo` on demo commands that intentionally write profile state, such as machine import or stack setup. Keep read-only commands on `local-dev` when you want to show the normal project profile.
+
 ### 0:00-0:20 - What It Is
 
 Show the README headline or terminal help:
@@ -36,52 +48,84 @@ Voiceover:
 
 ### 0:20-0:45 - Install And Readiness
 
-Show install/setup and doctors:
+Show install/setup and doctors. Use Conda as the main recording path, then mention venv, native/current-Python, and Docker CLI-image alternatives:
 
 ```bash
-python -m pip install -e .
-PYTHONPATH=src python -m aiplane profiles validate local-dev
-PYTHONPATH=src python -m aiplane environment doctor --required-only
-PYTHONPATH=src python -m aiplane tools matrix
+git clone https://github.com/ocagdas/aiplane.git
+cd aiplane
+source scripts/setup_env.sh --mode conda --conda-env aiplane --action install --editable
+aiplane profiles validate local-dev
+aiplane environment doctor --required-only
+aiplane tools matrix
+```
+
+Optional quick cuts for alternate `aiplane` CLI install modes:
+
+```bash
+scripts/setup_env.sh --mode venv --action install --editable --dry-run
+scripts/setup_env.sh --mode local --action install --editable --dry-run
+scripts/setup_env.sh --mode docker --action install --editable --docker-image aiplane:dev --dry-run
+```
+
+Show native and Docker runtime options for Ollama as dry-runs:
+
+```bash
+aiplane runtimes install ollama --dry-run
+aiplane runtimes install ollama --substrate docker --dry-run
+aiplane runtimes start ollama --substrate docker --dry-run
 ```
 
 What to highlight:
 
 - mandatory local prerequisites are checked separately from optional workflow tools;
 - `tools matrix` shows complete, partial, and needs-setup workflow categories;
-- nothing is provisioned just by inspecting readiness.
+- `aiplane` itself can run in Conda, venv, native Python, or a local Docker CLI image;
+- Ollama can be operated natively or through Docker using the official `ollama/ollama` image;
+- nothing is provisioned just by inspecting readiness or running dry-runs.
 
 ### 0:45-1:15 - Provider Discovery And Model Filtering
 
-Show provider discovery and safe generated-alias flow:
+Show provider discovery and safe generated-alias flow in the disposable profile. The first command is a dry run for narration; the next three intentionally write only `/tmp/aiplane-demo-profiles/demo/models.generated.yaml` so later export commands can resolve real aliases.
 
 ```bash
-PYTHONPATH=src python -m aiplane models refresh --provider ollama --dry-run --limit 3
-PYTHONPATH=src python -m aiplane models list --runtime ollama --role chat --ram-gb 16 --vram-gb 0 --sort-by role --limit 5
-PYTHONPATH=src python -m aiplane hardware recommend
+PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider ollama --query chat --dry-run --limit 5
+PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider ollama --query chat --limit 10
+PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider ollama --query code --limit 10
+PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider ollama --query embed --limit 10
+PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --runtime ollama --role chat --ram-gb 16 --vram-gb 0 --sort-by role --limit 5
+PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles hardware recommend --profile demo
+```
+
+Capture the aliases for the next section:
+
+```bash
+CHAT_ALIAS=$(PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --runtime ollama --role chat --enabled-only --sort-by role --limit 1 | python -c 'import json,sys; print(json.load(sys.stdin)[0]["name"])')
+AUTOCOMPLETE_ALIAS=$(PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --runtime ollama --role autocomplete --enabled-only --sort-by role --limit 1 | python -c 'import json,sys; print(json.load(sys.stdin)[0]["name"])')
+EMBEDDING_ALIAS=$(PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --runtime ollama --role embedding --enabled-only --sort-by role --limit 1 | python -c 'import json,sys; print(json.load(sys.stdin)[0]["name"])')
+printf 'chat=%s autocomplete=%s embedding=%s\n' "$CHAT_ALIAS" "$AUTOCOMPLETE_ALIAS" "$EMBEDDING_ALIAS"
 ```
 
 What to highlight:
 
 - refresh output includes `next_steps`;
-- `models.generated.yaml` is a review buffer, while `models.yaml` is curated profile state;
+- `models.generated.yaml` is an ignored review buffer, while checked-in `models.yaml` stays provider-only unless a user deliberately promotes aliases;
 - model filtering can use runtime, role, capability, RAM, and VRAM constraints;
 - hardware recommendations use the active hardware profile.
 
 ### 1:15-1:45 - Continue Config And Endpoint Flexibility
 
-Plan and export Continue config:
+Plan and export Continue config from the discovered aliases:
 
 ```bash
-PYTHONPATH=src python -m aiplane integrations plan continue --select-best --runtime ollama
-PYTHONPATH=src python -m aiplane integrations export continue --model qwen-tiny
-PYTHONPATH=src python -m aiplane integrations export openai-compatible --model qwen-tiny --endpoint http://localhost:11434/v1
+PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles integrations plan continue --profile demo --chat "$CHAT_ALIAS" --autocomplete "$AUTOCOMPLETE_ALIAS" --embedding "$EMBEDDING_ALIAS"
+PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles integrations export continue --profile demo --chat "$CHAT_ALIAS" --autocomplete "$AUTOCOMPLETE_ALIAS" --embedding "$EMBEDDING_ALIAS"
+PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles integrations export openai-compatible --profile demo --model "$CHAT_ALIAS" --endpoint http://localhost:11434/v1
 ```
 
 Optional endpoint variation to show in voiceover or split screen:
 
 ```bash
-PYTHONPATH=src python -m aiplane integrations export openai-compatible --model qwen-tiny --endpoint https://llm.example.com/v1 --api-key-env AIPLANE_GATEWAY_API_KEY
+PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles integrations export openai-compatible --profile demo --model "$CHAT_ALIAS" --endpoint https://llm.example.com/v1 --api-key-env AIPLANE_GATEWAY_API_KEY
 ```
 
 What to highlight:
@@ -111,46 +155,51 @@ What to highlight:
 - writes are narrow and guarded;
 - broad shell, secret writes, and cloud apply are intentionally blocked.
 
-### 2:05-2:30 - Two Repeatable CPU-Oriented Environments
+### 2:05-2:30 - Repeatable Local And Media Environments
 
-First create/import a local machine profile in a temporary demo location, then plan stack bindings. For the real recording, use a temp profile copy or pre-created demo profile so the repository profile is not polluted.
+First create/import a local machine profile into the disposable demo profile, then plan a small local chat stack. These commands write only under `/tmp/aiplane-demo-profiles` and can be rerun for rehearsal.
 
 ```bash
-PYTHONPATH=src python -m aiplane hardware export-machine --name demo-local-cpu > /tmp/demo-local-cpu.machine.yaml
-PYTHONPATH=src python -m aiplane machines import /tmp/demo-local-cpu.machine.yaml --name demo-local-cpu
-PYTHONPATH=src python -m aiplane stacks setup cpu_chat --runtime ollama --model qwen-tiny --machine demo-local-cpu --access same_host --dry-run
-PYTHONPATH=src python -m aiplane stacks plan cpu_chat
+PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles hardware export-machine --profile demo --name demo-local-cpu > /tmp/demo-local-cpu.machine.yaml
+PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles machines import --profile demo /tmp/demo-local-cpu.machine.yaml --name demo-local-cpu
+PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles machines list --profile demo
+PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles stacks setup --profile demo cpu_chat --runtime ollama --model "$CHAT_ALIAS" --machine demo-local-cpu --access same_host --dry-run
 ```
 
-For a CPU media-oriented path, prefer audio via Piper for the short demo. Show readiness and model metadata rather than trying to generate audio live unless a pre-rendered clip is prepared:
+For the media path, show that audio, image, and video generation are represented as AI model choices with runtime and platform requirements. The demo does not need to run these on CPU. Use a pre-provisioned Azure/GPU target, show the command path used to plan or deploy that resource, kick off the generation job, fast-forward the wait, and show the generated clip at the end.
 
 ```bash
-PYTHONPATH=src python -m aiplane models show piper-en-us-lessac-medium
-PYTHONPATH=src python -m aiplane runtimes prerequisites piper
-PYTHONPATH=src python -m aiplane stacks setup cpu_voice --runtime piper --model piper-en-us-lessac-medium --machine demo-local-cpu --access same_host --dry-run
+PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider huggingface --query text-to-speech --dry-run --verbose --limit 10
+PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider huggingface --query text-to-image --disable-new --limit 10
+PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --role image_generation --runtime diffusers --ram-gb 64 --vram-gb 16 --sort-by role --limit 5
+PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider huggingface --query text-to-video --disable-new --limit 10
+PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --role video_generation --runtime diffusers --ram-gb 128 --vram-gb 16 --sort-by role --limit 5
+PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles machines discover azure --profile demo --region uksouth --workload media_generation --runtime diffusers --limit 5
+PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles deploy plan --profile demo --target azure_gpu_vm
 ```
 
 What to highlight:
 
 - stacks are bindings of machine, runtime, model, and access policy;
 - local and remote setups use the same data model;
-- CPU image/video generation is not a good live demo target yet, but runtime planning can cover future media runtimes.
+- media generation is selected through online provider discovery, generated aliases, runtime compatibility, and hardware filters before any alias is promoted into curated profile state.
 
 ### 2:30-3:00 - Azure Machine Discovery And Deployment Planning
 
 Show Azure machine discovery by task/runtime, then model/machine fit planning:
 
 ```bash
-PYTHONPATH=src python -m aiplane machines discover azure --region uksouth --workload inference_small --runtime ollama --limit 5
-PYTHONPATH=src python -m aiplane machines discover azure --region uksouth --model qwen-coder-32b --runtime vllm --limit 5
-PYTHONPATH=src python -m aiplane machines import-azure-sku Standard_NC4as_T4_v3 --region uksouth --name azure_t4_demo
-PYTHONPATH=src python -m aiplane machines recommend --model qwen-coder-32b --runtime vllm --limit 5
-PYTHONPATH=src python -m aiplane deploy plan --target azure_gpu_vm
+PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles machines azure-status --profile demo --region uksouth
+PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles machines discover azure --profile demo --region uksouth --workload inference_small --runtime ollama --limit 5
+PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles machines discover azure --profile demo --region uksouth --workload inference_large --runtime vllm --limit 5
+PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles machines import-azure-sku Standard_NC4as_T4_v3 --profile demo --region uksouth --name azure_t4_demo
+PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles machines recommend --profile demo --workload inference_large --runtime vllm --limit 5
+PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles deploy plan --profile demo --target azure_gpu_vm
 ```
 
 Recording note:
 
-Azure discovery may include subscription, tenant, user, or account metadata in JSON output. For the public video, use redacted output or a sanitized pre-recorded fixture. Do not show raw Azure account fields.
+Azure account-identifying fields are redacted by default, but still inspect the terminal before recording or use a sanitized pre-recorded fixture. The live discovery/import commands use the disposable demo profile so Azure discovery cache and imported SKU state stay outside the checked-in `profiles/local-dev` profile. Do not show raw Azure portal pages, subscription ids, tenant ids, or personal account names.
 
 What to highlight:
 
@@ -174,14 +223,17 @@ Use these phrases in the voiceover:
 PYTHONPATH=src python -m aiplane profiles validate local-dev
 PYTHONPATH=src python -m aiplane environment doctor --required-only
 PYTHONPATH=src python -m aiplane tools matrix
-PYTHONPATH=src python -m aiplane models refresh --provider ollama --dry-run --limit 3
-PYTHONPATH=src python -m aiplane models list --runtime ollama --role chat --ram-gb 16 --vram-gb 0 --sort-by role --limit 5
-PYTHONPATH=src python -m aiplane hardware recommend
-PYTHONPATH=src python -m aiplane integrations plan continue --select-best --runtime ollama
-PYTHONPATH=src python -m aiplane integrations export continue --model qwen-tiny
+PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles profiles validate demo
+PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider ollama --query chat --dry-run --limit 5
+PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider ollama --query chat --limit 10
+PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider ollama --query code --limit 10
+PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider ollama --query embed --limit 10
+PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --runtime ollama --role chat --ram-gb 16 --vram-gb 0 --sort-by role --limit 5
+PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles integrations plan continue --profile demo --chat "$CHAT_ALIAS" --autocomplete "$AUTOCOMPLETE_ALIAS" --embedding "$EMBEDDING_ALIAS"
+PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles integrations export continue --profile demo --chat "$CHAT_ALIAS" --autocomplete "$AUTOCOMPLETE_ALIAS" --embedding "$EMBEDDING_ALIAS"
 PYTHONPATH=src python -m aiplane integrations export vscode-mcp
 PYTHONPATH=src python -m aiplane mcp manifest
-PYTHONPATH=src python -m aiplane machines discover azure --region uksouth --workload inference_small --runtime ollama --limit 5
+PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles machines discover azure --profile demo --region uksouth --workload inference_small --runtime ollama --limit 5
 ```
 
 ## Immediate Next Steps To Mention At The End
@@ -193,9 +245,9 @@ Voiceover:
 Project next steps:
 
 1. Add a sanitized Azure discovery example for the public demo.
-2. Create a disposable demo profile so stack/machine import commands can run without changing `local-dev`.
+2. Rehearse the disposable `/tmp/aiplane-demo-profiles` flow once immediately before recording.
 3. Add or verify a clean Continue config recording path in VS Code.
-4. Decide whether CPU media is a Piper audio plan only or a pre-rendered audio clip.
+4. Keep the media demo discovery-first: show online refresh, generated candidates, runtime/hardware filtering, then fast-forward a pre-provisioned Azure/GPU generation job and play the prepared audio/video clip.
 5. Keep Docker/endpoint flexibility in the demo through exports and stack plans unless a live container workflow is fully validated.
 
 ## Demo Readiness Gate
@@ -204,7 +256,7 @@ The demo is ready to plan in detail when:
 
 - current uncommitted changes are reviewed and committed by the human owner;
 - GitHub sensitive SHA cleanup is confirmed;
-- all commands in the dry-run list pass on the recording machine;
-- Azure output is redacted or replaced by a sanitized fixture;
+- all commands in the dry-run list and disposable-profile setup pass on the recording machine;
+- Azure output has been reviewed on screen and any account-identifying UI/output is redacted or replaced by a sanitized fixture;
 - VS Code/Continue and MCP screenshots are rehearsed once;
-- the CPU media segment is either reduced to runtime planning or backed by a pre-rendered artifact.
+- the media segment shows online-discovered AI audio, image, and video candidates and has a prepared, playable final clip generated from the selected media path.

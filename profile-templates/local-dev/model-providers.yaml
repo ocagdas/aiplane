@@ -22,13 +22,6 @@ ollama:
   online_adapter: ollama
   enabled: true
   origin: default
-piper_voices:
-  description: Piper text-to-speech voice model catalog
-  typical_runtimes: [piper]
-  online_adapter: piper_voices
-  enabled: true
-  origin: default
-
 openai:
   description: OpenAI hosted model catalog and deployments
   typical_runtimes: [openai]
@@ -51,5 +44,17 @@ ollama_cloud:
   description: Ollama Cloud hosted catalog and endpoints
   typical_runtimes: [ollama_cloud]
   online_adapter: profile_catalog
+  enabled: true
+  origin: default
+azure_speech:
+  description: Azure AI Speech managed text-to-speech voices
+  typical_runtimes: [azure_speech]
+  online_adapter: profile_catalog
+  enabled: false
+  origin: default
+elevenlabs:
+  description: ElevenLabs hosted text-to-speech voices and voice models
+  typical_runtimes: [elevenlabs]
+  online_adapter: elevenlabs
   enabled: true
   origin: default

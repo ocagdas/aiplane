@@ -25,7 +25,7 @@ The nearest analogy is not exactly Terraform, Vagrant, or a dev-container tool. 
 ## Common Terms
 
 - **Profile**: A named working configuration. It points to selected providers, models, defaults, hardware, machines, stacks, targets, and environment settings.
-- **Provider / Model Source / Catalog**: Where model identifiers or weights come from, such as the Ollama library, Hugging Face Hub, GGUF files, Piper voices, or a local file path.
+- **Provider / Model Source / Catalog**: Where model identifiers or weights come from, such as the Ollama library, Hugging Face Hub, GGUF files, Azure Speech voices, or a local file path.
 - **Runtime**: The software that loads model weights and serves inference, such as Ollama, vLLM, llama.cpp server, TGI, Transformers, LocalAI, faster-whisper, Diffusers, or ComfyUI.
 - **Runtime Endpoint**: A configured service URL exposed by a runtime, such as local Ollama, vLLM on a shared workstation, or llama.cpp behind an SSH tunnel.
 - **Model**: A profile-approved alias that maps to a source-native model id, hardware requirements, task capability scores, model provider, and supported runtimes.
@@ -48,7 +48,7 @@ A local Ollama setup can be driven from `aiplane`:
 aiplane runtimes install ollama --dry-run
 aiplane runtimes install ollama
 aiplane runtimes start ollama
-aiplane runtimes pull ollama --model qwen-tiny
+aiplane runtimes pull ollama --model MODEL_ALIAS
 aiplane runtimes list-runtime-models ollama
 aiplane runtimes status ollama
 ```
@@ -73,7 +73,7 @@ aiplane providers list
 # Install/start/pull a tiny local Ollama model.
 aiplane runtimes install ollama --dry-run
 aiplane runtimes start ollama
-aiplane runtimes pull ollama --model qwen-tiny
+aiplane runtimes pull ollama --model MODEL_ALIAS
 
 # Export a Continue config snippet for VS Code.
 aiplane integrations export continue
@@ -82,7 +82,7 @@ aiplane integrations export continue
 aiplane integrations export vscode-mcp
 
 # Render a reproducible runtime bundle plan.
-aiplane runtimes bundle vllm --model qwen-coder-32b-vllm --mode docker --format dockerfile
+aiplane runtimes bundle vllm --model MODEL_ALIAS --mode docker --format dockerfile
 ```
 
 ## Complete Recipes

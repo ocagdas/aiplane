@@ -4,14 +4,15 @@ In `aiplane`, **provider** means a model source/catalog: a place where model ids
 
 Examples:
 
-- `ollama`: Ollama model library names such as `qwen2.5-coder:0.5b`.
-- `huggingface`: Hugging Face Hub repos such as `Qwen/Qwen2.5-Coder-32B-Instruct`.
+- `ollama`: Ollama model library names such as `text-generation:0.5b`.
+- `huggingface`: Hugging Face Hub repos such as `Provider/Code-Large-Instruct`.
 - `huggingface_gguf`: GGUF files hosted on Hugging Face or similar file stores.
 - `local_file`: a local model path.
-- `piper_voices`: Piper text-to-speech voice catalog.
+- `azure_speech`: Azure Speech text-to-speech voice configuration.
+- `elevenlabs`: ElevenLabs hosted text-to-speech voices.
 - `openai`, `anthropic`, `azure_openai`, `ollama_cloud`: managed providers. These are hosted services, so they need endpoint/API-key configuration and curated model aliases before IDE exports can use them. Other catalogs can be added in `model-providers.user.yaml` when their discovery path is reliable for your environment.
 
-A **runtime** is different. A runtime loads model files into CPU/GPU memory and serves inference. Examples: `ollama`, `vllm`, `tgi`, `llamacpp`, `transformers`, `localai`, `lmstudio`, `faster_whisper`, `piper`, `diffusers`, and `comfyui`.
+A **runtime** is different. A runtime loads model files into CPU/GPU memory and serves inference. Examples: `ollama`, `vllm`, `tgi`, `llamacpp`, `transformers`, `localai`, `lmstudio`, `faster_whisper`, `diffusers`, and `comfyui`. Managed services such as `azure_speech` and `elevenlabs` are hosted service providers/endpoints, not local runtime-fit targets.
 
 An **endpoint** is the URL a client calls, for example `http://localhost:11434/v1` for Ollama's OpenAI-compatible API.
 
@@ -40,9 +41,12 @@ Useful commands:
 
 ```bash
 aiplane models list --group-by ownership
+aiplane models list --group-by provider-kind
 aiplane models list --self-managed-only
 aiplane models list --managed-service-only
 ```
+
+`provider-kind` groups first by ownership (`self_managed` or `managed_service`) and then by provider/source. Keep `provider` populated for managed services; it identifies the hosted service or endpoint family. Managed-service models are not runtime-fit candidates, so runtime grouping places them under `no_runtime`; `preferred_runtime` and `supported_runtimes` are ignored for managed-service aliases.
 
 ## Managed Providers In Practice
 
@@ -57,14 +61,23 @@ Examples:
 
 ```bash
 export OPENAI_API_KEY=...
-aiplane integrations export continue --model openai-gpt-4o-mini
+aiplane integrations export continue --model managed-chat-small
 
 export AZURE_OPENAI_API_KEY=...
 aiplane providers models azure_openai --online --limit 20
-aiplane integrations export openai-compatible --model azure-openai-chat-deployment --endpoint https://YOUR-RESOURCE.openai.azure.com
+aiplane integrations export openai-compatible --model managed-azure-chat --endpoint https://YOUR-RESOURCE.openai.azure.com
 ```
 
 Use managed providers deliberately. They can send selected IDE context to a hosted service and may incur cost. Keep local defaults for local-only workflows, and use explicit `--model`, `--provider`, or role overrides when you want a managed model.
+
+For hosted TTS, ElevenLabs can be used as a managed provider/source. `aiplane` can discover voices and track selected voice aliases, but it does not synthesize audio in this milestone:
+
+```bash
+export ELEVENLABS_API_KEY=...
+aiplane providers models elevenlabs --online --limit 20
+aiplane models refresh --provider elevenlabs --dry-run --verbose --limit 20
+aiplane models list --provider elevenlabs --role text_to_speech
+```
 
 For multiple accounts, keep credentials in the ignored local credentials file and reference them by name:
 
@@ -108,22 +121,25 @@ aiplane providers models huggingface
 Query an online catalog where an adapter exists:
 
 ```bash
-aiplane providers models ollama --online --query qwen --limit 500
-aiplane providers models huggingface --online --query qwen2.5-coder --limit 500
+aiplane providers models ollama --online --query model_row --limit 500
+aiplane providers models huggingface --online --query text-generation --limit 500
+aiplane providers models huggingface --online --query text-to-speech --limit 50
+aiplane providers models elevenlabs --online --query voice --limit 20
+aiplane providers models huggingface --online --query text-to-image --limit 50
+aiplane providers models huggingface --online --query text-to-video --limit 50
 aiplane providers models huggingface_gguf --online --query llama-3.1-8b --limit 500
-aiplane providers models piper_voices --online --query en_US --limit 500
 ```
 
-Current default online adapters are `ollama`, `huggingface`, `huggingface_gguf`, `piper_voices`, and `azure_openai` deployments when endpoint/key configuration is present. If an online query fails or the provider has no adapter yet, `aiplane` falls back to the profile catalog and includes the reason. Fallback is non-destructive: it does not update or prune local entries because it is only re-reading the local profile.
+Current default online adapters are `ollama`, `huggingface`, `huggingface_gguf`, `azure_openai` deployments when endpoint/key configuration is present, and `elevenlabs` voices when `ELEVENLABS_API_KEY` or a credential reference is configured. Hugging Face discovery can return media pipeline metadata that `models refresh` maps into roles such as `text_to_speech`, `image_generation`, and `video_generation` before candidates are filtered or promoted. If an online query fails or the provider has no adapter yet, `aiplane` falls back to the profile catalog and includes the reason. Fallback is non-destructive: it does not update or prune local entries because it is only re-reading the local profile.
 
 ## Provider Configuration Files
 
-Provider definitions are profile-local YAML, not hidden built-ins:
+Provider definitions are profile-local YAML. The checked-in profile contains provider definitions only; it deliberately does not ship curated model aliases or defaults:
 
 - `model-providers.yaml`: default/provider seed entries for this profile.
-- `model-providers.user.yaml`: user additions and overrides. This is where CLI edits go.
+- `model-providers.user.yaml`: ignored user additions and overrides. This is where CLI edits go, and it is the extension point for private cloud endpoints or internal catalogs.
 
-If neither file exists, `aiplane` can fall back to its hardcoded seed so a fresh developer checkout still works. To make the seed explicit, dump it into the profile:
+If neither file exists, `aiplane` can fall back to its built-in provider seed so a fresh developer checkout still has discovery providers. That seed contains provider metadata, not model aliases. To make the seed explicit, dump it into the profile:
 
 ```bash
 aiplane providers init-defaults
@@ -149,15 +165,15 @@ aiplane providers clear --scope all
 
 ## Model Catalog Refresh
 
-`aiplane models refresh` imports model-provider catalog entries into `models.generated.yaml` so you can later filter locally by runtime, role, capability, score, RAM/VRAM fit, and benchmark results without replacing curated aliases in `models.yaml`. It is online-first where an adapter exists, and it is not runtime inventory.
+`aiplane models refresh` imports model-provider catalog entries into the ignored `models.generated.yaml` cache so you can later filter locally by runtime, role, capability, score, RAM/VRAM fit, benchmark results, and target hardware. The checked-in `models.yaml` starts with providers only; generated aliases are repopulated from provider discovery whenever you refresh. It is online-first where an adapter exists, and it is not runtime inventory.
 
-When an online source adapter succeeds, the source result is treated as authoritative for generated/imported aliases when it is not a query or limit-truncated window: new source ids are imported into `models.generated.yaml`, stale generated ids are pruned, and changed source metadata updates generated aliases. Curated aliases in `models.yaml` are preserved; if a curated alias points at a returned source id, only source-derived metadata is refreshed while human-maintained fields stay intact. In this context, curated means profile data such as aliases, enabled/disabled state, roles, preferred runtime, manual capability scores, RAM/VRAM overrides, and notes.
+When an online source adapter succeeds, the source result is treated as authoritative for generated/imported aliases when it is not a query or limit-truncated window: new source ids are imported into `models.generated.yaml`, stale generated ids are pruned, and changed source metadata updates generated aliases. Curated aliases in `models.yaml` are preserved by refresh; if a local curated alias points at a returned source id, only source-derived metadata is refreshed while human-maintained fields stay intact. In this context, curated means profile data such as aliases, enabled/disabled state, roles, preferred runtime, manual capability scores, RAM/VRAM overrides, and notes.
 
 When online contact fails or no online adapter exists, refresh reports the error/reason and falls back to local profile entries without pruning or updating.
 
 ```bash
 aiplane models refresh --dry-run
-aiplane models refresh --provider huggingface --query qwen2.5-coder --limit 500 --dry-run
+aiplane models refresh --provider huggingface --query text-generation --limit 500 --dry-run
 aiplane models refresh --limit 100 --provider-limit huggingface=500 --provider-limit ollama=500 --dry-run
 aiplane models refresh --provider huggingface --limit 10 --dry-run --verbose
 ```
@@ -173,12 +189,12 @@ aiplane models promote generated-alias --as reviewed-alias --keep-generated
 aiplane models promote generated-alias --as existing-reviewed-alias --overwrite
 ```
 
-To clear generated model aliases, use `clear-cache`. This operates on refresh/import data in `models.generated.yaml` plus legacy refresh-imported aliases in `models.yaml`; it does not remove or disable model providers from `model-providers.yaml` or `model-providers.user.yaml`. The command reports counts by provider, not every removed alias. By default it keeps hand-curated/template aliases; add `--include-curated` only when you intentionally want to remove curated/template aliases too:
+To clear model catalog aliases, use `clear-cache`. This operates on refresh/import data in `models.generated.yaml` plus matching aliases in `models.yaml`; it does not remove or disable model providers from `model-providers.yaml` or `model-providers.user.yaml`. The command reports counts by provider, not every removed alias. By default it includes curated/template aliases in `models.yaml`, so the local model cache and any review-time aliases can be emptied and later repopulated from provider discovery; add `--keep-curated` when you only want to remove generated or legacy refresh-imported aliases:
 
 ```bash
 aiplane models clear-cache --dry-run
 aiplane models clear-cache --provider huggingface --dry-run
-aiplane models clear-cache --provider huggingface --include-curated --dry-run
+aiplane models clear-cache --provider huggingface --keep-curated --dry-run
 aiplane models clear-cache
 ```
 
@@ -186,8 +202,8 @@ Important output fields:
 
 - `source_models_returned`: number of model ids returned by the source catalog for that provider. This is the online source API count where an adapter exists, or the profile catalog fallback count when no online adapter/result is available.
 - `profile_models_before_refresh`: total profile aliases already stored for that provider before this refresh writes anything.
-- `profile_curated_models_before_refresh`: hand-curated/template aliases for that provider. These are preserved by refresh and normal `clear-cache`.
-- `profile_refresh_imported_models_before_refresh`: aliases previously imported by `models refresh`. These are written to `models.generated.yaml` and removed by normal `clear-cache`.
+- `profile_curated_models_before_refresh`: hand-curated/template aliases for that provider. These are preserved by refresh but included by default in `clear-cache` unless `--keep-curated` is used.
+- `profile_refresh_imported_models_before_refresh`: aliases previously imported by `models refresh`. These are written to `models.generated.yaml` and removed by `clear-cache`.
 - `source_models_already_profiled`: returned source ids already represented by profile aliases.
 - `source_models_to_import`: returned source ids that would be imported.
 - `source_models_to_update`: returned source ids that already exist locally but have changed source-derived metadata.
@@ -214,15 +230,24 @@ For Ollama, the local API `/api/tags` reports models already pulled into that Ol
 
 ## Runtime Helper Commands
 
-Common Ollama flow:
+Common Ollama native flow:
 
 ```bash
 aiplane runtimes install ollama --dry-run
 aiplane runtimes install ollama
 aiplane runtimes start ollama
-aiplane runtimes pull ollama --model qwen-tiny
+aiplane runtimes pull ollama --model MODEL_ALIAS
 aiplane runtimes list-runtime-models ollama
 aiplane runtimes status ollama
+```
+
+Ollama can also run through the official `ollama/ollama` container image when Docker is available. Use dry-run first; this is a runtime substrate choice, not the same thing as running the `aiplane` CLI in Docker:
+
+```bash
+aiplane runtimes install ollama --substrate docker --dry-run
+aiplane runtimes start ollama --substrate docker --dry-run
+aiplane runtimes pull ollama --substrate docker --model MODEL_ALIAS --dry-run
+aiplane runtimes status ollama --substrate docker
 ```
 
 Common OpenAI-compatible runtime checks:
@@ -230,8 +255,8 @@ Common OpenAI-compatible runtime checks:
 ```bash
 aiplane runtimes configure vllm
 aiplane runtimes install vllm --dry-run
-aiplane runtimes pull vllm --model qwen-coder-32b-vllm --dry-run
-aiplane runtimes start vllm --model qwen-coder-32b-vllm --dry-run
+aiplane runtimes pull vllm --model MODEL_ALIAS --dry-run
+aiplane runtimes start vllm --model MODEL_ALIAS --dry-run
 aiplane runtimes list-runtime-models vllm
 ```
 
@@ -244,6 +269,6 @@ Online catalog discovery is implemented provider by provider because each source
 - Hugging Face Hub has a live online query adapter via its model API.
 - Hugging Face GGUF uses the Hugging Face adapter with a GGUF-oriented search.
 - Ollama has local runtime inventory and pull support; complete public library enumeration still needs a separate catalog adapter or curated index.
-- Piper voices and local files are represented in the source model map and profile catalog. Other specialist catalogs can be added through user provider config once their API/metadata path is stable enough.
+- Azure Speech voices, local files, and other specialist catalogs can be added through user provider config once their API/metadata path is stable enough. Open-weight media models from Hugging Face should normally flow through online refresh into `models.generated.yaml` first.
 
 Runtime lifecycle support is documented in [Model Sources and Runtimes](runtime-model-map.md).

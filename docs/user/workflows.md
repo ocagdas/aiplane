@@ -5,7 +5,7 @@ This page shows common ways to combine profiles, model sources, runtimes, setup,
 ## Terminology Used Here
 
 - **Profile**: the editable configuration set under `profiles/<name>/`. It owns defaults, model aliases, runtime endpoints, machines, targets, tools, and approvals.
-- **Model source** or **model provider**: where model ids or files come from, such as Ollama Library, Hugging Face Hub, GGUF repos, Piper voices, or local files.
+- **Model source** or **model provider**: where model ids or files come from, such as Ollama Library, Hugging Face Hub, GGUF repos, Azure Speech voices, managed-provider catalogs, or local files.
 - **Runtime**: software that serves or loads the model, such as Ollama, vLLM, TGI, llama.cpp, Transformers, LocalAI, or LM Studio.
 - **Runtime endpoint**: the configured service a client calls, usually an OpenAI-compatible `/v1` URL.
 - **Curated model alias**: a human-maintained entry in `models.yaml`. Defaults should point at curated aliases.
@@ -27,7 +27,7 @@ aiplane profiles validate
 aiplane runtimes install ollama --dry-run
 aiplane runtimes install ollama
 aiplane runtimes start ollama
-aiplane runtimes pull ollama --model qwen-tiny
+aiplane runtimes pull ollama --model MODEL_ALIAS
 
 aiplane runtimes status ollama
 aiplane runtimes list-runtime-models ollama
@@ -37,7 +37,7 @@ aiplane models doctor
 Practical tips:
 
 - Run `--dry-run` before installs or pulls on a new machine.
-- `runtimes pull ollama --model qwen-tiny` accepts either a profile alias or a raw Ollama id.
+- `runtimes pull ollama --model MODEL_ALIAS` accepts either a profile alias or a raw Ollama id.
 - `models doctor` checks whether configured model aliases are currently usable; it is not an online catalog search.
 
 ## Workflow 2: Continue in VS Code
@@ -46,16 +46,16 @@ Use this when Continue should call selected local or remote model endpoints.
 
 ```bash
 aiplane integrations roles continue
-aiplane integrations plan continue
-aiplane integrations setup continue --dry-run
-aiplane integrations setup continue
-aiplane integrations export continue
+aiplane models refresh --provider ollama --query chat --dry-run --limit 10
+aiplane integrations plan continue --chat CHAT_ALIAS --autocomplete AUTOCOMPLETE_ALIAS --embedding EMBEDDING_ALIAS
+aiplane integrations setup continue --chat CHAT_ALIAS --autocomplete AUTOCOMPLETE_ALIAS --embedding EMBEDDING_ALIAS --dry-run
+aiplane integrations export continue --chat CHAT_ALIAS --autocomplete AUTOCOMPLETE_ALIAS --embedding EMBEDDING_ALIAS
 ```
 
 What happens:
 
 - `roles` shows that Continue can use `chat`, `autocomplete`, and `embedding` selections.
-- `plan` explains the chosen aliases, runtimes, endpoints, and reasons.
+- `plan` explains the chosen aliases, runtimes, endpoints, and reasons. On the checked-in provider-only profile, pass explicit aliases discovered into `models.generated.yaml` or promoted into local `models.yaml`.
 - `setup` starts missing selected runtimes and pulls missing selected models where helper support exists. It does not install the runtime.
 - `export` prints the Continue YAML to paste or merge into Continue config.
 
@@ -66,14 +66,14 @@ Practical tips:
 
 ```bash
 aiplane integrations plan continue \
-  --chat llama-8b \
-  --autocomplete qwen-coder-1.5b-base \
-  --embedding nomic-embed-text
+  --chat CHAT_ALIAS \
+  --autocomplete AUTOCOMPLETE_ALIAS \
+  --embedding EMBEDDING_ALIAS
 
 aiplane integrations export continue \
-  --chat llama-8b \
-  --autocomplete qwen-coder-1.5b-base \
-  --embedding nomic-embed-text
+  --chat CHAT_ALIAS \
+  --autocomplete AUTOCOMPLETE_ALIAS \
+  --embedding EMBEDDING_ALIAS
 ```
 
 ## Workflow 3: Single-Model IDE or CLI Client
@@ -81,13 +81,13 @@ aiplane integrations export continue \
 Use this for Cline, Zed, Aider, or a generic OpenAI-compatible client.
 
 ```bash
-aiplane integrations plan cline --model qwen-coder-32b-vllm --endpoint http://localhost:8000/v1
-aiplane integrations export cline --model qwen-coder-32b-vllm --endpoint http://localhost:8000/v1
+aiplane integrations plan cline --model MODEL_ALIAS --endpoint http://localhost:8000/v1
+aiplane integrations export cline --model MODEL_ALIAS --endpoint http://localhost:8000/v1
 
 aiplane integrations plan aider --select-best --runtime ollama --capability code_generation>=3
 aiplane integrations export aider --select-best --runtime ollama --capability code_generation>=3
 
-aiplane integrations export openai-compatible --model qwen-tiny
+aiplane integrations export openai-compatible --model MODEL_ALIAS
 ```
 
 Practical tips:
@@ -101,7 +101,7 @@ Practical tips:
 Use this when an IDE or agent should query `aiplane` as tools as well as call a model endpoint.
 
 ```bash
-aiplane integrations export continue
+aiplane integrations export continue --chat CHAT_ALIAS --autocomplete AUTOCOMPLETE_ALIAS --embedding EMBEDDING_ALIAS
 aiplane integrations export vscode-mcp
 aiplane mcp manifest
 aiplane mcp serve
@@ -115,11 +115,11 @@ How to think about it:
 
 ## Workflow 5: Refresh Source Catalogs Without Breaking Defaults
 
-Use this when you want local searchable model-source data while preserving curated defaults.
+Use this when you want local searchable model-source data in the ignored generated cache. The shipped profile has no model defaults; local defaults should be added only after discovery and review.
 
 ```bash
-aiplane models refresh --provider huggingface --query qwen2.5-coder --limit 25 --dry-run --verbose
-aiplane models refresh --provider huggingface --query qwen2.5-coder --limit 25
+aiplane models refresh --provider huggingface --query text-generation --limit 25 --dry-run --verbose
+aiplane models refresh --provider huggingface --query text-generation --limit 25
 
 aiplane models list --source huggingface --limit 10
 aiplane models list --runtime vllm --capability code_generation>=4 --enabled-only --sort-by avg --limit 10
@@ -130,7 +130,7 @@ Storage rules:
 - Curated aliases live in `models.yaml`.
 - Generated refresh/import aliases live in `models.generated.yaml`.
 - Curated aliases win if the same alias exists in both files.
-- Refresh can update source metadata on a curated alias, but it must not delete curated aliases or remove profile defaults.
+- Refresh can update source metadata on a curated alias, but it must not delete curated aliases or remove profile defaults. Use `models clear-cache` when you intentionally want to clear generated and curated review aliases.
 
 Cleanup:
 
@@ -140,7 +140,7 @@ aiplane models clear-cache --provider huggingface --dry-run
 aiplane models clear-cache
 ```
 
-Use `--include-curated` only when you intentionally want to remove curated aliases from `models.yaml` too.
+Use `--keep-curated` when you want to preserve curated aliases in `models.yaml` and clear only generated or legacy refresh-imported aliases.
 
 ## Workflow 6: Choose or Change Model Defaults
 
@@ -148,17 +148,17 @@ Use this when integrations or `aiplane run` should use different profile default
 
 ```bash
 aiplane models defaults
-aiplane models show llama-8b
-aiplane models use chat_model llama-8b
-aiplane models use autocomplete_model qwen-coder-1.5b-base
-aiplane models use embedding_model nomic-embed-text
+aiplane models show CHAT_ALIAS
+aiplane models use chat_model CHAT_ALIAS
+aiplane models use autocomplete_model AUTOCOMPLETE_ALIAS
+aiplane models use embedding_model EMBEDDING_ALIAS
 aiplane profiles validate
 ```
 
 Practical tips:
 
 - Defaults should point at curated aliases in `models.yaml`, not generated discovery entries.
-- Use `models list --role chat --sort-by role` to inspect candidates.
+- Use `models list --role chat --sort-by role`, `models list --role text_to_speech`, `models list --role image_generation --runtime diffusers`, or `models list --role video_generation --runtime diffusers` to inspect curated and generated candidates.
 - Use `profiles validate` after changing defaults to catch missing aliases.
 
 ## Workflow 7: vLLM or TGI on a GPU Host
@@ -166,13 +166,13 @@ Practical tips:
 Use this when a Hugging Face model should run behind an OpenAI-compatible endpoint.
 
 ```bash
-aiplane models show qwen-coder-32b-vllm
+aiplane models show MODEL_ALIAS
 aiplane runtimes install vllm --dry-run
-aiplane runtimes pull vllm --model qwen-coder-32b-vllm --dry-run
-aiplane runtimes start vllm --model qwen-coder-32b-vllm --dry-run
+aiplane runtimes pull vllm --model MODEL_ALIAS --dry-run
+aiplane runtimes start vllm --model MODEL_ALIAS --dry-run
 aiplane runtimes status vllm
 
-aiplane integrations export continue --model qwen-coder-32b-vllm --endpoint http://localhost:8000/v1
+aiplane integrations export continue --model MODEL_ALIAS --endpoint http://localhost:8000/v1
 ```
 
 Practical tips:
@@ -208,7 +208,7 @@ aiplane machines list
 aiplane machines discover
 aiplane stacks setup coding_agents \
   --runtime vllm \
-  --model qwen-coder-32b-vllm \
+  --model MODEL_ALIAS \
   --machine gpu_workstation_ssh \
   --access ssh_tunnel \
   --dry-run
@@ -247,8 +247,8 @@ Use this when you want a practical smoke signal before making a model default.
 
 ```bash
 aiplane hardware recommend
-aiplane models benchmark qwen-tiny --dry-run
-aiplane models benchmark qwen-tiny
+aiplane models benchmark MODEL_ALIAS --dry-run
+aiplane models benchmark MODEL_ALIAS
 aiplane models list --sort-by benchmark --require-benchmark
 ```
 
@@ -267,13 +267,14 @@ aiplane environment doctor --format text
 aiplane runtimes prerequisites all
 aiplane runtimes doctor
 aiplane models doctor
-aiplane integrations plan continue
+aiplane integrations roles continue
+aiplane integrations plan continue --chat CHAT_ALIAS --autocomplete AUTOCOMPLETE_ALIAS --embedding EMBEDDING_ALIAS
 ```
 
 Common fixes:
 
-- Missing default model alias: restore or add the alias in `models.yaml`, then run `profiles validate`.
+- Missing model alias: run provider discovery into `models.generated.yaml`, promote a reviewed alias if you want a curated default, or pass explicit `--chat`/`--autocomplete`/`--embedding` aliases.
 - Runtime not reachable: run `runtimes prerequisites <runtime>`, then preview `runtimes install <runtime> --dry-run` or `runtimes start <runtime> --dry-run` where helper support exists.
 - Model not pulled: run `runtimes pull <runtime> --model <alias>`.
 - Wrong IDE endpoint: rerun `integrations plan/export` with `--endpoint`.
-- Catalog too noisy: use `models clear-cache --dry-run`, then clear generated entries.
+- Catalog too noisy: use `models clear-cache --dry-run`, review whether curated aliases are included, and add `--keep-curated` if you only want to clear generated entries.

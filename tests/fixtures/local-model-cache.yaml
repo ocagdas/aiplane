@@ -1,0 +1,478 @@
+defaults:
+  self_managed_model: local-analysis-small
+  chat_model: local-chat-small
+  autocomplete_model: local-code-base
+  embedding_model: local-embedding-small
+  code_model: local-code-small
+  completion_model: local-code-small
+  reasoning_model: local-reasoning-small
+models:
+  local-analysis-small:
+    provider: ollama
+    model: 'provider-text-small:0.5b'
+    roles: [analysis, completion, autocomplete, generation]
+    local: true
+    enabled: true
+    size: 398MB
+    context: 32K
+    pull_command: 'ollama pull provider-text-small:0.5b'
+    min_ram_gb: 4
+    recommended_ram_gb: 8
+    min_vram_gb: 0
+  local-code-small:
+    provider: ollama
+    model: 'provider-code-small:1.5b'
+    roles: [analysis, completion, autocomplete, generation]
+    local: true
+    enabled: true
+    size: 986MB
+    context: 32K
+    pull_command: 'ollama pull provider-code-small:1.5b'
+    min_ram_gb: 8
+    recommended_ram_gb: 16
+    min_vram_gb: 0
+  local-code-base:
+    provider: ollama
+    model: 'provider-code-base:1.5b'
+    roles: [completion, autocomplete]
+    local: true
+    enabled: true
+    notes: Base coding model suited to autocomplete/completion more than chat/instruction following
+    pull_command: 'ollama pull provider-code-base:1.5b'
+    min_ram_gb: 8
+    recommended_ram_gb: 16
+    min_vram_gb: 0
+    capability_scores:
+      code_analysis: 2
+      code_generation: 2
+      code_completion: 4
+      debugging_refactor: 1
+      reasoning: 1
+      math: 1
+      tool_use: 1
+      general_chat: 1
+      embedding: 0
+      vision_image_understanding: 0
+      image_generation: 0
+      audio: 0
+      video: 0
+    capability_score_source: catalog_entry
+  local-code-alt-small:
+    provider: ollama
+    model: 'provider-code-alt-small:3b'
+    roles: [analysis, completion, autocomplete, generation]
+    local: true
+    enabled: true
+    size: 1.7GB
+    context: 16K
+    pull_command: 'ollama pull provider-code-alt-small:3b'
+    min_ram_gb: 12
+    recommended_ram_gb: 24
+    min_vram_gb: 0
+  local-general-small:
+    provider: ollama
+    model: 'provider-general-small:3b'
+    roles: [analysis, generation]
+    local: true
+    enabled: false
+    notes: general-purpose local model candidate; enable only after confirming runtime availability
+    pull_command: 'ollama pull provider-general-small:3b'
+    min_ram_gb: 12
+    recommended_ram_gb: 24
+    min_vram_gb: 0
+  local-code-small-plus:
+    provider: ollama
+    model: 'provider-code-small-plus:3b'
+    roles: [analysis, completion, generation]
+    local: true
+    enabled: false
+    notes: Small coding model candidate between laptop and workstation tiers
+    pull_command: 'ollama pull provider-code-small-plus:3b'
+    min_ram_gb: 12
+    recommended_ram_gb: 24
+    min_vram_gb: 0
+    recommended_vram_gb: 4
+  local-code-gpu:
+    provider: ollama
+    model: 'provider-code-gpu:7b'
+    roles: [analysis, completion, generation]
+    local: true
+    enabled: false
+    notes: Better local coding baseline for GPU laptops/workstations; enable after pull and fit check
+    pull_command: 'ollama pull provider-code-gpu:7b'
+    min_ram_gb: 16
+    recommended_ram_gb: 32
+    min_vram_gb: 6
+    recommended_vram_gb: 8
+  local-code-mid:
+    provider: ollama
+    model: 'provider-code-mid:14b'
+    roles: [analysis, completion, generation, refactor]
+    local: true
+    enabled: false
+    notes: Mid-size local coding model for stronger GPUs or unified-memory systems
+    pull_command: 'ollama pull provider-code-mid:14b'
+    min_ram_gb: 32
+    recommended_ram_gb: 64
+    min_vram_gb: 12
+    recommended_vram_gb: 16
+  local-code-large:
+    provider: ollama
+    model: 'provider-code-large:32b'
+    roles: [analysis, completion, generation, refactor]
+    local: true
+    enabled: false
+    notes: High-VRAM local coding model candidate for workstation GPUs
+    pull_command: 'ollama pull provider-code-large:32b'
+    min_ram_gb: 64
+    recommended_ram_gb: 128
+    min_vram_gb: 24
+    recommended_vram_gb: 32
+  local-reasoning-small:
+    provider: ollama
+    model: 'provider-reasoning-small:1.5b'
+    roles: [analysis, generation]
+    local: true
+    enabled: false
+    notes: Tiny reasoning candidate for CPU/laptop smoke tests
+    pull_command: 'ollama pull provider-reasoning-small:1.5b'
+    min_ram_gb: 8
+    recommended_ram_gb: 16
+    min_vram_gb: 0
+  local-reasoning-7b:
+    provider: ollama
+    model: 'provider-reasoning-7b:7b'
+    roles: [analysis, generation]
+    local: true
+    enabled: false
+    notes: Small reasoning candidate for stronger laptops/workstations
+    pull_command: 'ollama pull provider-reasoning-7b:7b'
+    min_ram_gb: 16
+    recommended_ram_gb: 32
+    min_vram_gb: 6
+    recommended_vram_gb: 8
+  local-reasoning-8b:
+    provider: ollama
+    model: 'provider-reasoning-8b:8b'
+    roles: [analysis, generation]
+    local: true
+    enabled: false
+    notes: Small reasoning candidate for GPU laptops/workstations
+    pull_command: 'ollama pull provider-reasoning-8b:8b'
+    min_ram_gb: 16
+    recommended_ram_gb: 32
+    min_vram_gb: 6
+    recommended_vram_gb: 10
+  local-reasoning-mid:
+    provider: ollama
+    model: 'provider-reasoning-mid:14b'
+    roles: [analysis, generation, refactor]
+    local: true
+    enabled: false
+    notes: Mid-size reasoning candidate; better for analysis than low-latency completion
+    pull_command: 'ollama pull provider-reasoning-mid:14b'
+    min_ram_gb: 32
+    recommended_ram_gb: 64
+    min_vram_gb: 12
+    recommended_vram_gb: 16
+  local-reasoning-large:
+    provider: ollama
+    model: 'provider-reasoning-large:32b'
+    roles: [analysis, generation, refactor]
+    local: true
+    enabled: false
+    notes: Local reasoning model candidate; useful for analysis-heavy tasks, slower for completion
+    pull_command: 'ollama pull provider-reasoning-large:32b'
+    min_ram_gb: 64
+    recommended_ram_gb: 128
+    min_vram_gb: 24
+    recommended_vram_gb: 32
+  local-reasoning-xl:
+    provider: ollama
+    model: 'provider-reasoning-xl:70b'
+    roles: [analysis, generation, refactor]
+    local: true
+    enabled: false
+    notes: Large reasoning candidate for very high-memory or multi-GPU systems
+    pull_command: 'ollama pull provider-reasoning-xl:70b'
+    min_ram_gb: 128
+    recommended_ram_gb: 256
+    min_vram_gb: 48
+    recommended_vram_gb: 80
+  local-code-alt-medium:
+    provider: ollama
+    model: 'provider-code-alt-medium:7b'
+    roles: [analysis, completion, generation]
+    local: true
+    enabled: false
+    notes: Medium code-generation candidate for code completion/analysis
+    pull_command: 'ollama pull provider-code-alt-medium:7b'
+    min_ram_gb: 16
+    recommended_ram_gb: 32
+    min_vram_gb: 6
+    recommended_vram_gb: 8
+  local-code-alt-large:
+    provider: ollama
+    model: 'provider-code-alt-large:15b'
+    roles: [analysis, completion, generation, refactor]
+    local: true
+    enabled: false
+    notes: Larger code-generation candidate for workstation GPUs
+    pull_command: 'ollama pull provider-code-alt-large:15b'
+    min_ram_gb: 32
+    recommended_ram_gb: 64
+    min_vram_gb: 12
+    recommended_vram_gb: 20
+  local-code-legacy-small:
+    provider: ollama
+    model: 'provider-code-legacy-small:7b'
+    roles: [analysis, completion, generation]
+    local: true
+    enabled: false
+    notes: legacy code candidate; older but useful baseline
+    pull_command: 'ollama pull provider-code-legacy-small:7b'
+    min_ram_gb: 16
+    recommended_ram_gb: 32
+    min_vram_gb: 6
+    recommended_vram_gb: 8
+  local-code-legacy-mid:
+    provider: ollama
+    model: 'provider-code-legacy-mid:13b'
+    roles: [analysis, completion, generation]
+    local: true
+    enabled: false
+    notes: legacy code mid-size candidate
+    pull_command: 'ollama pull provider-code-legacy-mid:13b'
+    min_ram_gb: 32
+    recommended_ram_gb: 64
+    min_vram_gb: 10
+    recommended_vram_gb: 16
+  local-code-legacy-large:
+    provider: ollama
+    model: 'provider-code-legacy-large:34b'
+    roles: [analysis, completion, generation, refactor]
+    local: true
+    enabled: false
+    notes: legacy code workstation candidate
+    pull_command: 'ollama pull provider-code-legacy-large:34b'
+    min_ram_gb: 64
+    recommended_ram_gb: 128
+    min_vram_gb: 24
+    recommended_vram_gb: 32
+  codelocal-chat-large:
+    provider: ollama
+    model: 'provider-code-legacy-xl:70b'
+    roles: [analysis, completion, generation, refactor]
+    local: true
+    enabled: false
+    notes: Large legacy code candidate for very high-memory or multi-GPU systems
+    pull_command: 'ollama pull provider-code-legacy-xl:70b'
+    min_ram_gb: 128
+    recommended_ram_gb: 256
+    min_vram_gb: 48
+    recommended_vram_gb: 80
+  local-chat-small:
+    provider: ollama
+    model: 'provider-chat-small:8b'
+    roles: [chat, analysis, generation]
+    local: true
+    enabled: true
+    notes: General-purpose local model candidate
+    pull_command: 'ollama pull provider-chat-small:8b'
+    min_ram_gb: 16
+    recommended_ram_gb: 32
+    min_vram_gb: 6
+    recommended_vram_gb: 10
+  local-chat-alt:
+    provider: ollama
+    model: 'provider-chat-alt:7b'
+    roles: [chat, analysis, generation]
+    local: true
+    enabled: false
+    notes: General-purpose general chat model candidate
+    pull_command: 'ollama pull provider-chat-alt:7b'
+    min_ram_gb: 16
+    recommended_ram_gb: 32
+    min_vram_gb: 6
+    recommended_vram_gb: 10
+  local-embedding-small:
+    provider: ollama
+    model: 'local-embedding-small:latest'
+    roles: [embedding]
+    local: true
+    enabled: true
+    notes: Embedding model for retrieval/vector search; not suitable for chat or code completion
+    pull_command: 'ollama pull local-embedding-small:latest'
+    min_ram_gb: 4
+    recommended_ram_gb: 8
+    min_vram_gb: 0
+    capability_scores:
+      code_analysis: 0
+      code_generation: 0
+      code_completion: 0
+      debugging_refactor: 0
+      reasoning: 0
+      math: 0
+      tool_use: 0
+      general_chat: 0
+      embedding: 5
+      vision_image_understanding: 0
+      image_generation: 0
+      audio: 0
+      video: 0
+    capability_score_source: catalog_entry
+  local-chat-large:
+    provider: ollama
+    model: 'provider-chat-large:70b'
+    roles: [analysis, generation, refactor]
+    local: true
+    enabled: false
+    notes: Large general-purpose local model candidate for multi-GPU or very high-memory systems
+    pull_command: 'ollama pull provider-chat-large:70b'
+    min_ram_gb: 128
+    recommended_ram_gb: 256
+    min_vram_gb: 48
+    recommended_vram_gb: 80
+  local-general-large:
+    provider: ollama
+    model: 'provider-general-large:70b'
+    roles: [analysis, generation, refactor]
+    local: true
+    enabled: false
+    notes: Large general-purpose candidate; confirm Ollama tag and license before enabling
+    pull_command: 'ollama pull provider-general-large:70b'
+    min_ram_gb: 128
+    recommended_ram_gb: 256
+    min_vram_gb: 48
+    recommended_vram_gb: 80
+  provider-code-large-vllm:
+    provider: vllm
+    preferred_runtime: vllm
+    supported_runtimes: [vllm, tgi, transformers]
+    source: huggingface
+    model: Provider/Code-Large-Instruct
+    roles: [analysis, completion, generation, refactor]
+    local: true
+    enabled: false
+    notes: vLLM-served high-VRAM coding model candidate using OpenAI-compatible endpoint
+    min_ram_gb: 64
+    recommended_ram_gb: 128
+    min_vram_gb: 24
+    recommended_vram_gb: 32
+  local-gguf-instruct:
+    provider: llamacpp
+    source: huggingface_gguf
+    preferred_runtime: llamacpp
+    model: Provider/Instruct-7B-GGUF
+    roles: [chat, analysis, generation]
+    local: true
+    enabled: false
+    notes: GGUF source example for llama.cpp/LocalAI/Ollama import workflows
+    min_ram_gb: 16
+    recommended_ram_gb: 32
+    min_vram_gb: 0
+    recommended_vram_gb: 8
+  local-gguf-chat:
+    provider: llamacpp
+    source: huggingface_gguf
+    preferred_runtime: llamacpp
+    model: Provider/Chat-8B-GGUF
+    roles: [chat, analysis, generation]
+    local: true
+    enabled: false
+    notes: Representative GGUF model source for CPU/GPU quantized runtime testing
+    min_ram_gb: 16
+    recommended_ram_gb: 32
+    min_vram_gb: 0
+    recommended_vram_gb: 8
+  speech-to-text-large:
+    provider: transformers
+    source: huggingface
+    preferred_runtime: faster_whisper
+    model: Provider/speech-to-text-large
+    roles: [speech_to_text]
+    local: true
+    enabled: false
+    notes: Speech-to-text source model for faster-whisper runtime experiments
+    min_ram_gb: 16
+    recommended_ram_gb: 32
+    min_vram_gb: 0
+    recommended_vram_gb: 8
+  local-gguf-example:
+    provider: llamacpp
+    source: local_file
+    preferred_runtime: llamacpp
+    model: /path/to/model.gguf
+    roles: [chat, analysis]
+    local: true
+    enabled: false
+    notes: Template alias for a local model file; replace model with a real local path
+    min_ram_gb: 8
+    recommended_ram_gb: 16
+    min_vram_gb: 0
+  managed-chat-small:
+    provider: openai
+    model: managed-chat-model
+    roles: [chat, analysis, generation]
+    local: false
+    enabled: false
+    api_key_env: OPENAI_API_KEY
+    notes: Managed OpenAI example; enable only after policy approval and key configuration.
+    capability_scores:
+      code_analysis: 3
+      code_generation: 3
+      code_completion: 1
+      debugging_refactor: 3
+      reasoning: 3
+      math: 2
+      tool_use: 3
+      general_chat: 4
+      embedding: 0
+      vision_image_understanding: 2
+      image_generation: 0
+      audio: 0
+      video: 0
+  managed-azure-chat:
+    provider: azure_openai
+    model: your-chat-deployment-name
+    roles: [chat, analysis, generation]
+    local: false
+    enabled: false
+    api_key_env: AZURE_OPENAI_API_KEY
+    notes: Azure OpenAI example; model is the deployment name, not necessarily the base model name.
+    capability_scores:
+      code_analysis: 3
+      code_generation: 3
+      code_completion: 1
+      debugging_refactor: 3
+      reasoning: 3
+      math: 2
+      tool_use: 3
+      general_chat: 4
+      embedding: 0
+      vision_image_understanding: 2
+      image_generation: 0
+      audio: 0
+      video: 0
+  managed-chat-alt:
+    provider: anthropic
+    model: managed-chat-alt-model
+    roles: [chat, analysis, generation]
+    local: false
+    enabled: false
+    api_key_env: ANTHROPIC_API_KEY
+    notes: Managed Anthropic example; use target-tool native Anthropic settings until aiplane has a dedicated exporter.
+    capability_scores:
+      code_analysis: 4
+      code_generation: 3
+      code_completion: 1
+      debugging_refactor: 4
+      reasoning: 4
+      math: 3
+      tool_use: 3
+      general_chat: 4
+      embedding: 0
+      vision_image_understanding: 2
+      image_generation: 0
+      audio: 0
+      video: 0

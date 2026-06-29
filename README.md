@@ -26,7 +26,8 @@ Implemented foundations include:
 - profile loading, validation, local config, ignored credentials, and selected/default summaries;
 - environment planning for system Python, `venv`, Conda, and Docker execution mode;
 - `environment doctor` and `tools doctor` readiness checks;
-- model/provider catalogs for local, open-weight, OpenAI-compatible, OpenAI, Anthropic, Azure OpenAI, Ollama Cloud placeholder, Hugging Face, GGUF, and runtime-backed models;
+- provider catalogs for local, open-weight, OpenAI-compatible, OpenAI, Anthropic, Azure OpenAI, Ollama Cloud placeholder, Hugging Face, GGUF, and runtime-backed discovery, with no checked-in model aliases;
+- ignored generated model caches that are repopulated from provider discovery and can be filtered by role, runtime, capability, RAM/VRAM, benchmark score, and target hardware;
 - runtime helper delegation for supported providers such as Ollama;
 - machine inventory, hardware discovery, hardware-aware model recommendations, and stack planning;
 - integration plan/setup/export for Continue, Cline, Zed, Aider, OpenAI-compatible clients, and MCP client snippets;
@@ -71,27 +72,27 @@ aiplane profiles validate
 aiplane environment doctor
 ```
 
-Inspect model/provider state:
+Inspect provider state, then populate an ignored local model cache from discovery when needed:
 
 ```bash
 aiplane providers list
+aiplane models refresh --provider huggingface --query text-generation --limit 25 --dry-run
 aiplane models list --group-by ownership
-aiplane models defaults
-aiplane models doctor
+aiplane models clear-cache --dry-run
 ```
 
-Plan a local runtime/model setup before changing the machine:
+Plan a local runtime/model setup before changing the machine. Replace `MODEL_ALIAS` with an alias discovered into `models.generated.yaml` or deliberately promoted into local `models.yaml`:
 
 ```bash
 aiplane runtimes install ollama --dry-run
-aiplane runtimes pull ollama --model qwen-tiny --dry-run
-aiplane integrations plan continue
+aiplane runtimes pull ollama --model MODEL_ALIAS --dry-run
+aiplane integrations roles continue
 ```
 
-Export IDE or agent-tool config:
+Export IDE or agent-tool config after choosing aliases. MCP exports do not need a model alias:
 
 ```bash
-aiplane integrations export continue
+aiplane integrations export continue --model MODEL_ALIAS
 aiplane integrations export vscode-mcp
 aiplane mcp manifest
 ```
@@ -100,8 +101,8 @@ Plan an agent application scaffold outside the repo/profile tree:
 
 ```bash
 aiplane agents templates
-aiplane agents plan news-briefing --framework langgraph --model qwen-tiny
-aiplane agents export news-briefing --framework langgraph --model qwen-tiny --file agent.py
+aiplane agents plan news-briefing --framework langgraph --model MODEL_ALIAS
+aiplane agents export news-briefing --framework langgraph --model MODEL_ALIAS --file agent.py
 ```
 
 Inspect automation and provisioning tool readiness:
@@ -118,7 +119,7 @@ Plan benchmark tooling:
 ```bash
 aiplane benchmarks list
 aiplane benchmarks doctor
-aiplane benchmarks plan vllm-serving --model qwen-tiny
+aiplane benchmarks plan vllm-serving --model MODEL_ALIAS
 ```
 
 ## The Three Execution Fabric Tracks

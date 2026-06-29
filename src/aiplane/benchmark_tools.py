@@ -73,7 +73,7 @@ class BenchmarkToolManager:
             }
         return self.tools.install(str(tool_name), dry_run=dry_run, yes=not dry_run)
 
-    def plan(self, name: str, model: str = "qwen-tiny", endpoint: str | None = None, spec: str | None = None) -> dict[str, Any]:
+    def plan(self, name: str, model: str = "MODEL_ALIAS", endpoint: str | None = None, spec: str | None = None) -> dict[str, Any]:
         row = self._row(name)
         endpoint = endpoint or "http://localhost:8000/v1"
         if name == "aiplane-smoke":

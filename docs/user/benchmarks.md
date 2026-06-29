@@ -34,10 +34,10 @@ aiplane benchmarks install locust-load --dry-run
 Render benchmark command templates without executing them:
 
 ```bash
-aiplane benchmarks plan aiplane-smoke --model qwen-tiny
-aiplane benchmarks plan aiplane-smoke --model qwen-tiny --spec benchmarks/simple-python.json
-aiplane benchmarks plan lm-evaluation-harness --model qwen-coder-32b --endpoint http://localhost:8000/v1
-aiplane benchmarks plan vllm-serving --model qwen-coder-32b --endpoint http://localhost:8000/v1
+aiplane benchmarks plan aiplane-smoke --model MODEL_ALIAS
+aiplane benchmarks plan aiplane-smoke --model MODEL_ALIAS --spec benchmarks/simple-python.json
+aiplane benchmarks plan lm-evaluation-harness --model MODEL_ALIAS --endpoint http://localhost:8000/v1
+aiplane benchmarks plan vllm-serving --model MODEL_ALIAS --endpoint http://localhost:8000/v1
 ```
 
 Current framework intent:
@@ -54,28 +54,28 @@ Current framework intent:
 Preview the built-in benchmark without calling a model:
 
 ```bash
-aiplane models benchmark qwen-tiny --dry-run
+aiplane models benchmark MODEL_ALIAS --dry-run
 ```
 
 Run all built-in benchmark tasks and save the result under `.aiplane/benchmarks/`:
 
 ```bash
-aiplane models benchmark qwen-tiny
+aiplane models benchmark MODEL_ALIAS
 ```
 
 Run one built-in task only:
 
 ```bash
-aiplane models benchmark --task analysis qwen-tiny
-aiplane models benchmark --task completion qwen-tiny
-aiplane models benchmark --task generation qwen-tiny
-aiplane models benchmark --task reasoning qwen-tiny
+aiplane models benchmark --task analysis MODEL_ALIAS
+aiplane models benchmark --task completion MODEL_ALIAS
+aiplane models benchmark --task generation MODEL_ALIAS
+aiplane models benchmark --task reasoning MODEL_ALIAS
 ```
 
 Skip saving:
 
 ```bash
-aiplane models benchmark --no-save qwen-tiny
+aiplane models benchmark --no-save MODEL_ALIAS
 ```
 
 ## Custom Benchmark Specs
@@ -103,19 +103,19 @@ Example JSON:
 Preview it:
 
 ```bash
-aiplane models benchmark qwen-tiny --spec benchmarks/simple-python.json --task clamp_unit --dry-run
+aiplane models benchmark MODEL_ALIAS --spec benchmarks/simple-python.json --task clamp_unit --dry-run
 ```
 
 Run it and execute the evaluator command in the active profile environment:
 
 ```bash
-aiplane models benchmark qwen-tiny --spec benchmarks/simple-python.json --task clamp_unit
+aiplane models benchmark MODEL_ALIAS --spec benchmarks/simple-python.json --task clamp_unit
 ```
 
 Run the evaluator command in a specific environment mode without changing the active profile setting:
 
 ```bash
-aiplane models benchmark qwen-tiny --spec benchmarks/simple-python.json --environment conda
+aiplane models benchmark MODEL_ALIAS --spec benchmarks/simple-python.json --environment conda
 ```
 
 Supported evaluator environment modes are `system`, `venv`, `conda`, and `docker`, using the profile's `environment.yaml` definitions.

@@ -195,7 +195,7 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
         "properties": {
             "profile": {"type": "string"},
             "tool": {"type": "string", "enum": ["continue", "cline", "zed", "aider", "openai-compatible", "vscode-mcp", "continue-mcp", "cline-mcp", "generic-mcp"]},
-            "model": {"type": "string", "default": "qwen-tiny"},
+            "model": {"type": "string"},
             "endpoint": {"type": "string"},
             "api_key_env": {"type": "string"},
         },

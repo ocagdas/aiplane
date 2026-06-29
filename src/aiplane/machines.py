@@ -409,17 +409,37 @@ def _az_account_status(completed: subprocess.CompletedProcess[str]) -> dict[str,
     if not isinstance(account, dict):
         return {"ok": False, "reason": "az account show returned unexpected JSON shape"}
     user = account.get("user") if isinstance(account.get("user"), dict) else {}
+    subscription_id = str(account.get("id") or "")
+    tenant_id = str(account.get("tenantId") or "")
+    user_name = str(user.get("name") or "")
+    subscription_name = str(account.get("name") or "")
     return {
         "ok": True,
         "environment": account.get("environmentName"),
         "state": account.get("state"),
         "is_default": account.get("isDefault"),
-        "subscription_name": account.get("name"),
-        "subscription_id": account.get("id"),
-        "tenant_id": account.get("tenantId"),
-        "user_name": user.get("name"),
+        "subscription_name": _redact_if_present(subscription_name),
+        "subscription_id": _redact_if_present(subscription_id),
+        "subscription_id_hint": _last4_hint(subscription_id),
+        "tenant_id": _redact_if_present(tenant_id),
+        "tenant_id_hint": _last4_hint(tenant_id),
+        "user_name": _redact_if_present(user_name),
+        "user_name_hint": _user_hint(user_name),
         "user_type": user.get("type"),
+        "redacted": True,
     }
+
+
+def _redact_if_present(value: str) -> str | None:
+    return "[redacted]" if value else None
+
+
+def _last4_hint(value: str) -> str | None:
+    return f"...{value[-4:]}" if len(value) >= 4 else None
+
+
+def _user_hint(value: str) -> str | None:
+    return "[redacted]" if value else None
 
 
 def _az_command_status(completed: subprocess.CompletedProcess[str]) -> dict[str, Any]:

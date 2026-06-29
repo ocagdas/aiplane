@@ -18,12 +18,14 @@ for example a shared workstation or cloud gateway.
 
 ## Plan, Setup, Export
 
-The integration flow has three separate steps:
+The integration flow has three separate steps. On the checked-in profile, discover or promote aliases first, then pass them explicitly:
 
 ```bash
-aiplane integrations plan continue
-aiplane integrations setup continue --dry-run
-aiplane integrations export continue
+aiplane integrations roles continue
+aiplane models refresh --provider ollama --query chat --dry-run --limit 10
+aiplane integrations plan continue --chat CHAT_ALIAS --autocomplete AUTOCOMPLETE_ALIAS --embedding EMBEDDING_ALIAS
+aiplane integrations setup continue --chat CHAT_ALIAS --autocomplete AUTOCOMPLETE_ALIAS --embedding EMBEDDING_ALIAS --dry-run
+aiplane integrations export continue --chat CHAT_ALIAS --autocomplete AUTOCOMPLETE_ALIAS --embedding EMBEDDING_ALIAS
 ```
 
 - `plan` prints the decision: selected model aliases, provider, runtime, endpoint, supported runtimes, capability scores, role score, and the reason each model was selected. It does not start services, pull models, edit IDE files, or print the final target config.
@@ -46,7 +48,7 @@ Important fields inside each selected row:
 | Field | Meaning |
 | --- | --- |
 | `name` | The `aiplane` model alias from the profile catalog. |
-| `model` | Provider/runtime-native model id, such as `qwen2.5-coder:7b` or `Qwen/Qwen2.5-Coder-32B-Instruct`. |
+| `model` | Provider/runtime-native model id, such as `text-generation:7b` or `Provider/Code-Large-Instruct`. |
 | `provider` | The configured model source/catalog recorded on the model alias. Some systems, such as Ollama, are both a source and a runtime. |
 | `runtime` | Runtime selected for serving, such as `ollama`, `vllm`, or `llamacpp`. |
 | `endpoint` | Base URL the IDE/tool should call. Override with `--endpoint` for SSH tunnels, LAN endpoints, or gateways. |
@@ -63,7 +65,7 @@ First inspect the roles a target can use:
 ```bash
 aiplane integrations roles continue
 aiplane integrations roles cline
-aiplane integrations plan continue --runtime ollama
+aiplane models refresh --provider ollama --query chat --dry-run --limit 10
 ```
 
 Continue can use separate `chat`, `autocomplete`, and `embedding` selections.
@@ -80,7 +82,7 @@ aiplane models list --runtime ollama --role embedding --enabled-only --sort-by r
 aiplane models list --runtime ollama --role chat --role autocomplete --role embedding --enabled-only --sort-by role --limit 5
 aiplane models list --runtime vllm --capability code_generation>=4 --capability debugging>=3 --enabled-only
 aiplane models list --runtime vllm --capability code_generation>=4 --capability tool_use>=3 --vram-gb 96 --sort-by avg --limit 10
-aiplane models show qwen-coder-32b
+aiplane models show MODEL_ALIAS
 ```
 
 The repeated-role form is useful when you want one model that is a good overall
@@ -94,21 +96,21 @@ Continue supports explicit role-level mix and match:
 
 ```bash
 aiplane integrations plan continue \
-  --chat llama-8b \
-  --autocomplete qwen-coder-1.5b-base \
-  --embedding nomic-embed-text
+  --chat CHAT_ALIAS \
+  --autocomplete AUTOCOMPLETE_ALIAS \
+  --embedding EMBEDDING_ALIAS
 
 aiplane integrations export continue \
-  --chat llama-8b \
-  --autocomplete qwen-coder-1.5b-base \
-  --embedding nomic-embed-text
+  --chat CHAT_ALIAS \
+  --autocomplete AUTOCOMPLETE_ALIAS \
+  --embedding EMBEDDING_ALIAS
 ```
 
 Single-model targets use one primary model:
 
 ```bash
-aiplane integrations plan cline --model qwen-coder-32b --endpoint http://localhost:8000/v1
-aiplane integrations export cline --model qwen-coder-32b --endpoint http://localhost:8000/v1
+aiplane integrations plan cline --model MODEL_ALIAS --endpoint http://localhost:8000/v1
+aiplane integrations export cline --model MODEL_ALIAS --endpoint http://localhost:8000/v1
 
 aiplane integrations plan aider --select-best --runtime vllm --capability code_generation>=4
 aiplane integrations export aider --select-best --runtime vllm --capability code_generation>=4
@@ -127,23 +129,23 @@ For VS Code, the first concrete path is Continue:
 aiplane runtimes install ollama --dry-run
 aiplane runtimes install ollama
 aiplane runtimes start ollama
-aiplane runtimes pull ollama --model qwen-tiny
+aiplane runtimes pull ollama --model MODEL_ALIAS
 ```
 
-3. Generate the Continue config bundle:
+3. Generate the Continue config bundle from selected aliases:
 
 ```bash
-aiplane integrations export continue
+aiplane integrations export continue --chat CHAT_ALIAS --autocomplete AUTOCOMPLETE_ALIAS --embedding EMBEDDING_ALIAS
 ```
 
-4. Paste or merge the printed YAML into Continue's config file. On a normal Linux install this is usually `~/.continue/config.yaml`. In VS Code, open Continue from the side bar and use its config/edit-config command if available. The bundle uses profile defaults for chat, autocomplete, and embeddings.
+4. Paste or merge the printed YAML into Continue's config file. On a normal Linux install this is usually `~/.continue/config.yaml`. In VS Code, open Continue from the side bar and use its config/edit-config command if available.
 
 For a larger local model, first check the hardware recommendation and pull it:
 
 ```bash
 aiplane hardware recommend
-aiplane models pull qwen-coder-32b
-aiplane integrations export continue --model qwen-coder-32b
+aiplane models pull MODEL_ALIAS
+aiplane integrations export continue --model MODEL_ALIAS
 ```
 
 ## Continue / VS Code
@@ -152,13 +154,13 @@ Continue is an open-source coding assistant/agent surface that has been
 available as a CLI, VS Code extension, and JetBrains plugin. `aiplane` treats
 Continue as one export target, not as the strategic foundation for all IDE work.
 
-Generate a Continue config bundle from profile defaults:
+Generate a Continue config bundle from explicit role aliases:
 
 ```bash
-aiplane integrations export continue
+aiplane integrations export continue --chat CHAT_ALIAS --autocomplete AUTOCOMPLETE_ALIAS --embedding EMBEDDING_ALIAS
 ```
 
-By default this emits chat, autocomplete, and embedding settings using `chat_model`, `autocomplete_model`, and `embedding_model` from the active profile. To export a single model entry instead, pass `--model <alias>`.
+The checked-in profile is provider-only, so discover or promote aliases before exporting. If your local profile has `chat_model`, `autocomplete_model`, and `embedding_model` defaults, you can omit the role flags. To export a single model entry instead, pass `--model <alias>`.
 
 For a shared workstation or cloud-hosted OpenAI-compatible endpoint, override the
 endpoint:
@@ -170,20 +172,20 @@ aiplane integrations export continue --endpoint https://llm-workstation.example.
 To export one specific model entry for that endpoint:
 
 ```bash
-aiplane integrations export continue --model qwen-tiny --endpoint https://llm-workstation.example.com/v1
+aiplane integrations export continue --model MODEL_ALIAS --endpoint https://llm-workstation.example.com/v1
 ```
 
 The exporter prints YAML shaped for Continue's configuration. Paste that snippet into Continue's YAML config, normally `~/.continue/config.yaml` on this PC. If the file already has a `models:` section, merge generated entries under the existing list instead of creating duplicate top-level keys.
 
-`--model` is a single-model export. It does not accept multiple values. For Continue's multi-role config, use `--chat`, `--autocomplete`, and `--embedding`, or omit all three to use profile defaults.
+`--model` is a single-model export. It does not accept multiple values. For Continue's multi-role config, use `--chat`, `--autocomplete`, and `--embedding`; omit all three only when your local profile has curated defaults.
 
 To avoid repeating selection flags, save the plan and export from it:
 
 ```bash
 aiplane integrations plan continue \
-  --chat openai-gpt-4o-mini \
-  --autocomplete qwen-coder-1.5b-base \
-  --embedding nomic-embed-text > continue-plan.json
+  --chat managed-chat-small \
+  --autocomplete AUTOCOMPLETE_ALIAS \
+  --embedding EMBEDDING_ALIAS > continue-plan.json
 
 aiplane integrations export continue --from-plan continue-plan.json
 ```
@@ -199,9 +201,9 @@ A minimal local Ollama entry looks like:
 
 ```yaml
 models:
-  - name: qwen-tiny
+  - name: MODEL_ALIAS
     provider: openai
-    model: qwen2.5-coder:0.5b
+    model: text-generation:0.5b
     apiBase: http://localhost:11434/v1
     apiKey: ollama
 ```
@@ -210,14 +212,14 @@ Before using it, make sure Ollama is running and the model is pulled. You can do
 
 ```bash
 aiplane runtimes start ollama
-aiplane runtimes pull ollama --model qwen-tiny
+aiplane runtimes pull ollama --model MODEL_ALIAS
 ```
 
 The equivalent native commands are:
 
 ```bash
 ollama serve
-ollama pull qwen2.5-coder:0.5b
+ollama pull text-generation:0.5b
 ```
 
 ## Managed Provider Exports
@@ -231,13 +233,13 @@ For OpenAI-style managed endpoints:
 ```bash
 export OPENAI_API_KEY=...
 aiplane integrations plan continue \
-  --chat openai-gpt-4o-mini \
-  --autocomplete qwen-coder-1.5b-base \
-  --embedding nomic-embed-text
+  --chat managed-chat-small \
+  --autocomplete AUTOCOMPLETE_ALIAS \
+  --embedding EMBEDDING_ALIAS
 aiplane integrations export continue \
-  --chat openai-gpt-4o-mini \
-  --autocomplete qwen-coder-1.5b-base \
-  --embedding nomic-embed-text
+  --chat managed-chat-small \
+  --autocomplete AUTOCOMPLETE_ALIAS \
+  --embedding EMBEDDING_ALIAS
 ```
 
 For Azure OpenAI, configure `providers.azure_openai.endpoint` in `models.yaml` or pass an endpoint at export time. The model alias should use the Azure deployment name:
@@ -245,7 +247,7 @@ For Azure OpenAI, configure `providers.azure_openai.endpoint` in `models.yaml` o
 ```bash
 export AZURE_OPENAI_API_KEY=...
 aiplane providers models azure_openai --online --limit 20
-aiplane integrations export openai-compatible --model azure-openai-chat-deployment --endpoint https://YOUR-RESOURCE.openai.azure.com
+aiplane integrations export openai-compatible --model managed-azure-chat --endpoint https://YOUR-RESOURCE.openai.azure.com
 ```
 
 For Anthropic, keep the alias in `models.yaml` for planning and catalog visibility. Dedicated target-tool exporters are intentionally conservative; use the target tool's native Anthropic provider settings when it supports them, or keep using local/OpenAI-compatible exports where that is the supported shape.
@@ -269,7 +271,7 @@ For client-specific MCP config examples, see [MCP Adapter](mcp.md). MCP is separ
 The same endpoint pattern works for local or remote vLLM, LM Studio, llama.cpp server, Ollama `/v1`, and API gateways that expose OpenAI-compatible chat completions. Configure the provider endpoint in the profile or override it during export:
 
 ```bash
-aiplane integrations export continue --model qwen-coder-32b-vllm --endpoint http://localhost:8000/v1
+aiplane integrations export continue --model MODEL_ALIAS --endpoint http://localhost:8000/v1
 ```
 
 For a remote/shared endpoint, use the tunnel or gateway URL as the endpoint. The IDE sends inference requests to that URL; MCP is separate and is used for querying `aiplane` configuration and plans.
@@ -295,8 +297,8 @@ Continue is the first VS Code path, but the plan/export surface is broader:
 ```bash
 aiplane integrations list
 
-aiplane integrations plan cline --model qwen-coder-32b --endpoint http://localhost:8000/v1
-aiplane integrations export cline --model qwen-coder-32b --endpoint http://localhost:8000/v1
+aiplane integrations plan cline --model MODEL_ALIAS --endpoint http://localhost:8000/v1
+aiplane integrations export cline --model MODEL_ALIAS --endpoint http://localhost:8000/v1
 
 aiplane integrations plan zed --select-best --runtime ollama
 aiplane integrations export zed --select-best --runtime ollama
@@ -304,7 +306,7 @@ aiplane integrations export zed --select-best --runtime ollama
 aiplane integrations plan aider --runtime vllm --capability code_generation>=4
 aiplane integrations export aider --runtime vllm --capability code_generation>=4
 
-aiplane integrations export openai-compatible --model qwen-coder-32b --endpoint http://localhost:8000/v1
+aiplane integrations export openai-compatible --model MODEL_ALIAS --endpoint http://localhost:8000/v1
 aiplane integrations export vscode-mcp
 aiplane integrations export continue-mcp
 ```
@@ -330,16 +332,16 @@ aiplane agents templates
 Plan a small LangGraph agent against a configured model alias:
 
 ```bash
-aiplane agents plan repo-helper --framework langgraph --model qwen-tiny
+aiplane agents plan repo-helper --framework langgraph --model MODEL_ALIAS
 ```
 
 Print one scaffold file at a time:
 
 ```bash
-aiplane agents export repo-helper --framework langgraph --model qwen-tiny --file agent.py
-aiplane agents export repo-helper --framework langgraph --model qwen-tiny --file requirements.txt
-aiplane agents export repo-helper --framework langgraph --model qwen-tiny --file .env.example
-aiplane agents export repo-helper --framework langgraph --model qwen-tiny --file README.md
+aiplane agents export repo-helper --framework langgraph --model MODEL_ALIAS --file agent.py
+aiplane agents export repo-helper --framework langgraph --model MODEL_ALIAS --file requirements.txt
+aiplane agents export repo-helper --framework langgraph --model MODEL_ALIAS --file .env.example
+aiplane agents export repo-helper --framework langgraph --model MODEL_ALIAS --file README.md
 ```
 
 The generated `agent.py` is intentionally small: it reads `OPENAI_BASE_URL`, `AIPLANE_MODEL`, and an API-key env var, then calls the selected endpoint. For local Ollama, the endpoint is usually `http://localhost:11434/v1` and a dummy API key is often accepted. For managed providers, set the configured API-key env var first.
@@ -361,7 +363,7 @@ aiplane chat
 The actual command is based on the active profile's `chat_model` default, for example:
 
 ```bash
-ollama run llama3.1:8b
+ollama run provider-chat-small:8b
 ```
 
 ## Local and Remote Endpoint Pattern

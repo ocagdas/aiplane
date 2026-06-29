@@ -37,6 +37,9 @@ Multimodal categories:
 
 - `vision_image_understanding`
 - `image_generation`
+- `text_to_speech`
+- `speech_to_text`
+- `video_generation`
 - `audio`
 - `video`
 
@@ -130,6 +133,6 @@ aiplane models list --runtime ollama --role chat --role autocomplete --enabled-o
 aiplane models list --capability code_completion>=3 --sort-by avg
 aiplane models disable some-model
 aiplane models enable some-model
-aiplane models show qwen-coder-32b
+aiplane models show MODEL_ALIAS
 aiplane hardware recommend
 ```

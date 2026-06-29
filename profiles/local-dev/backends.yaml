@@ -1,9 +1,9 @@
 default: local
 local:
   provider: ollama-compatible
-  model: qwen-coder-local
+  model: null
   endpoint: http://localhost:11434
 cloud:
   provider: mock
-  model: mock-frontier
+  model: null
   enabled: true

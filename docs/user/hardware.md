@@ -15,7 +15,7 @@ aiplane hardware use nvidia_consumer_gpu --set vram_gb=16
 aiplane hardware set memory_gb=64 gpu_index=0
 aiplane hardware discover
 aiplane hardware doctor
-aiplane hardware doctor --model qwen-tiny
+aiplane hardware doctor --model MODEL_ALIAS
 aiplane hardware recommend
 aiplane hardware recommend --include-not-recommended
 ```

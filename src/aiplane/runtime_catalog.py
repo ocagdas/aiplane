@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 import platform
 import shutil
 from pathlib import Path
@@ -20,6 +21,16 @@ RUNTIME_DEFINITIONS: dict[str, dict[str, Any]] = {
         "model_sources": ["ollama", "gguf_import"],
         "good_for": ["simple local setup", "CPU laptop", "single-user workstation"],
         "install_hint": "scripts/provider_helper.sh --provider ollama --action install",
+    },
+
+    "azure_speech": {
+        "description": "Azure AI Speech managed text-to-speech service",
+        "managed_by_helper": False,
+        "gui_required": False,
+        "protocol": "azure_speech",
+        "model_sources": ["azure_speech"],
+        "good_for": ["managed text to speech", "demo narration", "cloud audio generation"],
+        "install_hint": "Configure AZURE_SPEECH_KEY and AZURE_SPEECH_REGION, or use a credential reference in the profile.",
     },
     "vllm": {
         "description": "GPU-focused OpenAI-compatible server for Hugging Face Transformers-style models",
@@ -67,22 +78,13 @@ RUNTIME_DEFINITIONS: dict[str, dict[str, Any]] = {
         "install_hint": "Install/run LocalAI from its container or native release",
     },
     "faster_whisper": {
-        "description": "Speech-to-text runtime/library for Whisper-family models, optimized for local CPU/GPU transcription",
+        "description": "Speech-to-text runtime/library for speech-to-text models, optimized for local CPU/GPU transcription",
         "managed_by_helper": "planned",
         "gui_required": False,
         "protocol": "python_library",
         "model_sources": ["huggingface", "local_file"],
         "good_for": ["speech to text", "local transcription", "batch audio jobs"],
         "install_hint": "python -m pip install faster-whisper",
-    },
-    "piper": {
-        "description": "Local text-to-speech runtime for Piper voice models",
-        "managed_by_helper": "planned",
-        "gui_required": False,
-        "protocol": "native_cli",
-        "model_sources": ["piper_voices", "local_file"],
-        "good_for": ["text to speech", "offline voice generation", "low-latency local audio"],
-        "install_hint": "Install piper and download a compatible .onnx voice model",
     },
     "diffusers": {
         "description": "Hugging Face Diffusers Python library for image/video/audio generation pipelines",
@@ -129,11 +131,17 @@ SOURCE_DEFINITIONS: dict[str, dict[str, Any]] = {
     },
     "local_file": {
         "description": "Local model path, usually GGUF, ONNX, checkpoint, or runtime-specific files",
-        "typical_runtimes": ["llamacpp", "localai", "faster_whisper", "piper", "diffusers", "comfyui"],
+        "typical_runtimes": ["llamacpp", "localai", "faster_whisper", "diffusers", "comfyui"],
     },
-    "piper_voices": {
-        "description": "Piper ONNX voice model files and metadata",
-        "typical_runtimes": ["piper"],
+    "azure_speech": {
+        "description": "Azure AI Speech voice deployments and voice names",
+        "typical_runtimes": ["azure_speech"],
+        "online_adapter": "profile_catalog",
+    },
+    "elevenlabs": {
+        "description": "ElevenLabs hosted text-to-speech voices and voice models",
+        "typical_runtimes": ["elevenlabs"],
+        "online_adapter": "elevenlabs",
     },
     "openai": {
         "description": "OpenAI hosted model catalog and deployments",
@@ -275,6 +283,10 @@ class RuntimeCatalog:
         return self.compatible_runtimes_for_entry(self._model(model_name), include_gui=include_gui)
 
     def compatible_runtimes_for_entry(self, model: dict[str, Any], include_gui: bool = False) -> list[str]:
+        provider = self._providers().get(str(model.get("provider") or ""), {})
+        ownership = str(model.get("ownership") or provider.get("ownership") or "")
+        if ownership == "managed_service":
+            return []
         configured = model.get("supported_runtimes")
         if isinstance(configured, list) and configured:
             runtimes = [str(value) for value in configured]
@@ -309,7 +321,7 @@ class RuntimeCatalog:
         return {"name": model_name, "preferred_runtime": runtime, "path": str(path)}
 
 
-    def bundle_plan(self, runtime: str, model_name: str = "qwen-tiny", mode: str = "docker") -> dict[str, Any]:
+    def bundle_plan(self, runtime: str, model_name: str, mode: str = "docker") -> dict[str, Any]:
         if runtime not in RUNTIME_DEFINITIONS:
             raise ValueError(f"unknown runtime: {runtime}")
         if mode not in {"docker", "conda"}:
@@ -354,6 +366,22 @@ class RuntimeCatalog:
             reachable, reason = OpenAICompatibleBackend(endpoint, int(provider.get("timeout_seconds", 5))).is_reachable()
             payload = {"name": runtime, "available": reachable, "reason": reason, "endpoint": endpoint}
             return payload if reachable else {**payload, "suggested_actions": _runtime_suggestions(runtime, "start")}
+        if definition.get("protocol") == "azure_speech":
+            provider = providers.get(runtime, {})
+            key_env = str(provider.get("api_key_env") or "AZURE_SPEECH_KEY")
+            region_env = str(provider.get("region_env") or "AZURE_SPEECH_REGION")
+            enabled = bool(provider.get("enabled", True))
+            key_present = bool(os.environ.get(key_env) or provider.get("credential_ref"))
+            region_present = bool(os.environ.get(region_env) or provider.get("region"))
+            available = enabled and key_present and region_present
+            missing = []
+            if not enabled:
+                missing.append("provider is disabled")
+            if not key_present:
+                missing.append(f"missing env var {key_env}")
+            if not region_present:
+                missing.append(f"missing env var {region_env}")
+            return {"name": runtime, "available": available, "reason": "configured" if available else "; ".join(missing), "endpoint": provider.get("endpoint"), "suggested_actions": _runtime_suggestions(runtime, "configure")}
         if runtime in {"transformers", "faster_whisper", "diffusers"}:
             package = "faster_whisper" if runtime == "faster_whisper" else runtime
             installed = importlib.util.find_spec(package) is not None
@@ -495,7 +523,6 @@ def _pip_packages_for_runtime(runtime: str) -> list[str]:
         "llamacpp": [],
         "ollama": [],
         "tgi": [],
-        "piper": [],
         "comfyui": [],
         "lmstudio": [],
     }
@@ -533,7 +560,7 @@ def _diagram(include_gui: bool = False) -> str:
         '  OPENAI --> IDE["Continue / Cursor-style clients / aiplane"]',
         '  OAI2 --> IDE',
         '  HF --> FW["faster-whisper"]',
-        '  PIPERVOICES["Piper voices"] --> PIPER["Piper"]',
+        '  AZSPEECH["Azure AI Speech"] --> AZTTS["Managed TTS"]',
         '  HF --> DIFF["Diffusers"]',
     ])
     if include_gui:
@@ -602,6 +629,8 @@ def _runtime_prerequisite_spec(runtime: str) -> tuple[list[str], list[str], dict
         return ["docker"], ["nvidia-smi"], packages, ["The helper uses Docker images. GPU serving also needs a working NVIDIA container runtime when GPUs are required."]
     if runtime == "llamacpp":
         return ["llama-server"], ["curl"], packages, ["Install/build llama.cpp for your CPU/GPU target and put llama-server on PATH."]
+    if runtime == "azure_speech":
+        return [], [], packages, ["Azure AI Speech is a managed service; configure AZURE_SPEECH_KEY and AZURE_SPEECH_REGION or a profile credential reference instead of installing a local runtime."]
     if runtime == "lmstudio":
         return [], [], packages, ["LM Studio is GUI-managed. Install it manually and enable the local server from the app."]
     return [], [], packages, ["No automated prerequisite policy is defined for this runtime yet."]

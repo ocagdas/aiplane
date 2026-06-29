@@ -21,6 +21,9 @@ profiles/*
 !profiles/local-dev/
 !profiles/local-dev/*.yaml
 profiles/local-dev/models.generated.yaml
+profiles/local-dev/source-providers.user.yaml
+profiles/local-dev/machine-discovery-cache.json
+profiles/local-dev/model-providers.user.yaml
 
 # Runtime state
 .agentctl/

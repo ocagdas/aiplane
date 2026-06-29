@@ -766,13 +766,23 @@ variable "region" {{
 def _runtime_prerequisite_rows(profile: Profile, include_optional: bool) -> list[dict[str, object]]:
     catalog = RuntimeCatalog(profile)
     runtimes = ["ollama", "vllm", "tgi", "transformers", "localai"] if include_optional else ["ollama", "vllm"]
+    runtimes = [*runtimes, *_default_model_runtimes(profile, include_gui=include_optional)]
     rows: list[dict[str, object]] = []
-    for runtime in runtimes:
+    for runtime in dict.fromkeys(runtimes):
         payload = catalog.prerequisites(runtime)
+        ok = bool(payload.get("ok"))
+        notes = list(payload.get("notes", [])) if isinstance(payload.get("notes"), list) else []
+        availability = None
+        if runtime == "azure_speech":
+            availability = catalog.runtime_available(runtime)
+            ok = bool(availability.get("available"))
+            reason = availability.get("reason")
+            if reason:
+                notes.append(f"Azure Speech status: {reason}")
         rows.append({
             "runtime": runtime,
             "known_runtime": payload.get("known_runtime"),
-            "ok": payload.get("ok"),
+            "ok": ok,
             "helper_management": payload.get("helper_management"),
             "install_supported_by_helper": payload.get("install_supported_by_helper"),
             "purpose": RUNTIME_PURPOSES.get(runtime, []),
@@ -780,9 +790,23 @@ def _runtime_prerequisite_rows(profile: Profile, include_optional: bool) -> list
             "missing_optional": payload.get("missing_optional", []),
             "ubuntu_install_hint": payload.get("ubuntu_install_hint"),
             "setup_commands": _runtime_setup_commands(runtime, payload),
-            "notes": payload.get("notes", []),
+            "notes": notes,
+            "availability": availability,
         })
     return rows
+
+
+def _default_model_runtimes(profile: Profile, include_gui: bool) -> list[str]:
+    catalog = RuntimeCatalog(profile)
+    defaults = profile.models.get("defaults", {}) if isinstance(profile.models, dict) else {}
+    models = profile.models.get("models", {}) if isinstance(profile.models, dict) else {}
+    runtimes: list[str] = []
+    if isinstance(defaults, dict) and isinstance(models, dict):
+        for name in defaults.values():
+            model = models.get(str(name))
+            if isinstance(model, dict):
+                runtimes.extend(catalog.compatible_runtimes_for_entry(model, include_gui=include_gui))
+    return runtimes
 
 
 RUNTIME_PURPOSES: dict[str, list[str]] = {
@@ -791,6 +815,9 @@ RUNTIME_PURPOSES: dict[str, list[str]] = {
     "tgi": ["containerized Hugging Face serving", "GPU server inference", "OpenAI-compatible endpoint workflows"],
     "transformers": ["Python library experiments", "training/fine-tuning scripts", "offline evaluation jobs"],
     "localai": ["OpenAI-compatible local service", "GGUF/llama.cpp-style models", "mixed backend experiments"],
+    "azure_speech": ["managed text-to-speech", "cloud audio generation", "voice output workflows"],
+    "diffusers": ["AI image/video generation", "GPU or remote media jobs", "pipeline experiments"],
+    "comfyui": ["AI image/video workflows", "visual generation pipelines", "local or remote GPU runtime"],
 }
 
 
@@ -800,6 +827,12 @@ def _runtime_setup_commands(runtime: str, payload: dict[str, object]) -> list[st
         commands.append(f"aiplane runtimes install {runtime} --dry-run")
     if runtime in {"ollama", "vllm", "tgi", "localai"}:
         commands.append(f"aiplane runtimes start {runtime} --dry-run")
+    if runtime == "azure_speech":
+        commands.extend(["aiplane models list --role text_to_speech", "aiplane providers list --include-disabled --runtime azure_speech"])
+    if runtime == "diffusers":
+        commands.extend(["aiplane models list --role image_generation --runtime diffusers", "aiplane models list --role video_generation --runtime diffusers"])
+    if runtime == "comfyui":
+        commands.extend(["aiplane models list --role image_generation --runtime comfyui", "aiplane models list --role video_generation --runtime comfyui"])
     return commands
 
 

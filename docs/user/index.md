@@ -34,9 +34,9 @@ aiplane profiles list
 aiplane profiles validate
 aiplane environment doctor
 aiplane providers list
-aiplane models list --group-by ownership
+aiplane models refresh --provider huggingface --query text-generation --limit 25 --dry-run
 aiplane tools doctor
-aiplane integrations plan continue
+aiplane integrations roles continue
 ```
 
 Project strategy, contributor notes, and roadmap details live under `docs/project/`,

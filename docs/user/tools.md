@@ -74,7 +74,7 @@ aiplane environment doctor --format json
 - whether each checked tool is mandatory for the minimal setup path or optional for specific workflows;
 - what each CLI is needed for;
 - whether `aiplane tools install NAME` can attempt an install;
-- runtime prerequisite status for common local runtimes;
+- runtime prerequisite/status rows for common local runtimes and provider-selected managed services;
 - dry-run setup commands to try next, such as `aiplane runtimes install vllm --dry-run`.
 
 Text output is the default human-readable aligned table with tool/runtime name, type, status, mandatory/optional scope, and a short purpose. Use `--format json` for scripts and tests. Use `tools matrix` when you need a broader workflow map across infrastructure, VM, container, remote, cloud, Kubernetes, and benchmark tools.

@@ -31,7 +31,10 @@ The `OpenAI-compatible /v1 API` node is an API shape, not the OpenAI cloud
 provider. Continue and similar tools can use vLLM, Ollama, llama.cpp server,
 LocalAI, LM Studio, or TGI gateways when they expose a compatible endpoint and
 the selected tool supports that endpoint configuration. Managed cloud providers
-are intentionally outside the default profile for now.
+are provider/service entries, not self-managed runtimes. Keep their `provider`
+set to the hosted service such as `openai`, `azure_openai`, or `elevenlabs`; do not null it.
+Runtime-fit filters intentionally exclude managed-service models unless the
+model explicitly declares compatible runtime metadata.
 
 ## Commands
 
@@ -53,14 +56,14 @@ aiplane runtimes models vllm
 Show which runtimes can run one model:
 
 ```bash
-aiplane runtimes model qwen-coder-32b-vllm
+aiplane runtimes model MODEL_ALIAS
 ```
 
 Set a preferred runtime for a model:
 
 ```bash
-aiplane runtimes use qwen-coder-32b-vllm vllm
-aiplane runtimes use qwen-coder-32b-vllm tgi
+aiplane runtimes use MODEL_ALIAS vllm
+aiplane runtimes use MODEL_ALIAS tgi
 ```
 
 This writes `preferred_runtime` to the editable profile model entry. It does not
@@ -97,7 +100,7 @@ Common options:
 
 - `--profile`: selects the editable profile, for example `local-dev`. The profile provides runtime endpoints, model aliases, default models, and provider config.
 - `<runtime>`: the runtime/provider name to operate on, such as `ollama`, `vllm`, `tgi`, `transformers`, `localai`, `llamacpp`, or `lmstudio`.
-- `--model`: model alias or runtime-native model id. It can be a configured alias like `qwen-coder-32b-vllm`, a Hugging Face id like `Qwen/Qwen2.5-Coder-32B-Instruct`, a raw Ollama id like `qwen2.5-coder:0.5b`, a direct GGUF URL for llama.cpp, or `all` where the runtime supports it.
+- `--model`: model alias or runtime-native model id. It can be a configured alias like `MODEL_ALIAS`, a Hugging Face id like `Provider/Code-Large-Instruct`, a raw Ollama id like `text-generation:0.5b`, a direct GGUF URL for llama.cpp, or `all` where the runtime supports it.
 - `--dry-run`: prints the helper command and delegated runtime command without installing packages, downloading models, starting services, or changing files.
 
 Lifecycle commands:
@@ -115,15 +118,15 @@ Lifecycle commands:
 - `list-runtime-models`: asks the runtime/provider for available models when it exposes a model-list API, otherwise falls back to configured catalog entries.
 - `doctor`: checks runtime availability directly from `aiplane`; it does not call install/update/pull.
 
-Model catalog refresh is separate from runtime inventory. Curated aliases live in `models.yaml`; generated refresh/import aliases live in `models.generated.yaml`. `models refresh` works
+Model catalog refresh is separate from runtime inventory. The checked-in profile is provider-only: curated aliases are optional local entries in `models.yaml`, while generated refresh/import aliases live in the ignored `models.generated.yaml` cache. `models refresh` works
 against model providers, not runtime endpoints:
 
 ```bash
 aiplane models refresh --dry-run
-aiplane models refresh --provider huggingface --query qwen2.5-coder --limit 500 --dry-run
+aiplane models refresh --provider huggingface --query text-generation --limit 500 --dry-run
 aiplane models refresh --limit 100 --provider-limit huggingface=500 --provider-limit ollama=500 --dry-run
 aiplane models clear-cache --dry-run
-aiplane models clear-cache --provider huggingface --include-curated --dry-run
+aiplane models clear-cache --provider huggingface --keep-curated --dry-run
 aiplane models refresh --provider huggingface --limit 10 --dry-run --verbose
 ```
 
@@ -138,7 +141,7 @@ rows are hidden by default and shown with `--verbose`; those rows use
 `model.id`/`model.source` for the model source and `runtime_endpoint` for the
 configured runtime endpoint.
 `prune_enabled: true` means a successful authoritative online source response is being used
-as the source of truth for stale generated ids. Curated aliases in `models.yaml` are preserved. Profile-catalog fallback never updates
+as the source of truth for stale generated ids. Curated aliases in `models.yaml` are preserved by refresh. `models clear-cache` includes curated aliases by default unless `--keep-curated` is used, so discovery state can be cleared and repopulated from providers. Profile-catalog fallback never updates
 or prunes.
 
 Runtime inventory is queried separately with `aiplane runtimes
@@ -147,7 +150,7 @@ local `/api/tags` endpoint and means "models already pulled here", not "every
 model in the public Ollama library".
 
 Online source-catalog querying currently exists for Hugging Face Hub, Hugging
-Face GGUF searches, Ollama Library, and Piper voices. Other model providers fall back to profile
+Face GGUF searches, and Ollama Library. Other model providers fall back to profile
 catalog entries until dedicated adapters are added. Use `--limit` for the default
 per-provider import window and repeated `--provider-limit PROVIDER=COUNT` for
 provider-specific overrides.
@@ -159,9 +162,12 @@ Examples:
 
 ```bash
 aiplane runtimes update-installed all --dry-run
+aiplane runtimes install ollama --dry-run
+aiplane runtimes install ollama --substrate docker --dry-run
+aiplane runtimes start ollama --substrate docker --dry-run
 aiplane runtimes install vllm --dry-run
-aiplane runtimes pull vllm --model qwen-coder-32b-vllm --dry-run
-aiplane runtimes start vllm --model qwen-coder-32b-vllm --dry-run
+aiplane runtimes pull vllm --model MODEL_ALIAS --dry-run
+aiplane runtimes start vllm --model MODEL_ALIAS --dry-run
 aiplane runtimes status vllm
 aiplane runtimes stop vllm
 aiplane runtimes list-runtime-models vllm
@@ -179,7 +185,7 @@ Examples of roles:
 - `completion_model`: preferred completion model.
 - `chat`: model role label for conversational use.
 - `autocomplete`: model role label for code completion/autocomplete use.
-- `embedding`: model role label for vector/retrieval models such as `nomic-embed-text`.
+- `embedding`: model role label for vector/retrieval models such as `EMBEDDING_ALIAS`.
 - `reasoning_model`: preferred reasoning/analysis model.
 
 The command now groups by provider by default:
@@ -206,6 +212,7 @@ Model catalog output can be grouped when the flat list is hard to read:
 aiplane models list
 aiplane models list --group-by provider
 aiplane models list --group-by source
+aiplane models list --group-by provider-kind
 aiplane models list --group-by runtime
 aiplane models list --group-by model
 aiplane models defaults --group-by provider
@@ -215,13 +222,14 @@ Grouping meanings:
 
 - `provider`: groups by model source/catalog, such as `ollama`, `huggingface`, `huggingface_gguf`, or `local_file`.
 - `source`: same source/catalog value as `provider`; kept as an explicit source field in model rows.
-- `runtime`: groups by each supported runtime. A model may appear in more than one runtime group when it can run under multiple runtimes, for example vLLM, TGI, and Transformers.
+- `provider-kind`: groups first by ownership (`self_managed` or `managed_service`) and then by provider/source.
+- `runtime`: groups by each supported runtime. A model may appear in more than one runtime group when it can run under multiple runtimes, for example vLLM, TGI, and Transformers. Managed-service aliases appear under `no_runtime`; `preferred_runtime` and `supported_runtimes` are ignored for managed-service aliases so they cannot be combined with local runtime config.
 - `model`: groups by provider-native model id. This is useful when multiple profile aliases point at the same underlying model id. It is less useful when equivalent models use different naming schemes across sources.
 - defaults grouped by `provider`: shows which default roles, such as `chat_model`, `autocomplete_model`, `embedding_model`, `self_managed_model`, or `reasoning_model`, resolve to each provider.
 
 ## Current Runtime Policy
 
-- **Ollama**: full helper support for install/update/start/stop/restart/status/doctor/pull/list.
+- **Ollama**: full helper support for install/update/start/stop/restart/status/doctor/pull/list. Native is the default; `--substrate docker` uses the official `ollama/ollama` image when Docker is available.
 - **vLLM**: helper support for pip install/update, Hugging Face snapshot download, background start/stop/restart/status, provider list, and doctor checks. Advanced GPU tuning remains runtime-native.
 - **TGI**: helper support for Docker image pull/update, Hugging Face snapshot download, background start/stop/restart/status, provider list, and doctor checks.
 - **llama.cpp**: partial helper support for background start/stop/restart/status when `llama-server` is installed and `LLAMACPP_MODEL_PATH` or a direct GGUF URL is configured. Native build/install remains manual because CPU/GPU build choices vary.
@@ -236,25 +244,46 @@ Use the same helper surface across manageable runtimes from the main CLI:
 
 ```bash
 aiplane runtimes update-installed all --dry-run
+aiplane runtimes install ollama --dry-run
+aiplane runtimes install ollama --substrate docker --dry-run
+aiplane runtimes start ollama --substrate docker --dry-run
 aiplane runtimes install vllm --dry-run
-aiplane runtimes pull vllm --model qwen-coder-32b-vllm --dry-run
-aiplane runtimes start vllm --model qwen-coder-32b-vllm --dry-run
+aiplane runtimes pull vllm --model MODEL_ALIAS --dry-run
+aiplane runtimes start vllm --model MODEL_ALIAS --dry-run
 aiplane runtimes status vllm
 aiplane runtimes stop vllm
 
 aiplane runtimes install tgi --dry-run
-aiplane runtimes start tgi --model qwen-coder-32b-vllm --dry-run
+aiplane runtimes start tgi --model MODEL_ALIAS --dry-run
 
 aiplane runtimes start llamacpp --dry-run
 aiplane runtimes start localai --dry-run
-aiplane runtimes pull transformers --model qwen-coder-32b-vllm --dry-run
+aiplane runtimes pull transformers --model MODEL_ALIAS --dry-run
 ```
 
 These commands delegate to `scripts/provider_helper.sh`. Direct helper usage still works when debugging the shell layer:
 
 ```bash
-scripts/provider_helper.sh --provider vllm --action start --model qwen-coder-32b-vllm --dry-run
+scripts/provider_helper.sh --provider vllm --action start --model MODEL_ALIAS --dry-run
 ```
+
+Audio, image, and video generation should come from provider discovery or deliberately promoted aliases, not hard-coded showcase defaults. Use online catalog refresh to populate ignored `models.generated.yaml`, then filter the generated candidates by role, runtime, RAM/VRAM, and target hardware. Promote only the specific alias you have reviewed and chosen for a real workflow.
+
+```bash
+aiplane providers models huggingface --online --query text-to-speech --limit 20
+aiplane providers models elevenlabs --online --query voice --limit 20
+aiplane models refresh --provider huggingface --query text-to-speech --dry-run --verbose --limit 20
+aiplane models refresh --provider huggingface --query text-to-speech --disable-new --limit 20
+aiplane models list --role text_to_speech --sort-by role
+
+aiplane models refresh --provider huggingface --query text-to-image --disable-new --limit 20
+aiplane models list --role image_generation --runtime diffusers --ram-gb 64 --vram-gb 16 --sort-by role
+
+aiplane models refresh --provider huggingface --query text-to-video --disable-new --limit 20
+aiplane models list --role video_generation --runtime diffusers --ram-gb 128 --vram-gb 16 --sort-by role
+```
+
+For demos, it is fine to show the Azure or GPU resource command path, kick off the generation job, fast-forward the runtime wait, and play the generated clip at the end. `aiplane` should make the discovered model, runtime, machine, and access policy explicit; it should not hide media generation behind an unrelated utility.
 
 Helper-managed background processes write PID and log files under:
 

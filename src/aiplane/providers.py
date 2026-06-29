@@ -268,10 +268,10 @@ class ProviderRegistry:
             return self._civitai_models(query=query, limit=limit)
         if adapter == "ollama" or name == "ollama":
             return self._ollama_library_models(query=query, limit=limit)
-        if adapter == "piper_voices" or name == "piper_voices":
-            return self._piper_voice_models(query=query, limit=limit)
         if adapter == "azure_openai" or name == "azure_openai":
             return self._azure_openai_deployments(query=query, limit=limit)
+        if adapter == "elevenlabs" or name == "elevenlabs":
+            return self._elevenlabs_voices(query=query, limit=limit)
         return None
 
     def _azure_openai_deployments(self, query: str | None = None, limit: int = DEFAULT_PROVIDER_MODEL_LIMIT) -> ProviderModelsResult:
@@ -320,6 +320,47 @@ class ProviderRegistry:
                 break
         unique_ids = sorted(dict.fromkeys(ids))[: max(1, int(limit))]
         return ProviderModelsResult("azure_openai", "provider_api", unique_ids, f"queried Azure OpenAI deployments API: {url}", {model_id: metadata.get(model_id, {}) for model_id in unique_ids})
+
+    def _elevenlabs_voices(self, query: str | None = None, limit: int = DEFAULT_PROVIDER_MODEL_LIMIT) -> ProviderModelsResult:
+        runtime_provider = self.profile.models.get("providers", {}).get("elevenlabs", {}) if isinstance(self.profile.models.get("providers"), dict) else {}
+        endpoint = str(runtime_provider.get("endpoint") or os.environ.get("ELEVENLABS_ENDPOINT") or "https://api.elevenlabs.io/v1").rstrip("/")
+        credential_ref = str(runtime_provider.get("credential_ref") or "")
+        key_env = str(runtime_provider.get("api_key_env") or "ELEVENLABS_API_KEY")
+        api_key = CredentialStore().api_key(credential_ref) if credential_ref else os.environ.get(key_env)
+        if not api_key:
+            need = f"credential {credential_ref}" if credential_ref else f"env var {key_env}"
+            raise ValueError(f"ElevenLabs voice discovery needs {need}")
+        url = f"{endpoint}/voices"
+        payload = _json_get(url, timeout=int(runtime_provider.get("timeout_seconds", 20)), headers={"xi-api-key": api_key})
+        items = payload.get("voices") if isinstance(payload, dict) else None
+        if not isinstance(items, list):
+            raise RuntimeError("ElevenLabs returned an unexpected voices response")
+        ids: list[str] = []
+        metadata: dict[str, dict[str, Any]] = {}
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            voice_id = str(item.get("voice_id") or item.get("voiceId") or item.get("id") or "").strip()
+            name = str(item.get("name") or voice_id).strip()
+            if not voice_id:
+                continue
+            searchable = " ".join(str(value) for value in [voice_id, name, item.get("category"), item.get("description")] if value)
+            if query and query.lower() not in searchable.lower():
+                continue
+            ids.append(voice_id)
+            metadata[voice_id] = {
+                "voice_id": voice_id,
+                "name": name,
+                "provider": "elevenlabs",
+                "pipeline_tag": "text-to-speech",
+                "category": item.get("category"),
+                "description": item.get("description"),
+                "labels": item.get("labels") if isinstance(item.get("labels"), dict) else {},
+            }
+            if len(ids) >= max(1, int(limit)):
+                break
+        unique_ids = list(dict.fromkeys(ids))[: max(1, int(limit))]
+        return ProviderModelsResult("elevenlabs", "provider_api", unique_ids, f"queried ElevenLabs voices API: {url}", {voice_id: metadata.get(voice_id, {}) for voice_id in unique_ids})
 
     def _huggingface_models(self, query: str | None = None, limit: int = DEFAULT_PROVIDER_MODEL_LIMIT, gguf: bool = False) -> ProviderModelsResult:
         params: dict[str, str | int] = {"limit": max(1, min(int(limit), DEFAULT_PROVIDER_MODEL_LIMIT)), "sort": "downloads", "direction": -1}
@@ -423,19 +464,6 @@ class ProviderRegistry:
                     break
         return ProviderModelsResult("ollama", "source_api", ids[: max(1, int(limit))], f"scraped Ollama Library page: {url}", {model_id: metadata.get(model_id, {}) for model_id in ids[: max(1, int(limit))]})
 
-    def _piper_voice_models(self, query: str | None = None, limit: int = DEFAULT_PROVIDER_MODEL_LIMIT) -> ProviderModelsResult:
-        url = "https://raw.githubusercontent.com/rhasspy/piper/master/VOICES.md"
-        text = _text_get(url, timeout=20)
-        ids = []
-        for match in re.finditer(r'([a-z]{2,3}[-_][A-Za-z0-9_\-.]+?)(?:\.onnx|\s|\||$)', text):
-            voice_id = match.group(1).strip().replace("_", "-")
-            if query and query.lower() not in voice_id.lower():
-                continue
-            if voice_id not in ids:
-                ids.append(voice_id)
-            if len(ids) >= max(1, int(limit)):
-                break
-        return ProviderModelsResult("piper_voices", "source_api", ids, f"queried Piper voices list: {url}")
 
 def _json_get(url: str, timeout: int = 20, headers: dict[str, str] | None = None) -> Any:
     return json.loads(_text_get(url, timeout=timeout, accept="application/json", headers=headers))
