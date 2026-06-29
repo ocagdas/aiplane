@@ -8,6 +8,10 @@ This is the master project guidance file for coding agents and IDE assistants wo
 
 It must not become a coding agent, model runtime, model proxy, IDE extension, or hidden cloud deployment engine.
 
+## Open Source Quality Bar
+
+Treat `aiplane` as a public open-source project that should be worthy of trust, adoption, and contribution. Keep code, documentation, roadmap, implemented features, command coverage, handoff notes, examples, and tests aligned and held to a high standard. Do not let the project drift into a collection of impressive but undocumented, untested, or overstated capabilities.
+
 ## Required Maintenance Habit
 
 When changing behavior, update these together in the same change whenever relevant:

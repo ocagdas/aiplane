@@ -131,7 +131,8 @@ When adding a new command, test at least one representative JSON output shape if
 PYTHONPATH=src python -m aiplane profiles list
 PYTHONPATH=src python -m aiplane providers list --profile local-dev
 PYTHONPATH=src python -m aiplane providers models --profile local-dev ollama
-PYTHONPATH=src python -m aiplane code write --profile local-dev --model qwen-tiny --task "add email validation" --dry-run
+PYTHONPATH=src python -m aiplane environment doctor --required-only
+PYTHONPATH=src python -m aiplane integrations plan continue --select-best --runtime ollama
 ```
 
 ## Documentation Split

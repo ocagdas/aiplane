@@ -30,16 +30,16 @@
 | Minimal container runtime path | Docker | Mandatory for container workflows | Runs local or VM-hosted runtime containers such as TGI, LocalAI, and exported stack images. | Doctor, health check, install hint, stack/runtime export integration. |
 | Remote access and tunnels | OpenSSH client | Mandatory for remote workflows | Connects to remote PCs/VMs and exposes remote model endpoints locally. | Doctor, install helper where safe, tunnel plan/start/status/stop. |
 | Azure account/resource operations | Azure CLI | Optional | Checks account state, quotas, VM/SKU data, and Azure resources. | Doctor, install hint, Azure machine/deploy planning, narrow VM apply. |
-| Provider-agnostic cloud provisioning | OpenTofu | Optional | Default IaC target for repeatable cloud resources across providers. | Doctor and install hint; export/apply workflows planned. |
-| Terraform-standardized teams | Terraform | Optional | Terraform-compatible IaC for teams already committed to HashiCorp Terraform. | Doctor and install hint; export/apply workflows planned. |
-| Language-native cloud provisioning | Pulumi | Optional | IaC using Python, TypeScript, Go, and other supported languages. | Doctor and install hint; project export workflows planned. |
-| Local VM development | Vagrant | Optional | Creates repeatable local VM dev/test environments using a provider such as VirtualBox, libvirt, Hyper-V, or VMware. | Doctor and install hint; Vagrantfile export planned. |
-| Reusable VM/cloud images | Packer | Optional | Builds golden machine images before provisioning local or cloud VMs. | Doctor and install hint; template export planned. |
-| Containerized dev shell | Dev Container CLI | Optional | Opens reproducible development shells backed by Docker-compatible containers. | Doctor and install hint; devcontainer export planned. |
+| Provider-agnostic cloud provisioning | OpenTofu | Optional | Default IaC target for repeatable cloud resources across providers. | Doctor, install hint, and starter module export; apply workflows remain planned. |
+| Terraform-standardized teams | Terraform | Optional | Terraform-compatible IaC for teams already committed to HashiCorp Terraform. | Doctor, install hint, and starter module export; apply workflows remain planned. |
+| Language-native cloud provisioning | Pulumi | Optional | IaC using Python, TypeScript, Go, and other supported languages. | Doctor, install hint, and starter project export; richer apply workflows remain planned. |
+| Local VM development | Vagrant | Optional | Creates repeatable local VM dev/test environments using a provider such as VirtualBox, libvirt, Hyper-V, or VMware. | Doctor, install hint, and starter Vagrantfile export; provider-specific VM workflows remain planned. |
+| Reusable VM/cloud images | Packer | Optional | Builds golden machine images before provisioning local or cloud VMs. | Doctor, install hint, and starter template export; image pipelines remain planned. |
+| Containerized dev shell | Dev Container CLI | Optional | Opens reproducible development shells backed by Docker-compatible containers. | Doctor, install hint, and starter devcontainer export; richer feature/mount tuning remains planned. |
 | Multi-container local stack | Docker Compose | Optional | Starts multiple local services/runtimes together. | Doctor, service health check, compose stack export. |
-| Kubernetes/AKS operations | kubectl | Optional | Inspects and operates Kubernetes resources. | Doctor and install hint; guarded AKS workflows planned. |
-| Kubernetes packaging | Helm | Optional | Installs packaged Kubernetes runtime charts. | Doctor and install hint; chart-driven runtime deployment planned. |
-| Remote host configuration | Ansible | Optional | Applies repeatable package/service configuration to local VMs, remote VMs, and remote PCs over SSH. | Doctor and install hint; inventory/playbook workflows planned. |
+| Kubernetes/AKS operations | kubectl | Optional | Inspects and operates Kubernetes resources. | Doctor and install hint; guarded AKS workflows remain planned. |
+| Kubernetes packaging | Helm | Optional | Installs packaged Kubernetes runtime charts. | Doctor and install hint; chart-driven runtime deployment remains planned. |
+| Remote host configuration | Ansible | Optional | Applies repeatable package/service configuration to local VMs, remote VMs, and remote PCs over SSH. | Doctor, install hint, and starter inventory/playbook export; richer host configuration remains planned. |
 | Model quality benchmark suite | lm-evaluation-harness | Optional | Runs external evaluation harness tasks. | Benchmark doctor/install/plan. |
 | vLLM serving benchmark | vLLM benchmark scripts | Optional | Measures vLLM endpoint serving behavior. | Benchmark doctor/install/plan. |
 | Endpoint load testing | Locust | Optional | Load-tests model endpoints and gateways. | Benchmark doctor/install/plan. |

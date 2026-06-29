@@ -31,11 +31,12 @@ This page mirrors [README.md](README.md) for tools that link to `index.md`.
 
 ```bash
 aiplane profiles list
-aiplane environment show
+aiplane profiles validate
+aiplane environment doctor
 aiplane providers list
-aiplane providers models ollama
-aiplane models list
-aiplane code write --task "add email validation" --dry-run
+aiplane models list --group-by ownership
+aiplane tools doctor
+aiplane integrations plan continue
 ```
 
 Project strategy, contributor notes, and roadmap details live under `docs/project/`,
