@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from html import unescape
 from pathlib import Path
@@ -12,6 +13,7 @@ from urllib.request import Request, urlopen
 from .config import dump_yaml, parse_yaml
 from .model_catalog import ModelCatalog, ModelStatus, model_source
 from .models import Profile
+from .secrets import CredentialStore
 
 
 DEFAULT_PROVIDER_MODEL_LIMIT = 500
@@ -268,7 +270,56 @@ class ProviderRegistry:
             return self._ollama_library_models(query=query, limit=limit)
         if adapter == "piper_voices" or name == "piper_voices":
             return self._piper_voice_models(query=query, limit=limit)
+        if adapter == "azure_openai" or name == "azure_openai":
+            return self._azure_openai_deployments(query=query, limit=limit)
         return None
+
+    def _azure_openai_deployments(self, query: str | None = None, limit: int = DEFAULT_PROVIDER_MODEL_LIMIT) -> ProviderModelsResult:
+        runtime_provider = self.profile.models.get("providers", {}).get("azure_openai", {}) if isinstance(self.profile.models.get("providers"), dict) else {}
+        endpoint = str(runtime_provider.get("endpoint") or os.environ.get("AZURE_OPENAI_ENDPOINT") or "").rstrip("/")
+        if not endpoint:
+            raise ValueError("Azure OpenAI discovery needs provider endpoint or AZURE_OPENAI_ENDPOINT")
+        api_version = str(runtime_provider.get("api_version") or os.environ.get("AZURE_OPENAI_API_VERSION") or "2024-02-01")
+        credential_ref = str(runtime_provider.get("credential_ref") or "")
+        key_env = str(runtime_provider.get("api_key_env") or "AZURE_OPENAI_API_KEY")
+        api_key = CredentialStore().api_key(credential_ref) if credential_ref else os.environ.get(key_env)
+        if not api_key:
+            need = f"credential {credential_ref}" if credential_ref else f"env var {key_env}"
+            raise ValueError(f"Azure OpenAI discovery needs {need}")
+        base = endpoint[:-7] if endpoint.endswith("/openai") else endpoint
+        url = f"{base}/openai/deployments?" + urlencode({"api-version": api_version})
+        payload = _json_get(url, timeout=int(runtime_provider.get("timeout_seconds", 20)), headers={"api-key": api_key})
+        items = payload.get("data") if isinstance(payload, dict) else None
+        if items is None and isinstance(payload, dict):
+            items = payload.get("value")
+        if not isinstance(items, list):
+            raise RuntimeError("Azure OpenAI returned an unexpected deployments response")
+        ids: list[str] = []
+        metadata: dict[str, dict[str, Any]] = {}
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            deployment_id = item.get("id") or item.get("name")
+            if not deployment_id:
+                continue
+            model_id = str(deployment_id)
+            if query and query.lower() not in model_id.lower():
+                properties = item.get("properties") if isinstance(item.get("properties"), dict) else {}
+                model_info = item.get("model") or properties.get("model")
+                if query.lower() not in str(model_info or "").lower():
+                    continue
+            ids.append(model_id)
+            metadata[model_id] = {
+                key: item[key]
+                for key in ["id", "name", "model", "created_at", "updated_at", "status"]
+                if key in item
+            }
+            if isinstance(item.get("properties"), dict):
+                metadata[model_id]["properties"] = item["properties"]
+            if len(ids) >= max(1, int(limit)):
+                break
+        unique_ids = sorted(dict.fromkeys(ids))[: max(1, int(limit))]
+        return ProviderModelsResult("azure_openai", "provider_api", unique_ids, f"queried Azure OpenAI deployments API: {url}", {model_id: metadata.get(model_id, {}) for model_id in unique_ids})
 
     def _huggingface_models(self, query: str | None = None, limit: int = DEFAULT_PROVIDER_MODEL_LIMIT, gguf: bool = False) -> ProviderModelsResult:
         params: dict[str, str | int] = {"limit": max(1, min(int(limit), DEFAULT_PROVIDER_MODEL_LIMIT)), "sort": "downloads", "direction": -1}
@@ -386,12 +437,13 @@ class ProviderRegistry:
                 break
         return ProviderModelsResult("piper_voices", "source_api", ids, f"queried Piper voices list: {url}")
 
-def _json_get(url: str, timeout: int = 20) -> Any:
-    return json.loads(_text_get(url, timeout=timeout, accept="application/json"))
+def _json_get(url: str, timeout: int = 20, headers: dict[str, str] | None = None) -> Any:
+    return json.loads(_text_get(url, timeout=timeout, accept="application/json", headers=headers))
 
 
-def _text_get(url: str, timeout: int = 20, accept: str = "text/html,application/json,text/plain") -> str:
-    request = Request(url, headers={"Accept": accept, "User-Agent": "aiplane/0.1"})
+def _text_get(url: str, timeout: int = 20, accept: str = "text/html,application/json,text/plain", headers: dict[str, str] | None = None) -> str:
+    request_headers = {"Accept": accept, "User-Agent": "aiplane/0.1", **(headers or {})}
+    request = Request(url, headers=request_headers)
     with urlopen(request, timeout=timeout) as response:
         return response.read().decode("utf-8", errors="replace")
 

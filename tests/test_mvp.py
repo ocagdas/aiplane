@@ -226,6 +226,33 @@ class MvpTests(unittest.TestCase):
             self.assertEqual(code, 0)
             self.assertEqual(json.loads(stdout.getvalue())["key"], "profiles_dir")
 
+    def test_config_show_includes_default_and_active_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            profiles_dir = root / "profiles"
+            shutil.copytree(Path.cwd() / "profile-templates" / "local-dev", profiles_dir / "local-dev")
+            config_path = root / "config.yaml"
+            config_path.write_text(
+                f"default_profile: local-dev\nprofiles_dir: {profiles_dir}\ncredentials_path: {root / 'credentials.yaml'}\nagent_artifacts_dir: {root / 'agents'}\n",
+                encoding="utf-8",
+            )
+
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = cli_main(["config", "show", "--path", str(config_path)])
+
+            self.assertEqual(code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(payload["path"], str(config_path.resolve()))
+            self.assertEqual(payload["paths"]["config"]["active"], str(config_path.resolve()))
+            self.assertTrue(payload["paths"]["config"]["default"].endswith(".aiplane/config.yaml"))
+            self.assertEqual(payload["paths"]["profiles"]["active_root"], str(profiles_dir.resolve()))
+            self.assertTrue(payload["paths"]["profiles"]["default_root"].endswith("profiles"))
+            self.assertEqual(payload["paths"]["profiles"]["default_profile_path"], str((profiles_dir / "local-dev").resolve()))
+            self.assertEqual(payload["paths"]["profiles"]["current_profile_path"], str((profiles_dir / "local-dev").resolve()))
+            self.assertEqual(payload["effective"]["credentials_path"], str((root / "credentials.yaml").resolve()))
+            self.assertEqual(payload["effective"]["agent_artifacts_dir"], str((root / "agents").resolve()))
+
     def test_profiles_show_defaults_to_effective_profile(self) -> None:
         stdout = StringIO()
         with redirect_stdout(stdout):
@@ -322,6 +349,37 @@ class MvpTests(unittest.TestCase):
         text = "api_key = 'abcdefghijklmnop'"
         self.assertTrue(contains_secret(text))
         self.assertEqual(redact(text), "[REDACTED_SECRET]")
+
+    def test_credentials_cli_lists_and_redacts_local_accounts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "credentials.yaml"
+            path.write_text(
+                "providers:\n"
+                "  openai:\n"
+                "    accounts:\n"
+                "      personal:\n"
+                "        api_key: dummy-api-key-value-123456\n"
+                "        endpoint: https://api.openai.com/v1\n"
+                "      business_a:\n"
+                "        api_key_env: OPENAI_BUSINESS_A_API_KEY\n",
+                encoding="utf-8",
+            )
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = cli_main(["credentials", "list", "--path", str(path)])
+            self.assertEqual(code, 0)
+            payload = json.loads(stdout.getvalue())
+            refs = {row["ref"] for row in payload["credentials"]}
+            self.assertIn("openai.personal", refs)
+            self.assertIn("openai.business_a", refs)
+
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = cli_main(["credentials", "show", "openai.personal", "--path", str(path)])
+            self.assertEqual(code, 0)
+            output = stdout.getvalue()
+            self.assertIn("[REDACTED_SECRET]", output)
+            self.assertNotIn("dummy-api-key-value-123456", output)
 
     def test_router_blocks_secret_cloud_escalation(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1714,6 +1772,14 @@ class MvpTests(unittest.TestCase):
         self.assertIn("vllm", payload["groups"])
         stdout = StringIO()
         with redirect_stdout(stdout):
+            code = cli_main(["models", "list", "--profile", "local-dev", "--group-by", "ownership"])
+        self.assertEqual(code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["group_by"], "ownership")
+        self.assertIn("self_managed", payload["groups"])
+        self.assertIn("managed_service", payload["groups"])
+        stdout = StringIO()
+        with redirect_stdout(stdout):
             code = cli_main(["models", "defaults", "--profile", "local-dev", "--group-by", "provider"])
         self.assertEqual(code, 0)
         payload = json.loads(stdout.getvalue())
@@ -1949,6 +2015,151 @@ class MvpTests(unittest.TestCase):
         self.assertIn("apiBase: http://localhost:11434/v1", exported.content)
         self.assertIn("model: qwen2.5-coder:0.5b", exported.content)
 
+    def test_integrations_export_continue_supports_role_flags_and_saved_plan(self) -> None:
+        stdout = StringIO()
+        with redirect_stdout(stdout):
+            code = cli_main(["integrations", "export", "continue", "--chat", "openai-gpt-4o-mini", "--autocomplete", "qwen-coder-1.5b-base", "--embedding", "nomic-embed-text"])
+        self.assertEqual(code, 0)
+        output = stdout.getvalue()
+        self.assertIn("model: gpt-4o-mini", output)
+        self.assertIn("model: qwen2.5-coder:1.5b-base", output)
+        self.assertIn("model: nomic-embed-text:latest", output)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            plan_path = Path(tmp) / "plan.json"
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = cli_main(["integrations", "plan", "continue", "--chat", "openai-gpt-4o-mini", "--autocomplete", "qwen-coder-1.5b-base", "--embedding", "nomic-embed-text"])
+            self.assertEqual(code, 0)
+            plan_path.write_text(stdout.getvalue(), encoding="utf-8")
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = cli_main(["integrations", "export", "continue", "--from-plan", str(plan_path)])
+            self.assertEqual(code, 0)
+            self.assertIn("model: gpt-4o-mini", stdout.getvalue())
+
+    def test_agents_plan_and_export_cli_print_scaffold(self) -> None:
+        stdout = StringIO()
+        with redirect_stdout(stdout):
+            code = cli_main(["agents", "plan", "repo-helper", "--framework", "langgraph", "--model", "qwen-tiny"])
+        self.assertEqual(code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["name"], "agent_plan")
+        self.assertEqual(payload["selection"]["model_alias"], "qwen-tiny")
+        self.assertIn("agent.py", payload["files"])
+
+        stdout = StringIO()
+        with redirect_stdout(stdout):
+            code = cli_main(["agents", "export", "repo-helper", "--framework", "simple-openai", "--model", "qwen-tiny", "--file", "agent.py"])
+        self.assertEqual(code, 0)
+        output = stdout.getvalue()
+        self.assertIn("from openai import OpenAI", output)
+        self.assertIn("qwen2.5-coder:0.5b", output)
+
+
+    def test_agent_artifacts_root_uses_env_config_and_cli_override(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = Path(tmp) / "config.yaml"
+            configured = Path(tmp) / "agents-config"
+            config_path.write_text(f"agent_artifacts_dir: {configured}\n", encoding="utf-8")
+            old_config = os.environ.get("AIPLANE_CONFIG")
+            old_agents = os.environ.get("AIPLANE_AGENT_ARTIFACTS_DIR")
+            os.environ["AIPLANE_CONFIG"] = str(config_path)
+            try:
+                stdout = StringIO()
+                with redirect_stdout(stdout):
+                    code = cli_main(["agents", "plan", "demo", "--model", "qwen-tiny"])
+                self.assertEqual(code, 0)
+                payload = json.loads(stdout.getvalue())
+                self.assertEqual(payload["artifact_root"], str(configured.resolve()))
+
+                env_root = Path(tmp) / "agents-env"
+                os.environ["AIPLANE_AGENT_ARTIFACTS_DIR"] = str(env_root)
+                stdout = StringIO()
+                with redirect_stdout(stdout):
+                    code = cli_main(["agents", "plan", "demo", "--model", "qwen-tiny"])
+                self.assertEqual(code, 0)
+                payload = json.loads(stdout.getvalue())
+                self.assertEqual(payload["artifact_root"], str(env_root.resolve()))
+
+                override = Path(tmp) / "agents-cli"
+                stdout = StringIO()
+                with redirect_stdout(stdout):
+                    code = cli_main(["agents", "plan", "demo", "--model", "qwen-tiny", "--output-dir", str(override)])
+                self.assertEqual(code, 0)
+                payload = json.loads(stdout.getvalue())
+                self.assertEqual(payload["artifact_root"], str(override.resolve()))
+            finally:
+                if old_config is None:
+                    os.environ.pop("AIPLANE_CONFIG", None)
+                else:
+                    os.environ["AIPLANE_CONFIG"] = old_config
+                if old_agents is None:
+                    os.environ.pop("AIPLANE_AGENT_ARTIFACTS_DIR", None)
+                else:
+                    os.environ["AIPLANE_AGENT_ARTIFACTS_DIR"] = old_agents
+
+    def test_integrations_export_uses_named_credential_ref(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            cred_path = Path(tmp) / "credentials.yaml"
+            cred_path.write_text(
+                "providers:\n"
+                "  openai:\n"
+                "    accounts:\n"
+                "      personal:\n"
+                "        api_key_env: OPENAI_PERSONAL_KEY\n"
+                "        endpoint: https://api.openai.com/v1\n",
+                encoding="utf-8",
+            )
+            old = os.environ.get("AIPLANE_CREDENTIALS")
+            os.environ["AIPLANE_CREDENTIALS"] = str(cred_path)
+            try:
+                profile = load_profile("local-dev", Path.cwd())
+                profile.models["providers"]["openai"]["credential_ref"] = "openai.personal"
+                profile.models["models"]["openai-gpt-4o-mini"]["enabled"] = True
+                exported = IntegrationManager(profile).export("continue", "openai-gpt-4o-mini")
+                self.assertIn("apiKey: ${OPENAI_PERSONAL_KEY}", exported.content)
+            finally:
+                if old is None:
+                    os.environ.pop("AIPLANE_CREDENTIALS", None)
+                else:
+                    os.environ["AIPLANE_CREDENTIALS"] = old
+
+    def test_provider_models_can_query_azure_openai_with_named_credential(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            cred_path = Path(tmp) / "credentials.yaml"
+            cred_path.write_text(
+                "providers:\n"
+                "  azure_openai:\n"
+                "    accounts:\n"
+                "      business_a:\n"
+                "        api_key: dummy-azure-key-value-123456\n",
+                encoding="utf-8",
+            )
+            old = os.environ.get("AIPLANE_CREDENTIALS")
+            os.environ["AIPLANE_CREDENTIALS"] = str(cred_path)
+            profile = load_profile("local-dev", Path.cwd())
+            profile.models["providers"]["azure_openai"]["endpoint"] = "https://example.openai.azure.com"
+            profile.models["providers"]["azure_openai"]["credential_ref"] = "azure_openai.business_a"
+            payload = {"data": [{"id": "news-deployment", "model": "gpt-4o-mini"}]}
+            class FakeResponse:
+                def __enter__(self):
+                    return self
+                def __exit__(self, exc_type, exc, tb):
+                    return False
+                def read(self):
+                    return json.dumps(payload).encode("utf-8")
+            try:
+                with patch("aiplane.providers.urlopen", return_value=FakeResponse()) as opened:
+                    result = ProviderRegistry(profile).models("azure_openai", online=True, limit=5)
+                self.assertEqual(result.models, ["news-deployment"])
+                self.assertEqual(opened.call_args.args[0].headers.get("Api-key"), "dummy-azure-key-value-123456")
+            finally:
+                if old is None:
+                    os.environ.pop("AIPLANE_CREDENTIALS", None)
+                else:
+                    os.environ["AIPLANE_CREDENTIALS"] = old
+
     def test_integrations_export_allows_remote_endpoint_override(self) -> None:
         profile = load_profile("local-dev", Path.cwd())
         exported = IntegrationManager(profile).export("openai-compatible", "qwen-tiny", endpoint="https://llm.example.com/v1")
@@ -2066,9 +2277,12 @@ class MvpTests(unittest.TestCase):
         rows = ProviderRegistry(profile).list()
         names = {row["name"] for row in rows}
         self.assertIn("ollama", names)
-        self.assertNotIn("ollama_cloud", names)
-        self.assertNotIn("openai", names)
-        ollama = next(row for row in rows if row["name"] == "ollama")
+        for managed in ["openai", "anthropic", "azure_openai", "ollama_cloud"]:
+            self.assertIn(managed, names)
+        by_name = {row["name"]: row for row in rows}
+        self.assertEqual(by_name["azure_openai"]["online_adapter"], "azure_openai")
+        self.assertEqual(by_name["openai"]["online_adapter"], "profile_catalog")
+        ollama = by_name["ollama"]
         self.assertIn("ollama", ollama["typical_runtimes"])
 
     def test_provider_enable_disable_cli_updates_user_provider_config(self) -> None:
@@ -2203,6 +2417,25 @@ class MvpTests(unittest.TestCase):
             result = ProviderRegistry(profile).models("huggingface", online=True, query="qwen", limit=1)
         self.assertEqual(result.source, "source_api")
         self.assertEqual(result.models, ["Qwen/Test-Coder"])
+
+    def test_provider_models_can_query_azure_openai_deployments_with_mocked_http(self) -> None:
+        profile = load_profile("local-dev", Path.cwd())
+        profile.models["providers"]["azure_openai"]["endpoint"] = "https://example.openai.azure.com"
+        payload = {"data": [{"id": "coding-chat", "model": "gpt-4o-mini"}]}
+        class FakeResponse:
+            def __enter__(self):
+                return self
+            def __exit__(self, exc_type, exc, tb):
+                return False
+            def read(self):
+                return json.dumps(payload).encode("utf-8")
+        with patch.dict(os.environ, {"AZURE_OPENAI_API_KEY": "test-key"}), patch("aiplane.providers.urlopen", return_value=FakeResponse()) as opened:
+            result = ProviderRegistry(profile).models("azure_openai", online=True, query="coding", limit=5)
+        self.assertEqual(result.source, "provider_api")
+        self.assertEqual(result.models, ["coding-chat"])
+        request = opened.call_args.args[0]
+        self.assertIn("/openai/deployments", request.full_url)
+        self.assertEqual(request.headers.get("Api-key"), "test-key")
 
     def test_runtime_catalog_maps_sources_and_models(self) -> None:
         profile = load_profile("local-dev", Path.cwd())
@@ -2408,6 +2641,34 @@ class MvpTests(unittest.TestCase):
         self.assertEqual(tools["vagrant"]["category"], "vm")
         self.assertEqual(tools["packer"]["category"], "image-build")
         self.assertEqual(tools["devcontainer-cli"]["category"], "container")
+
+    def test_tools_plan_and_export_cli_are_non_mutating_starters(self) -> None:
+        stdout = StringIO()
+        with redirect_stdout(stdout):
+            code = cli_main(["tools", "plan", "vagrant"])
+        self.assertEqual(code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["name"], "tools_plan")
+        self.assertEqual(payload["tool"], "vagrant")
+        self.assertIn("Vagrantfile", payload["artifacts"])
+
+        stdout = StringIO()
+        with redirect_stdout(stdout):
+            code = cli_main(["tools", "export", "opentofu"])
+        self.assertEqual(code, 0)
+        output = stdout.getvalue()
+        self.assertIn("terraform {", output)
+        self.assertIn("tofu plan", output)
+
+    def test_managed_provider_alias_exports_continue_config(self) -> None:
+        stdout = StringIO()
+        with redirect_stdout(stdout):
+            code = cli_main(["integrations", "export", "continue", "--model", "openai-gpt-4o-mini"])
+        self.assertEqual(code, 0)
+        output = stdout.getvalue()
+        self.assertIn("provider: openai", output)
+        self.assertIn("model: gpt-4o-mini", output)
+        self.assertIn("apiKey: ${OPENAI_API_KEY}", output)
 
     def test_environment_doctor_cli_groups_installable_tools(self) -> None:
         stdout = StringIO()

@@ -32,6 +32,7 @@ Use these terms consistently:
 - Confirm `pyproject.toml` has a public-safe description, readme, license, build backend, and package discovery.
 - Confirm `.aiplane/` and generated model caches are not tracked.
 - Confirm `docs/user/tools.md` maps each external tool to the workflows it enables.
+- Confirm `docs/project/agent-guidance.md` and tool-specific instruction files point to the current project guidance.
 - Scan README and user docs for stale command examples and terminology drift.
 
 ## Known Public-Launch Caveats

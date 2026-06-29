@@ -175,6 +175,19 @@ aiplane integrations export continue --model qwen-tiny --endpoint https://llm-wo
 
 The exporter prints YAML shaped for Continue's configuration. Paste that snippet into Continue's YAML config, normally `~/.continue/config.yaml` on this PC. If the file already has a `models:` section, merge generated entries under the existing list instead of creating duplicate top-level keys.
 
+`--model` is a single-model export. It does not accept multiple values. For Continue's multi-role config, use `--chat`, `--autocomplete`, and `--embedding`, or omit all three to use profile defaults.
+
+To avoid repeating selection flags, save the plan and export from it:
+
+```bash
+aiplane integrations plan continue \
+  --chat openai-gpt-4o-mini \
+  --autocomplete qwen-coder-1.5b-base \
+  --embedding nomic-embed-text > continue-plan.json
+
+aiplane integrations export continue --from-plan continue-plan.json
+```
+
 The provider is set to `openai` because local Ollama and many gateways expose
 OpenAI-compatible `/v1` endpoints. For local Ollama, the default endpoint is:
 
@@ -206,6 +219,38 @@ The equivalent native commands are:
 ollama serve
 ollama pull qwen2.5-coder:0.5b
 ```
+
+## Managed Provider Exports
+
+Managed providers use the same profile alias flow as local runtimes. The difference is that the endpoint and API key usually point to a hosted service instead of `localhost`.
+
+Managed-provider exports prefer `api_key_env` from the model/provider entry or from a named local credential reference. Raw keys from `.aiplane/credentials.yaml` are not printed into IDE config.
+
+For OpenAI-style managed endpoints:
+
+```bash
+export OPENAI_API_KEY=...
+aiplane integrations plan continue \
+  --chat openai-gpt-4o-mini \
+  --autocomplete qwen-coder-1.5b-base \
+  --embedding nomic-embed-text
+aiplane integrations export continue \
+  --chat openai-gpt-4o-mini \
+  --autocomplete qwen-coder-1.5b-base \
+  --embedding nomic-embed-text
+```
+
+For Azure OpenAI, configure `providers.azure_openai.endpoint` in `models.yaml` or pass an endpoint at export time. The model alias should use the Azure deployment name:
+
+```bash
+export AZURE_OPENAI_API_KEY=...
+aiplane providers models azure_openai --online --limit 20
+aiplane integrations export openai-compatible --model azure-openai-chat-deployment --endpoint https://YOUR-RESOURCE.openai.azure.com
+```
+
+For Anthropic, keep the alias in `models.yaml` for planning and catalog visibility. Dedicated target-tool exporters are intentionally conservative; use the target tool's native Anthropic provider settings when it supports them, or keep using local/OpenAI-compatible exports where that is the supported shape.
+
+Continue can mix local and managed roles. For example, use OpenAI for chat, local Ollama for autocomplete, and local Ollama embeddings by passing role overrides to `integrations plan/export continue`.
 
 ## MCP Tools
 
@@ -271,6 +316,37 @@ aiplane integrations export continue-mcp
 - `vscode-mcp`, `continue-mcp`, `cline-mcp`, and `generic-mcp` print MCP client config snippets that launch `aiplane mcp serve`. These are for querying `aiplane`; they are not model endpoint configs and do not select an inference model.
 
 `setup` is available for Continue and single-model endpoint tools (`cline`, `zed`, `aider`, and `openai-compatible`). It prepares the selected runtime/model where helpers exist, but it still does not edit the target tool's configuration file.
+
+## Agent Applications
+
+An agent application is the code that owns the prompt, state, tools, and model-call loop. `aiplane` does not become that agent; it selects and documents the endpoint/model the agent code should call, then prints a starter scaffold you can review.
+
+List starter templates:
+
+```bash
+aiplane agents templates
+```
+
+Plan a small LangGraph agent against a configured model alias:
+
+```bash
+aiplane agents plan repo-helper --framework langgraph --model qwen-tiny
+```
+
+Print one scaffold file at a time:
+
+```bash
+aiplane agents export repo-helper --framework langgraph --model qwen-tiny --file agent.py
+aiplane agents export repo-helper --framework langgraph --model qwen-tiny --file requirements.txt
+aiplane agents export repo-helper --framework langgraph --model qwen-tiny --file .env.example
+aiplane agents export repo-helper --framework langgraph --model qwen-tiny --file README.md
+```
+
+The generated `agent.py` is intentionally small: it reads `OPENAI_BASE_URL`, `AIPLANE_MODEL`, and an API-key env var, then calls the selected endpoint. For local Ollama, the endpoint is usually `http://localhost:11434/v1` and a dummy API key is often accepted. For managed providers, set the configured API-key env var first.
+
+Agent artifact paths are intentionally separate from profiles. Use `--output-dir`, `AIPLANE_AGENT_ARTIFACTS_DIR`, or local config `agent_artifacts_dir` to choose where generated agent projects should live. The default is `.aiplane/agents`, which is ignored by git.
+
+This is the step after environment preparation: once `environment doctor`, runtime setup, model aliases, and endpoint exports are understood, the agent application is the actual Python code that uses those settings to perform a task.
 
 ## CLI Chat Wrapper
 

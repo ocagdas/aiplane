@@ -6,12 +6,13 @@ import subprocess
 import sys
 from pathlib import Path
 
+from .agents import AgentManager
 from .approvals import ApprovalHandler
 from .audit import AuditLogger
 from .benchmarks import BenchmarkRunner
 from .benchmark_tools import BenchmarkToolManager
 from .code_tasks import CodeTaskRunner
-from .config import create_profile, default_profile, get_local_config_value, init_local_config, list_config_templates, list_profile_templates, list_profiles, load_local_config, local_config_path, load_profile, resolve_profile_name, set_default_profile, set_local_config_value
+from .config import agent_artifacts_root, create_profile, default_local_config_path, default_profile, default_profiles_root, get_local_config_value, init_local_config, list_config_templates, list_profile_templates, list_profiles, load_local_config, local_config_path, load_profile, profiles_root, resolve_profile_name, set_default_profile, set_local_config_value
 from .deploy import DeployManager
 from .env import EnvironmentManager
 from .hardware import HardwareManager
@@ -24,6 +25,7 @@ from .output import json_dumps as _json
 from .policy import PolicyEngine
 from .providers import ProviderRegistry
 from .remote import RemoteManager
+from .secrets import CredentialStore, credentials_path
 from .router import Router
 from .runtime_catalog import RuntimeCatalog
 from .stacks import StackManager
@@ -411,7 +413,7 @@ def _main(argv: list[str] | None = None) -> int:
     models_disable.add_argument("name", help="Model alias to disable")
     models_list = models_sub.add_parser("list", help="List approved model aliases", description="List catalog entries with model provider, supported runtimes, configured runtime endpoints, roles, enabled state, and capability scores.", formatter_class=HelpFormatter)
     _profile_arg(models_list)
-    models_list.add_argument("--group-by", choices=["none", "provider", "source", "runtime", "model"], default="none", help="Group output by model provider, model source/catalog, supported runtime, or provider-native model id")
+    models_list.add_argument("--group-by", choices=["none", "provider", "source", "runtime", "model", "ownership"], default="none", help="Group output by model provider, model source/catalog, supported runtime, or provider-native model id")
     models_list.add_argument("--provider", help="Filter by model provider, such as ollama, huggingface, or huggingface_gguf")
     models_list.add_argument("--runtime", help="Filter by supported runtime, such as ollama, vllm, tgi, transformers")
     models_list.add_argument("--source", help="Filter by model source/catalog, such as ollama, huggingface, huggingface_gguf")
@@ -547,9 +549,44 @@ def _main(argv: list[str] | None = None) -> int:
     _profile_arg(integrations_export)
     _integration_selection_args(integrations_export)
     integrations_export.add_argument("--model", help="Single model alias to export. For Continue, omit this to export chat/autocomplete/embedding selections")
+    integrations_export.add_argument("--from-plan", help="Path to a JSON file produced by integrations plan. Exports from that saved decision instead of recomputing selection")
     integrations_export.add_argument("--endpoint", help="Override provider endpoint/base URL, useful for SSH tunnels, gateways, or remote runtimes")
     integrations_export.add_argument("--api-key-env", help="Environment variable name the target tool should read for an API key")
     integrations_export.add_argument("tool", choices=["continue", "cline", "zed", "aider", "openai-compatible", "vscode-mcp", "continue-mcp", "cline-mcp", "generic-mcp"], help="Export format to print")
+
+    agents_cmd = _command(
+        subparsers,
+        "agents",
+        "Plan and export starter agent applications",
+        "Create non-mutating plans and scaffold files for small agent applications that use configured aiplane model endpoints.",
+        "Examples:\n  aiplane agents templates\n  aiplane agents plan repo-helper --framework langgraph --model qwen-tiny\n  aiplane agents export repo-helper --framework langgraph --model qwen-tiny --file agent.py",
+    )
+    agents_sub = agents_cmd.add_subparsers(dest="agents_command", required=True, metavar="command")
+    agents_templates = agents_sub.add_parser("templates", help="List starter agent frameworks", description="List agent application scaffold templates supported by aiplane.", formatter_class=HelpFormatter)
+    _profile_arg(agents_templates)
+    agents_plan = agents_sub.add_parser("plan", help="Plan an agent application scaffold", description="Select a model endpoint and show the files/packages for an agent application scaffold. This does not write files or run the agent.", formatter_class=HelpFormatter)
+    _profile_arg(agents_plan)
+    agents_plan.add_argument("name", help="Agent application name, such as repo-helper")
+    agents_plan.add_argument("--framework", choices=["langgraph", "simple-openai"], default="langgraph", help="Agent scaffold framework")
+    agents_plan.add_argument("--model", help="Model alias to use; if omitted, aiplane selects the best enabled chat model")
+    agents_plan.add_argument("--runtime", help="Runtime constraint, such as ollama or vllm")
+    agents_plan.add_argument("--provider", help="Provider/source constraint, such as openai or ollama")
+    agents_plan.add_argument("--endpoint", help="Endpoint/base URL override")
+    agents_plan.add_argument("--api-key-env", help="API-key environment variable override")
+    agents_plan.add_argument("--instruction", help="System instruction embedded in the scaffold")
+    agents_plan.add_argument("--output-dir", help="Agent artifact root. Defaults to AIPLANE_AGENT_ARTIFACTS_DIR, local config agent_artifacts_dir, or .aiplane/agents")
+    agents_export = agents_sub.add_parser("export", help="Print one starter agent file", description="Print one scaffold file for an agent application. Output is not written automatically.", formatter_class=HelpFormatter)
+    _profile_arg(agents_export)
+    agents_export.add_argument("name", help="Agent application name, such as repo-helper")
+    agents_export.add_argument("--framework", choices=["langgraph", "simple-openai"], default="langgraph", help="Agent scaffold framework")
+    agents_export.add_argument("--model", help="Model alias to use; if omitted, aiplane selects the best enabled chat model")
+    agents_export.add_argument("--runtime", help="Runtime constraint, such as ollama or vllm")
+    agents_export.add_argument("--provider", help="Provider/source constraint, such as openai or ollama")
+    agents_export.add_argument("--endpoint", help="Endpoint/base URL override")
+    agents_export.add_argument("--api-key-env", help="API-key environment variable override")
+    agents_export.add_argument("--instruction", help="System instruction embedded in the scaffold")
+    agents_export.add_argument("--output-dir", help="Agent artifact root. Defaults to AIPLANE_AGENT_ARTIFACTS_DIR, local config agent_artifacts_dir, or .aiplane/agents")
+    agents_export.add_argument("--file", choices=["agent.py", "requirements.txt", ".env.example", "README.md"], default="agent.py", help="Scaffold file to print")
 
     chat_cmd = _command(
         subparsers,
@@ -735,7 +772,7 @@ def _main(argv: list[str] | None = None) -> int:
         "tools",
         "Check and install external prerequisite CLIs",
         "Inspect and install the small external toolchain aiplane can use for cloud, container, Kubernetes, and remote operations.",
-        "Examples:\n  aiplane tools doctor\n  aiplane tools doctor azure-cli\n  aiplane tools install opentofu --dry-run\n  aiplane tools install azure-cli",
+        "Examples:\n  aiplane tools doctor\n  aiplane tools doctor azure-cli\n  aiplane tools plan vagrant\n  aiplane tools export opentofu\n  aiplane tools install opentofu --dry-run\n  aiplane tools install azure-cli",
     )
     tools_sub = tools_cmd.add_subparsers(dest="tools_command", required=True, metavar="command")
     tools_list = tools_sub.add_parser("list", help="List known prerequisite tools", description="List supported external CLIs, categories, install hints, and detected versions.", formatter_class=HelpFormatter)
@@ -743,10 +780,30 @@ def _main(argv: list[str] | None = None) -> int:
     tools_doctor = tools_sub.add_parser("doctor", help="Check external toolchain health", description="Check whether prerequisite tools are installed and whether selected services are reachable, such as Azure login or Docker daemon status.", formatter_class=HelpFormatter)
     _profile_arg(tools_doctor)
     tools_doctor.add_argument("name", nargs="?", help="Optional tool name, such as azure-cli, opentofu, docker, kubectl, helm, openssh-client, or ansible")
+    tools_plan = tools_sub.add_parser("plan", help="Plan how a tool fits a workflow", description="Show prerequisites, safe commands, generated artifacts, and next steps for an external tool workflow without mutating anything.", formatter_class=HelpFormatter)
+    _profile_arg(tools_plan)
+    tools_plan.add_argument("name", help="Tool name, such as vagrant, packer, opentofu, terraform, pulumi, devcontainer-cli, or ansible")
+    tools_export = tools_sub.add_parser("export", help="Print a starter tool artifact", description="Print a starter Vagrantfile, Packer template, IaC module, Dev Container config, or Ansible playbook. Output is not written automatically.", formatter_class=HelpFormatter)
+    _profile_arg(tools_export)
+    tools_export.add_argument("name", help="Tool name, such as vagrant, packer, opentofu, terraform, pulumi, devcontainer-cli, or ansible")
     tools_install = tools_sub.add_parser("install", help="Plan or run prerequisite tool install", description="Render and run platform-specific install commands where supported. Use --dry-run to inspect commands without executing them.", formatter_class=HelpFormatter)
     _profile_arg(tools_install)
     tools_install.add_argument("name", help="Tool name, such as azure-cli, opentofu, docker, kubectl, helm, openssh-client, or ansible")
     tools_install.add_argument("--dry-run", action="store_true", help="Print install commands without executing them")
+
+    credentials_cmd = _command(
+        subparsers,
+        "credentials",
+        "Inspect ignored local credential references",
+        "List or show redacted credential accounts from the ignored local credentials file. This never prints raw secrets.",
+        "Examples:\n  aiplane credentials list\n  aiplane credentials show openai.personal",
+    )
+    credentials_sub = credentials_cmd.add_subparsers(dest="credentials_command", required=True, metavar="command")
+    credentials_list = credentials_sub.add_parser("list", help="List configured credential refs", description="List credential account names and metadata without secret values.", formatter_class=HelpFormatter)
+    credentials_list.add_argument("--path", help="Optional credentials YAML path. Defaults to AIPLANE_CREDENTIALS, local config credentials_path, or .aiplane/credentials.yaml")
+    credentials_show = credentials_sub.add_parser("show", help="Show one credential ref with secrets redacted", description="Show one credential account without printing raw secret values.", formatter_class=HelpFormatter)
+    credentials_show.add_argument("ref", help="Credential ref, such as openai.personal or openai/personal")
+    credentials_show.add_argument("--path", help="Optional credentials YAML path")
 
     mcp_cmd = _command(
         subparsers,
@@ -802,7 +859,7 @@ def _main(argv: list[str] | None = None) -> int:
                 path = set_default_profile(args.name, path=args.path)
                 print(_json({"default_profile": args.name, "path": str(path)}, indent=2, sort_keys=True))
                 return 0
-            print(_json({"default_profile": default_profile(), "source": "AIPLANE_PROFILE or local config or fallback"}, indent=2, sort_keys=True))
+            print(_json({"default_profile": default_profile(args.path), "source": "AIPLANE_PROFILE or local config or fallback"}, indent=2, sort_keys=True))
             return 0
         if args.config_command == "get":
             print(_json({"key": args.key, "value": get_local_config_value(args.key, path=args.path), "path": str(local_config_path(args.path))}, indent=2, sort_keys=True))
@@ -812,7 +869,55 @@ def _main(argv: list[str] | None = None) -> int:
             print(_json({"key": args.key, "value": get_local_config_value(args.key, path=path), "path": str(path)}, indent=2, sort_keys=True))
             return 0
         config_path = local_config_path(args.path)
-        print(_json({"path": str(config_path), "exists": config_path.exists(), "settings": load_local_config(config_path), "effective": {"default_profile": default_profile()}}, indent=2, sort_keys=True))
+        profile_root = profiles_root(profiles_dir, config_path=config_path)
+        configured_default_profile = default_profile(config_path)
+        current_profile = None
+        current_profile_error = None
+        available_profiles = list_profiles(profile_root)
+        if requested_profile:
+            current_profile = requested_profile
+        elif configured_default_profile in available_profiles:
+            current_profile = configured_default_profile
+        elif len(available_profiles) == 1:
+            current_profile = available_profiles[0]
+        elif not available_profiles:
+            current_profile_error = "no aiplane profiles found. Create one with: aiplane profiles create local-dev --template local-dev"
+        else:
+            current_profile_error = (
+                "no valid default profile is configured. Set one with: "
+                "aiplane config default-profile <name>, or pass --profile. "
+                f"Available profiles: {', '.join(available_profiles)}"
+            )
+        profile_paths = {
+            "default_root": str(default_profiles_root()),
+            "active_root": str(profile_root),
+            "default_profile": configured_default_profile,
+            "default_profile_path": str(profile_root / configured_default_profile),
+            "current_profile": current_profile,
+            "current_profile_path": str(profile_root / current_profile) if current_profile else None,
+        }
+        if current_profile_error:
+            profile_paths["current_profile_error"] = current_profile_error
+        print(_json({
+            "path": str(config_path),
+            "exists": config_path.exists(),
+            "settings": load_local_config(config_path),
+            "paths": {
+                "config": {
+                    "default": str(default_local_config_path()),
+                    "active": str(config_path),
+                    "exists": config_path.exists(),
+                },
+                "profiles": profile_paths,
+            },
+            "effective": {
+                "default_profile": configured_default_profile,
+                "current_profile": current_profile,
+                "profiles_dir": str(profile_root),
+                "agent_artifacts_dir": str(agent_artifacts_root(config_path=config_path)),
+                "credentials_path": str(credentials_path(config_path=config_path)),
+            },
+        }, indent=2, sort_keys=True))
         return 0
 
     if args.command == "profiles":
@@ -861,6 +966,17 @@ def _main(argv: list[str] | None = None) -> int:
             return 0
         if args.tools_command == "doctor":
             print(_json(manager.doctor(args.name), indent=2))
+            return 0
+        if args.tools_command == "plan":
+            print(_json(manager.plan(args.name), indent=2))
+            return 0
+        if args.tools_command == "export":
+            exported = manager.export(args.name)
+            print(exported["content"])
+            if exported.get("notes"):
+                print("\n# Notes")
+                for note in exported["notes"]:
+                    print(f"# - {note}")
             return 0
         print(_json(manager.install(args.name, dry_run=args.dry_run, yes=not args.dry_run), indent=2))
         return 0
@@ -1138,6 +1254,31 @@ def _main(argv: list[str] | None = None) -> int:
         print(result.output)
         return 0
 
+    if args.command == "credentials":
+        store = CredentialStore(args.path)
+        if args.credentials_command == "list":
+            print(_json(store.list(), indent=2, sort_keys=True))
+            return 0
+        print(_json(store.show(args.ref), indent=2, sort_keys=True))
+        return 0
+
+    if args.command == "agents":
+        profile = load_profile(effective_profile, workspace, profiles_dir=profiles_dir)
+        manager = AgentManager(profile)
+        if args.agents_command == "templates":
+            print(_json(manager.templates(), indent=2))
+            return 0
+        if args.agents_command == "plan":
+            print(_json(manager.plan(args.name, framework=args.framework, model=args.model, runtime=args.runtime, provider=args.provider, endpoint=args.endpoint, api_key_env=args.api_key_env, instruction=args.instruction, output_dir=args.output_dir), indent=2))
+            return 0
+        exported = manager.export(args.name, framework=args.framework, model=args.model, runtime=args.runtime, provider=args.provider, endpoint=args.endpoint, api_key_env=args.api_key_env, instruction=args.instruction, file=args.file, output_dir=args.output_dir)
+        print(exported["content"])
+        if exported.get("notes"):
+            print("\n# Notes")
+            for note in exported["notes"]:
+                print(f"# - {note}")
+        return 0
+
     if args.command == "integrations":
         profile = load_profile(effective_profile, workspace, profiles_dir=profiles_dir)
         manager = IntegrationManager(profile)
@@ -1153,7 +1294,11 @@ def _main(argv: list[str] | None = None) -> int:
         if args.integrations_command == "setup":
             print(_json(manager.setup(args.tool, model_name=args.model, provider=args.provider, runtime=args.runtime, capabilities=args.capability, select_best=args.select_best, chat=args.chat, autocomplete=args.autocomplete, embedding=args.embedding, endpoint=args.endpoint, api_key_env=args.api_key_env, dry_run=args.dry_run, yes=not args.dry_run), indent=2))
             return 0
-        exported = manager.export(args.tool, args.model, endpoint=args.endpoint, api_key_env=args.api_key_env, provider=args.provider, runtime=args.runtime, capabilities=args.capability, select_best=args.select_best, chat=args.chat, autocomplete=args.autocomplete, embedding=args.embedding)
+        if args.from_plan:
+            plan = json.loads(Path(args.from_plan).read_text(encoding="utf-8"))
+            exported = manager.export_from_plan(plan)
+        else:
+            exported = manager.export(args.tool, args.model, endpoint=args.endpoint, api_key_env=args.api_key_env, provider=args.provider, runtime=args.runtime, capabilities=args.capability, select_best=args.select_best, chat=args.chat, autocomplete=args.autocomplete, embedding=args.embedding)
         print(exported.content)
         if exported.notes:
             print("\n# Notes")

@@ -31,6 +31,11 @@ profiles/local-dev/models.generated.yaml
 .aiplane/
 
 # Provider/local secrets
+credentials.yaml
+credentials.local.yaml
+*.credentials.yaml
+.env.credentials
+.env.credentials.local
 .env.providers
 .env.providers.local
 .env.providers.example

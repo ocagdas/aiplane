@@ -8,7 +8,8 @@ Examples:
 - `huggingface`: Hugging Face Hub repos such as `Qwen/Qwen2.5-Coder-32B-Instruct`.
 - `huggingface_gguf`: GGUF files hosted on Hugging Face or similar file stores.
 - `local_file`: a local model path.
-- `piper_voices`: Piper text-to-speech voice catalog. Other catalogs can be added in `model-providers.user.yaml` when their discovery path is reliable for your environment.
+- `piper_voices`: Piper text-to-speech voice catalog.
+- `openai`, `anthropic`, `azure_openai`, `ollama_cloud`: managed providers. These are hosted services, so they need endpoint/API-key configuration and curated model aliases before IDE exports can use them. Other catalogs can be added in `model-providers.user.yaml` when their discovery path is reliable for your environment.
 
 A **runtime** is different. A runtime loads model files into CPU/GPU memory and serves inference. Examples: `ollama`, `vllm`, `tgi`, `llamacpp`, `transformers`, `localai`, `lmstudio`, `faster_whisper`, `piper`, `diffusers`, and `comfyui`.
 
@@ -27,6 +28,58 @@ That overlap is real in the ecosystem, but `aiplane` keeps the concepts separate
 - `supported_runtimes`: runtimes that can plausibly run it.
 - `runtime_endpoint`: the configured runtime endpoint selected in the profile entry, for example `ollama`, `vllm`, or `llamacpp`.
 - `configured_runtime_endpoints`: compatible runtime endpoint names already present in the profile config.
+
+## Ownership Groups
+
+Models are grouped by ownership:
+
+- `self_managed`: local, workstation, VM, container, or Kubernetes-hosted runtimes you operate.
+- `managed_service`: hosted providers such as OpenAI, Anthropic, Azure OpenAI, and Ollama Cloud.
+
+Useful commands:
+
+```bash
+aiplane models list --group-by ownership
+aiplane models list --self-managed-only
+aiplane models list --managed-service-only
+```
+
+## Managed Providers In Practice
+
+Managed providers are not local runtimes. They become useful to Continue/Cline/Aider/Zed only after you have a profile model alias in `models.yaml`. The flow is:
+
+1. Configure the managed provider endpoint and API-key environment variable under `providers:` in `models.yaml`.
+2. Add or enable a model alias under `models:`. For Azure OpenAI, the `model` value is the deployment name.
+3. Run `aiplane integrations plan ...` to inspect which aliases, endpoints, and API-key env vars will be used.
+4. Run `aiplane integrations export ...` and merge the printed config into the target tool.
+
+Examples:
+
+```bash
+export OPENAI_API_KEY=...
+aiplane integrations export continue --model openai-gpt-4o-mini
+
+export AZURE_OPENAI_API_KEY=...
+aiplane providers models azure_openai --online --limit 20
+aiplane integrations export openai-compatible --model azure-openai-chat-deployment --endpoint https://YOUR-RESOURCE.openai.azure.com
+```
+
+Use managed providers deliberately. They can send selected IDE context to a hosted service and may incur cost. Keep local defaults for local-only workflows, and use explicit `--model`, `--provider`, or role overrides when you want a managed model.
+
+For multiple accounts, keep credentials in the ignored local credentials file and reference them by name:
+
+```yaml
+providers:
+  openai:
+    endpoint: https://api.openai.com/v1
+    credential_ref: openai.personal
+  custom_openai_gateway:
+    endpoint: https://llm-gateway.example.com/v1
+    protocol: openai_compatible
+    credential_ref: custom_openai_compatible.lab_gateway
+```
+
+Well-known managed providers have built-in defaults and adapters where safe. Custom providers should specify an endpoint, protocol, and credential reference. The profile should not contain raw API keys.
 
 ## Provider Commands
 
@@ -61,7 +114,7 @@ aiplane providers models huggingface_gguf --online --query llama-3.1-8b --limit 
 aiplane providers models piper_voices --online --query en_US --limit 500
 ```
 
-Current default online adapters are `ollama`, `huggingface`, `huggingface_gguf`, and `piper_voices`. If an online query fails or the provider has no adapter yet, `aiplane` falls back to the profile catalog and includes the reason. Fallback is non-destructive: it does not update or prune local entries because it is only re-reading the local profile.
+Current default online adapters are `ollama`, `huggingface`, `huggingface_gguf`, `piper_voices`, and `azure_openai` deployments when endpoint/key configuration is present. If an online query fails or the provider has no adapter yet, `aiplane` falls back to the profile catalog and includes the reason. Fallback is non-destructive: it does not update or prune local entries because it is only re-reading the local profile.
 
 ## Provider Configuration Files
 

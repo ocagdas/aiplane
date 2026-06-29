@@ -84,6 +84,17 @@ aiplane tools doctor docker
 aiplane tools doctor openssh-client
 ```
 
+Plan or print starter artifacts for tool workflows without mutating hosts or cloud accounts:
+
+```bash
+aiplane tools plan vagrant
+aiplane tools export vagrant
+aiplane tools plan opentofu
+aiplane tools export opentofu
+aiplane tools export packer
+aiplane tools export ansible
+```
+
 The output reports command path, detected version where available, install hints, purposes, and service checks where they make sense. For example, Docker checks whether the daemon is reachable; Azure CLI checks whether `az account show` works.
 
 ## Provisioning and Setup Layers

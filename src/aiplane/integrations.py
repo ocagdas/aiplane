@@ -10,6 +10,7 @@ from .model_catalog import ModelCatalog, ROLE_CAPABILITY_MAP, expand_capability_
 from .models import Profile
 from .output import json_dumps
 from .runtime_catalog import RuntimeCatalog
+from .secrets import CredentialStore
 
 
 MCP_EXPORT_TOOLS = {"vscode-mcp", "continue-mcp", "cline-mcp", "generic-mcp"}
@@ -29,6 +30,7 @@ class IntegrationManager:
     def __init__(self, profile: Profile):
         self.profile = profile
         self.catalog = ModelCatalog(profile)
+        self.credentials = CredentialStore()
 
     def list(self) -> list[dict[str, str]]:
         return [
@@ -129,7 +131,7 @@ class IntegrationManager:
         model = self.catalog.get(model_name)
         provider_name = str(model.get("provider"))
         endpoint_value = endpoint or self._endpoint_for_provider(provider_name)
-        api_key_value = api_key_env or str(model.get("api_key_env") or self.catalog.providers().get(provider_name, {}).get("api_key_env") or "")
+        api_key_value = api_key_env or self._api_key_env_for(model, provider_name)
         if tool == "continue":
             return self._continue_export(model_name, model, provider_name, endpoint_value, api_key_value)
         if tool == "cline":
@@ -141,6 +143,31 @@ class IntegrationManager:
         if tool == "openai-compatible":
             return self._openai_compatible_export(model_name, model, provider_name, endpoint_value, api_key_value)
         raise ValueError(f"unknown integration: {tool}")
+
+    def export_from_plan(self, plan: dict[str, Any]) -> IntegrationExport:
+        tool = str(plan.get("tool") or "")
+        if tool == "continue":
+            return self._continue_export_from_plan(plan)
+        if tool in MCP_EXPORT_TOOLS:
+            return self._mcp_export(tool)
+        if tool not in {"cline", "zed", "aider", "openai-compatible"}:
+            raise ValueError(f"unknown integration in plan: {tool}")
+        selection = plan.get("selection") if isinstance(plan.get("selection"), dict) else {}
+        row = selection.get("primary") if isinstance(selection.get("primary"), dict) else None
+        if not row:
+            raise ValueError("saved plan does not contain a primary selection")
+        model_name = str(row.get("name") or "selected-model")
+        model = {"model": row.get("model")}
+        provider_name = str(row.get("provider") or "")
+        endpoint = str(row.get("endpoint") or "")
+        api_key_env = str(row.get("api_key_env") or "")
+        if tool == "cline":
+            return self._cline_export(model_name, model, provider_name, endpoint, api_key_env)
+        if tool == "zed":
+            return self._zed_export(model_name, model, provider_name, endpoint, api_key_env)
+        if tool == "aider":
+            return self._aider_export(model_name, model, provider_name, endpoint, api_key_env)
+        return self._openai_compatible_export(model_name, model, provider_name, endpoint, api_key_env)
 
     def plan(
         self,
@@ -301,7 +328,7 @@ class IntegrationManager:
         model = self.catalog.get(name)
         provider_name = str(model.get("provider"))
         endpoint = self._endpoint_for_provider(provider_name)
-        api_key_env = str(model.get("api_key_env") or self.catalog.providers().get(provider_name, {}).get("api_key_env") or "")
+        api_key_env = self._api_key_env_for(model, provider_name)
         return name, model, provider_name, endpoint, api_key_env
 
     def _best_model_for_role(self, role: str, constraints: dict[str, Any], endpoint: str | None = None, api_key_env: str | None = None) -> dict[str, Any]:
@@ -337,7 +364,7 @@ class IntegrationManager:
             runtime_name = str(selected_runtime.get("selected") or model.get("preferred_runtime") or model.get("provider") or "")
         provider_name = str(model.get("provider") or "")
         endpoint_value = endpoint or self._endpoint_for_provider(runtime_name if runtime_name in self.catalog.providers() else provider_name)
-        api_key_value = api_key_env or str(model.get("api_key_env") or self.catalog.providers().get(provider_name, {}).get("api_key_env") or "")
+        api_key_value = api_key_env or self._api_key_env_for(model, provider_name)
         capabilities = self.catalog.show(model_name)["capabilities"]
         return {
             "name": model_name,
@@ -396,14 +423,34 @@ class IntegrationManager:
         subprocess.run(command, cwd=self.profile.workspace, check=True)
         return ""
 
+    def _api_key_env_for(self, model: dict[str, Any], provider_name: str) -> str:
+        provider = self.catalog.providers().get(provider_name, {})
+        credential_ref = str(model.get("credential_ref") or provider.get("credential_ref") or "")
+        if credential_ref:
+            env_name = self.credentials.api_key_env(credential_ref)
+            if env_name:
+                return env_name
+        return str(model.get("api_key_env") or provider.get("api_key_env") or "")
+
     def _endpoint_for_provider(self, provider_name: str) -> str:
         provider = self.catalog.providers().get(provider_name, {})
-        endpoint = str(provider.get("endpoint", ""))
+        credential_ref = str(provider.get("credential_ref") or "")
+        credential_endpoint = self.credentials.endpoint(credential_ref) if credential_ref else None
+        endpoint = str(provider.get("endpoint") or credential_endpoint or "")
         if provider_name in {"ollama", "ollama_cloud"}:
             if not endpoint:
                 endpoint = "http://localhost:11434" if provider_name == "ollama" else "https://ollama.com"
             return endpoint.rstrip("/") + "/v1"
-        return endpoint
+        if provider_name == "openai":
+            return (endpoint or "https://api.openai.com/v1").rstrip("/")
+        if provider_name == "anthropic":
+            return (endpoint or "https://api.anthropic.com").rstrip("/")
+        return endpoint.rstrip("/")
+
+    def _continue_provider(self, provider_name: str) -> str:
+        if provider_name == "anthropic":
+            return "anthropic"
+        return "openai"
 
     def _continue_export_from_plan(self, plan: dict[str, Any]) -> IntegrationExport:
         selection = plan["selection"]
@@ -421,25 +468,25 @@ class IntegrationManager:
             "schema: v1\n"
             "models:\n"
             f"  - name: {chat['name']}\n"
-            "    provider: openai\n"
+            f"    provider: {self._continue_provider(str(chat.get('provider') or ''))}\n"
             f"    model: {chat['model']}\n"
             f"    apiBase: {chat['endpoint']}\n"
             f"    apiKey: {api_key(chat)}\n"
             "    roles: [chat, edit, apply]\n"
             f"  - name: {completion['name']}\n"
-            "    provider: openai\n"
+            f"    provider: {self._continue_provider(str(completion.get('provider') or ''))}\n"
             f"    model: {completion['model']}\n"
             f"    apiBase: {completion['endpoint']}\n"
             f"    apiKey: {api_key(completion)}\n"
             "    roles: [autocomplete]\n"
             "tabAutocompleteModel:\n"
             f"  title: {completion['name']}\n"
-            "  provider: openai\n"
+            f"  provider: {self._continue_provider(str(completion.get('provider') or ''))}\n"
             f"  model: {completion['model']}\n"
             f"  apiBase: {completion['endpoint']}\n"
             f"  apiKey: {api_key(completion)}\n"
             "embeddingsProvider:\n"
-            "  provider: openai\n"
+            f"  provider: {self._continue_provider(str(embedding.get('provider') or ''))}\n"
             f"  model: {embedding['model']}\n"
             f"  apiBase: {embedding['endpoint']}\n"
             f"  apiKey: {api_key(embedding)}\n"
@@ -469,25 +516,25 @@ class IntegrationManager:
             "schema: v1\n"
             "models:\n"
             f"  - name: {chat_name}\n"
-            "    provider: openai\n"
+            f"    provider: {self._continue_provider(chat_provider)}\n"
             f"    model: {chat_model.get('model')}\n"
             f"    apiBase: {chat_endpoint}\n"
             f"    apiKey: {api_key(chat_provider, chat_key_env)}\n"
             "    roles: [chat, edit, apply]\n"
             f"  - name: {completion_name}\n"
-            "    provider: openai\n"
+            f"    provider: {self._continue_provider(completion_provider)}\n"
             f"    model: {completion_model.get('model')}\n"
             f"    apiBase: {completion_endpoint}\n"
             f"    apiKey: {api_key(completion_provider, completion_key_env)}\n"
             "    roles: [autocomplete]\n"
             "tabAutocompleteModel:\n"
             f"  title: {completion_name}\n"
-            "  provider: openai\n"
+            f"  provider: {self._continue_provider(completion_provider)}\n"
             f"  model: {completion_model.get('model')}\n"
             f"  apiBase: {completion_endpoint}\n"
             f"  apiKey: {api_key(completion_provider, completion_key_env)}\n"
             "embeddingsProvider:\n"
-            "  provider: openai\n"
+            f"  provider: {self._continue_provider(embedding_provider)}\n"
             f"  model: {embedding_model.get('model')}\n"
             f"  apiBase: {embedding_endpoint}\n"
             f"  apiKey: {api_key(embedding_provider, embedding_key_env)}\n"
@@ -504,7 +551,7 @@ class IntegrationManager:
         yaml = (
             "models:\n"
             f"  - name: {model_name}\n"
-            "    provider: openai\n"
+            f"    provider: {self._continue_provider(provider_name)}\n"
             f"    model: {model.get('model')}\n"
             f"    apiBase: {endpoint}\n"
             f"    apiKey: {api_key}\n"

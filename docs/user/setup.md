@@ -156,6 +156,8 @@ Default path:
 .aiplane/config.yaml
 ```
 
+`aiplane config show` prints both the default and active config paths, the default and current profile paths, and the effective credentials and agent artifact paths.
+
 You can also choose a different config file with `AIPLANE_CONFIG` or
 `aiplane config init --path ...`. Precedence for profile location is:
 
@@ -163,6 +165,64 @@ You can also choose a different config file with `AIPLANE_CONFIG` or
 2. `AIPLANE_PROFILES_DIR`
 3. `profiles_dir` in local config
 4. repo-local `profiles/`
+
+Agent application artifacts use a separate local path because they are project outputs, not profile configuration. Precedence for agent artifact roots is:
+
+1. `--output-dir` on agent commands
+2. `AIPLANE_AGENT_ARTIFACTS_DIR`
+3. `agent_artifacts_dir` in local config
+4. `.aiplane/agents`
+
+## Local Credentials
+
+Credentials are local machine/user state, not profile state. Profiles and model aliases should reference credential names such as `openai.personal` or `azure_openai.business_a`; the actual keys live in an ignored credentials file.
+
+Precedence for the credentials file is:
+
+1. `--path` on `aiplane credentials` commands
+2. `AIPLANE_CREDENTIALS`
+3. `credentials_path` in local config
+4. `.aiplane/credentials.yaml`
+
+Example ignored credentials file:
+
+```yaml
+providers:
+  openai:
+    accounts:
+      personal:
+        api_key_env: OPENAI_PERSONAL_API_KEY
+        endpoint: https://api.openai.com/v1
+      business_a:
+        api_key_env: OPENAI_BUSINESS_A_API_KEY
+        endpoint: https://api.openai.com/v1
+  custom_openai_compatible:
+    accounts:
+      lab_gateway:
+        api_key_env: AIPLANE_LAB_LLM_KEY
+        endpoint: https://llm-gateway.example.com/v1
+```
+
+`api_key_env` is preferred because target tools such as Continue and Aider can read environment variables without `aiplane` printing raw secrets. For internal discovery/checks, `aiplane` can also read an `api_key` from the ignored credentials file, but `credentials show` redacts it.
+
+Inspect configured refs without exposing secrets:
+
+```bash
+aiplane credentials list
+aiplane credentials show openai.personal
+```
+
+Profile/provider entries can then refer to credentials without embedding secret values:
+
+```yaml
+providers:
+  openai:
+    endpoint: https://api.openai.com/v1
+    credential_ref: openai.personal
+  azure_openai:
+    endpoint: https://YOUR-RESOURCE.openai.azure.com
+    credential_ref: azure_openai.business_a
+```
 
 ## Profile Templates
 

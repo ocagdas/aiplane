@@ -135,6 +135,26 @@ SOURCE_DEFINITIONS: dict[str, dict[str, Any]] = {
         "description": "Piper ONNX voice model files and metadata",
         "typical_runtimes": ["piper"],
     },
+    "openai": {
+        "description": "OpenAI hosted model catalog and deployments",
+        "typical_runtimes": ["openai"],
+        "online_adapter": "profile_catalog",
+    },
+    "anthropic": {
+        "description": "Anthropic hosted model catalog",
+        "typical_runtimes": ["anthropic"],
+        "online_adapter": "profile_catalog",
+    },
+    "azure_openai": {
+        "description": "Azure OpenAI deployments in a configured Azure OpenAI resource",
+        "typical_runtimes": ["azure_openai"],
+        "online_adapter": "azure_openai",
+    },
+    "ollama_cloud": {
+        "description": "Ollama Cloud hosted catalog and endpoints",
+        "typical_runtimes": ["ollama_cloud"],
+        "online_adapter": "profile_catalog",
+    },
 }
 
 

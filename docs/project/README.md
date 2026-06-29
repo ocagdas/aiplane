@@ -9,6 +9,7 @@ under `docs/user/`.
 - [Public Launch Review](public-launch-review.md): release-readiness checklist and terminology guardrails.
 - [Integration Roadmap](integrations-roadmap.md): IDE/CLI/MCP integration direction and status.
 - [Development Guide](development.md): contributor setup, tests, and output conventions.
+- [Agent Guidance](agent-guidance.md): master instructions for Codex, Copilot, Claude, Cursor, and other coding assistants.
 
 The product boundary is intentionally narrow: `aiplane` is an orchestration,
 governance, and setup control plane, not another coding agent or IDE assistant.

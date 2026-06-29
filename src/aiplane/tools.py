@@ -322,6 +322,66 @@ TOOLCHAIN: dict[str, dict[str, object]] = {
 }
 
 
+TOOL_WORKFLOWS: dict[str, dict[str, object]] = {
+    "vagrant": {
+        "task": "local VM lifecycle",
+        "summary": "Create and manage repeatable local development VMs from a base box.",
+        "prerequisites": ["Vagrant", "a VM provider such as VirtualBox, libvirt, Hyper-V, or VMware", "optional Packer-built box"],
+        "commands": ["vagrant init aiplane/ubuntu-dev", "vagrant up", "vagrant ssh", "vagrant halt"],
+        "artifacts": ["Vagrantfile"],
+        "next_steps": ["Use Packer first if you need a custom base image.", "Run aiplane environment doctor inside the VM or against a configured remote endpoint."],
+    },
+    "packer": {
+        "task": "machine image build",
+        "summary": "Build reusable VM or cloud images before Vagrant or cloud provisioning uses them.",
+        "prerequisites": ["Packer", "builder plugin/provider credentials", "OS installer/base image access"],
+        "commands": ["packer init .", "packer validate aiplane.pkr.hcl", "packer build aiplane.pkr.hcl"],
+        "artifacts": ["aiplane.pkr.hcl"],
+        "next_steps": ["Use the resulting box/image from Vagrant, OpenTofu/Terraform, Pulumi, or a cloud CLI."],
+    },
+    "opentofu": {
+        "task": "provider-agnostic infrastructure provisioning",
+        "summary": "Default Terraform-compatible IaC target for repeatable cloud resources.",
+        "prerequisites": ["OpenTofu", "provider credentials", "selected provider module/resources"],
+        "commands": ["tofu init", "tofu plan", "tofu apply"],
+        "artifacts": ["main.tf", "variables.tf"],
+        "next_steps": ["Fill in the provider block and resources for Azure, AWS, GCP, or another supported provider.", "Keep apply behind explicit review."],
+    },
+    "terraform": {
+        "task": "Terraform-standardized infrastructure provisioning",
+        "summary": "Terraform-compatible IaC for teams already standardized on HashiCorp Terraform.",
+        "prerequisites": ["Terraform", "provider credentials", "selected provider module/resources"],
+        "commands": ["terraform init", "terraform plan", "terraform apply"],
+        "artifacts": ["main.tf", "variables.tf"],
+        "next_steps": ["Use the same module shape as OpenTofu unless a team policy requires Terraform-specific behavior."],
+    },
+    "pulumi": {
+        "task": "language-native infrastructure provisioning",
+        "summary": "Provider-agnostic IaC using Python, TypeScript, Go, or other supported languages.",
+        "prerequisites": ["Pulumi", "language runtime", "provider credentials", "Pulumi stack configuration"],
+        "commands": ["pulumi stack init dev", "pulumi preview", "pulumi up"],
+        "artifacts": ["Pulumi.yaml", "__main__.py"],
+        "next_steps": ["Choose Pulumi when the team wants normal programming-language abstractions for IaC."],
+    },
+    "devcontainer-cli": {
+        "task": "containerized development shell",
+        "summary": "Open a reproducible development environment backed by Docker-compatible containers.",
+        "prerequisites": ["Docker", "Dev Container CLI"],
+        "commands": ["devcontainer up --workspace-folder .", "devcontainer exec --workspace-folder . bash"],
+        "artifacts": [".devcontainer/devcontainer.json"],
+        "next_steps": ["Use this for local dependency isolation; use Docker/Compose for runtime services."],
+    },
+    "ansible": {
+        "task": "remote host configuration",
+        "summary": "Configure local VMs, remote VMs, or remote PCs over SSH after they exist.",
+        "prerequisites": ["OpenSSH", "Ansible", "SSH credentials/inventory"],
+        "commands": ["ansible-inventory -i inventory.ini --list", "ansible-playbook -i inventory.ini playbook.yml --check", "ansible-playbook -i inventory.ini playbook.yml"],
+        "artifacts": ["inventory.ini", "playbook.yml"],
+        "next_steps": ["Use Ansible after Vagrant/cloud provisioning when shell bootstrap steps become too large."],
+    },
+}
+
+
 class ToolchainManager:
     def __init__(self, profile: Profile):
         self.profile = profile
@@ -424,6 +484,45 @@ class ToolchainManager:
         payload["installed_after"] = self._tool_row(name)["installed"]
         return payload
 
+    def plan(self, name: str) -> dict[str, object]:
+        if name not in TOOLCHAIN:
+            raise ValueError(f"unknown tool: {name}")
+        row = self._tool_row(name)
+        workflow = dict(TOOL_WORKFLOWS.get(name, {}))
+        return {
+            "name": "tools_plan",
+            "tool": name,
+            "status": row,
+            "task": workflow.get("task", row.get("category")),
+            "summary": workflow.get("summary", row.get("description")),
+            "prerequisites": workflow.get("prerequisites", []),
+            "commands": [str(command) for command in workflow.get("commands", [])],
+            "artifacts": workflow.get("artifacts", []),
+            "next_steps": workflow.get("next_steps", []),
+            "notes": [
+                "Planning and export commands do not mutate hosts or cloud accounts.",
+                "Run tool-specific init/plan/preview commands before any apply/build/up step.",
+            ],
+        }
+
+    def export(self, name: str) -> dict[str, object]:
+        if name not in TOOLCHAIN:
+            raise ValueError(f"unknown tool: {name}")
+        if name not in TOOL_WORKFLOWS:
+            raise ValueError(f"tool export is not available for {name}")
+        filename, content = _tool_export_content(name)
+        workflow = TOOL_WORKFLOWS[name]
+        return {
+            "name": "tools_export",
+            "tool": name,
+            "filename": filename,
+            "content": content,
+            "notes": [
+                str(workflow.get("summary", "Starter artifact.")),
+                "Review and adapt this starter artifact before running mutating commands.",
+            ],
+        }
+
     def _tool_row(self, name: str) -> dict[str, object]:
         if name not in TOOLCHAIN:
             raise ValueError(f"unknown tool: {name}")
@@ -472,6 +571,136 @@ class ToolchainManager:
             completed = _checked_command([command, "compose", "version"], self.profile.workspace)
             return {"ok": completed.get("returncode") == 0, "reason": "compose plugin available" if completed.get("returncode") == 0 else "docker compose plugin not available"}
         return {"ok": True, "reason": "command found"}
+
+
+
+def _tool_export_content(name: str) -> tuple[str, str]:
+    if name == "vagrant":
+        return "Vagrantfile", """# Generated starter Vagrantfile from aiplane.
+# Use a Packer-built box here when you need a custom CUDA/runtime base image.
+Vagrant.configure("2") do |config|
+  config.vm.box = ENV.fetch("AIPLANE_VAGRANT_BOX", "ubuntu/jammy64")
+  config.vm.hostname = "aiplane-dev"
+  config.vm.synced_folder ".", "/workspace"
+  config.vm.network "forwarded_port", guest: 11434, host: 11434, auto_correct: true
+  config.vm.network "forwarded_port", guest: 8000, host: 8000, auto_correct: true
+
+  config.vm.provider "virtualbox" do |vb|
+    vb.cpus = Integer(ENV.fetch("AIPLANE_VM_CPUS", "4"))
+    vb.memory = Integer(ENV.fetch("AIPLANE_VM_MEMORY_MB", "8192"))
+  end
+
+  config.vm.provision "shell", inline: <<-SHELL
+    set -eu
+    sudo apt-get update
+    sudo apt-get install -y curl git python3 python3-venv openssh-client
+  SHELL
+end
+"""
+    if name == "packer":
+        return "aiplane.pkr.hcl", """packer {
+  required_plugins {
+    virtualbox = {
+      version = ">= 1.0.0"
+      source  = "github.com/hashicorp/virtualbox"
+    }
+  }
+}
+
+variable "vm_name" {
+  type    = string
+  default = "aiplane-ubuntu-dev"
+}
+
+source "virtualbox-iso" "ubuntu" {
+  vm_name       = var.vm_name
+  guest_os_type = "Ubuntu_64"
+  # Fill in ISO URL/checksum or replace this builder with azure-arm, amazon-ebs, googlecompute, etc.
+  iso_url       = "file:///path/to/ubuntu.iso"
+  iso_checksum  = "sha256:replace-me"
+  ssh_username  = "ubuntu"
+  ssh_password  = "ubuntu"
+  shutdown_command = "echo 'ubuntu' | sudo -S shutdown -P now"
+}
+
+build {
+  sources = ["source.virtualbox-iso.ubuntu"]
+
+  provisioner "shell" {
+    inline = [
+      "sudo apt-get update",
+      "sudo apt-get install -y curl git python3 python3-venv openssh-client",
+    ]
+  }
+}
+"""
+    if name in {"opentofu", "terraform"}:
+        binary = "tofu" if name == "opentofu" else "terraform"
+        return "main.tf", f"""# Generated starter {name} module from aiplane.
+# Fill in the provider and resources for your target cloud before running {binary} apply.
+
+terraform {{
+  required_version = ">= 1.6.0"
+  required_providers {{
+    # Example:
+    # azurerm = {{
+    #   source  = "hashicorp/azurerm"
+    #   version = "~> 4.0"
+    # }}
+  }}
+}}
+
+variable "name" {{
+  type    = string
+  default = "aiplane-runtime"
+}}
+
+variable "region" {{
+  type    = string
+  default = "uksouth"
+}}
+
+# Add provider blocks and VM/container/Kubernetes resources here.
+# Keep {binary} plan in review before any {binary} apply.
+"""
+    if name == "pulumi":
+        return "__main__.py", '"""Generated starter Pulumi program from aiplane.\n\nInstall the provider package you need, configure credentials, then add resources.\nFor Azure, for example, use pulumi-azure-native and `pulumi config set azure-native:location uksouth`.\n"""\n\nimport pulumi\n\nname = pulumi.Config().get("name") or "aiplane-runtime"\nregion = pulumi.Config().get("region") or "uksouth"\n\npulumi.export("name", name)\npulumi.export("region", region)\n# Add cloud resources here using the provider package selected by your team.\n'
+    if name == "devcontainer-cli":
+        return ".devcontainer/devcontainer.json", """{
+  "name": "aiplane-dev",
+  "image": "python:3.13-slim",
+  "workspaceFolder": "/workspace",
+  "features": {},
+  "postCreateCommand": "python -m pip install -e .",
+  "customizations": {
+    "vscode": {
+      "extensions": []
+    }
+  }
+}
+"""
+    if name == "ansible":
+        return "playbook.yml", """---
+- name: Prepare aiplane runtime host
+  hosts: aiplane_hosts
+  become: true
+  tasks:
+    - name: Install baseline packages
+      ansible.builtin.apt:
+        name:
+          - curl
+          - git
+          - python3
+          - python3-venv
+          - openssh-client
+        update_cache: true
+      when: ansible_os_family == "Debian"
+
+    - name: Show next manual runtime step
+      ansible.builtin.debug:
+        msg: "Run aiplane environment doctor and aiplane runtimes prerequisites on this host before starting runtimes."
+"""
+    raise ValueError(f"tool export is not available for {name}")
 
 
 def _runtime_prerequisite_rows(profile: Profile, include_optional: bool) -> list[dict[str, object]]:

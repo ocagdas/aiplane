@@ -113,6 +113,51 @@ providers:
     protocol: python_library
     enabled: false
     notes: Hugging Face Diffusers Python runtime for image/video/audio pipelines.
+  openai:
+    ownership: managed_service
+    access:
+      kind: hosted_api
+    substrate: managed_service
+    runtime: openai
+    protocol: openai_compatible
+    endpoint: 'https://api.openai.com/v1'
+    api_key_env: OPENAI_API_KEY
+    enabled: false
+    notes: Enable after setting OPENAI_API_KEY and choosing approved model aliases.
+  anthropic:
+    ownership: managed_service
+    access:
+      kind: hosted_api
+    substrate: managed_service
+    runtime: anthropic
+    protocol: anthropic_api
+    endpoint: 'https://api.anthropic.com'
+    api_key_env: ANTHROPIC_API_KEY
+    enabled: false
+    notes: Enable after setting ANTHROPIC_API_KEY; direct Anthropic exports are target-tool specific.
+  azure_openai:
+    ownership: managed_service
+    access:
+      kind: hosted_api
+    substrate: azure
+    runtime: azure_openai
+    protocol: azure_openai
+    endpoint: ''
+    api_version: '2024-02-01'
+    api_key_env: AZURE_OPENAI_API_KEY
+    enabled: false
+    notes: Set endpoint to your Azure OpenAI resource URL, for example https://NAME.openai.azure.com, and use deployment names as model ids.
+  ollama_cloud:
+    ownership: managed_service
+    access:
+      kind: hosted_api
+    substrate: managed_service
+    runtime: ollama_cloud
+    protocol: ollama_api
+    endpoint: 'https://ollama.com'
+    api_key_env: OLLAMA_API_KEY
+    enabled: false
+    notes: Hosted Ollama-style endpoint; enable only when configured for your account.
 models:
   qwen-tiny:
     provider: ollama
@@ -529,3 +574,70 @@ models:
     min_ram_gb: 8
     recommended_ram_gb: 16
     min_vram_gb: 0
+
+  openai-gpt-4o-mini:
+    provider: openai
+    model: gpt-4o-mini
+    roles: [chat, analysis, generation]
+    local: false
+    enabled: false
+    api_key_env: OPENAI_API_KEY
+    notes: Managed OpenAI example; enable only after policy approval and key configuration.
+    capability_scores:
+      code_analysis: 3
+      code_generation: 3
+      code_completion: 1
+      debugging_refactor: 3
+      reasoning: 3
+      math: 2
+      tool_use: 3
+      general_chat: 4
+      embedding: 0
+      vision_image_understanding: 2
+      image_generation: 0
+      audio: 0
+      video: 0
+  azure-openai-chat-deployment:
+    provider: azure_openai
+    model: your-chat-deployment-name
+    roles: [chat, analysis, generation]
+    local: false
+    enabled: false
+    api_key_env: AZURE_OPENAI_API_KEY
+    notes: Azure OpenAI example; model is the deployment name, not necessarily the base model name.
+    capability_scores:
+      code_analysis: 3
+      code_generation: 3
+      code_completion: 1
+      debugging_refactor: 3
+      reasoning: 3
+      math: 2
+      tool_use: 3
+      general_chat: 4
+      embedding: 0
+      vision_image_understanding: 2
+      image_generation: 0
+      audio: 0
+      video: 0
+  anthropic-claude-example:
+    provider: anthropic
+    model: claude-sonnet-example
+    roles: [chat, analysis, generation]
+    local: false
+    enabled: false
+    api_key_env: ANTHROPIC_API_KEY
+    notes: Managed Anthropic example; use target-tool native Anthropic settings until aiplane has a dedicated exporter.
+    capability_scores:
+      code_analysis: 4
+      code_generation: 3
+      code_completion: 1
+      debugging_refactor: 4
+      reasoning: 4
+      math: 3
+      tool_use: 3
+      general_chat: 4
+      embedding: 0
+      vision_image_understanding: 2
+      image_generation: 0
+      audio: 0
+      video: 0

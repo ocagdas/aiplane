@@ -8,6 +8,7 @@ from typing import Any, Callable
 
 from .backends import BackendResult, OllamaBackend, OpenAICompatibleBackend
 from .models import Profile
+from .secrets import CredentialStore
 
 
 GENERATED_MODELS_FILE = "models.generated.yaml"
@@ -623,9 +624,13 @@ class ModelCatalog:
         endpoint = str(provider.get("endpoint", "http://localhost:11434" if provider_name == "ollama" else "https://ollama.com"))
         timeout = int(provider.get("timeout_seconds", 60))
         headers = {}
+        credential_ref = str(provider.get("credential_ref") or "")
+        api_key = CredentialStore().api_key(credential_ref) if credential_ref else None
         key_env = provider.get("api_key_env")
-        if key_env and os.environ.get(str(key_env)):
-            headers["Authorization"] = "Bearer " + os.environ[str(key_env)]
+        if not api_key and key_env and os.environ.get(str(key_env)):
+            api_key = os.environ[str(key_env)]
+        if api_key:
+            headers["Authorization"] = "Bearer " + api_key
         return OllamaBackend(endpoint, timeout, headers)
 
     def _openai_compatible_backend(self, provider_name: str) -> OpenAICompatibleBackend:
@@ -633,9 +638,13 @@ class ModelCatalog:
         endpoint = self._openai_compatible_endpoint(provider_name, provider)
         timeout = int(provider.get("timeout_seconds", 60))
         headers = {}
+        credential_ref = str(provider.get("credential_ref") or "")
+        api_key = CredentialStore().api_key(credential_ref) if credential_ref else None
         key_env = provider.get("api_key_env")
-        if key_env and os.environ.get(str(key_env)):
-            headers["Authorization"] = "Bearer " + os.environ[str(key_env)]
+        if not api_key and key_env and os.environ.get(str(key_env)):
+            api_key = os.environ[str(key_env)]
+        if api_key:
+            headers["Authorization"] = "Bearer " + api_key
         return OpenAICompatibleBackend(endpoint, timeout, headers)
 
     def _openai_compatible_endpoint(self, provider_name: str, provider: dict[str, Any] | None = None) -> str:
@@ -681,8 +690,11 @@ class ModelCatalog:
                 return ModelStatus(name, provider_name, True, False, str(exc))
             return ModelStatus(name, provider_name, True, pulled, "model is pulled" if pulled else f"model is not pulled: ollama pull {model_id}")
         if self._is_openai_compatible(provider_name):
+            credential_ref = str(model.get("credential_ref") or provider.get("credential_ref") or "")
             key_env = provider.get("api_key_env")
-            if key_env and not os.environ.get(str(key_env)):
+            if credential_ref and not CredentialStore().api_key(credential_ref):
+                return ModelStatus(name, provider_name, True, False, f"missing credential {credential_ref}")
+            if not credential_ref and key_env and not os.environ.get(str(key_env)):
                 return ModelStatus(name, provider_name, True, False, f"missing env var {key_env}")
             if not bool(provider.get("enabled", True)):
                 return ModelStatus(name, provider_name, True, False, "provider is disabled")
@@ -697,6 +709,10 @@ class ModelCatalog:
                 return ModelStatus(name, provider_name, True, False, str(exc))
             usable = not available or model_id in available
             return ModelStatus(name, provider_name, True, usable, "model is available" if usable else f"model was not listed by provider: {model_id}")
+        credential_ref = str(model.get("credential_ref") or provider.get("credential_ref") or "")
+        if credential_ref:
+            present = bool(CredentialStore().api_key(credential_ref))
+            return ModelStatus(name, provider_name, True, present, f"credential {credential_ref} is present" if present else f"missing credential {credential_ref}")
         key_env = provider.get("api_key_env")
         if key_env:
             present = bool(os.environ.get(str(key_env)))
@@ -934,7 +950,7 @@ def model_source(model: dict[str, Any]) -> str:
     if provider in {"llamacpp", "localai"} or model_id.endswith(".gguf"):
         return "huggingface_gguf"
     if provider in {"openai", "anthropic", "azure_openai"}:
-        return "managed_catalog"
+        return provider
     return provider or "unknown"
 
 

@@ -8,6 +8,14 @@
 # when set, otherwise the repo-local profiles/ directory.
 profiles_dir: null
 
+# Optional root for generated agent application artifacts. If null, aiplane uses
+# AIPLANE_AGENT_ARTIFACTS_DIR when set, otherwise .aiplane/agents.
+agent_artifacts_dir: null
+
+# Optional local credentials file. If null, aiplane uses AIPLANE_CREDENTIALS
+# when set, otherwise .aiplane/credentials.yaml. This file is ignored by git.
+credentials_path: null
+
 # Reserved for future defaults. Current commands still default to local-dev unless
 # --profile is passed explicitly.
 default_profile: local-dev

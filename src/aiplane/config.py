@@ -25,13 +25,17 @@ def project_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
+def default_local_config_path() -> Path:
+    return project_root() / ".aiplane" / "config.yaml"
+
+
 def local_config_path(path: Path | str | None = None) -> Path:
     if path is not None:
         return Path(path).expanduser().resolve()
     env_path = os.environ.get("AIPLANE_CONFIG")
     if env_path:
         return Path(env_path).expanduser().resolve()
-    return project_root() / ".aiplane" / "config.yaml"
+    return default_local_config_path()
 
 
 def config_templates_root() -> Path:
@@ -67,11 +71,11 @@ def init_local_config(template: str = "local", path: Path | str | None = None, o
 
 
 
-def default_profile() -> str:
+def default_profile(path: Path | str | None = None) -> str:
     env_value = os.environ.get("AIPLANE_PROFILE")
     if env_value:
         return env_value
-    configured = load_local_config().get("default_profile")
+    configured = load_local_config(path).get("default_profile")
     return str(configured or "local-dev")
 
 
@@ -99,18 +103,36 @@ def set_local_config_value(key: str, value: Any, path: Path | str | None = None)
     return config_path
 
 
-def profiles_root(path: Path | str | None = None) -> Path:
+def agent_artifacts_root(path: Path | str | None = None, config_path: Path | str | None = None) -> Path:
+    if path is not None:
+        return Path(path).expanduser().resolve()
+    env_path = os.environ.get("AIPLANE_AGENT_ARTIFACTS_DIR")
+    if env_path:
+        return Path(env_path).expanduser().resolve()
+    resolved_config_path = local_config_path(config_path)
+    if resolved_config_path.exists():
+        configured = load_local_config(resolved_config_path).get("agent_artifacts_dir")
+        if configured:
+            return Path(str(configured)).expanduser().resolve()
+    return project_root() / ".aiplane" / "agents"
+
+
+def default_profiles_root() -> Path:
+    return project_root() / "profiles"
+
+
+def profiles_root(path: Path | str | None = None, config_path: Path | str | None = None) -> Path:
     if path is not None:
         return Path(path).expanduser().resolve()
     env_path = os.environ.get("AIPLANE_PROFILES_DIR")
     if env_path:
         return Path(env_path).expanduser().resolve()
-    config_path = local_config_path()
-    if config_path.exists():
-        configured = load_local_config(config_path).get("profiles_dir")
+    resolved_config_path = local_config_path(config_path)
+    if resolved_config_path.exists():
+        configured = load_local_config(resolved_config_path).get("profiles_dir")
         if configured:
             return Path(str(configured)).expanduser().resolve()
-    return project_root() / "profiles"
+    return default_profiles_root()
 
 
 def profile_templates_root() -> Path:

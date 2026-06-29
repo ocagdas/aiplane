@@ -23,3 +23,28 @@ piper_voices:
   typical_runtimes: [piper]
   enabled: true
   origin: default
+
+openai:
+  description: OpenAI hosted model catalog and deployments
+  typical_runtimes: [openai]
+  online_adapter: profile_catalog
+  enabled: true
+  origin: default
+anthropic:
+  description: Anthropic hosted model catalog
+  typical_runtimes: [anthropic]
+  online_adapter: profile_catalog
+  enabled: true
+  origin: default
+azure_openai:
+  description: Azure OpenAI deployments in a configured Azure OpenAI resource
+  typical_runtimes: [azure_openai]
+  online_adapter: azure_openai
+  enabled: true
+  origin: default
+ollama_cloud:
+  description: Ollama Cloud hosted catalog and endpoints
+  typical_runtimes: [ollama_cloud]
+  online_adapter: profile_catalog
+  enabled: true
+  origin: default
