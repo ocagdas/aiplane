@@ -3209,47 +3209,56 @@ class MvpTests(unittest.TestCase):
             self.assertIn("model: managed-chat-model", stdout.getvalue())
 
     def test_agents_plan_and_export_cli_print_scaffold(self) -> None:
-        stdout = StringIO()
-        with redirect_stdout(stdout):
-            code = cli_main(
-                [
-                    "agents",
-                    "plan",
-                    "repo-helper",
-                    "--framework",
-                    "langgraph",
-                    "--model",
-                    "local-analysis-small",
-                ]
-            )
-        self.assertEqual(code, 0)
-        payload = json.loads(stdout.getvalue())
-        self.assertEqual(payload["name"], "agent_plan")
-        self.assertEqual(payload["selection"]["model_alias"], "local-analysis-small")
-        self.assertIn("agent.py", payload["files"])
+        with tempfile.TemporaryDirectory() as tmp:
+            profiles_dir = Path(tmp) / "profiles"
+            create_profile("local-dev", profiles_dir=profiles_dir)
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = cli_main(
+                    [
+                        "--profiles-dir",
+                        str(profiles_dir),
+                        "agents",
+                        "plan",
+                        "repo-helper",
+                        "--framework",
+                        "langgraph",
+                        "--model",
+                        "local-analysis-small",
+                    ]
+                )
+            self.assertEqual(code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(payload["name"], "agent_plan")
+            self.assertEqual(payload["selection"]["model_alias"], "local-analysis-small")
+            self.assertIn("agent.py", payload["files"])
 
-        stdout = StringIO()
-        with redirect_stdout(stdout):
-            code = cli_main(
-                [
-                    "agents",
-                    "export",
-                    "repo-helper",
-                    "--framework",
-                    "simple-openai",
-                    "--model",
-                    "local-analysis-small",
-                    "--file",
-                    "agent.py",
-                ]
-            )
-        self.assertEqual(code, 0)
-        output = stdout.getvalue()
-        self.assertIn("from openai import OpenAI", output)
-        self.assertIn("provider-text-small:0.5b", output)
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = cli_main(
+                    [
+                        "--profiles-dir",
+                        str(profiles_dir),
+                        "agents",
+                        "export",
+                        "repo-helper",
+                        "--framework",
+                        "simple-openai",
+                        "--model",
+                        "local-analysis-small",
+                        "--file",
+                        "agent.py",
+                    ]
+                )
+            self.assertEqual(code, 0)
+            output = stdout.getvalue()
+            self.assertIn("from openai import OpenAI", output)
+            self.assertIn("provider-text-small:0.5b", output)
 
     def test_agent_artifacts_root_uses_env_config_and_cli_override(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
+            profiles_dir = Path(tmp) / "profiles"
+            create_profile("local-dev", profiles_dir=profiles_dir)
             config_path = Path(tmp) / "config.yaml"
             configured = Path(tmp) / "agents-config"
             config_path.write_text(f"agent_artifacts_dir: {configured}\n", encoding="utf-8")
@@ -3259,7 +3268,17 @@ class MvpTests(unittest.TestCase):
             try:
                 stdout = StringIO()
                 with redirect_stdout(stdout):
-                    code = cli_main(["agents", "plan", "demo", "--model", "local-analysis-small"])
+                    code = cli_main(
+                        [
+                            "--profiles-dir",
+                            str(profiles_dir),
+                            "agents",
+                            "plan",
+                            "demo",
+                            "--model",
+                            "local-analysis-small",
+                        ]
+                    )
                 self.assertEqual(code, 0)
                 payload = json.loads(stdout.getvalue())
                 self.assertEqual(payload["artifact_root"], str(configured.resolve()))
@@ -3268,7 +3287,17 @@ class MvpTests(unittest.TestCase):
                 os.environ["AIPLANE_AGENT_ARTIFACTS_DIR"] = str(env_root)
                 stdout = StringIO()
                 with redirect_stdout(stdout):
-                    code = cli_main(["agents", "plan", "demo", "--model", "local-analysis-small"])
+                    code = cli_main(
+                        [
+                            "--profiles-dir",
+                            str(profiles_dir),
+                            "agents",
+                            "plan",
+                            "demo",
+                            "--model",
+                            "local-analysis-small",
+                        ]
+                    )
                 self.assertEqual(code, 0)
                 payload = json.loads(stdout.getvalue())
                 self.assertEqual(payload["artifact_root"], str(env_root.resolve()))
@@ -3278,6 +3307,8 @@ class MvpTests(unittest.TestCase):
                 with redirect_stdout(stdout):
                     code = cli_main(
                         [
+                            "--profiles-dir",
+                            str(profiles_dir),
                             "agents",
                             "plan",
                             "demo",
