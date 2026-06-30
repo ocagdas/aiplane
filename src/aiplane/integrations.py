@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import subprocess
 from pathlib import Path
 from dataclasses import dataclass
@@ -116,7 +115,11 @@ class IntegrationManager:
                 api_key_env=api_key_env,
             )
             return self._continue_export_from_plan(plan)
-        if tool not in {"continue", *MCP_EXPORT_TOOLS} and not model_name and (provider or runtime or capabilities or select_best):
+        if (
+            tool not in {"continue", *MCP_EXPORT_TOOLS}
+            and not model_name
+            and (provider or runtime or capabilities or select_best)
+        ):
             plan = self.plan(
                 tool,
                 provider=provider,
@@ -208,14 +211,32 @@ class IntegrationManager:
             for role in roles:
                 alias = overrides.get(role)
                 if alias:
-                    row = self._selection_row(role, alias, "manual override", endpoint=endpoint, api_key_env=api_key_env, runtime_constraint=runtime)
+                    row = self._selection_row(
+                        role,
+                        alias,
+                        "manual override",
+                        endpoint=endpoint,
+                        api_key_env=api_key_env,
+                        runtime_constraint=runtime,
+                    )
                 elif select_best or provider or runtime or capabilities:
                     row = self._best_model_for_role(role, constraints, endpoint=endpoint, api_key_env=api_key_env)
                 else:
                     default_role = f"{role}_model"
-                    fallback = {"chat": ("code_model", "self_managed_model"), "autocomplete": ("completion_model", "code_model"), "embedding": ()}[role]
+                    fallback = {
+                        "chat": ("code_model", "self_managed_model"),
+                        "autocomplete": ("completion_model", "code_model"),
+                        "embedding": (),
+                    }[role]
                     alias = self._default_model_name(default_role, *fallback)
-                    row = self._selection_row(role, alias, f"profile default {default_role}", endpoint=endpoint, api_key_env=api_key_env, runtime_constraint=runtime)
+                    row = self._selection_row(
+                        role,
+                        alias,
+                        f"profile default {default_role}",
+                        endpoint=endpoint,
+                        api_key_env=api_key_env,
+                        runtime_constraint=runtime,
+                    )
                 selection[role] = row
         else:
             if tool not in {"cline", "zed", "aider", "openai-compatible"}:
@@ -223,12 +244,26 @@ class IntegrationManager:
             if any(overrides.values()):
                 raise ValueError("--chat, --autocomplete, and --embedding are only meaningful for Continue planning")
             if model_name:
-                row = self._selection_row("chat", model_name, "manual model override", endpoint=endpoint, api_key_env=api_key_env, runtime_constraint=runtime)
+                row = self._selection_row(
+                    "chat",
+                    model_name,
+                    "manual model override",
+                    endpoint=endpoint,
+                    api_key_env=api_key_env,
+                    runtime_constraint=runtime,
+                )
             elif select_best or provider or runtime or capabilities:
                 row = self._best_model_for_role("chat", constraints, endpoint=endpoint, api_key_env=api_key_env)
             else:
                 alias = self._default_model_name("chat_model", "code_model", "self_managed_model")
-                row = self._selection_row("chat", alias, "profile default chat_model", endpoint=endpoint, api_key_env=api_key_env, runtime_constraint=runtime)
+                row = self._selection_row(
+                    "chat",
+                    alias,
+                    "profile default chat_model",
+                    endpoint=endpoint,
+                    api_key_env=api_key_env,
+                    runtime_constraint=runtime,
+                )
             selection["primary"] = row
         return {
             "name": "integration_plan",
@@ -262,23 +297,68 @@ class IntegrationManager:
         yes: bool = False,
     ) -> dict[str, Any]:
         if not dry_run and not yes:
-            raise PermissionError("integration setup changes runtimes/models; pass --dry-run to preview without executing")
-        plan = self.plan(tool, model_name=model_name, provider=provider, runtime=runtime, capabilities=capabilities or [], select_best=select_best, chat=chat, autocomplete=autocomplete, embedding=embedding, endpoint=endpoint, api_key_env=api_key_env)
+            raise PermissionError(
+                "integration setup changes runtimes/models; pass --dry-run to preview without executing"
+            )
+        plan = self.plan(
+            tool,
+            model_name=model_name,
+            provider=provider,
+            runtime=runtime,
+            capabilities=capabilities or [],
+            select_best=select_best,
+            chat=chat,
+            autocomplete=autocomplete,
+            embedding=embedding,
+            endpoint=endpoint,
+            api_key_env=api_key_env,
+        )
         actions = []
         seen_start: set[str] = set()
         runtime_catalog = RuntimeCatalog(self.profile)
         for role, selected in plan["selection"].items():
             runtime_name = str(selected.get("runtime") or "")
             model_name = str(selected.get("name") or "")
-            status = runtime_catalog.runtime_available(runtime_name) if runtime_name else {"available": False, "reason": "no runtime selected"}
+            status = (
+                runtime_catalog.runtime_available(runtime_name)
+                if runtime_name
+                else {"available": False, "reason": "no runtime selected"}
+            )
             if runtime_name and runtime_name not in seen_start and not bool(status.get("available")):
-                actions.append(self._setup_action(runtime_name, "start", model_name, dry_run=dry_run, execute=not dry_run and yes, reason=status.get("reason")))
+                actions.append(
+                    self._setup_action(
+                        runtime_name,
+                        "start",
+                        model_name,
+                        dry_run=dry_run,
+                        execute=not dry_run and yes,
+                        reason=status.get("reason"),
+                    )
+                )
                 seen_start.add(runtime_name)
             model_status = self._model_presence(model_name)
             if not model_status["available"] and runtime_name:
-                actions.append(self._setup_action(runtime_name, "pull", model_name, dry_run=dry_run, execute=not dry_run and yes, reason=model_status["reason"]))
+                actions.append(
+                    self._setup_action(
+                        runtime_name,
+                        "pull",
+                        model_name,
+                        dry_run=dry_run,
+                        execute=not dry_run and yes,
+                        reason=model_status["reason"],
+                    )
+                )
             else:
-                actions.append({"role": role, "runtime": runtime_name, "model": model_name, "action": "check_model", "status": "ok", **model_status})
+                actions.append(
+                    {
+                        "role": role,
+                        "runtime": runtime_name,
+                        "model": model_name,
+                        "action": "check_model",
+                        "status": "ok",
+                        **model_status,
+                    }
+                )
         return {
             "name": "integration_setup",
             "tool": tool,
@@ -323,7 +403,9 @@ class IntegrationManager:
                 return name
         raise ValueError("no enabled model is configured in the selected profile")
 
-    def _model_ref_for_role(self, role: str, fallback_roles: tuple[str, ...]) -> tuple[str, dict[str, Any], str, str, str]:
+    def _model_ref_for_role(
+        self, role: str, fallback_roles: tuple[str, ...]
+    ) -> tuple[str, dict[str, Any], str, str, str]:
         name = self._default_model_name(role, *fallback_roles)
         model = self.catalog.get(name)
         provider_name = str(model.get("provider"))
@@ -331,7 +413,13 @@ class IntegrationManager:
         api_key_env = self._api_key_env_for(model, provider_name)
         return name, model, provider_name, endpoint, api_key_env
 
-    def _best_model_for_role(self, role: str, constraints: dict[str, Any], endpoint: str | None = None, api_key_env: str | None = None) -> dict[str, Any]:
+    def _best_model_for_role(
+        self,
+        role: str,
+        constraints: dict[str, Any],
+        endpoint: str | None = None,
+        api_key_env: str | None = None,
+    ) -> dict[str, Any]:
         required_caps = dict(constraints.get("capabilities") or {})
         for capability in ROLE_CAPABILITY_MAP.get(role, []):
             required_caps.setdefault(capability, 1)
@@ -349,21 +437,42 @@ class IntegrationManager:
         if not rows:
             raise ValueError(f"no enabled model matches role {role!r} and constraints")
         selected = max(rows, key=lambda row: (self._role_score(role, row), row.get("name", "")))
-        return self._selection_row(role, str(selected["name"]), "best catalog match for role/capability constraints", endpoint=endpoint, api_key_env=api_key_env, runtime_constraint=constraints.get("runtime"))
+        return self._selection_row(
+            role,
+            str(selected["name"]),
+            "best catalog match for role/capability constraints",
+            endpoint=endpoint,
+            api_key_env=api_key_env,
+            runtime_constraint=constraints.get("runtime"),
+        )
 
-    def _selection_row(self, role: str, model_name: str, reason: str, endpoint: str | None = None, api_key_env: str | None = None, runtime_constraint: str | None = None) -> dict[str, Any]:
+    def _selection_row(
+        self,
+        role: str,
+        model_name: str,
+        reason: str,
+        endpoint: str | None = None,
+        api_key_env: str | None = None,
+        runtime_constraint: str | None = None,
+    ) -> dict[str, Any]:
         model = self.catalog.get(model_name)
         runtime_catalog = RuntimeCatalog(self.profile)
         supported = runtime_catalog.supported_runtimes(model_name)
         if runtime_constraint:
             if runtime_constraint not in supported:
-                raise ValueError(f"runtime {runtime_constraint!r} is not supported by model {model_name!r}; supported: {', '.join(supported) or 'none'}")
+                raise ValueError(
+                    f"runtime {runtime_constraint!r} is not supported by model {model_name!r}; supported: {', '.join(supported) or 'none'}"
+                )
             runtime_name = runtime_constraint
         else:
             selected_runtime = runtime_catalog.select_runtime(model_name)
-            runtime_name = str(selected_runtime.get("selected") or model.get("preferred_runtime") or model.get("provider") or "")
+            runtime_name = str(
+                selected_runtime.get("selected") or model.get("preferred_runtime") or model.get("provider") or ""
+            )
         provider_name = str(model.get("provider") or "")
-        endpoint_value = endpoint or self._endpoint_for_provider(runtime_name if runtime_name in self.catalog.providers() else provider_name)
+        endpoint_value = endpoint or self._endpoint_for_provider(
+            runtime_name if runtime_name in self.catalog.providers() else provider_name
+        )
         api_key_value = api_key_env or self._api_key_env_for(model, provider_name)
         capabilities = self.catalog.show(model_name)["capabilities"]
         return {
@@ -393,19 +502,71 @@ class IntegrationManager:
         status = statuses.get(model_name)
         if status is None:
             return {"available": False, "reason": "model is not configured"}
-        return {"available": bool(status.usable), "reason": status.reason, "provider": status.provider}
+        return {
+            "available": bool(status.usable),
+            "reason": status.reason,
+            "provider": status.provider,
+        }
 
-    def _setup_action(self, runtime: str, action: str, model_name: str, dry_run: bool, execute: bool, reason: object = None) -> dict[str, Any]:
+    def _setup_action(
+        self,
+        runtime: str,
+        action: str,
+        model_name: str,
+        dry_run: bool,
+        execute: bool,
+        reason: object = None,
+    ) -> dict[str, Any]:
         helper = Path(__file__).resolve().parents[2] / "scripts" / "provider_helper.sh"
-        command = ["scripts/provider_helper.sh", "--provider", runtime, "--action", action, "--profile", self.profile.name, "--model", model_name]
-        exec_command = [str(helper), "--provider", runtime, "--action", action, "--profile", self.profile.name, "--model", model_name]
+        command = [
+            "scripts/provider_helper.sh",
+            "--provider",
+            runtime,
+            "--action",
+            action,
+            "--profile",
+            self.profile.name,
+            "--model",
+            model_name,
+        ]
+        exec_command = [
+            str(helper),
+            "--provider",
+            runtime,
+            "--action",
+            action,
+            "--profile",
+            self.profile.name,
+            "--model",
+            model_name,
+        ]
         if dry_run:
             command.append("--dry-run")
             exec_command.append("--dry-run")
-        row: dict[str, Any] = {"runtime": runtime, "model": model_name, "action": action, "reason": reason, "command": command, "status": "planned" if dry_run else "pending"}
+        row: dict[str, Any] = {
+            "runtime": runtime,
+            "model": model_name,
+            "action": action,
+            "reason": reason,
+            "command": command,
+            "status": "planned" if dry_run else "pending",
+        }
         if execute:
-            completed = subprocess.run(exec_command, cwd=self.profile.workspace, text=True, capture_output=True, check=False)
-            row.update({"status": "succeeded" if completed.returncode == 0 else "failed", "returncode": completed.returncode, "stdout": completed.stdout, "stderr": completed.stderr})
+            completed = subprocess.run(
+                exec_command,
+                cwd=self.profile.workspace,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            row.update(
+                {
+                    "status": "succeeded" if completed.returncode == 0 else "failed",
+                    "returncode": completed.returncode,
+                    "stdout": completed.stdout,
+                    "stderr": completed.stderr,
+                }
+            )
         return row
 
     def chat_command(self, model_name: str | None = None) -> list[str]:
@@ -457,7 +618,9 @@ class IntegrationManager:
 
         def api_key(row: dict[str, Any]) -> str:
             key_env = str(row.get("api_key_env") or "")
-            return "ollama" if row.get("provider") == "ollama" and not key_env else "${" + key_env + "}" if key_env else ""
+            return (
+                "ollama" if row.get("provider") == "ollama" and not key_env else "${" + key_env + "}" if key_env else ""
+            )
 
         chat = selection["chat"]
         completion = selection["autocomplete"]
@@ -499,9 +662,23 @@ class IntegrationManager:
         return IntegrationExport("continue", "profile-defaults", "mixed", "planned endpoints", yaml, notes)
 
     def _continue_bundle_export(self, endpoint: str | None = None, api_key_env: str | None = None) -> IntegrationExport:
-        chat_name, chat_model, chat_provider, chat_endpoint, chat_key_env = self._model_ref_for_role("chat_model", ("code_model", "self_managed_model"))
-        completion_name, completion_model, completion_provider, completion_endpoint, completion_key_env = self._model_ref_for_role("autocomplete_model", ("completion_model", "code_model"))
-        embedding_name, embedding_model, embedding_provider, embedding_endpoint, embedding_key_env = self._model_ref_for_role("embedding_model", ())
+        chat_name, chat_model, chat_provider, chat_endpoint, chat_key_env = self._model_ref_for_role(
+            "chat_model", ("code_model", "self_managed_model")
+        )
+        (
+            completion_name,
+            completion_model,
+            completion_provider,
+            completion_endpoint,
+            completion_key_env,
+        ) = self._model_ref_for_role("autocomplete_model", ("completion_model", "code_model"))
+        (
+            embedding_name,
+            embedding_model,
+            embedding_provider,
+            embedding_endpoint,
+            embedding_key_env,
+        ) = self._model_ref_for_role("embedding_model", ())
         if endpoint:
             chat_endpoint = completion_endpoint = embedding_endpoint = endpoint
         if api_key_env is not None:
@@ -544,10 +721,30 @@ class IntegrationManager:
             "Paste/merge the YAML into your Continue config. It does not install Continue or edit files.",
             "For Ollama, make sure the service is running and the selected models are pulled.",
         ]
-        return IntegrationExport("continue", "profile-defaults", "mixed", endpoint or "profile endpoints", yaml, notes)
+        return IntegrationExport(
+            "continue",
+            "profile-defaults",
+            "mixed",
+            endpoint or "profile endpoints",
+            yaml,
+            notes,
+        )
 
-    def _continue_export(self, model_name: str, model: dict[str, Any], provider_name: str, endpoint: str, api_key_env: str) -> IntegrationExport:
-        api_key = "ollama" if provider_name == "ollama" and not api_key_env else "${" + api_key_env + "}" if api_key_env else ""
+    def _continue_export(
+        self,
+        model_name: str,
+        model: dict[str, Any],
+        provider_name: str,
+        endpoint: str,
+        api_key_env: str,
+    ) -> IntegrationExport:
+        api_key = (
+            "ollama"
+            if provider_name == "ollama" and not api_key_env
+            else "${" + api_key_env + "}"
+            if api_key_env
+            else ""
+        )
         yaml = (
             "models:\n"
             f"  - name: {model_name}\n"
@@ -579,7 +776,9 @@ class IntegrationManager:
                 }
             }
             content = json_dumps(payload, indent=2)
-            notes = ["Use this in .vscode/mcp.json or another VS Code MCP client config that accepts the servers shape."]
+            notes = [
+                "Use this in .vscode/mcp.json or another VS Code MCP client config that accepts the servers shape."
+            ]
         elif tool == "continue-mcp":
             content = (
                 "name: aiplane\n"
@@ -593,7 +792,9 @@ class IntegrationManager:
                 "      - mcp\n"
                 "      - serve\n"
             )
-            notes = ["Use this in Continue's MCP/server config area. This is separate from Continue model endpoint config."]
+            notes = [
+                "Use this in Continue's MCP/server config area. This is separate from Continue model endpoint config."
+            ]
         else:
             payload = {
                 "mcpServers": {
@@ -607,12 +808,20 @@ class IntegrationManager:
             notes = ["Use this with MCP clients that accept the common mcpServers JSON shape."]
             if tool == "cline-mcp":
                 notes.append("Cline versions differ; map this into the MCP server settings for your installed version.")
-        notes.append("The MCP server lets clients query aiplane configuration and guarded tools; it is not the model inference endpoint.")
+        notes.append(
+            "The MCP server lets clients query aiplane configuration and guarded tools; it is not the model inference endpoint."
+        )
         notes.append("Profile selection uses the normal aiplane default rules unless you add --profile to the args.")
         return IntegrationExport(tool, "mcp", "aiplane", "stdio", content, notes)
 
-
-    def _cline_export(self, model_name: str, model: dict[str, Any], provider_name: str, endpoint: str, api_key_env: str) -> IntegrationExport:
+    def _cline_export(
+        self,
+        model_name: str,
+        model: dict[str, Any],
+        provider_name: str,
+        endpoint: str,
+        api_key_env: str,
+    ) -> IntegrationExport:
         payload = {
             "name": model_name,
             "provider": "openai-compatible",
@@ -624,9 +833,23 @@ class IntegrationManager:
             "Use this as the provider/model values in Cline where OpenAI-compatible providers are supported.",
             "The exact settings location can vary by Cline version and client surface.",
         ]
-        return IntegrationExport("cline", model_name, provider_name, endpoint, json_dumps(payload, indent=2), notes)
+        return IntegrationExport(
+            "cline",
+            model_name,
+            provider_name,
+            endpoint,
+            json_dumps(payload, indent=2),
+            notes,
+        )
 
-    def _zed_export(self, model_name: str, model: dict[str, Any], provider_name: str, endpoint: str, api_key_env: str) -> IntegrationExport:
+    def _zed_export(
+        self,
+        model_name: str,
+        model: dict[str, Any],
+        provider_name: str,
+        endpoint: str,
+        api_key_env: str,
+    ) -> IntegrationExport:
         payload = {
             "assistant": {
                 "provider": "openai-compatible",
@@ -642,9 +865,23 @@ class IntegrationManager:
             "Use this as a starting point for Zed assistant/provider settings.",
             "Prefer the generic OpenAI-compatible endpoint when the runtime is Ollama, vLLM, llama.cpp, LM Studio, TGI, or LocalAI.",
         ]
-        return IntegrationExport("zed", model_name, provider_name, endpoint, json_dumps(payload, indent=2), notes)
+        return IntegrationExport(
+            "zed",
+            model_name,
+            provider_name,
+            endpoint,
+            json_dumps(payload, indent=2),
+            notes,
+        )
 
-    def _aider_export(self, model_name: str, model: dict[str, Any], provider_name: str, endpoint: str, api_key_env: str) -> IntegrationExport:
+    def _aider_export(
+        self,
+        model_name: str,
+        model: dict[str, Any],
+        provider_name: str,
+        endpoint: str,
+        api_key_env: str,
+    ) -> IntegrationExport:
         key_value = f"${api_key_env}" if api_key_env else "dummy-local-key"
         content = (
             f"export OPENAI_API_BASE={endpoint}\n"
@@ -657,7 +894,14 @@ class IntegrationManager:
         ]
         return IntegrationExport("aider", model_name, provider_name, endpoint, content, notes)
 
-    def _openai_compatible_export(self, model_name: str, model: dict[str, Any], provider_name: str, endpoint: str, api_key_env: str) -> IntegrationExport:
+    def _openai_compatible_export(
+        self,
+        model_name: str,
+        model: dict[str, Any],
+        provider_name: str,
+        endpoint: str,
+        api_key_env: str,
+    ) -> IntegrationExport:
         payload = {
             "name": model_name,
             "provider": provider_name,
@@ -665,4 +909,11 @@ class IntegrationManager:
             "base_url": endpoint,
             "api_key_env": api_key_env or None,
         }
-        return IntegrationExport("openai-compatible", model_name, provider_name, endpoint, json_dumps(payload, indent=2), ["Generic OpenAI-compatible config payload."])
+        return IntegrationExport(
+            "openai-compatible",
+            model_name,
+            provider_name,
+            endpoint,
+            json_dumps(payload, indent=2),
+            ["Generic OpenAI-compatible config payload."],
+        )

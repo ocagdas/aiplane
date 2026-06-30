@@ -212,6 +212,14 @@ aiplane credentials list
 aiplane credentials show openai.personal
 ```
 
+Use provider connection tests to verify that a selected endpoint and credential can make a small provider-specific API call. The command reports whether the credential worked, the method used, and item counts, but it does not print the key or token:
+
+```bash
+aiplane providers test openai --credential-ref openai.personal
+aiplane providers test azure_openai --credential-ref azure_openai.business_a
+aiplane providers test elevenlabs
+```
+
 Profile/provider entries can then refer to credentials without embedding secret values:
 
 ```yaml

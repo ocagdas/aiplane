@@ -32,11 +32,11 @@ These restored docs are public-facing contributor context and intentionally avoi
 
 High-level implemented areas:
 
-- profiles, local config, ignored credential references, and validation;
+- profiles, local config, ignored credential references, provider credential tests, and validation;
 - environment planning/doctor checks for system Python, `venv`, Conda, and Docker;
 - provider/model catalogs, provider-only shipped profile config, ignored generated cache review, runtime/source mapping, local model defaults, and benchmark smoke checks;
 - hardware discovery, machine inventory, Azure SKU discovery/import, and stack planning;
-- tool doctors/plans/exports for infrastructure and automation tools;
+- tool doctors/plans/exports for infrastructure, quality, and automation tools;
 - integration exports for Continue, Cline, Zed, Aider, OpenAI-compatible clients, and MCP client snippets;
 - starter agent app planning/export;
 - MCP stdio server with read tools and narrow audited writes;
@@ -44,7 +44,7 @@ High-level implemented areas:
 
 Known in-progress areas:
 
-- richer managed-provider discovery;
+- richer managed-provider discovery and provider-specific live credential tests;
 - managed-service endpoint binding for stacks/orchestrator exports without mixing those models into self-managed runtime-fit checks;
 - agent-to-agent role metadata and config export for established orchestrator frameworks;
 - remote execution and Docker-aware stack lifecycle;

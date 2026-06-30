@@ -12,13 +12,21 @@ AGENT_FRAMEWORKS: dict[str, dict[str, Any]] = {
     "langgraph": {
         "description": "Small LangGraph-style stateful agent scaffold using an OpenAI-compatible chat endpoint.",
         "packages": ["langgraph", "langchain-openai"],
-        "good_for": ["reviewable state machines", "bounded tool loops", "human checkpoints"],
+        "good_for": [
+            "reviewable state machines",
+            "bounded tool loops",
+            "human checkpoints",
+        ],
         "files": ["agent.py", "requirements.txt", ".env.example"],
     },
     "simple-openai": {
         "description": "Minimal Python agent loop using the OpenAI-compatible API directly.",
         "packages": ["openai"],
-        "good_for": ["small CLI agents", "endpoint smoke tests", "framework-free prototypes"],
+        "good_for": [
+            "small CLI agents",
+            "endpoint smoke tests",
+            "framework-free prototypes",
+        ],
         "files": ["agent.py", "requirements.txt", ".env.example"],
     },
 }
@@ -44,8 +52,27 @@ class AgentManager:
     def templates(self) -> list[dict[str, Any]]:
         return [{"name": name, **spec} for name, spec in sorted(AGENT_FRAMEWORKS.items())]
 
-    def plan(self, name: str, framework: str = "langgraph", model: str | None = None, runtime: str | None = None, provider: str | None = None, endpoint: str | None = None, api_key_env: str | None = None, instruction: str | None = None, output_dir: str | None = None) -> dict[str, Any]:
-        selection = self._selection(name, framework, model=model, runtime=runtime, provider=provider, endpoint=endpoint, api_key_env=api_key_env)
+    def plan(
+        self,
+        name: str,
+        framework: str = "langgraph",
+        model: str | None = None,
+        runtime: str | None = None,
+        provider: str | None = None,
+        endpoint: str | None = None,
+        api_key_env: str | None = None,
+        instruction: str | None = None,
+        output_dir: str | None = None,
+    ) -> dict[str, Any]:
+        selection = self._selection(
+            name,
+            framework,
+            model=model,
+            runtime=runtime,
+            provider=provider,
+            endpoint=endpoint,
+            api_key_env=api_key_env,
+        )
         spec = AGENT_FRAMEWORKS[framework]
         root = agent_artifacts_root(output_dir)
         target_dir = root / name
@@ -57,7 +84,8 @@ class AgentManager:
             "artifact_root": str(root),
             "target_dir": str(target_dir),
             "selection": selection.__dict__,
-            "instruction": instruction or "You are a focused coding assistant. Keep answers concise and ask before destructive actions.",
+            "instruction": instruction
+            or "You are a focused coding assistant. Keep answers concise and ask before destructive actions.",
             "files": spec["files"],
             "packages": spec["packages"],
             "next_steps": [
@@ -74,13 +102,40 @@ class AgentManager:
             ],
         }
 
-    def export(self, name: str, framework: str = "langgraph", model: str | None = None, runtime: str | None = None, provider: str | None = None, endpoint: str | None = None, api_key_env: str | None = None, instruction: str | None = None, file: str = "agent.py", output_dir: str | None = None) -> dict[str, Any]:
+    def export(
+        self,
+        name: str,
+        framework: str = "langgraph",
+        model: str | None = None,
+        runtime: str | None = None,
+        provider: str | None = None,
+        endpoint: str | None = None,
+        api_key_env: str | None = None,
+        instruction: str | None = None,
+        file: str = "agent.py",
+        output_dir: str | None = None,
+    ) -> dict[str, Any]:
         if framework not in AGENT_FRAMEWORKS:
             raise ValueError(f"unknown agent framework: {framework}")
-        selection = self._selection(name, framework, model=model, runtime=runtime, provider=provider, endpoint=endpoint, api_key_env=api_key_env)
-        instruction = instruction or "You are a focused coding assistant. Keep answers concise and ask before destructive actions."
+        selection = self._selection(
+            name,
+            framework,
+            model=model,
+            runtime=runtime,
+            provider=provider,
+            endpoint=endpoint,
+            api_key_env=api_key_env,
+        )
+        instruction = (
+            instruction
+            or "You are a focused coding assistant. Keep answers concise and ask before destructive actions."
+        )
         if file == "agent.py":
-            content = _langgraph_agent(selection, instruction) if framework == "langgraph" else _simple_openai_agent(selection, instruction)
+            content = (
+                _langgraph_agent(selection, instruction)
+                if framework == "langgraph"
+                else _simple_openai_agent(selection, instruction)
+            )
         elif file == "requirements.txt":
             content = "\n".join(AGENT_FRAMEWORKS[framework]["packages"]) + "\n"
         elif file == ".env.example":
@@ -104,13 +159,32 @@ class AgentManager:
             ],
         }
 
-    def _selection(self, name: str, framework: str, model: str | None, runtime: str | None, provider: str | None, endpoint: str | None, api_key_env: str | None) -> AgentSelection:
+    def _selection(
+        self,
+        name: str,
+        framework: str,
+        model: str | None,
+        runtime: str | None,
+        provider: str | None,
+        endpoint: str | None,
+        api_key_env: str | None,
+    ) -> AgentSelection:
         if framework not in AGENT_FRAMEWORKS:
             raise ValueError(f"unknown agent framework: {framework}")
-        plan = self.integrations.plan("openai-compatible", model_name=model, provider=provider, runtime=runtime, select_best=model is None, endpoint=endpoint, api_key_env=api_key_env)
+        plan = self.integrations.plan(
+            "openai-compatible",
+            model_name=model,
+            provider=provider,
+            runtime=runtime,
+            select_best=model is None,
+            endpoint=endpoint,
+            api_key_env=api_key_env,
+        )
         row = plan["selection"]["primary"]
         if not row.get("endpoint"):
-            raise ValueError("selected model does not have an endpoint; pass --endpoint or configure the provider endpoint")
+            raise ValueError(
+                "selected model does not have an endpoint; pass --endpoint or configure the provider endpoint"
+            )
         return AgentSelection(
             name=name,
             framework=framework,
@@ -163,7 +237,7 @@ For local Ollama/OpenAI-compatible endpoints, a dummy API key is often accepted.
 
 def _simple_openai_agent(selection: AgentSelection, instruction: str) -> str:
     key_env = selection.api_key_env or "OPENAI_API_KEY"
-    return f'''from __future__ import annotations
+    return f"""from __future__ import annotations
 
 import os
 import sys
@@ -191,12 +265,12 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-'''
+"""
 
 
 def _langgraph_agent(selection: AgentSelection, instruction: str) -> str:
     key_env = selection.api_key_env or "OPENAI_API_KEY"
-    return f'''from __future__ import annotations
+    return f"""from __future__ import annotations
 
 import os
 import sys
@@ -242,4 +316,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-'''
+"""

@@ -61,7 +61,18 @@ class BenchmarkRunner:
         spec = load_benchmark_spec(spec_path) if spec_path else {"name": "builtin-smoke", "tasks": BENCHMARK_TASKS}
         tasks = _select_tasks(spec, task)
         model = self.catalog.show(model_name)
-        results = [self._run_task(model_name, model, task_name, task_spec, dry_run, environment_mode, timeout_seconds) for task_name, task_spec in tasks]
+        results = [
+            self._run_task(
+                model_name,
+                model,
+                task_name,
+                task_spec,
+                dry_run,
+                environment_mode,
+                timeout_seconds,
+            )
+            for task_name, task_spec in tasks
+        ]
         payload = {
             "name": str(spec.get("name") or "benchmark"),
             "created_at": datetime.now(timezone.utc).isoformat(),
@@ -115,11 +126,25 @@ class BenchmarkRunner:
         output_length = len(text)
         lower = text.lower()
         matched_terms = [term for term in expected_terms if term in lower] if not dry_run else []
-        evaluation = self._evaluate(task, prompt, text, evaluator, dry_run, environment_mode, timeout) if not error else {"type": "skipped", "passed": False, "score": 0, "reason": error}
+        evaluation = (
+            self._evaluate(task, prompt, text, evaluator, dry_run, environment_mode, timeout)
+            if not error
+            else {"type": "skipped", "passed": False, "score": 0, "reason": error}
+        )
         if not evaluator:
-            task_passed = None if dry_run else error is None and bool(text.strip()) and len(matched_terms) >= max(1, len(expected_terms) // 2)
+            task_passed = (
+                None
+                if dry_run
+                else error is None and bool(text.strip()) and len(matched_terms) >= max(1, len(expected_terms) // 2)
+            )
             score = _task_score(task_passed, elapsed_ms, output_length, dry_run)
-            evaluation = {"type": "expected_terms", "passed": task_passed, "score": score, "matched_terms": matched_terms, "expected_terms": expected_terms}
+            evaluation = {
+                "type": "expected_terms",
+                "passed": task_passed,
+                "score": score,
+                "matched_terms": matched_terms,
+                "expected_terms": expected_terms,
+            }
         else:
             task_passed = None if dry_run else bool(evaluation.get("passed"))
             score = int(evaluation.get("score", 0)) if not dry_run else 0
@@ -137,10 +162,24 @@ class BenchmarkRunner:
             "error": error,
         }
 
-    def _evaluate(self, task: str, prompt: str, output: str, evaluator: dict[str, Any], dry_run: bool, environment_mode: str | None, timeout_seconds: int) -> dict[str, Any]:
+    def _evaluate(
+        self,
+        task: str,
+        prompt: str,
+        output: str,
+        evaluator: dict[str, Any],
+        dry_run: bool,
+        environment_mode: str | None,
+        timeout_seconds: int,
+    ) -> dict[str, Any]:
         command = _list_value(evaluator.get("command"))
         if not command:
-            return {"type": "expected_terms", "passed": True, "score": 100, "reason": "no custom evaluator command"}
+            return {
+                "type": "expected_terms",
+                "passed": True,
+                "score": 100,
+                "reason": "no custom evaluator command",
+            }
         workdir = self.profile.workspace / ".aiplane" / "benchmarks" / "work"
         workdir.mkdir(parents=True, exist_ok=True)
         safe_task = "".join(ch if ch.isalnum() or ch in {"-", "_"} else "_" for ch in task) or "task"
@@ -148,12 +187,29 @@ class BenchmarkRunner:
         output_file = workdir / f"{safe_task}-output.txt"
         prompt_file.write_text(prompt, encoding="utf-8")
         output_file.write_text(output, encoding="utf-8")
-        replacements = {"{prompt_file}": str(prompt_file), "{output_file}": str(output_file)}
+        replacements = {
+            "{prompt_file}": str(prompt_file),
+            "{output_file}": str(output_file),
+        }
         planned_command = [replacements.get(str(part), str(part)) for part in command]
         plan = self.environment.plan(planned_command, mode=environment_mode)
         if dry_run:
-            return {"type": "command", "passed": None, "score": 0, "command": plan.command, "cwd": str(plan.cwd), "reason": "dry run"}
-        completed = subprocess.run(plan.command, cwd=plan.cwd, text=True, capture_output=True, check=False, timeout=timeout_seconds)
+            return {
+                "type": "command",
+                "passed": None,
+                "score": 0,
+                "command": plan.command,
+                "cwd": str(plan.cwd),
+                "reason": "dry run",
+            }
+        completed = subprocess.run(
+            plan.command,
+            cwd=plan.cwd,
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=timeout_seconds,
+        )
         stdout = completed.stdout.strip()
         parsed = _json_object(stdout)
         if parsed and "score" in parsed:
@@ -200,7 +256,11 @@ def latest_benchmark_summary(profile: Profile, model_name: str) -> dict[str, Any
     root = profile.workspace / ".aiplane" / "benchmarks"
     if not root.exists():
         return None
-    candidates = sorted(root.glob(f"*-{model_name}.json"), key=lambda path: path.stat().st_mtime, reverse=True)
+    candidates = sorted(
+        root.glob(f"*-{model_name}.json"),
+        key=lambda path: path.stat().st_mtime,
+        reverse=True,
+    )
     for path in candidates:
         try:
             payload = json.loads(path.read_text(encoding="utf-8"))
@@ -245,7 +305,13 @@ def _summary(results: list[dict[str, Any]]) -> dict[str, Any]:
     if not results:
         return {"passed": 0, "failed": 0, "average_score": 0, "average_elapsed_ms": 0}
     if all(row.get("passed") is None for row in results):
-        return {"previewed": len(results), "passed": 0, "failed": 0, "average_score": 0, "average_elapsed_ms": 0}
+        return {
+            "previewed": len(results),
+            "passed": 0,
+            "failed": 0,
+            "average_score": 0,
+            "average_elapsed_ms": 0,
+        }
     scored_results = [row for row in results if row.get("passed") is not None]
     scores = [float(row.get("score", 0)) for row in scored_results]
     elapsed = [float(row.get("elapsed_ms", 0)) for row in scored_results]

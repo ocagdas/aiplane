@@ -15,7 +15,15 @@ SECRET_PATTERNS = [
 ]
 
 
-SENSITIVE_KEYS = {"api_key", "token", "secret", "password", "client_secret", "subscription_key", "bearer_token"}
+SENSITIVE_KEYS = {
+    "api_key",
+    "token",
+    "secret",
+    "password",
+    "client_secret",
+    "subscription_key",
+    "bearer_token",
+}
 
 
 def credentials_path(path: Path | str | None = None, config_path: Path | str | None = None) -> Path:
@@ -41,7 +49,10 @@ def contains_secret(value: Any) -> bool:
 
 def redact(value: Any) -> Any:
     if isinstance(value, dict):
-        return {key: "[REDACTED_SECRET]" if str(key).lower() in SENSITIVE_KEYS and inner else redact(inner) for key, inner in value.items()}
+        return {
+            key: "[REDACTED_SECRET]" if str(key).lower() in SENSITIVE_KEYS and inner else redact(inner)
+            for key, inner in value.items()
+        }
     if isinstance(value, list):
         return [redact(inner) for inner in value]
     if not isinstance(value, str):
@@ -50,7 +61,7 @@ def redact(value: Any) -> Any:
     for pattern in SECRET_PATTERNS:
         redacted = pattern.sub("[REDACTED_SECRET]", redacted)
     redacted = redacted.replace("[REDACTED_SECRET]'", "[REDACTED_SECRET]")
-    redacted = redacted.replace("[REDACTED_SECRET]\"", "[REDACTED_SECRET]")
+    redacted = redacted.replace('[REDACTED_SECRET]"', "[REDACTED_SECRET]")
     return redacted
 
 
@@ -67,24 +78,36 @@ class CredentialStore:
             for account, value in sorted(accounts.items()):
                 if not isinstance(value, dict):
                     continue
-                rows.append({
-                    "ref": f"{provider}.{account}",
-                    "provider": provider,
-                    "account": account,
-                    "endpoint": value.get("endpoint"),
-                    "api_key_env": value.get("api_key_env"),
-                    "has_api_key": bool(value.get("api_key")),
-                    "has_token": bool(value.get("token") or value.get("bearer_token")),
-                    "notes": value.get("notes"),
-                })
-        return {"name": "credentials", "path": str(self.path), "exists": self.path.exists(), "credentials": rows}
+                rows.append(
+                    {
+                        "ref": f"{provider}.{account}",
+                        "provider": provider,
+                        "account": account,
+                        "endpoint": value.get("endpoint"),
+                        "api_key_env": value.get("api_key_env"),
+                        "has_api_key": bool(value.get("api_key")),
+                        "has_token": bool(value.get("token") or value.get("bearer_token")),
+                        "notes": value.get("notes"),
+                    }
+                )
+        return {
+            "name": "credentials",
+            "path": str(self.path),
+            "exists": self.path.exists(),
+            "credentials": rows,
+        }
 
     def show(self, ref: str) -> dict[str, Any]:
         provider, account = parse_credential_ref(ref)
         value = self._account(provider, account)
         if value is None:
             raise ValueError(f"credential not found: {ref}")
-        return {"name": "credential", "ref": f"{provider}.{account}", "path": str(self.path), "credential": redact(value)}
+        return {
+            "name": "credential",
+            "ref": f"{provider}.{account}",
+            "path": str(self.path),
+            "credential": redact(value),
+        }
 
     def resolve(self, ref: str | None) -> dict[str, Any]:
         if not ref:

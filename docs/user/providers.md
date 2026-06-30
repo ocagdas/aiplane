@@ -94,6 +94,16 @@ providers:
 
 Well-known managed providers have built-in defaults and adapters where safe. Custom providers should specify an endpoint, protocol, and credential reference. The profile should not contain raw API keys.
 
+Test a managed provider endpoint and credential without printing the secret:
+
+```bash
+aiplane providers test openai --credential-ref openai.personal
+aiplane providers test azure_openai --credential-ref azure_openai.business_a
+aiplane providers test elevenlabs
+```
+
+The test command currently has live adapters for Azure OpenAI deployment listing, ElevenLabs voice listing, and OpenAI-compatible `/v1/models` endpoints. Other providers still rely on doctor checks until a provider-specific safe test is added.
+
 ## Provider Commands
 
 List known model providers:
@@ -116,6 +126,12 @@ List known source-native model ids for one model provider:
 ```bash
 aiplane providers models ollama
 aiplane providers models huggingface
+```
+
+Test one provider endpoint and credential:
+
+```bash
+aiplane providers test azure_openai --credential-ref azure_openai.personal
 ```
 
 Query an online catalog where an adapter exists:

@@ -21,7 +21,17 @@ import aiplane.cli as cli_module
 import aiplane.mcp as mcp_module
 from aiplane.code_tasks import CodeTaskRunner
 from aiplane import config as agent_config
-from aiplane.config import create_profile, default_profile, init_local_config, list_config_templates, list_profile_templates, load_local_config, load_profile, resolve_profile_name, set_default_profile
+from aiplane.config import (
+    create_profile,
+    default_profile,
+    init_local_config,
+    list_config_templates,
+    list_profile_templates,
+    load_local_config,
+    load_profile,
+    resolve_profile_name,
+    set_default_profile,
+)
 from aiplane.deploy import DeployManager
 from aiplane.env import EnvironmentManager
 from aiplane.hardware import HardwareManager
@@ -92,7 +102,9 @@ def _test_model_fixture() -> dict[str, object]:
     return agent_config.parse_yaml(fixture_path.read_text(encoding="utf-8"))
 
 
-def _load_profile_with_test_models(name: str, workspace: Path | None = None, profiles_dir: Path | str | None = None) -> Profile:
+def _load_profile_with_test_models(
+    name: str, workspace: Path | None = None, profiles_dir: Path | str | None = None
+) -> Profile:
     profile = _REAL_LOAD_PROFILE(name, workspace, profiles_dir=profiles_dir)
     models = profile.models.get("models") if isinstance(profile.models, dict) else None
     if isinstance(models, dict) and models:
@@ -116,7 +128,10 @@ class MvpTests(unittest.TestCase):
         self.assertEqual(profile.tools["mode"], "full_automation")
 
     def test_shipped_profiles_do_not_hardcode_model_aliases(self) -> None:
-        for rel in ["profile-templates/local-dev/models.yaml", "profiles/local-dev/models.yaml"]:
+        for rel in [
+            "profile-templates/local-dev/models.yaml",
+            "profiles/local-dev/models.yaml",
+        ]:
             data = agent_config.parse_yaml((Path.cwd() / rel).read_text(encoding="utf-8"))
             self.assertEqual(data.get("defaults"), {})
             self.assertEqual(data.get("models"), {})
@@ -142,7 +157,10 @@ class MvpTests(unittest.TestCase):
                 agent_config.project_root = original_project_root
             self.assertEqual(created, profiles / "custom")
             (created / "models.yaml").write_text("value: changed\n", encoding="utf-8")
-            self.assertEqual((templates / "models.yaml").read_text(encoding="utf-8"), "value: original\n")
+            self.assertEqual(
+                (templates / "models.yaml").read_text(encoding="utf-8"),
+                "value: original\n",
+            )
 
     def test_create_profile_supports_custom_profiles_dir(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -223,7 +241,9 @@ class MvpTests(unittest.TestCase):
                 if old_profile is not None:
                     os.environ["AIPLANE_PROFILE"] = old_profile
 
-    def test_resolve_profile_uses_single_available_profile_and_errors_without_profiles(self) -> None:
+    def test_resolve_profile_uses_single_available_profile_and_errors_without_profiles(
+        self,
+    ) -> None:
         source = load_profile("local-dev", Path.cwd())
         with tempfile.TemporaryDirectory() as tmp:
             profiles_root = Path(tmp) / "profiles"
@@ -242,7 +262,15 @@ class MvpTests(unittest.TestCase):
             config_path = Path(tmp) / "config.yaml"
             stdout = StringIO()
             with redirect_stdout(stdout):
-                code = cli_main(["config", "default-profile", "local-dev", "--path", str(config_path)])
+                code = cli_main(
+                    [
+                        "config",
+                        "default-profile",
+                        "local-dev",
+                        "--path",
+                        str(config_path),
+                    ]
+                )
             self.assertEqual(code, 0)
             self.assertEqual(load_local_config(config_path)["default_profile"], "local-dev")
 
@@ -251,7 +279,16 @@ class MvpTests(unittest.TestCase):
             config_path = Path(tmp) / "config.yaml"
             stdout = StringIO()
             with redirect_stdout(stdout):
-                code = cli_main(["config", "set", "profiles_dir", str(Path(tmp) / "profiles"), "--path", str(config_path)])
+                code = cli_main(
+                    [
+                        "config",
+                        "set",
+                        "profiles_dir",
+                        str(Path(tmp) / "profiles"),
+                        "--path",
+                        str(config_path),
+                    ]
+                )
             self.assertEqual(code, 0)
             self.assertIn("profiles_dir", load_local_config(config_path))
             stdout = StringIO()
@@ -264,7 +301,10 @@ class MvpTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             profiles_dir = root / "profiles"
-            shutil.copytree(Path.cwd() / "profile-templates" / "local-dev", profiles_dir / "local-dev")
+            shutil.copytree(
+                Path.cwd() / "profile-templates" / "local-dev",
+                profiles_dir / "local-dev",
+            )
             config_path = root / "config.yaml"
             config_path.write_text(
                 f"default_profile: local-dev\nprofiles_dir: {profiles_dir}\ncredentials_path: {root / 'credentials.yaml'}\nagent_artifacts_dir: {root / 'agents'}\n",
@@ -282,10 +322,22 @@ class MvpTests(unittest.TestCase):
             self.assertTrue(payload["paths"]["config"]["default"].endswith(".aiplane/config.yaml"))
             self.assertEqual(payload["paths"]["profiles"]["active_root"], str(profiles_dir.resolve()))
             self.assertTrue(payload["paths"]["profiles"]["default_root"].endswith("profiles"))
-            self.assertEqual(payload["paths"]["profiles"]["default_profile_path"], str((profiles_dir / "local-dev").resolve()))
-            self.assertEqual(payload["paths"]["profiles"]["current_profile_path"], str((profiles_dir / "local-dev").resolve()))
-            self.assertEqual(payload["effective"]["credentials_path"], str((root / "credentials.yaml").resolve()))
-            self.assertEqual(payload["effective"]["agent_artifacts_dir"], str((root / "agents").resolve()))
+            self.assertEqual(
+                payload["paths"]["profiles"]["default_profile_path"],
+                str((profiles_dir / "local-dev").resolve()),
+            )
+            self.assertEqual(
+                payload["paths"]["profiles"]["current_profile_path"],
+                str((profiles_dir / "local-dev").resolve()),
+            )
+            self.assertEqual(
+                payload["effective"]["credentials_path"],
+                str((root / "credentials.yaml").resolve()),
+            )
+            self.assertEqual(
+                payload["effective"]["agent_artifacts_dir"],
+                str((root / "agents").resolve()),
+            )
 
     def test_profiles_show_defaults_to_effective_profile(self) -> None:
         stdout = StringIO()
@@ -303,12 +355,15 @@ class MvpTests(unittest.TestCase):
             code = cli_main(["profiles", "show", "local-dev"])
         self.assertEqual(code, 0)
         payload = json.loads(stdout.getvalue())
-        self.assertEqual(list(payload.keys())[:5], ["name", "default", "root", "workspace", "selected"])
+        self.assertEqual(
+            list(payload.keys())[:5],
+            ["name", "default", "root", "workspace", "selected"],
+        )
         self.assertIn("environment", payload["selected"])
 
     def test_profiles_selected_entries_put_name_first(self) -> None:
         profile = load_profile("local-dev", Path.cwd())
-        selected = __import__("aiplane.cli", fromlist=["_profile_selected"]). _profile_selected(profile, "local-dev")
+        selected = __import__("aiplane.cli", fromlist=["_profile_selected"])._profile_selected(profile, "local-dev")
         self.assertTrue(selected["models"])
         self.assertEqual(next(iter(selected["models"][0].keys())), "name")
         self.assertTrue(selected["providers"])
@@ -348,22 +403,27 @@ class MvpTests(unittest.TestCase):
             workspace = Path(tmp) / "workspace"
             workspace.mkdir()
             profiles_dir = Path(tmp) / "profiles"
-            shutil.copytree(Path.cwd() / "profile-templates" / "local-dev", profiles_dir / "local-dev")
+            shutil.copytree(
+                Path.cwd() / "profile-templates" / "local-dev",
+                profiles_dir / "local-dev",
+            )
             stdout = StringIO()
             with redirect_stdout(stdout):
-                code = cli_main([
-                    "--workspace",
-                    str(workspace),
-                    "--profiles-dir",
-                    str(profiles_dir),
-                    "tool",
-                    "--profile",
-                    "local-dev",
-                    "run_tests",
-                    "python",
-                    "-c",
-                    "print('ok')",
-                ])
+                code = cli_main(
+                    [
+                        "--workspace",
+                        str(workspace),
+                        "--profiles-dir",
+                        str(profiles_dir),
+                        "tool",
+                        "--profile",
+                        "local-dev",
+                        "run_tests",
+                        "python",
+                        "-c",
+                        "print('ok')",
+                    ]
+                )
         self.assertEqual(code, 0)
         self.assertIn("ok", stdout.getvalue())
 
@@ -441,7 +501,9 @@ class MvpTests(unittest.TestCase):
     def test_router_run_dry_run_can_use_explicit_model(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             profile = load_profile("local-dev", Path(tmp))
-            result = Router(profile, AuditLogger(profile)).route("explain setup", model_name="local-code-small", dry_run=True)
+            result = Router(profile, AuditLogger(profile)).route(
+                "explain setup", model_name="local-code-small", dry_run=True
+            )
             self.assertIn("local-code-small", result.text)
             self.assertIn("provider-code-small:1.5b", result.text)
 
@@ -449,8 +511,21 @@ class MvpTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             profile = load_profile("local-dev", Path(tmp))
             profile.repository["allow_cloud"] = False
-            profile.models.setdefault("providers", {})["openai"] = {"ownership": "managed_service", "runtime": "openai_api", "protocol": "openai_compatible", "endpoint": "https://api.openai.com/v1", "enabled": True, "api_key_env": "OPENAI_API_KEY"}
-            profile.models.setdefault("models", {})["openai-main"] = {"provider": "openai", "model": "gpt-4.1", "roles": ["analysis"], "local": False, "enabled": True}
+            profile.models.setdefault("providers", {})["openai"] = {
+                "ownership": "managed_service",
+                "runtime": "openai_api",
+                "protocol": "openai_compatible",
+                "endpoint": "https://api.openai.com/v1",
+                "enabled": True,
+                "api_key_env": "OPENAI_API_KEY",
+            }
+            profile.models.setdefault("models", {})["openai-main"] = {
+                "provider": "openai",
+                "model": "gpt-4.1",
+                "roles": ["analysis"],
+                "local": False,
+                "enabled": True,
+            }
             with self.assertRaises(PermissionError):
                 Router(profile, AuditLogger(profile)).route("explain setup", model_name="openai-main", dry_run=True)
 
@@ -586,7 +661,10 @@ class MvpTests(unittest.TestCase):
             class Process:
                 pid = 12345
 
-            with patch("aiplane.remote.shutil.which", return_value="/usr/bin/ssh"), patch("aiplane.remote.subprocess.Popen", return_value=Process()):
+            with (
+                patch("aiplane.remote.shutil.which", return_value="/usr/bin/ssh"),
+                patch("aiplane.remote.subprocess.Popen", return_value=Process()),
+            ):
                 started = manager.tunnel_start("gpu_workstation_ssh", yes=True)
             self.assertEqual(started["status"], "started")
             self.assertTrue((workspace / ".aiplane" / "remote" / "gpu_workstation_ssh.pid").exists())
@@ -611,7 +689,9 @@ class MvpTests(unittest.TestCase):
         self.assertIn("aiplane.models.use", names)
         self.assertIn("aiplane.runtimes.status", names)
         self.assertTrue(any(tool["mutates"] for tool in manifest["tools"]))
-        self.assertTrue(all(tool["mutates"] for tool in manifest["write_tools"] if tool["name"] != "aiplane.remote.tunnel.status"))
+        self.assertTrue(
+            all(tool["mutates"] for tool in manifest["write_tools"] if tool["name"] != "aiplane.remote.tunnel.status")
+        )
 
     def test_mcp_server_lists_tools(self) -> None:
         server = AiplaneMcpServer(Path.cwd())
@@ -668,17 +748,26 @@ class MvpTests(unittest.TestCase):
                 "jsonrpc": "2.0",
                 "id": 22,
                 "method": "tools/call",
-                "params": {"name": "aiplane.models.show", "arguments": {"model": "local-analysis-small"}},
+                "params": {
+                    "name": "aiplane.models.show",
+                    "arguments": {"model": "local-analysis-small"},
+                },
             }
         )
         self.assertIsNotNone(model_response)
-        self.assertEqual(model_response["result"]["structuredContent"]["model"], "provider-text-small:0.5b")
+        self.assertEqual(
+            model_response["result"]["structuredContent"]["model"],
+            "provider-text-small:0.5b",
+        )
         provider_response = server.handle_message(
             {
                 "jsonrpc": "2.0",
                 "id": 23,
                 "method": "tools/call",
-                "params": {"name": "aiplane.providers.models", "arguments": {"provider": "huggingface"}},
+                "params": {
+                    "name": "aiplane.providers.models",
+                    "arguments": {"provider": "huggingface"},
+                },
             }
         )
         self.assertIsNotNone(provider_response)
@@ -688,7 +777,10 @@ class MvpTests(unittest.TestCase):
         source = load_profile("local-dev", Path.cwd())
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            (root / "models.yaml").write_text(agent_config.dump_yaml(json.loads(json.dumps(source.models))), encoding="utf-8")
+            (root / "models.yaml").write_text(
+                agent_config.dump_yaml(json.loads(json.dumps(source.models))),
+                encoding="utf-8",
+            )
             profile = Profile(
                 name="tmp",
                 root=root,
@@ -704,15 +796,26 @@ class MvpTests(unittest.TestCase):
             )
             with patch("aiplane.mcp.load_profile", return_value=profile):
                 server = AiplaneMcpServer(Path.cwd())
-                allowed = server.handle_message({
-                    "jsonrpc": "2.0",
-                    "id": 31,
-                    "method": "tools/call",
-                    "params": {"name": "aiplane.models.use", "arguments": {"role": "code_model", "model": "local-code-small"}},
-                })
+                allowed = server.handle_message(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 31,
+                        "method": "tools/call",
+                        "params": {
+                            "name": "aiplane.models.use",
+                            "arguments": {
+                                "role": "code_model",
+                                "model": "local-code-small",
+                            },
+                        },
+                    }
+                )
             self.assertIsNotNone(allowed)
             self.assertEqual(allowed["result"]["structuredContent"]["name"], "local-code-small")
-            self.assertIn("code_model: local-code-small", (root / "models.yaml").read_text(encoding="utf-8"))
+            self.assertIn(
+                "code_model: local-code-small",
+                (root / "models.yaml").read_text(encoding="utf-8"),
+            )
             events = AuditLogger(profile).tail(1)
             self.assertEqual(events[0]["event_type"], "mcp")
             self.assertEqual(events[0]["action"], "aiplane.models.use")
@@ -722,7 +825,10 @@ class MvpTests(unittest.TestCase):
         source = load_profile("local-dev", Path.cwd())
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            (root / "models.yaml").write_text(agent_config.dump_yaml(json.loads(json.dumps(source.models))), encoding="utf-8")
+            (root / "models.yaml").write_text(
+                agent_config.dump_yaml(json.loads(json.dumps(source.models))),
+                encoding="utf-8",
+            )
             profile = Profile(
                 name="tmp",
                 root=root,
@@ -738,12 +844,20 @@ class MvpTests(unittest.TestCase):
                 orchestrators=source.orchestrators,
             )
             with patch("aiplane.mcp.load_profile", return_value=profile):
-                response = AiplaneMcpServer(root).handle_message({
-                    "jsonrpc": "2.0",
-                    "id": 32,
-                    "method": "tools/call",
-                    "params": {"name": "aiplane.models.use", "arguments": {"role": "code_model", "model": "missing-model"}},
-                })
+                response = AiplaneMcpServer(root).handle_message(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 32,
+                        "method": "tools/call",
+                        "params": {
+                            "name": "aiplane.models.use",
+                            "arguments": {
+                                "role": "code_model",
+                                "model": "missing-model",
+                            },
+                        },
+                    }
+                )
             self.assertIsNotNone(response)
             self.assertIn("error", response)
             events = AuditLogger(profile).tail(1)
@@ -753,12 +867,17 @@ class MvpTests(unittest.TestCase):
 
     def test_mcp_can_export_non_continue_integrations(self) -> None:
         server = AiplaneMcpServer(Path.cwd())
-        response = server.handle_message({
-            "jsonrpc": "2.0",
-            "id": 32,
-            "method": "tools/call",
-            "params": {"name": "aiplane.integrations.export", "arguments": {"tool": "cline", "model": "local-analysis-small"}},
-        })
+        response = server.handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 32,
+                "method": "tools/call",
+                "params": {
+                    "name": "aiplane.integrations.export",
+                    "arguments": {"tool": "cline", "model": "local-analysis-small"},
+                },
+            }
+        )
         self.assertIsNotNone(response)
         payload = response["result"]["structuredContent"]
         self.assertEqual(payload["tool"], "cline")
@@ -767,8 +886,17 @@ class MvpTests(unittest.TestCase):
     def test_mcp_can_preview_refresh_and_runtime_status(self) -> None:
         source = load_profile("local-dev", Path.cwd())
         models_config = json.loads(json.dumps(source.models))
-        models_config.setdefault("models", {})["local-chat-small"] = {"provider": "ollama", "model": "provider-chat-small:8b", "enabled": True}
-        discovered = ProviderModelsResult("ollama", "provider_api", ["provider-chat-small:8b", "fresh-model:1b"], "test discovery")
+        models_config.setdefault("models", {})["local-chat-small"] = {
+            "provider": "ollama",
+            "model": "provider-chat-small:8b",
+            "enabled": True,
+        }
+        discovered = ProviderModelsResult(
+            "ollama",
+            "provider_api",
+            ["provider-chat-small:8b", "fresh-model:1b"],
+            "test discovery",
+        )
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             (root / "models.yaml").write_text(agent_config.dump_yaml(models_config), encoding="utf-8")
@@ -785,14 +913,22 @@ class MvpTests(unittest.TestCase):
                 models=models_config,
                 targets=source.targets,
             )
-            with patch("aiplane.mcp.load_profile", return_value=profile), patch.object(ProviderRegistry, "models", return_value=discovered):
+            with (
+                patch("aiplane.mcp.load_profile", return_value=profile),
+                patch.object(ProviderRegistry, "models", return_value=discovered),
+            ):
                 server = AiplaneMcpServer(Path.cwd())
-                response = server.handle_message({
-                    "jsonrpc": "2.0",
-                    "id": 33,
-                    "method": "tools/call",
-                    "params": {"name": "aiplane.models.refresh", "arguments": {"provider": "ollama", "dry_run": True}},
-                })
+                response = server.handle_message(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 33,
+                        "method": "tools/call",
+                        "params": {
+                            "name": "aiplane.models.refresh",
+                            "arguments": {"provider": "ollama", "dry_run": True},
+                        },
+                    }
+                )
         self.assertIsNotNone(response)
         payload = response["result"]["structuredContent"]
         self.assertFalse(payload["write"])
@@ -805,12 +941,17 @@ class MvpTests(unittest.TestCase):
         self.assertNotIn("catalog", payload)
         self.assertIn("ollama", payload["results"])
 
-        response = AiplaneMcpServer(Path.cwd()).handle_message({
-            "jsonrpc": "2.0",
-            "id": 34,
-            "method": "tools/call",
-            "params": {"name": "aiplane.runtimes.status", "arguments": {"runtime": "ollama"}},
-        })
+        response = AiplaneMcpServer(Path.cwd()).handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 34,
+                "method": "tools/call",
+                "params": {
+                    "name": "aiplane.runtimes.status",
+                    "arguments": {"runtime": "ollama"},
+                },
+            }
+        )
         self.assertIsNotNone(response)
         self.assertEqual(response["result"]["structuredContent"][0]["name"], "ollama")
 
@@ -857,8 +998,21 @@ class MvpTests(unittest.TestCase):
 
     def test_hardware_doctor_groups_remote_models_after_local_fit_checks(self) -> None:
         profile = load_profile("local-dev", Path.cwd())
-        profile.models.setdefault("providers", {})["openai"] = {"ownership": "managed_service", "runtime": "openai_api", "protocol": "openai_compatible", "endpoint": "https://api.openai.com/v1", "enabled": True, "api_key_env": "OPENAI_API_KEY"}
-        profile.models.setdefault("models", {})["openai-main"] = {"provider": "openai", "model": "gpt-4.1", "roles": ["analysis"], "local": False, "enabled": True}
+        profile.models.setdefault("providers", {})["openai"] = {
+            "ownership": "managed_service",
+            "runtime": "openai_api",
+            "protocol": "openai_compatible",
+            "endpoint": "https://api.openai.com/v1",
+            "enabled": True,
+            "api_key_env": "OPENAI_API_KEY",
+        }
+        profile.models.setdefault("models", {})["openai-main"] = {
+            "provider": "openai",
+            "model": "gpt-4.1",
+            "roles": ["analysis"],
+            "local": False,
+            "enabled": True,
+        }
         grouped = HardwareManager(profile).doctor()
         self.assertIn("needs_fit_check", grouped)
         self.assertIn("no_local_fit_check_required", grouped)
@@ -897,7 +1051,10 @@ class MvpTests(unittest.TestCase):
     def test_hardware_recommend_can_include_not_recommended(self) -> None:
         profile = load_profile("local-dev", Path.cwd())
         result = HardwareManager(profile).recommend(include_not_recommended=True)
-        self.assertEqual(list(result["models"].keys()), ["recommended", "usable", "remote_or_cloud", "not_recommended"])
+        self.assertEqual(
+            list(result["models"].keys()),
+            ["recommended", "usable", "remote_or_cloud", "not_recommended"],
+        )
         names = {row["name"] for rows in result["models"].values() for row in rows}
         self.assertIn("local-reasoning-large", names)
         self.assertIn("local-code-large", names)
@@ -949,16 +1106,19 @@ class MvpTests(unittest.TestCase):
                 targets=source.targets,
             )
             manager = HardwareManager(profile)
-            manager.use_template("cloud_gpu_vm", {
-                "machine_tag": "azure_h100_test",
-                "provider": "azure",
-                "stock_sku": "Standard_NC40ads_H100_v5",
-                "memory_gb": 320,
-                "gpu_vendor": "nvidia",
-                "gpu_model": "H100 NVL",
-                "gpu_count": 1,
-                "vram_gb": 94,
-            })
+            manager.use_template(
+                "cloud_gpu_vm",
+                {
+                    "machine_tag": "azure_h100_test",
+                    "provider": "azure",
+                    "stock_sku": "Standard_NC40ads_H100_v5",
+                    "memory_gb": 320,
+                    "gpu_vendor": "nvidia",
+                    "gpu_model": "H100 NVL",
+                    "gpu_count": 1,
+                    "vram_gb": 94,
+                },
+            )
             result = manager.recommend()
             self.assertEqual(result["machine"]["stock"]["machine_tag"], "azure_h100_test")
             self.assertEqual(result["machine"]["gpu"]["vram_gb"], 94)
@@ -1026,29 +1186,70 @@ class MvpTests(unittest.TestCase):
             def fake_run(command, **kwargs):
                 calls.append(command)
                 if command[:3] == ["az", "account", "show"]:
-                    return Completed(json.dumps({"environmentName": "AzureCloud", "state": "Enabled", "isDefault": True, "name": "sub", "id": "sub-id", "tenantId": "tenant", "user": {"name": "u", "type": "user"}}))
+                    return Completed(
+                        json.dumps(
+                            {
+                                "environmentName": "AzureCloud",
+                                "state": "Enabled",
+                                "isDefault": True,
+                                "name": "sub",
+                                "id": "sub-id",
+                                "tenantId": "tenant",
+                                "user": {"name": "u", "type": "user"},
+                            }
+                        )
+                    )
                 if command[:3] == ["az", "vm", "list-skus"]:
-                    return Completed(json.dumps([{
-                        "name": "Standard_NC40ads_H100_v5",
-                        "restrictions": [{"type": "Location", "reasonCode": "NotAvailableForSubscription", "values": ["uksouth"]}],
-                    }]))
+                    return Completed(
+                        json.dumps(
+                            [
+                                {
+                                    "name": "Standard_NC40ads_H100_v5",
+                                    "restrictions": [
+                                        {
+                                            "type": "Location",
+                                            "reasonCode": "NotAvailableForSubscription",
+                                            "values": ["uksouth"],
+                                        }
+                                    ],
+                                }
+                            ]
+                        )
+                    )
                 if command[:3] == ["az", "vm", "list-usage"]:
-                    return Completed(json.dumps([{
-                        "name": {"value": "cores", "localizedValue": "Total Regional vCPUs"},
-                        "currentValue": 4,
-                        "limit": 100,
-                        "unit": "Count",
-                    }]))
+                    return Completed(
+                        json.dumps(
+                            [
+                                {
+                                    "name": {
+                                        "value": "cores",
+                                        "localizedValue": "Total Regional vCPUs",
+                                    },
+                                    "currentValue": 4,
+                                    "limit": 100,
+                                    "unit": "Count",
+                                }
+                            ]
+                        )
+                    )
                 return Completed("", returncode=1)
 
-            with patch("aiplane.machines.shutil.which", return_value="/usr/bin/az"), patch("aiplane.machines.subprocess.run", side_effect=fake_run):
+            with (
+                patch("aiplane.machines.shutil.which", return_value="/usr/bin/az"),
+                patch("aiplane.machines.subprocess.run", side_effect=fake_run),
+            ):
                 result = MachineManager(profile).discover_azure("uksouth", workload="inference_large", limit=1)
             self.assertEqual(result["discovery"]["method"], "live")
             self.assertTrue(result["quota"]["ok"])
             self.assertEqual(result["quota"]["items"][0]["remaining"], 96)
-            self.assertEqual(result["candidates"][0]["restrictions"][0]["reason_code"], "NotAvailableForSubscription")
+            self.assertEqual(
+                result["candidates"][0]["restrictions"][0]["reason_code"],
+                "NotAvailableForSubscription",
+            )
 
-    def test_machine_azure_discovery_records_method_and_live_overrides_offline_cache(self) -> None:
+    def test_machine_azure_discovery_records_method_and_live_overrides_offline_cache(
+        self,
+    ) -> None:
         source = load_profile("local-dev", Path.cwd())
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -1078,7 +1279,10 @@ class MvpTests(unittest.TestCase):
                 stdout = json.dumps([{"name": "Standard_NC40ads_H100_v5"}])
                 stderr = ""
 
-            with patch("aiplane.machines.shutil.which", return_value="/usr/bin/az"), patch("aiplane.machines.subprocess.run", return_value=Completed()):
+            with (
+                patch("aiplane.machines.shutil.which", return_value="/usr/bin/az"),
+                patch("aiplane.machines.subprocess.run", return_value=Completed()),
+            ):
                 live = manager.discover_azure("uksouth", workload="inference_large", limit=2)
             self.assertEqual(live["discovery"]["method"], "live")
             self.assertEqual(live["discovery"]["cache"]["previous_method"], "offline")
@@ -1086,7 +1290,10 @@ class MvpTests(unittest.TestCase):
             cache = json.loads((root / "machine-discovery-cache.json").read_text(encoding="utf-8"))
             only_entry = next(iter(cache.values()))
             self.assertEqual(only_entry["discovery"]["method"], "live")
-            self.assertEqual(only_entry["candidates"][0]["machine"]["stock"]["stock_sku"], "Standard_NC40ads_H100_v5")
+            self.assertEqual(
+                only_entry["candidates"][0]["machine"]["stock"]["stock_sku"],
+                "Standard_NC40ads_H100_v5",
+            )
 
     def test_machine_cache_validate_and_azure_status_cli(self) -> None:
         source = load_profile("local-dev", Path.cwd())
@@ -1115,18 +1322,23 @@ class MvpTests(unittest.TestCase):
 
             class AccountCompleted:
                 returncode = 0
-                stdout = json.dumps({
-                    "environmentName": "AzureCloud",
-                    "state": "Enabled",
-                    "isDefault": True,
-                    "name": "Test Subscription",
-                    "id": "sub-123",
-                    "tenantId": "tenant-456",
-                    "user": {"name": "user@example.com", "type": "user"},
-                })
+                stdout = json.dumps(
+                    {
+                        "environmentName": "AzureCloud",
+                        "state": "Enabled",
+                        "isDefault": True,
+                        "name": "Test Subscription",
+                        "id": "sub-123",
+                        "tenantId": "tenant-456",
+                        "user": {"name": "user@example.com", "type": "user"},
+                    }
+                )
                 stderr = ""
 
-            with patch("aiplane.machines.shutil.which", return_value="/usr/bin/az"), patch("aiplane.machines.subprocess.run", return_value=AccountCompleted()):
+            with (
+                patch("aiplane.machines.shutil.which", return_value="/usr/bin/az"),
+                patch("aiplane.machines.subprocess.run", return_value=AccountCompleted()),
+            ):
                 logged_in = manager.azure_status()
             self.assertEqual(logged_in["account"]["user_name"], "[redacted]")
             self.assertEqual(logged_in["account"]["user_name_hint"], "[redacted]")
@@ -1193,7 +1405,13 @@ class MvpTests(unittest.TestCase):
             machine_path.write_text(json.dumps(exported), encoding="utf-8")
             MachineManager(profile).import_file(machine_path)
             stacks = StackManager(profile)
-            stacks.create("local_chat_stack", "local-analysis-small", "ollama", "local_box", access="same_host")
+            stacks.create(
+                "local_chat_stack",
+                "local-analysis-small",
+                "ollama",
+                "local_box",
+                access="same_host",
+            )
 
             class Completed:
                 returncode = 0
@@ -1225,7 +1443,13 @@ class MvpTests(unittest.TestCase):
             )
             MachineManager(profile).import_azure_sku("Standard_NC40ads_H100_v5", "uksouth", name="azure_h100_test")
             stacks = StackManager(profile)
-            created = stacks.create("code_on_gpu", "local-code-large", "vllm", "azure_h100_test", endpoint="http://localhost:8000/v1")
+            created = stacks.create(
+                "code_on_gpu",
+                "local-code-large",
+                "vllm",
+                "azure_h100_test",
+                endpoint="http://localhost:8000/v1",
+            )
             self.assertEqual(created["stack"]["runtime"], "vllm")
             plan = stacks.plan("code_on_gpu")
             self.assertEqual(plan["machine"], "azure_h100_test")
@@ -1262,7 +1486,10 @@ class MvpTests(unittest.TestCase):
             self.assertEqual(active["origin"], "nvidia_consumer_gpu")
             self.assertTrue(active["custom"])
             self.assertEqual(active["values"]["vram_gb"], 16)
-            self.assertEqual(source.hardware["hardware_profiles"]["nvidia_consumer_gpu"]["vram_gb"], "8-24")
+            self.assertEqual(
+                source.hardware["hardware_profiles"]["nvidia_consumer_gpu"]["vram_gb"],
+                "8-24",
+            )
 
     def test_model_catalog_lists_default_models(self) -> None:
         profile = load_profile("local-dev", Path.cwd())
@@ -1303,7 +1530,11 @@ class MvpTests(unittest.TestCase):
     def test_model_catalog_refresh_imports_provider_discovered_models(self) -> None:
         source = load_profile("local-dev", Path.cwd())
         models_config = json.loads(json.dumps(source.models))
-        models_config.setdefault("models", {})["local-chat-small"] = {"provider": "ollama", "model": "provider-chat-small:8b", "enabled": True}
+        models_config.setdefault("models", {})["local-chat-small"] = {
+            "provider": "ollama",
+            "model": "provider-chat-small:8b",
+            "enabled": True,
+        }
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             profile = Profile(
@@ -1322,7 +1553,11 @@ class MvpTests(unittest.TestCase):
             discovered = ProviderModelsResult(
                 provider="ollama",
                 source="provider_api",
-                models=["provider-chat-small:8b", "new-embed-model:latest", "new-coder:1b-base"],
+                models=[
+                    "provider-chat-small:8b",
+                    "new-embed-model:latest",
+                    "new-coder:1b-base",
+                ],
                 reason="test discovery",
             )
             with patch.object(ProviderRegistry, "models", return_value=discovered):
@@ -1335,10 +1570,22 @@ class MvpTests(unittest.TestCase):
                 self.assertNotIn("catalog", preview)
                 rows = preview["results"]["ollama"]["model_changes"]
                 imported_preview = {row["name"]: row for row in rows if row["refresh_status"] == "would_import"}
-                self.assertEqual(imported_preview["ollama-new-embed-model-latest"]["suitable_runtimes"], ["ollama"])
-                self.assertEqual(imported_preview["ollama-new-embed-model-latest"]["preferred_runtime"], "ollama")
-                self.assertEqual(imported_preview["ollama-new-embed-model-latest"]["ownership"], "self_managed")
-                self.assertEqual(imported_preview["ollama-new-embed-model-latest"]["local_presence"], "pulled")
+                self.assertEqual(
+                    imported_preview["ollama-new-embed-model-latest"]["suitable_runtimes"],
+                    ["ollama"],
+                )
+                self.assertEqual(
+                    imported_preview["ollama-new-embed-model-latest"]["preferred_runtime"],
+                    "ollama",
+                )
+                self.assertEqual(
+                    imported_preview["ollama-new-embed-model-latest"]["ownership"],
+                    "self_managed",
+                )
+                self.assertEqual(
+                    imported_preview["ollama-new-embed-model-latest"]["local_presence"],
+                    "pulled",
+                )
                 self.assertFalse((root / "models.yaml").exists())
 
                 written = ModelCatalog(profile).refresh("ollama", write=True, verbose=True)
@@ -1347,32 +1594,58 @@ class MvpTests(unittest.TestCase):
             self.assertEqual(written["changes"]["removed"], 0)
             self.assertTrue((root / "models.generated.yaml").exists())
             if (root / "models.yaml").exists():
-                self.assertIn("local-chat-small:", (root / "models.yaml").read_text(encoding="utf-8"))
+                self.assertIn(
+                    "local-chat-small:",
+                    (root / "models.yaml").read_text(encoding="utf-8"),
+                )
             rows = written["results"]["ollama"]["model_changes"]
             names = {row["name"] for row in rows}
             self.assertIn("ollama-new-embed-model-latest", names)
             self.assertIn("ollama-new-coder-1b-base", names)
-            self.assertIn("enabled: true", (root / "models.generated.yaml").read_text(encoding="utf-8"))
+            self.assertIn(
+                "enabled: true",
+                (root / "models.generated.yaml").read_text(encoding="utf-8"),
+            )
 
     def test_models_refresh_default_omits_per_model_changes_until_verbose(self) -> None:
         discovered = ProviderModelsResult("ollama", "provider_api", ["new-model:1b"], "test discovery")
         with patch.object(ProviderRegistry, "models", return_value=discovered):
             stdout = StringIO()
             with redirect_stdout(stdout):
-                code = cli_main(["models", "refresh", "--profile", "local-dev", "--provider", "ollama", "--dry-run"])
+                code = cli_main(
+                    [
+                        "models",
+                        "refresh",
+                        "--profile",
+                        "local-dev",
+                        "--provider",
+                        "ollama",
+                        "--dry-run",
+                    ]
+                )
         self.assertEqual(code, 0)
         payload = json.loads(stdout.getvalue())
         self.assertEqual(payload["changes"]["would_import"], 1)
         self.assertGreaterEqual(payload["results"]["ollama"]["model_changes_count"], 1)
         self.assertNotIn("model_changes", payload["results"]["ollama"])
 
-
     def test_models_refresh_cli_previews_with_mocked_provider(self) -> None:
         discovered = ProviderModelsResult("ollama", "provider_api", ["new-model:1b"], "test discovery")
         with patch.object(ProviderRegistry, "models", return_value=discovered):
             stdout = StringIO()
             with redirect_stdout(stdout):
-                code = cli_main(["models", "refresh", "--profile", "local-dev", "--provider", "ollama", "--dry-run", "--verbose"])
+                code = cli_main(
+                    [
+                        "models",
+                        "refresh",
+                        "--profile",
+                        "local-dev",
+                        "--provider",
+                        "ollama",
+                        "--dry-run",
+                        "--verbose",
+                    ]
+                )
         self.assertEqual(code, 0)
         payload = json.loads(stdout.getvalue())
         self.assertEqual(payload["changes"]["would_import"], 1)
@@ -1383,23 +1656,45 @@ class MvpTests(unittest.TestCase):
         self.assertEqual(imported[0]["ownership"], "self_managed")
         self.assertFalse(payload["write"])
 
-    def test_models_refresh_cli_can_disable_new_imports_and_groups_provider_results(self) -> None:
+    def test_models_refresh_cli_can_disable_new_imports_and_groups_provider_results(
+        self,
+    ) -> None:
         discovered = ProviderModelsResult("ollama", "provider_api", ["new-model:1b"], "test discovery")
         with patch.object(ProviderRegistry, "models", return_value=discovered):
             stdout = StringIO()
             with redirect_stdout(stdout):
-                code = cli_main(["models", "refresh", "--profile", "local-dev", "--provider", "ollama", "--disable-new", "--dry-run", "--verbose"])
+                code = cli_main(
+                    [
+                        "models",
+                        "refresh",
+                        "--profile",
+                        "local-dev",
+                        "--provider",
+                        "ollama",
+                        "--disable-new",
+                        "--dry-run",
+                        "--verbose",
+                    ]
+                )
         self.assertEqual(code, 0)
         payload = json.loads(stdout.getvalue())
         self.assertFalse(payload["write"])
         self.assertFalse(payload["new_entries_enabled"])
-        imported = [row for row in payload["results"]["ollama"]["model_changes"] if row["refresh_status"] == "would_import"]
+        imported = [
+            row for row in payload["results"]["ollama"]["model_changes"] if row["refresh_status"] == "would_import"
+        ]
         self.assertEqual(imported[0]["enabled"], False)
 
-    def test_models_refresh_all_reports_mocked_provider_success_and_failure(self) -> None:
+    def test_models_refresh_all_reports_mocked_provider_success_and_failure(
+        self,
+    ) -> None:
         source = load_profile("local-dev", Path.cwd())
         models_config = json.loads(json.dumps(source.models))
-        models_config["models"] = {name: model for name, model in models_config["models"].items() if name in {"local-analysis-small", "provider-code-large-vllm"}}
+        models_config["models"] = {
+            name: model
+            for name, model in models_config["models"].items()
+            if name in {"local-analysis-small", "provider-code-large-vllm"}
+        }
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             profile = Profile(
@@ -1416,6 +1711,7 @@ class MvpTests(unittest.TestCase):
                 targets=source.targets,
                 orchestrators=source.orchestrators,
             )
+
             def fake_models(provider: str, **kwargs) -> ProviderModelsResult:
                 if provider == "ollama":
                     return ProviderModelsResult("ollama", "provider_api", ["fresh:1b"], "mock ok")
@@ -1433,7 +1729,9 @@ class MvpTests(unittest.TestCase):
         self.assertEqual(result["results"]["huggingface"]["status"], "failed")
         self.assertNotIn("catalog", result)
 
-    def test_models_refresh_all_still_uses_model_providers_after_catalog_clear(self) -> None:
+    def test_models_refresh_all_still_uses_model_providers_after_catalog_clear(
+        self,
+    ) -> None:
         source = load_profile("local-dev", Path.cwd())
         models_config = json.loads(json.dumps(source.models))
         models_config["models"] = {"curated": {"provider": "ollama", "model": "curated:1b", "enabled": True}}
@@ -1445,10 +1743,12 @@ class MvpTests(unittest.TestCase):
             catalog = ModelCatalog(profile)
             catalog.clear_imported(write=False, include_curated=True)
             discovered = ProviderModelsResult("ollama", "source_api", ["fresh:1b"], "mock ok")
+
             def fake_models(provider: str, **kwargs) -> ProviderModelsResult:
                 if provider == "ollama":
                     return discovered
                 return ProviderModelsResult(provider, "profile_catalog", [], "empty")
+
             with patch.object(ProviderRegistry, "models", side_effect=fake_models):
                 result = catalog.refresh_all(write=False)
         self.assertIn("ollama", result["results"])
@@ -1486,7 +1786,10 @@ class MvpTests(unittest.TestCase):
             )
             preview = ModelCatalog(profile).clear_imported(write=False)
             self.assertEqual(preview["would_remove"], 56)
-            self.assertEqual(preview["provider_counts"], [{"name": "huggingface", "count": 55}, {"name": "ollama", "count": 1}])
+            self.assertEqual(
+                preview["provider_counts"],
+                [{"name": "huggingface", "count": 55}, {"name": "ollama", "count": 1}],
+            )
             self.assertEqual(preview["curated_provider_counts"], [{"name": "ollama", "count": 1}])
             self.assertTrue(preview["include_curated"])
             self.assertNotIn("model_changes", preview)
@@ -1505,8 +1808,9 @@ class MvpTests(unittest.TestCase):
             self.assertIn("curated:", written_text)
             self.assertNotIn("imported-00:", written_text)
 
-
-    def test_discovered_huggingface_image_classifier_does_not_default_to_chat_roles(self) -> None:
+    def test_discovered_huggingface_image_classifier_does_not_default_to_chat_roles(
+        self,
+    ) -> None:
         entry = _discovered_model_entry(
             "huggingface",
             "AdamCodd/vit-base-nsfw-detector",
@@ -1517,7 +1821,9 @@ class MvpTests(unittest.TestCase):
         self.assertNotIn("chat", entry["roles"])
         self.assertEqual(entry["preferred_runtime"], "vllm")
 
-    def test_discovered_huggingface_media_pipeline_tags_map_to_media_roles(self) -> None:
+    def test_discovered_huggingface_media_pipeline_tags_map_to_media_roles(
+        self,
+    ) -> None:
         cases = [
             ({"pipeline_tag": "text-to-speech"}, "text_to_speech", "transformers", 0),
             ({"pipeline_tag": "text-to-image"}, "image_generation", "diffusers", 12),
@@ -1542,7 +1848,10 @@ class MvpTests(unittest.TestCase):
         source = load_profile("local-dev", Path.cwd())
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            models_config = {"providers": {"ollama": {"runtime": "ollama"}}, "models": {}}
+            models_config = {
+                "providers": {"ollama": {"runtime": "ollama"}},
+                "models": {},
+            }
             generated_config = {
                 "models": {
                     "generated-provider-chat": {
@@ -1557,15 +1866,37 @@ class MvpTests(unittest.TestCase):
             }
             (root / "models.yaml").write_text(agent_config.dump_yaml(models_config), encoding="utf-8")
             (root / "models.generated.yaml").write_text(agent_config.dump_yaml(generated_config), encoding="utf-8")
-            profile = Profile("tmp", root, Path.cwd(), source.hardware, source.backends, source.repository, source.tools, source.approvals, source.environment, models_config, source.targets, source.orchestrators)
+            profile = Profile(
+                "tmp",
+                root,
+                Path.cwd(),
+                source.hardware,
+                source.backends,
+                source.repository,
+                source.tools,
+                source.approvals,
+                source.environment,
+                models_config,
+                source.targets,
+                source.orchestrators,
+            )
 
-            preview = ModelCatalog(profile).promote_generated("generated-provider-chat", new_name="reviewed-provider-chat", write=False)
+            preview = ModelCatalog(profile).promote_generated(
+                "generated-provider-chat",
+                new_name="reviewed-provider-chat",
+                write=False,
+            )
             self.assertEqual(preview["would_promote"], 1)
             self.assertIn("next_steps", preview)
             self.assertIn("without --dry-run", preview["next_steps"][0])
-            self.assertIn("generated-provider-chat", (root / "models.generated.yaml").read_text(encoding="utf-8"))
+            self.assertIn(
+                "generated-provider-chat",
+                (root / "models.generated.yaml").read_text(encoding="utf-8"),
+            )
 
-            written = ModelCatalog(profile).promote_generated("generated-provider-chat", new_name="reviewed-provider-chat", write=True)
+            written = ModelCatalog(profile).promote_generated(
+                "generated-provider-chat", new_name="reviewed-provider-chat", write=True
+            )
             self.assertEqual(written["promoted"], 1)
             self.assertIn("next_steps", written)
             self.assertIn("models.yaml", written["next_steps"][0])
@@ -1576,20 +1907,49 @@ class MvpTests(unittest.TestCase):
             self.assertNotIn("imported_by", curated_text)
             self.assertNotIn("generated-provider-chat:", generated_text)
 
-    def test_models_promote_refuses_curated_alias_collision_without_overwrite(self) -> None:
+    def test_models_promote_refuses_curated_alias_collision_without_overwrite(
+        self,
+    ) -> None:
         source = load_profile("local-dev", Path.cwd())
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             models_config = {
                 "providers": {"ollama": {"runtime": "ollama"}},
-                "models": {"generated-provider-chat": {"provider": "ollama", "model": "existing", "source": "ollama", "enabled": True}},
+                "models": {
+                    "generated-provider-chat": {
+                        "provider": "ollama",
+                        "model": "existing",
+                        "source": "ollama",
+                        "enabled": True,
+                    }
+                },
             }
             generated_config = {
-                "models": {"generated-provider-chat": {"provider": "ollama", "model": "provider-text-small:0.5b", "source": "ollama", "enabled": True}}
+                "models": {
+                    "generated-provider-chat": {
+                        "provider": "ollama",
+                        "model": "provider-text-small:0.5b",
+                        "source": "ollama",
+                        "enabled": True,
+                    }
+                }
             }
             (root / "models.yaml").write_text(agent_config.dump_yaml(models_config), encoding="utf-8")
             (root / "models.generated.yaml").write_text(agent_config.dump_yaml(generated_config), encoding="utf-8")
-            profile = Profile("tmp", root, Path.cwd(), source.hardware, source.backends, source.repository, source.tools, source.approvals, source.environment, models_config, source.targets, source.orchestrators)
+            profile = Profile(
+                "tmp",
+                root,
+                Path.cwd(),
+                source.hardware,
+                source.backends,
+                source.repository,
+                source.tools,
+                source.approvals,
+                source.environment,
+                models_config,
+                source.targets,
+                source.orchestrators,
+            )
 
             with self.assertRaises(ValueError):
                 ModelCatalog(profile).promote_generated("generated-provider-chat", write=False)
@@ -1616,11 +1976,41 @@ class MvpTests(unittest.TestCase):
                 "orchestrators.yaml": source.orchestrators,
             }.items():
                 (profile_root / name).write_text(agent_config.dump_yaml(data), encoding="utf-8")
-            (profile_root / "models.yaml").write_text(agent_config.dump_yaml({"providers": {"ollama": {"runtime": "ollama"}}, "models": {}}), encoding="utf-8")
-            (profile_root / "models.generated.yaml").write_text(agent_config.dump_yaml({"models": {"generated-provider-chat": {"provider": "ollama", "model": "provider-text-small:0.5b", "source": "ollama", "enabled": True}}}), encoding="utf-8")
+            (profile_root / "models.yaml").write_text(
+                agent_config.dump_yaml({"providers": {"ollama": {"runtime": "ollama"}}, "models": {}}),
+                encoding="utf-8",
+            )
+            (profile_root / "models.generated.yaml").write_text(
+                agent_config.dump_yaml(
+                    {
+                        "models": {
+                            "generated-provider-chat": {
+                                "provider": "ollama",
+                                "model": "provider-text-small:0.5b",
+                                "source": "ollama",
+                                "enabled": True,
+                            }
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
             stdout = StringIO()
             with redirect_stdout(stdout):
-                code = cli_main(["--profiles-dir", str(profiles_dir), "models", "promote", "--profile", "tmp", "generated-provider-chat", "--as", "reviewed-provider-chat", "--dry-run"])
+                code = cli_main(
+                    [
+                        "--profiles-dir",
+                        str(profiles_dir),
+                        "models",
+                        "promote",
+                        "--profile",
+                        "tmp",
+                        "generated-provider-chat",
+                        "--as",
+                        "reviewed-provider-chat",
+                        "--dry-run",
+                    ]
+                )
             self.assertEqual(code, 0)
             payload = json.loads(stdout.getvalue())
             self.assertEqual(payload["name"], "model_catalog_promote")
@@ -1629,7 +2019,9 @@ class MvpTests(unittest.TestCase):
             self.assertIn("next_steps", payload)
             self.assertIn("without --dry-run", payload["next_steps"][0])
 
-    def test_refresh_verbose_rows_use_model_source_and_runtime_endpoint_names(self) -> None:
+    def test_refresh_verbose_rows_use_model_source_and_runtime_endpoint_names(
+        self,
+    ) -> None:
         source = load_profile("local-dev", Path.cwd())
         models_config = json.loads(json.dumps(source.models))
         models_config["models"] = {
@@ -1655,18 +2047,28 @@ class MvpTests(unittest.TestCase):
             targets=source.targets,
             orchestrators=source.orchestrators,
         )
-        discovered = ProviderModelsResult("huggingface", "source_api", ["Provider/speech-to-text-large"], "live source", {"Provider/speech-to-text-large": {"downloads": 3}})
+        discovered = ProviderModelsResult(
+            "huggingface",
+            "source_api",
+            ["Provider/speech-to-text-large"],
+            "live source",
+            {"Provider/speech-to-text-large": {"downloads": 3}},
+        )
         with patch.object(ProviderRegistry, "models", return_value=discovered):
             result = ModelCatalog(profile).refresh("huggingface", write=False, verbose=True)
         row = result["results"]["huggingface"]["model_changes"][0]
         self.assertNotIn("provider", row)
-        self.assertEqual(row["model"], {"id": "Provider/speech-to-text-large", "source": "huggingface"})
+        self.assertEqual(
+            row["model"],
+            {"id": "Provider/speech-to-text-large", "source": "huggingface"},
+        )
         self.assertEqual(row["runtime_endpoint"], "transformers")
         self.assertEqual(row["preferred_runtime"], "faster_whisper")
         self.assertIn("faster_whisper", row["suitable_runtimes"])
 
-
-    def test_model_catalog_refresh_updates_source_metadata_and_preserves_curated_fields(self) -> None:
+    def test_model_catalog_refresh_updates_source_metadata_and_preserves_curated_fields(
+        self,
+    ) -> None:
         source = load_profile("local-dev", Path.cwd())
         models_config = json.loads(json.dumps(source.models))
         models_config["models"] = {
@@ -1705,29 +2107,47 @@ class MvpTests(unittest.TestCase):
                 "source_api",
                 ["Provider/Code-Large-Instruct"],
                 "live source",
-                {"Provider/Code-Large-Instruct": {"downloads": 99, "pipeline_tag": "text-generation"}},
+                {
+                    "Provider/Code-Large-Instruct": {
+                        "downloads": 99,
+                        "pipeline_tag": "text-generation",
+                    }
+                },
             )
             with patch.object(ProviderRegistry, "models", return_value=discovered):
                 preview = ModelCatalog(profile).refresh("huggingface", write=False, verbose=True)
                 self.assertEqual(preview["changes"]["would_update"], 1)
                 self.assertIn("next_steps", preview)
-                self.assertIn("aiplane models refresh --provider huggingface", preview["next_steps"][0])
+                self.assertIn(
+                    "aiplane models refresh --provider huggingface",
+                    preview["next_steps"][0],
+                )
                 self.assertEqual(preview["results"]["huggingface"]["source_models_to_update"], 1)
-                self.assertEqual(preview["results"]["huggingface"]["profile_curated_models_before_refresh"], 1)
-                self.assertEqual(preview["results"]["huggingface"]["profile_refresh_imported_models_before_refresh"], 0)
+                self.assertEqual(
+                    preview["results"]["huggingface"]["profile_curated_models_before_refresh"],
+                    1,
+                )
+                self.assertEqual(
+                    preview["results"]["huggingface"]["profile_refresh_imported_models_before_refresh"],
+                    0,
+                )
                 written = ModelCatalog(profile).refresh("huggingface", write=True, verbose=True)
 
             self.assertEqual(written["changes"]["updated"], 1)
             model = profile.models["models"]["curated-provider-chat"]
-            self.assertEqual(model["source_metadata"], {"downloads": 99, "pipeline_tag": "text-generation"})
+            self.assertEqual(
+                model["source_metadata"],
+                {"downloads": 99, "pipeline_tag": "text-generation"},
+            )
             self.assertEqual(model["roles"], ["manual_role"])
             self.assertEqual(model["notes"], "keep this note")
             self.assertEqual(model["preferred_runtime"], "transformers")
             self.assertEqual(model["capability_score_source"], "manual")
             self.assertEqual(model["capability_scores"]["code_generation"], 5)
 
-
-    def test_model_catalog_refresh_updates_refresh_imported_fields_from_source(self) -> None:
+    def test_model_catalog_refresh_updates_refresh_imported_fields_from_source(
+        self,
+    ) -> None:
         source = load_profile("local-dev", Path.cwd())
         models_config = json.loads(json.dumps(source.models))
         models_config["models"] = {
@@ -1757,7 +2177,13 @@ class MvpTests(unittest.TestCase):
                 targets=source.targets,
                 orchestrators=source.orchestrators,
             )
-            discovered = ProviderModelsResult("huggingface", "source_api", ["org/old-embed"], "live source", {"org/old-embed": {"downloads": 2}})
+            discovered = ProviderModelsResult(
+                "huggingface",
+                "source_api",
+                ["org/old-embed"],
+                "live source",
+                {"org/old-embed": {"downloads": 2}},
+            )
             with patch.object(ProviderRegistry, "models", return_value=discovered):
                 written = ModelCatalog(profile).refresh("huggingface", write=True, verbose=True)
             self.assertEqual(written["changes"]["updated"], 1)
@@ -1765,12 +2191,19 @@ class MvpTests(unittest.TestCase):
             self.assertEqual(generated_models["hf-old"]["roles"], ["embedding"])
             self.assertEqual(generated_models["hf-old"]["source_metadata"], {"downloads": 2})
 
-
     def test_model_catalog_refresh_prunes_live_discovery_but_not_fallback(self) -> None:
         source = load_profile("local-dev", Path.cwd())
         models_config = json.loads(json.dumps(source.models))
-        models_config.setdefault("models", {})["local-chat-small"] = {"provider": "ollama", "model": "provider-chat-small:8b", "enabled": True}
-        models_config.setdefault("models", {})["local-analysis-small"] = {"provider": "ollama", "model": "provider-text-small:0.5b", "enabled": True}
+        models_config.setdefault("models", {})["local-chat-small"] = {
+            "provider": "ollama",
+            "model": "provider-chat-small:8b",
+            "enabled": True,
+        }
+        models_config.setdefault("models", {})["local-analysis-small"] = {
+            "provider": "ollama",
+            "model": "provider-text-small:0.5b",
+            "enabled": True,
+        }
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             (root / "models.yaml").write_text(agent_config.dump_yaml(models_config), encoding="utf-8")
@@ -1788,12 +2221,20 @@ class MvpTests(unittest.TestCase):
                 targets=source.targets,
                 orchestrators=source.orchestrators,
             )
-            live = ProviderModelsResult("ollama", "provider_api", ["provider-chat-small:8b"], "live runtime inventory")
+            live = ProviderModelsResult(
+                "ollama",
+                "provider_api",
+                ["provider-chat-small:8b"],
+                "live runtime inventory",
+            )
             with patch.object(ProviderRegistry, "models", return_value=live):
                 preview = ModelCatalog(profile).refresh("ollama", write=False, verbose=True)
                 self.assertEqual(preview["changes"]["would_remove"], 0)
                 self.assertTrue(preview["results"]["ollama"]["prune_enabled"])
-                self.assertIn("local-analysis-small:", (root / "models.yaml").read_text(encoding="utf-8"))
+                self.assertIn(
+                    "local-analysis-small:",
+                    (root / "models.yaml").read_text(encoding="utf-8"),
+                )
 
                 written = ModelCatalog(profile).refresh("ollama", write=True, verbose=True)
 
@@ -1816,12 +2257,16 @@ class MvpTests(unittest.TestCase):
                 targets=source.targets,
                 orchestrators=source.orchestrators,
             )
-            fallback = ProviderModelsResult("ollama", "profile_catalog", ["provider-chat-small:8b"], "offline fallback")
+            fallback = ProviderModelsResult(
+                "ollama",
+                "profile_catalog",
+                ["provider-chat-small:8b"],
+                "offline fallback",
+            )
             with patch.object(ProviderRegistry, "models", return_value=fallback):
                 fallback_result = ModelCatalog(fallback_profile).refresh("ollama", write=True)
             self.assertFalse(fallback_result["results"]["ollama"]["prune_enabled"])
             self.assertEqual(fallback_result["changes"]["removed"], 0)
-
 
     def test_model_defaults_can_be_shown_and_changed(self) -> None:
         source = load_profile("local-dev", Path.cwd())
@@ -1842,10 +2287,16 @@ class MvpTests(unittest.TestCase):
                 targets=source.targets,
             )
             catalog = ModelCatalog(profile)
-            self.assertEqual(catalog.default_model("self_managed_model")["name"], "local-analysis-small")
+            self.assertEqual(
+                catalog.default_model("self_managed_model")["name"],
+                "local-analysis-small",
+            )
             changed = catalog.set_default("self_managed_model", "local-code-small")
             self.assertEqual(changed["name"], "local-code-small")
-            self.assertIn("self_managed_model: local-code-small", (root / "models.yaml").read_text(encoding="utf-8"))
+            self.assertIn(
+                "self_managed_model: local-code-small",
+                (root / "models.yaml").read_text(encoding="utf-8"),
+            )
 
     def test_models_list_and_defaults_support_grouping(self) -> None:
         stdout = StringIO()
@@ -1871,7 +2322,16 @@ class MvpTests(unittest.TestCase):
         self.assertIn("managed_service", payload["groups"])
         stdout = StringIO()
         with redirect_stdout(stdout):
-            code = cli_main(["models", "list", "--profile", "local-dev", "--group-by", "provider-kind"])
+            code = cli_main(
+                [
+                    "models",
+                    "list",
+                    "--profile",
+                    "local-dev",
+                    "--group-by",
+                    "provider-kind",
+                ]
+            )
         self.assertEqual(code, 0)
         payload = json.loads(stdout.getvalue())
         self.assertEqual(payload["group_by"], "provider-kind")
@@ -1881,7 +2341,16 @@ class MvpTests(unittest.TestCase):
         self.assertIn("openai", payload["groups"]["managed_service"])
         stdout = StringIO()
         with redirect_stdout(stdout):
-            code = cli_main(["models", "defaults", "--profile", "local-dev", "--group-by", "provider"])
+            code = cli_main(
+                [
+                    "models",
+                    "defaults",
+                    "--profile",
+                    "local-dev",
+                    "--group-by",
+                    "provider",
+                ]
+            )
         self.assertEqual(code, 0)
         payload = json.loads(stdout.getvalue())
         self.assertEqual(payload["group_by"], "provider")
@@ -1890,17 +2359,19 @@ class MvpTests(unittest.TestCase):
     def test_models_list_filters_sorts_and_limits_cli(self) -> None:
         stdout = StringIO()
         with redirect_stdout(stdout):
-            code = cli_main([
-                "models",
-                "list",
-                "--profile",
-                "local-dev",
-                "--capability",
-                "code_generation>=3",
-                "--capability",
-                "debugging>=2",
-                "--self-managed-only",
-            ])
+            code = cli_main(
+                [
+                    "models",
+                    "list",
+                    "--profile",
+                    "local-dev",
+                    "--capability",
+                    "code_generation>=3",
+                    "--capability",
+                    "debugging>=2",
+                    "--self-managed-only",
+                ]
+            )
         self.assertEqual(code, 0)
         rows = json.loads(stdout.getvalue())
         self.assertTrue(rows)
@@ -1909,21 +2380,23 @@ class MvpTests(unittest.TestCase):
 
         stdout = StringIO()
         with redirect_stdout(stdout):
-            code = cli_main([
-                "models",
-                "list",
-                "--profile",
-                "local-dev",
-                "--capability",
-                "coding>=3",
-                "--vram-gb",
-                "96",
-                "--self-managed-only",
-                "--sort-by",
-                "avg",
-                "--limit",
-                "3",
-            ])
+            code = cli_main(
+                [
+                    "models",
+                    "list",
+                    "--profile",
+                    "local-dev",
+                    "--capability",
+                    "coding>=3",
+                    "--vram-gb",
+                    "96",
+                    "--self-managed-only",
+                    "--sort-by",
+                    "avg",
+                    "--limit",
+                    "3",
+                ]
+            )
         self.assertEqual(code, 0)
         payload = json.loads(stdout.getvalue())
         self.assertLessEqual(len(payload), 3)
@@ -1931,19 +2404,21 @@ class MvpTests(unittest.TestCase):
     def test_models_pull_can_plan_huggingface_download(self) -> None:
         stdout = StringIO()
         with redirect_stdout(stdout):
-            code = cli_main([
-                "models",
-                "pull",
-                "--profile",
-                "local-dev",
-                "--source",
-                "huggingface",
-                "--model-id",
-                "Provider/Code-Large-Instruct",
-                "--for-runtime",
-                "vllm",
-                "--dry-run",
-            ])
+            code = cli_main(
+                [
+                    "models",
+                    "pull",
+                    "--profile",
+                    "local-dev",
+                    "--source",
+                    "huggingface",
+                    "--model-id",
+                    "Provider/Code-Large-Instruct",
+                    "--for-runtime",
+                    "vllm",
+                    "--dry-run",
+                ]
+            )
         self.assertEqual(code, 0)
         payload = json.loads(stdout.getvalue())
         self.assertEqual(payload["source"], "huggingface")
@@ -1969,13 +2444,29 @@ class MvpTests(unittest.TestCase):
             self.assertEqual(result["summary"]["previewed"], 4)
             self.assertEqual(result["summary"]["average_score"], 0)
             self.assertTrue(all(row["passed"] is None for row in result["results"]))
-            self.assertEqual({row["task"] for row in result["results"]}, {"analysis", "completion", "generation", "reasoning"})
+            self.assertEqual(
+                {row["task"] for row in result["results"]},
+                {"analysis", "completion", "generation", "reasoning"},
+            )
             self.assertNotIn("saved_to", result)
 
     def test_model_catalog_cloud_doctor_checks_env_var(self) -> None:
         profile = load_profile("local-dev", Path.cwd())
-        profile.models.setdefault("providers", {})["openai"] = {"ownership": "managed_service", "runtime": "openai_api", "protocol": "openai_compatible", "endpoint": "https://api.openai.com/v1", "enabled": True, "api_key_env": "OPENAI_API_KEY"}
-        profile.models.setdefault("models", {})["openai-main"] = {"provider": "openai", "model": "managed-chat-model", "roles": ["analysis"], "local": False, "enabled": True}
+        profile.models.setdefault("providers", {})["openai"] = {
+            "ownership": "managed_service",
+            "runtime": "openai_api",
+            "protocol": "openai_compatible",
+            "endpoint": "https://api.openai.com/v1",
+            "enabled": True,
+            "api_key_env": "OPENAI_API_KEY",
+        }
+        profile.models.setdefault("models", {})["openai-main"] = {
+            "provider": "openai",
+            "model": "managed-chat-model",
+            "roles": ["analysis"],
+            "local": False,
+            "enabled": True,
+        }
         statuses = {status.name: status for status in ModelCatalog(profile).doctor()}
         self.assertIn("OPENAI_API_KEY", statuses["openai-main"].reason)
 
@@ -1995,7 +2486,10 @@ class MvpTests(unittest.TestCase):
         self.assertNotIn("managed-chat-small", ollama_matches)
 
         stdout = StringIO()
-        with patch("aiplane.cli.load_profile", return_value=profile), redirect_stdout(stdout):
+        with (
+            patch("aiplane.cli.load_profile", return_value=profile),
+            redirect_stdout(stdout),
+        ):
             code = cli_main(["models", "list", "--profile", "local-dev", "--group-by", "runtime"])
         self.assertEqual(code, 0)
         payload = json.loads(stdout.getvalue())
@@ -2028,13 +2522,17 @@ class MvpTests(unittest.TestCase):
             target = workspace / "sample.py"
             target.write_text("def add(a, b):\n    return a + b\n", encoding="utf-8")
             profile = load_profile("local-dev", workspace)
-            result = CodeTaskRunner(profile, AuditLogger(profile)).complete("local-analysis-small", target, 2, dry_run=True)
+            result = CodeTaskRunner(profile, AuditLogger(profile)).complete(
+                "local-analysis-small", target, 2, dry_run=True
+            )
             self.assertIn("Before cursor", result.output)
             self.assertIn("After cursor", result.output)
 
     def test_code_write_dry_run_builds_prompt(self) -> None:
         profile = load_profile("local-dev", Path.cwd())
-        result = CodeTaskRunner(profile, AuditLogger(profile)).write("local-analysis-small", "add email validation", dry_run=True)
+        result = CodeTaskRunner(profile, AuditLogger(profile)).write(
+            "local-analysis-small", "add email validation", dry_run=True
+        )
         self.assertIn("add email validation", result.output)
 
     def test_code_runner_blocks_path_escape(self) -> None:
@@ -2072,7 +2570,12 @@ class MvpTests(unittest.TestCase):
         self.assertEqual(best_plan["constraints"]["runtime"], "ollama")
         self.assertTrue(all(row["runtime"] == "ollama" for row in best_plan["selection"].values()))
 
-        manual = manager.plan("continue", chat="local-code-small", autocomplete="local-code-base", embedding="local-embedding-small")
+        manual = manager.plan(
+            "continue",
+            chat="local-code-small",
+            autocomplete="local-code-base",
+            embedding="local-embedding-small",
+        )
         self.assertEqual(manual["selection"]["chat"]["name"], "local-code-small")
         self.assertEqual(manual["overrides"]["chat"], "local-code-small")
 
@@ -2093,7 +2596,16 @@ class MvpTests(unittest.TestCase):
     def test_integrations_plan_and_setup_cli(self) -> None:
         stdout = StringIO()
         with redirect_stdout(stdout):
-            code = cli_main(["integrations", "plan", "continue", "--runtime", "ollama", "--select-best"])
+            code = cli_main(
+                [
+                    "integrations",
+                    "plan",
+                    "continue",
+                    "--runtime",
+                    "ollama",
+                    "--select-best",
+                ]
+            )
         self.assertEqual(code, 0)
         payload = json.loads(stdout.getvalue())
         self.assertEqual(payload["tool"], "continue")
@@ -2110,7 +2622,11 @@ class MvpTests(unittest.TestCase):
     def test_integrations_export_continue_uses_planner_constraints(self) -> None:
         profile = load_profile("local-dev", Path.cwd())
         models_config = json.loads(json.dumps(profile.models))
-        models_config["models"] = {name: model for name, model in models_config.get("models", {}).items() if model.get("imported_by") != "aiplane_refresh"}
+        models_config["models"] = {
+            name: model
+            for name, model in models_config.get("models", {}).items()
+            if model.get("imported_by") != "aiplane_refresh"
+        }
         profile = Profile(
             name=profile.name,
             root=profile.root,
@@ -2137,21 +2653,66 @@ class MvpTests(unittest.TestCase):
         source = _REAL_LOAD_PROFILE("local-dev", Path.cwd())
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            models_config = {"providers": json.loads(json.dumps(source.models.get("providers", {}))), "models": {}, "defaults": {}}
+            models_config = {
+                "providers": json.loads(json.dumps(source.models.get("providers", {}))),
+                "models": {},
+                "defaults": {},
+            }
             generated_config = {
                 "models": {
-                    "generated-chat": {"provider": "ollama", "model": "provider-chat-demo", "source": "ollama", "roles": ["chat", "analysis", "generation"], "enabled": True},
-                    "generated-code": {"provider": "ollama", "model": "provider-code-demo", "source": "ollama", "roles": ["autocomplete", "completion"], "enabled": True},
-                    "generated-embed": {"provider": "ollama", "model": "provider-embed-demo", "source": "ollama", "roles": ["embedding"], "enabled": True},
+                    "generated-chat": {
+                        "provider": "ollama",
+                        "model": "provider-chat-demo",
+                        "source": "ollama",
+                        "roles": ["chat", "analysis", "generation"],
+                        "enabled": True,
+                    },
+                    "generated-code": {
+                        "provider": "ollama",
+                        "model": "provider-code-demo",
+                        "source": "ollama",
+                        "roles": ["autocomplete", "completion"],
+                        "enabled": True,
+                    },
+                    "generated-embed": {
+                        "provider": "ollama",
+                        "model": "provider-embed-demo",
+                        "source": "ollama",
+                        "roles": ["embedding"],
+                        "enabled": True,
+                    },
                 }
             }
             (root / "models.yaml").write_text(agent_config.dump_yaml(models_config), encoding="utf-8")
             (root / "models.generated.yaml").write_text(agent_config.dump_yaml(generated_config), encoding="utf-8")
-            profile = Profile("demo", root, Path.cwd(), source.hardware, source.backends, source.repository, source.tools, source.approvals, source.environment, models_config, source.targets, source.orchestrators)
+            profile = Profile(
+                "demo",
+                root,
+                Path.cwd(),
+                source.hardware,
+                source.backends,
+                source.repository,
+                source.tools,
+                source.approvals,
+                source.environment,
+                models_config,
+                source.targets,
+                source.orchestrators,
+            )
             manager = IntegrationManager(profile)
 
-            plan = manager.plan("continue", chat="generated-chat", autocomplete="generated-code", embedding="generated-embed")
-            exported = manager.export("continue", chat="generated-chat", autocomplete="generated-code", embedding="generated-embed")
+            plan = manager.plan(
+                "continue",
+                chat="generated-chat",
+                autocomplete="generated-code",
+                embedding="generated-embed",
+            )
+            exported = manager.export(
+                "continue",
+                chat="generated-chat",
+                autocomplete="generated-code",
+                embedding="generated-embed",
+            )
 
             self.assertEqual(plan["selection"]["chat"]["name"], "generated-chat")
             self.assertIn("model: provider-chat-demo", exported.content)
@@ -2166,10 +2727,24 @@ class MvpTests(unittest.TestCase):
         self.assertIn("apiBase: http://localhost:11434/v1", exported.content)
         self.assertIn("model: provider-text-small:0.5b", exported.content)
 
-    def test_integrations_export_continue_supports_role_flags_and_saved_plan(self) -> None:
+    def test_integrations_export_continue_supports_role_flags_and_saved_plan(
+        self,
+    ) -> None:
         stdout = StringIO()
         with redirect_stdout(stdout):
-            code = cli_main(["integrations", "export", "continue", "--chat", "managed-chat-small", "--autocomplete", "local-code-base", "--embedding", "local-embedding-small"])
+            code = cli_main(
+                [
+                    "integrations",
+                    "export",
+                    "continue",
+                    "--chat",
+                    "managed-chat-small",
+                    "--autocomplete",
+                    "local-code-base",
+                    "--embedding",
+                    "local-embedding-small",
+                ]
+            )
         self.assertEqual(code, 0)
         output = stdout.getvalue()
         self.assertIn("model: managed-chat-model", output)
@@ -2180,19 +2755,49 @@ class MvpTests(unittest.TestCase):
             plan_path = Path(tmp) / "plan.json"
             stdout = StringIO()
             with redirect_stdout(stdout):
-                code = cli_main(["integrations", "plan", "continue", "--chat", "managed-chat-small", "--autocomplete", "local-code-base", "--embedding", "local-embedding-small"])
+                code = cli_main(
+                    [
+                        "integrations",
+                        "plan",
+                        "continue",
+                        "--chat",
+                        "managed-chat-small",
+                        "--autocomplete",
+                        "local-code-base",
+                        "--embedding",
+                        "local-embedding-small",
+                    ]
+                )
             self.assertEqual(code, 0)
             plan_path.write_text(stdout.getvalue(), encoding="utf-8")
             stdout = StringIO()
             with redirect_stdout(stdout):
-                code = cli_main(["integrations", "export", "continue", "--from-plan", str(plan_path)])
+                code = cli_main(
+                    [
+                        "integrations",
+                        "export",
+                        "continue",
+                        "--from-plan",
+                        str(plan_path),
+                    ]
+                )
             self.assertEqual(code, 0)
             self.assertIn("model: managed-chat-model", stdout.getvalue())
 
     def test_agents_plan_and_export_cli_print_scaffold(self) -> None:
         stdout = StringIO()
         with redirect_stdout(stdout):
-            code = cli_main(["agents", "plan", "repo-helper", "--framework", "langgraph", "--model", "local-analysis-small"])
+            code = cli_main(
+                [
+                    "agents",
+                    "plan",
+                    "repo-helper",
+                    "--framework",
+                    "langgraph",
+                    "--model",
+                    "local-analysis-small",
+                ]
+            )
         self.assertEqual(code, 0)
         payload = json.loads(stdout.getvalue())
         self.assertEqual(payload["name"], "agent_plan")
@@ -2201,12 +2806,23 @@ class MvpTests(unittest.TestCase):
 
         stdout = StringIO()
         with redirect_stdout(stdout):
-            code = cli_main(["agents", "export", "repo-helper", "--framework", "simple-openai", "--model", "local-analysis-small", "--file", "agent.py"])
+            code = cli_main(
+                [
+                    "agents",
+                    "export",
+                    "repo-helper",
+                    "--framework",
+                    "simple-openai",
+                    "--model",
+                    "local-analysis-small",
+                    "--file",
+                    "agent.py",
+                ]
+            )
         self.assertEqual(code, 0)
         output = stdout.getvalue()
         self.assertIn("from openai import OpenAI", output)
         self.assertIn("provider-text-small:0.5b", output)
-
 
     def test_agent_artifacts_root_uses_env_config_and_cli_override(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -2236,7 +2852,17 @@ class MvpTests(unittest.TestCase):
                 override = Path(tmp) / "agents-cli"
                 stdout = StringIO()
                 with redirect_stdout(stdout):
-                    code = cli_main(["agents", "plan", "demo", "--model", "local-analysis-small", "--output-dir", str(override)])
+                    code = cli_main(
+                        [
+                            "agents",
+                            "plan",
+                            "demo",
+                            "--model",
+                            "local-analysis-small",
+                            "--output-dir",
+                            str(override),
+                        ]
+                    )
                 self.assertEqual(code, 0)
                 payload = json.loads(stdout.getvalue())
                 self.assertEqual(payload["artifact_root"], str(override.resolve()))
@@ -2293,18 +2919,25 @@ class MvpTests(unittest.TestCase):
             profile.models["providers"]["azure_openai"]["endpoint"] = "https://example.openai.azure.com"
             profile.models["providers"]["azure_openai"]["credential_ref"] = "azure_openai.business_a"
             payload = {"data": [{"id": "news-deployment", "model": "managed-chat-model"}]}
+
             class FakeResponse:
                 def __enter__(self):
                     return self
+
                 def __exit__(self, exc_type, exc, tb):
                     return False
+
                 def read(self):
                     return json.dumps(payload).encode("utf-8")
+
             try:
                 with patch("aiplane.providers.urlopen", return_value=FakeResponse()) as opened:
                     result = ProviderRegistry(profile).models("azure_openai", online=True, limit=5)
                 self.assertEqual(result.models, ["news-deployment"])
-                self.assertEqual(opened.call_args.args[0].headers.get("Api-key"), "dummy-azure-key-value-123456")
+                self.assertEqual(
+                    opened.call_args.args[0].headers.get("Api-key"),
+                    "dummy-azure-key-value-123456",
+                )
             finally:
                 if old is None:
                     os.environ.pop("AIPLANE_CREDENTIALS", None)
@@ -2313,7 +2946,11 @@ class MvpTests(unittest.TestCase):
 
     def test_integrations_export_allows_remote_endpoint_override(self) -> None:
         profile = load_profile("local-dev", Path.cwd())
-        exported = IntegrationManager(profile).export("openai-compatible", "local-analysis-small", endpoint="https://llm.example.com/v1")
+        exported = IntegrationManager(profile).export(
+            "openai-compatible",
+            "local-analysis-small",
+            endpoint="https://llm.example.com/v1",
+        )
         self.assertIn("https://llm.example.com/v1", exported.content)
 
     def test_models_list_can_rank_and_limit_by_repeated_roles(self) -> None:
@@ -2322,7 +2959,25 @@ class MvpTests(unittest.TestCase):
             shutil.copytree(Path("profile-templates") / "local-dev", profiles_dir / "local-dev")
             stdout = StringIO()
             with redirect_stdout(stdout):
-                code = cli_main(["--profiles-dir", str(profiles_dir), "models", "list", "--runtime", "ollama", "--role", "chat", "--role", "autocomplete", "--enabled-only", "--sort-by", "role", "--limit", "2"])
+                code = cli_main(
+                    [
+                        "--profiles-dir",
+                        str(profiles_dir),
+                        "models",
+                        "list",
+                        "--runtime",
+                        "ollama",
+                        "--role",
+                        "chat",
+                        "--role",
+                        "autocomplete",
+                        "--enabled-only",
+                        "--sort-by",
+                        "role",
+                        "--limit",
+                        "2",
+                    ]
+                )
         self.assertEqual(code, 0)
         payload = json.loads(stdout.getvalue())
         self.assertEqual(len(payload), 2)
@@ -2335,7 +2990,15 @@ class MvpTests(unittest.TestCase):
             shutil.copytree(Path("profile-templates") / "local-dev", profiles_dir / "local-dev")
             stdout = StringIO()
             with redirect_stdout(stdout):
-                code = cli_main(["--profiles-dir", str(profiles_dir), "models", "disable", "local-analysis-small"])
+                code = cli_main(
+                    [
+                        "--profiles-dir",
+                        str(profiles_dir),
+                        "models",
+                        "disable",
+                        "local-analysis-small",
+                    ]
+                )
             self.assertEqual(code, 0)
             payload = json.loads(stdout.getvalue())
             self.assertFalse(payload["enabled"])
@@ -2344,7 +3007,15 @@ class MvpTests(unittest.TestCase):
 
             stdout = StringIO()
             with redirect_stdout(stdout):
-                code = cli_main(["--profiles-dir", str(profiles_dir), "models", "enable", "local-analysis-small"])
+                code = cli_main(
+                    [
+                        "--profiles-dir",
+                        str(profiles_dir),
+                        "models",
+                        "enable",
+                        "local-analysis-small",
+                    ]
+                )
             self.assertEqual(code, 0)
             profile = load_profile("local-dev", Path.cwd(), profiles_dir=profiles_dir)
             self.assertTrue(ModelCatalog(profile).show("local-analysis-small")["enabled"])
@@ -2355,11 +3026,22 @@ class MvpTests(unittest.TestCase):
             shutil.copytree(Path("profile-templates") / "local-dev", profiles_dir / "local-dev")
             stdout = StringIO()
             with redirect_stdout(stdout):
-                code = cli_main(["--profiles-dir", str(profiles_dir), "integrations", "roles", "continue"])
+                code = cli_main(
+                    [
+                        "--profiles-dir",
+                        str(profiles_dir),
+                        "integrations",
+                        "roles",
+                        "continue",
+                    ]
+                )
         self.assertEqual(code, 0)
         payload = json.loads(stdout.getvalue())
         self.assertEqual(payload["tool"], "continue")
-        self.assertEqual([role["name"] for role in payload["roles"]], ["chat", "autocomplete", "embedding"])
+        self.assertEqual(
+            [role["name"] for role in payload["roles"]],
+            ["chat", "autocomplete", "embedding"],
+        )
 
     def test_integrations_plan_supports_single_model_targets(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -2367,7 +3049,19 @@ class MvpTests(unittest.TestCase):
             shutil.copytree(Path("profile-templates") / "local-dev", profiles_dir / "local-dev")
             stdout = StringIO()
             with redirect_stdout(stdout):
-                code = cli_main(["--profiles-dir", str(profiles_dir), "integrations", "plan", "cline", "--model", "local-analysis-small", "--endpoint", "http://localhost:11434/v1"])
+                code = cli_main(
+                    [
+                        "--profiles-dir",
+                        str(profiles_dir),
+                        "integrations",
+                        "plan",
+                        "cline",
+                        "--model",
+                        "local-analysis-small",
+                        "--endpoint",
+                        "http://localhost:11434/v1",
+                    ]
+                )
         self.assertEqual(code, 0)
         payload = json.loads(stdout.getvalue())
         self.assertEqual(payload["tool"], "cline")
@@ -2380,7 +3074,20 @@ class MvpTests(unittest.TestCase):
             shutil.copytree(Path("profile-templates") / "local-dev", profiles_dir / "local-dev")
             stdout = StringIO()
             with redirect_stdout(stdout):
-                code = cli_main(["--profiles-dir", str(profiles_dir), "integrations", "export", "aider", "--select-best", "--runtime", "ollama", "--capability", "code_generation>=1"])
+                code = cli_main(
+                    [
+                        "--profiles-dir",
+                        str(profiles_dir),
+                        "integrations",
+                        "export",
+                        "aider",
+                        "--select-best",
+                        "--runtime",
+                        "ollama",
+                        "--capability",
+                        "code_generation>=1",
+                    ]
+                )
         self.assertEqual(code, 0)
         output = stdout.getvalue()
         self.assertIn("aider --model openai/", output)
@@ -2482,7 +3189,20 @@ class MvpTests(unittest.TestCase):
                 "  enabled: true\n",
                 encoding="utf-8",
             )
-            profile = Profile("local-dev", profile_root, root, {}, {}, {}, {}, {}, {}, {"models": {}}, {}, {})
+            profile = Profile(
+                "local-dev",
+                profile_root,
+                root,
+                {},
+                {},
+                {},
+                {},
+                {},
+                {},
+                {"models": {}},
+                {},
+                {},
+            )
             rows = ProviderRegistry(profile).list(include_disabled=True)
             self.assertEqual([row["name"] for row in rows], ["legacyhub"])
 
@@ -2508,7 +3228,16 @@ class MvpTests(unittest.TestCase):
             shutil.copytree(Path.cwd() / "profiles" / "local-dev", root / "local-dev")
             stdout = StringIO()
             with redirect_stdout(stdout):
-                code = cli_main(["--profiles-dir", str(root), "providers", "clear", "--profile", "local-dev"])
+                code = cli_main(
+                    [
+                        "--profiles-dir",
+                        str(root),
+                        "providers",
+                        "clear",
+                        "--profile",
+                        "local-dev",
+                    ]
+                )
             self.assertEqual(code, 0)
             payload = json.loads(stdout.getvalue())
             self.assertEqual(payload["scope"], "all")
@@ -2521,7 +3250,12 @@ class MvpTests(unittest.TestCase):
             shutil.copytree(Path.cwd() / "profiles" / "local-dev", root / "local-dev")
             profile = load_profile("local-dev", Path.cwd(), profiles_dir=root)
             registry = ProviderRegistry(profile)
-            added = registry.add("myhub", description="Private hub", typical_runtimes=["vllm"], online_adapter="huggingface")
+            added = registry.add(
+                "myhub",
+                description="Private hub",
+                typical_runtimes=["vllm"],
+                online_adapter="huggingface",
+            )
             self.assertEqual(added["online_adapter"], "huggingface")
             self.assertIn("myhub", registry.model_providers())
             removed = registry.remove("myhub")
@@ -2541,16 +3275,22 @@ class MvpTests(unittest.TestCase):
         self.assertEqual(result.source, "profile_catalog")
         self.assertIn("Provider/Code-Large-Instruct", result.models)
 
-    def test_provider_models_can_query_ollama_online_adapter_with_mocked_http(self) -> None:
+    def test_provider_models_can_query_ollama_online_adapter_with_mocked_http(
+        self,
+    ) -> None:
         profile = load_profile("local-dev", Path.cwd())
         html = '<a href="/library/provider-chat">provider-chat</a><a href="/library/provider-code">provider-code</a>'
+
         class FakeResponse:
             def __enter__(self):
                 return self
+
             def __exit__(self, exc_type, exc, tb):
                 return False
+
             def read(self):
                 return html.encode("utf-8")
+
         with patch("aiplane.providers.urlopen", return_value=FakeResponse()):
             result = ProviderRegistry(profile).models("ollama", online=True, query="code", limit=5)
         self.assertEqual(result.source, "source_api")
@@ -2559,30 +3299,43 @@ class MvpTests(unittest.TestCase):
     def test_provider_models_can_query_online_adapter_with_mocked_http(self) -> None:
         profile = load_profile("local-dev", Path.cwd())
         payload = [{"modelId": "Provider/Test-Coder"}]
+
         class FakeResponse:
             def __enter__(self):
                 return self
+
             def __exit__(self, exc_type, exc, tb):
                 return False
+
             def read(self):
                 return json.dumps(payload).encode("utf-8")
+
         with patch("aiplane.providers.urlopen", return_value=FakeResponse()):
             result = ProviderRegistry(profile).models("huggingface", online=True, query="code", limit=1)
         self.assertEqual(result.source, "source_api")
         self.assertEqual(result.models, ["Provider/Test-Coder"])
 
-    def test_provider_models_can_query_azure_openai_deployments_with_mocked_http(self) -> None:
+    def test_provider_models_can_query_azure_openai_deployments_with_mocked_http(
+        self,
+    ) -> None:
         profile = load_profile("local-dev", Path.cwd())
         profile.models["providers"]["azure_openai"]["endpoint"] = "https://example.openai.azure.com"
         payload = {"data": [{"id": "coding-chat", "model": "managed-chat-model"}]}
+
         class FakeResponse:
             def __enter__(self):
                 return self
+
             def __exit__(self, exc_type, exc, tb):
                 return False
+
             def read(self):
                 return json.dumps(payload).encode("utf-8")
-        with patch.dict(os.environ, {"AZURE_OPENAI_API_KEY": "test-key"}), patch("aiplane.providers.urlopen", return_value=FakeResponse()) as opened:
+
+        with (
+            patch.dict(os.environ, {"AZURE_OPENAI_API_KEY": "test-key"}),
+            patch("aiplane.providers.urlopen", return_value=FakeResponse()) as opened,
+        ):
             result = ProviderRegistry(profile).models("azure_openai", online=True, query="coding", limit=5)
         self.assertEqual(result.source, "provider_api")
         self.assertEqual(result.models, ["coding-chat"])
@@ -2595,14 +3348,21 @@ class MvpTests(unittest.TestCase):
         profile.models["providers"]["elevenlabs"]["enabled"] = True
         profile.models.setdefault("models", {})
         payload = {"voices": [{"voice_id": "voice-alpha", "name": "Demo Voice", "category": "premade"}]}
+
         class FakeResponse:
             def __enter__(self):
                 return self
+
             def __exit__(self, exc_type, exc, tb):
                 return False
+
             def read(self):
                 return json.dumps(payload).encode("utf-8")
-        with patch.dict(os.environ, {"ELEVENLABS_API_KEY": "test-key"}), patch("aiplane.providers.urlopen", return_value=FakeResponse()) as opened:
+
+        with (
+            patch.dict(os.environ, {"ELEVENLABS_API_KEY": "test-key"}),
+            patch("aiplane.providers.urlopen", return_value=FakeResponse()) as opened,
+        ):
             result = ProviderRegistry(profile).models("elevenlabs", online=True, query="demo", limit=5)
         self.assertEqual(result.source, "provider_api")
         self.assertEqual(result.models, ["voice-alpha"])
@@ -2610,6 +3370,89 @@ class MvpTests(unittest.TestCase):
         request = opened.call_args.args[0]
         self.assertIn("/voices", request.full_url)
         self.assertEqual(request.headers.get("Xi-api-key"), "test-key")
+
+    def test_provider_test_command_checks_openai_compatible_credential(self) -> None:
+        profile = load_profile("local-dev", Path.cwd())
+        profile.models.setdefault("providers", {})["openai"] = {
+            "ownership": "managed_service",
+            "runtime": "openai_api",
+            "protocol": "openai_compatible",
+            "endpoint": "https://api.example.test/v1",
+            "enabled": True,
+            "api_key_env": "OPENAI_API_KEY",
+        }
+        payload = {"data": [{"id": "managed-chat"}]}
+
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def read(self):
+                return json.dumps(payload).encode("utf-8")
+
+        with (
+            patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}),
+            patch("aiplane.providers.urlopen", return_value=FakeResponse()) as opened,
+        ):
+            result = ProviderRegistry(profile).test_connection("openai")
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["method"], "openai_compatible_models")
+        self.assertEqual(result["items_seen"], 1)
+        request = opened.call_args.args[0]
+        self.assertEqual(request.full_url, "https://api.example.test/v1/models")
+        self.assertEqual(request.headers.get("Authorization"), "Bearer test-key")
+        self.assertNotIn("test-key", json.dumps(result))
+
+    def test_provider_test_cli_uses_named_credential_ref(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            cred_path = Path(tmp) / "credentials.yaml"
+            cred_path.write_text(
+                "providers:\n"
+                "  openai:\n"
+                "    accounts:\n"
+                "      personal:\n"
+                "        api_key: dummy-api-key-value-123456\n"
+                "        endpoint: https://api.example.test/v1\n",
+                encoding="utf-8",
+            )
+            payload = {"data": [{"id": "managed-chat"}]}
+
+            class FakeResponse:
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, exc_type, exc, tb):
+                    return False
+
+                def read(self):
+                    return json.dumps(payload).encode("utf-8")
+
+            stdout = StringIO()
+            with (
+                patch.dict(os.environ, {"AIPLANE_CREDENTIALS": str(cred_path)}),
+                patch("aiplane.providers.urlopen", return_value=FakeResponse()),
+                redirect_stdout(stdout),
+            ):
+                code = cli_main(
+                    [
+                        "providers",
+                        "test",
+                        "--profile",
+                        "local-dev",
+                        "openai",
+                        "--credential-ref",
+                        "openai.personal",
+                    ]
+                )
+            self.assertEqual(code, 0)
+            result = json.loads(stdout.getvalue())
+            self.assertTrue(result["ok"])
+            self.assertEqual(result["credential_ref"], "openai.personal")
+            self.assertEqual(result["endpoint"], "https://api.example.test/v1")
+            self.assertNotIn("dummy-api-key-value", stdout.getvalue())
 
     def test_elevenlabs_refresh_imports_managed_tts_voice(self) -> None:
         profile = load_profile("local-dev", Path.cwd())
@@ -2690,21 +3533,42 @@ class MvpTests(unittest.TestCase):
             )
             changed = RuntimeCatalog(profile).set_preferred_runtime("provider-code-large-vllm", "tgi")
             self.assertEqual(changed["preferred_runtime"], "tgi")
-            self.assertIn("preferred_runtime: tgi", (root / "models.yaml").read_text(encoding="utf-8"))
-
+            self.assertIn(
+                "preferred_runtime: tgi",
+                (root / "models.yaml").read_text(encoding="utf-8"),
+            )
 
     def test_ollama_helper_status_is_human_readable(self) -> None:
         root = Path.cwd()
         with tempfile.TemporaryDirectory() as tmp:
             bindir = Path(tmp) / "bin"
             bindir.mkdir()
-            (bindir / "ollama").write_text("#!/usr/bin/env bash\nif [[ \"$1\" == \"--version\" ]]; then echo 'ollama version is 1.2.3'; elif [[ \"$1\" == \"list\" ]]; then echo 'NAME ID SIZE MODIFIED'; fi\n", encoding="utf-8")
-            (bindir / "curl").write_text("#!/usr/bin/env bash\nprintf '%s' '{\"models\":[{\"name\":\"provider-text-small:0.5b\",\"model\":\"provider-text-small:0.5b\",\"size\":397821516,\"details\":{\"parameter_size\":\"494.03M\",\"quantization_level\":\"Q4_K_M\"},\"capabilities\":[\"completion\",\"tools\"]}]}'\n", encoding="utf-8")
+            (bindir / "ollama").write_text(
+                '#!/usr/bin/env bash\nif [[ "$1" == "--version" ]]; then echo \'ollama version is 1.2.3\'; elif [[ "$1" == "list" ]]; then echo \'NAME ID SIZE MODIFIED\'; fi\n',
+                encoding="utf-8",
+            )
+            (bindir / "curl").write_text(
+                '#!/usr/bin/env bash\nprintf \'%s\' \'{"models":[{"name":"provider-text-small:0.5b","model":"provider-text-small:0.5b","size":397821516,"details":{"parameter_size":"494.03M","quantization_level":"Q4_K_M"},"capabilities":["completion","tools"]}]}\'\n',
+                encoding="utf-8",
+            )
             for path in bindir.iterdir():
                 path.chmod(0o755)
             env = os.environ.copy()
             env["PATH"] = f"{bindir}:{env.get('PATH', '')}"
-            completed = subprocess.run(["scripts/provider_helper.sh", "--provider", "ollama", "--action", "status"], cwd=root, env=env, text=True, capture_output=True, check=False)
+            completed = subprocess.run(
+                [
+                    "scripts/provider_helper.sh",
+                    "--provider",
+                    "ollama",
+                    "--action",
+                    "status",
+                ],
+                cwd=root,
+                env=env,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
         self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertIn("Ollama status", completed.stdout)
         self.assertIn("api_running: yes", completed.stdout)
@@ -2715,20 +3579,71 @@ class MvpTests(unittest.TestCase):
 
     def test_provider_helper_runtime_dry_runs(self) -> None:
         root = Path.cwd()
-        syntax = subprocess.run(["bash", "-n", "scripts/provider_helper.sh"], cwd=root, text=True, capture_output=True, check=False)
+        syntax = subprocess.run(
+            ["bash", "-n", "scripts/provider_helper.sh"],
+            cwd=root,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
         self.assertEqual(syntax.returncode, 0, syntax.stderr)
-        install = subprocess.run(["scripts/provider_helper.sh", "--provider", "vllm", "--action", "install", "--dry-run"], cwd=root, text=True, capture_output=True, check=False)
+        install = subprocess.run(
+            [
+                "scripts/provider_helper.sh",
+                "--provider",
+                "vllm",
+                "--action",
+                "install",
+                "--dry-run",
+            ],
+            cwd=root,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
         self.assertEqual(install.returncode, 0, install.stderr)
         self.assertIn("pip install vllm", install.stdout)
-        start = subprocess.run(["scripts/provider_helper.sh", "--provider", "tgi", "--action", "start", "--model", "Provider/Code-Large-Instruct", "--dry-run"], cwd=root, text=True, capture_output=True, check=False)
+        start = subprocess.run(
+            [
+                "scripts/provider_helper.sh",
+                "--provider",
+                "tgi",
+                "--action",
+                "start",
+                "--model",
+                "Provider/Code-Large-Instruct",
+                "--dry-run",
+            ],
+            cwd=root,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
         self.assertEqual(start.returncode, 0, start.stderr)
         self.assertIn("text-generation-inference", start.stdout)
-        ollama_docker = subprocess.run(["scripts/provider_helper.sh", "--provider", "ollama", "--action", "start", "--substrate", "docker", "--dry-run"], cwd=root, text=True, capture_output=True, check=False)
+        ollama_docker = subprocess.run(
+            [
+                "scripts/provider_helper.sh",
+                "--provider",
+                "ollama",
+                "--action",
+                "start",
+                "--substrate",
+                "docker",
+                "--dry-run",
+            ],
+            cwd=root,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
         self.assertEqual(ollama_docker.returncode, 0, ollama_docker.stderr)
         self.assertIn("docker run", ollama_docker.stdout)
         self.assertIn("ollama/ollama:latest", ollama_docker.stdout)
 
-    def test_runtime_lifecycle_reports_unavailable_helper_for_planned_runtime(self) -> None:
+    def test_runtime_lifecycle_reports_unavailable_helper_for_planned_runtime(
+        self,
+    ) -> None:
         stdout = StringIO()
         with redirect_stdout(stdout):
             code = cli_main(["runtimes", "install", "diffusers", "--dry-run"])
@@ -2752,7 +3667,10 @@ class MvpTests(unittest.TestCase):
 
     def test_runtime_install_preflight_blocks_when_required_tools_missing(self) -> None:
         stdout = StringIO()
-        with patch("aiplane.runtime_catalog.shutil.which", return_value=None), redirect_stdout(stdout):
+        with (
+            patch("aiplane.runtime_catalog.shutil.which", return_value=None),
+            redirect_stdout(stdout),
+        ):
             code = cli_main(["runtimes", "install", "--profile", "local-dev", "vllm"])
         self.assertEqual(code, 2)
         payload = json.loads(stdout.getvalue())
@@ -2763,17 +3681,36 @@ class MvpTests(unittest.TestCase):
     def test_aiplane_runtime_lifecycle_delegates_to_provider_helper(self) -> None:
         stdout = StringIO()
         with redirect_stdout(stdout):
-            code = cli_main(["runtimes", "start", "--profile", "local-dev", "vllm", "--model", "Provider/Code-Large-Instruct", "--dry-run"])
+            code = cli_main(
+                [
+                    "runtimes",
+                    "start",
+                    "--profile",
+                    "local-dev",
+                    "vllm",
+                    "--model",
+                    "Provider/Code-Large-Instruct",
+                    "--dry-run",
+                ]
+            )
         self.assertEqual(code, 0)
         output = stdout.getvalue()
         self.assertIn("vllm.entrypoints.openai.api_server", output)
         self.assertIn("Provider/Code-Large-Instruct", output)
 
-
     def test_aiplane_runtime_update_installed_and_repull_dry_runs(self) -> None:
         stdout = StringIO()
         with redirect_stdout(stdout):
-            code = cli_main(["runtimes", "update-installed", "--profile", "local-dev", "all", "--dry-run"])
+            code = cli_main(
+                [
+                    "runtimes",
+                    "update-installed",
+                    "--profile",
+                    "local-dev",
+                    "all",
+                    "--dry-run",
+                ]
+            )
         self.assertEqual(code, 0)
         output = stdout.getvalue()
         self.assertIn("Updating helper-managed runtimes", output)
@@ -2782,21 +3719,66 @@ class MvpTests(unittest.TestCase):
 
         stdout = StringIO()
         with redirect_stdout(stdout):
-            code = cli_main(["runtimes", "repull", "--profile", "local-dev", "ollama", "--model", "all", "--dry-run"])
+            code = cli_main(
+                [
+                    "runtimes",
+                    "repull",
+                    "--profile",
+                    "local-dev",
+                    "ollama",
+                    "--model",
+                    "all",
+                    "--dry-run",
+                ]
+            )
         self.assertEqual(code, 0)
         self.assertIn("ollama list", stdout.getvalue())
 
         stdout = StringIO()
         with redirect_stdout(stdout):
-            code = cli_main(["runtimes", "start", "--profile", "local-dev", "ollama", "--substrate", "docker", "--dry-run"])
+            code = cli_main(
+                [
+                    "runtimes",
+                    "start",
+                    "--profile",
+                    "local-dev",
+                    "ollama",
+                    "--substrate",
+                    "docker",
+                    "--dry-run",
+                ]
+            )
         self.assertEqual(code, 0)
         self.assertIn("docker run", stdout.getvalue())
         self.assertIn("ollama/ollama:latest", stdout.getvalue())
 
+        profile = load_profile("local-dev", Path.cwd())
+        profile.models["providers"]["ollama"]["substrate"] = "docker"
+        stdout = StringIO()
+        with (
+            patch("aiplane.cli.load_profile", return_value=profile),
+            redirect_stdout(stdout),
+        ):
+            code = cli_main(["runtimes", "start", "--profile", "local-dev", "ollama", "--dry-run"])
+        self.assertEqual(code, 0)
+        self.assertIn("docker run", stdout.getvalue())
+
     def test_aiplane_runtime_bundle_cli_prints_selected_file(self) -> None:
         stdout = StringIO()
         with redirect_stdout(stdout):
-            code = cli_main(["runtimes", "bundle", "--profile", "local-dev", "vllm", "--model", "provider-code-large-vllm", "--format", "dockerfile"])
+            code = cli_main(
+                [
+                    "runtimes",
+                    "bundle",
+                    "--profile",
+                    "local-dev",
+                    "vllm",
+                    "--model",
+                    "provider-code-large-vllm",
+                    "--format",
+                    "dockerfile",
+                ]
+            )
         self.assertEqual(code, 0)
         output = stdout.getvalue()
         self.assertIn("FROM python:3.13-slim", output)
@@ -2821,7 +3803,6 @@ class MvpTests(unittest.TestCase):
             events = audit.tail(1)
             self.assertEqual(events[0]["event_type"], "tool")
             json.dumps(events[0])
-
 
     def test_tools_doctor_and_install_dry_run_cli(self) -> None:
         stdout = StringIO()
@@ -2848,7 +3829,16 @@ class MvpTests(unittest.TestCase):
         self.assertEqual(code, 0)
         payload = json.loads(stdout.getvalue())
         tools = {row["name"]: row for row in payload["tools"]}
-        for name in ["opentofu", "terraform", "pulumi", "vagrant", "packer", "devcontainer-cli"]:
+        for name in [
+            "opentofu",
+            "terraform",
+            "pulumi",
+            "vagrant",
+            "packer",
+            "devcontainer-cli",
+            "ruff",
+            "black",
+        ]:
             self.assertIn(name, tools)
             self.assertEqual(tools[name]["requirement"], "optional")
         self.assertEqual(tools["opentofu"]["category"], "iac")
@@ -2856,6 +3846,8 @@ class MvpTests(unittest.TestCase):
         self.assertEqual(tools["vagrant"]["category"], "vm")
         self.assertEqual(tools["packer"]["category"], "image-build")
         self.assertEqual(tools["devcontainer-cli"]["category"], "container")
+        self.assertEqual(tools["ruff"]["category"], "quality")
+        self.assertEqual(tools["black"]["category"], "quality")
 
     def test_tools_matrix_cli_groups_tasks_and_capabilities(self) -> None:
         stdout = StringIO()
@@ -2874,10 +3866,18 @@ class MvpTests(unittest.TestCase):
         categories = {category["name"]: category for category in payload["categories"]}
         workflows = {workflow["name"]: workflow for workflow in payload["workflows"]}
         self.assertIn("iac", categories)
+        self.assertIn("quality", categories)
         self.assertIn("iac", workflows)
+        self.assertIn("quality", workflows)
         self.assertEqual(workflows["iac"]["tools"], len(categories["iac"]["tools"]))
+        quality_tools = {tool["name"]: tool for tool in categories["quality"]["tools"]}
+        self.assertIn("ruff", quality_tools)
+        self.assertIn("black", quality_tools)
         self.assertIn(workflows["iac"]["readiness"], {"complete", "partial", "needs_setup"})
-        self.assertIn("provider-agnostic infrastructure provisioning", workflows["iac"]["primary_tasks"])
+        self.assertIn(
+            "provider-agnostic infrastructure provisioning",
+            workflows["iac"]["primary_tasks"],
+        )
         self.assertIn("missing_tools", workflows["iac"])
         iac_tools = {tool["name"]: tool for tool in categories["iac"]["tools"]}
         self.assertTrue(iac_tools["opentofu"]["plan_available"])
@@ -2932,7 +3932,10 @@ class MvpTests(unittest.TestCase):
         self.assertIn("ollama", runtimes)
         self.assertIn("vllm", runtimes)
         self.assertIn("purpose", runtimes["ollama"])
-        self.assertIn("aiplane runtimes prerequisites ollama", runtimes["ollama"]["setup_commands"])
+        self.assertIn(
+            "aiplane runtimes prerequisites ollama",
+            runtimes["ollama"]["setup_commands"],
+        )
 
     def test_environment_plan_cli_outputs_execution_plan(self) -> None:
         stdout = StringIO()
@@ -2981,7 +3984,17 @@ class MvpTests(unittest.TestCase):
 
         stdout = StringIO()
         with redirect_stdout(stdout):
-            code = cli_main(["benchmarks", "plan", "vllm-serving", "--model", "local-code-large", "--endpoint", "http://localhost:8000/v1"])
+            code = cli_main(
+                [
+                    "benchmarks",
+                    "plan",
+                    "vllm-serving",
+                    "--model",
+                    "local-code-large",
+                    "--endpoint",
+                    "http://localhost:8000/v1",
+                ]
+            )
         self.assertEqual(code, 0)
         payload = json.loads(stdout.getvalue())
         self.assertEqual(payload["name"], "vllm-serving")
@@ -2990,18 +4003,36 @@ class MvpTests(unittest.TestCase):
     def test_custom_benchmark_spec_dry_run_plans_evaluator_environment(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             spec = Path(tmp) / "bench.json"
-            spec.write_text(json.dumps({
-                "name": "custom-code",
-                "tasks": {
-                    "unit": {
-                        "prompt": "Write a Python function.",
-                        "expected_terms": ["def"],
-                        "evaluator": {"command": ["python", "-c", "print('{\\\"score\\\": 77, \\\"passed\\\": true}')"]},
+            spec.write_text(
+                json.dumps(
+                    {
+                        "name": "custom-code",
+                        "tasks": {
+                            "unit": {
+                                "prompt": "Write a Python function.",
+                                "expected_terms": ["def"],
+                                "evaluator": {
+                                    "command": [
+                                        "python",
+                                        "-c",
+                                        'print(\'{\\"score\\": 77, \\"passed\\": true}\')',
+                                    ]
+                                },
+                            }
+                        },
                     }
-                },
-            }), encoding="utf-8")
+                ),
+                encoding="utf-8",
+            )
             profile = load_profile("local-dev", Path.cwd())
-            result = BenchmarkRunner(profile).run("local-analysis-small", task="unit", dry_run=True, save=False, spec_path=spec, environment_mode="system")
+            result = BenchmarkRunner(profile).run(
+                "local-analysis-small",
+                task="unit",
+                dry_run=True,
+                save=False,
+                spec_path=spec,
+                environment_mode="system",
+            )
         self.assertEqual(result["name"], "custom-code")
         self.assertEqual(result["environment_mode"], "system")
         self.assertEqual(result["results"][0]["evaluation"]["type"], "command")
@@ -3012,12 +4043,14 @@ class MvpTests(unittest.TestCase):
             workspace = Path(tmp)
             root = workspace / ".aiplane" / "benchmarks"
             root.mkdir(parents=True)
-            (root / "20260101T000000Z-local-analysis-small.json").write_text(json.dumps({"summary": {"average_score": 91, "passed": 1, "failed": 0}}), encoding="utf-8")
+            (root / "20260101T000000Z-local-analysis-small.json").write_text(
+                json.dumps({"summary": {"average_score": 91, "passed": 1, "failed": 0}}),
+                encoding="utf-8",
+            )
             profile = load_profile("local-dev", workspace)
             rows = ModelCatalog(profile).filter({"min_benchmark_score": 90})
         names = {row["name"] for row in rows}
         self.assertIn("local-analysis-small", names)
-
 
     def test_orchestrators_are_catalog_only_in_cli(self) -> None:
         stdout = StringIO()
@@ -3031,7 +4064,16 @@ class MvpTests(unittest.TestCase):
 
         stdout = StringIO()
         with redirect_stdout(stdout):
-            code = cli_main(["orchestrators", "list", "--provider", "ollama", "--group-by", "provider"])
+            code = cli_main(
+                [
+                    "orchestrators",
+                    "list",
+                    "--provider",
+                    "ollama",
+                    "--group-by",
+                    "provider",
+                ]
+            )
         self.assertEqual(code, 0)
         payload = json.loads(stdout.getvalue())
         self.assertEqual(payload["group_by"], "provider")
@@ -3040,7 +4082,18 @@ class MvpTests(unittest.TestCase):
 
         stdout = StringIO()
         with redirect_stdout(stdout):
-            code = cli_main(["orchestrators", "list", "--runtime", "vllm", "--runtime", "tgi", "--group-by", "runtime"])
+            code = cli_main(
+                [
+                    "orchestrators",
+                    "list",
+                    "--runtime",
+                    "vllm",
+                    "--runtime",
+                    "tgi",
+                    "--group-by",
+                    "runtime",
+                ]
+            )
         self.assertEqual(code, 0)
         payload = json.loads(stdout.getvalue())
         self.assertEqual(set(payload["groups"]), {"vllm", "tgi"})
@@ -3056,10 +4109,31 @@ class MvpTests(unittest.TestCase):
             workspace = Path(tmp) / "workspace"
             workspace.mkdir()
             profiles_dir = Path(tmp) / "profiles"
-            shutil.copytree(Path.cwd() / "profile-templates" / "local-dev", profiles_dir / "local-dev")
+            shutil.copytree(
+                Path.cwd() / "profile-templates" / "local-dev",
+                profiles_dir / "local-dev",
+            )
             stdout = StringIO()
             with redirect_stdout(stdout):
-                code = cli_main(["--workspace", str(workspace), "--profiles-dir", str(profiles_dir), "orchestrators", "setup", "langgraph", "--runtime", "ollama", "--model", "local-analysis-small", "--limit", "timeout=30m", "--tool", "shell=guarded"])
+                code = cli_main(
+                    [
+                        "--workspace",
+                        str(workspace),
+                        "--profiles-dir",
+                        str(profiles_dir),
+                        "orchestrators",
+                        "setup",
+                        "langgraph",
+                        "--runtime",
+                        "ollama",
+                        "--model",
+                        "local-analysis-small",
+                        "--limit",
+                        "timeout=30m",
+                        "--tool",
+                        "shell=guarded",
+                    ]
+                )
             self.assertEqual(code, 0)
             payload = json.loads(stdout.getvalue())
             self.assertFalse(payload["dry_run"])
@@ -3086,7 +4160,13 @@ class MvpTests(unittest.TestCase):
                 targets=source.targets,
                 orchestrators={"orchestrators": {}},
             )
-            result = OrchestratorCatalog(profile).setup("langgraph", runtime="ollama", model="local-analysis-small", dry_run=False, yes=True)
+            result = OrchestratorCatalog(profile).setup(
+                "langgraph",
+                runtime="ollama",
+                model="local-analysis-small",
+                dry_run=False,
+                yes=True,
+            )
             orchestrators_text = (root / "orchestrators.yaml").read_text(encoding="utf-8")
             hardware_text = (root / "hardware.yaml").read_text(encoding="utf-8")
         self.assertEqual(result["results"][-1]["path"], str(root / "orchestrators.yaml"))
@@ -3116,7 +4196,15 @@ class MvpTests(unittest.TestCase):
             machine_path.write_text(json.dumps(exported), encoding="utf-8")
             MachineManager(profile).import_file(machine_path)
             stacks = StackManager(profile)
-            created = stacks.setup("coding_agents", orchestrator="langgraph", runtime="ollama", model="local-analysis-small", machine="local_box", limits={"timeout": "30m", "max_parallel_agents": 3}, tools={"shell": "guarded"})
+            created = stacks.setup(
+                "coding_agents",
+                orchestrator="langgraph",
+                runtime="ollama",
+                model="local-analysis-small",
+                machine="local_box",
+                limits={"timeout": "30m", "max_parallel_agents": 3},
+                tools={"shell": "guarded"},
+            )
             self.assertFalse(created["dry_run"])
             shown = stacks.show("coding_agents")["stack"]
             self.assertEqual(shown["orchestrator"], "langgraph")
@@ -3137,8 +4225,6 @@ class MvpTests(unittest.TestCase):
             self.assertEqual(status["orchestrator"], "langgraph")
             self.assertEqual(status["limits"]["max_parallel_agents"], 3)
 
-
-
     def test_stack_setup_cli_accepts_limits_and_tool_policies(self) -> None:
         source = load_profile("local-dev", Path.cwd())
         with tempfile.TemporaryDirectory() as tmp:
@@ -3155,16 +4241,27 @@ class MvpTests(unittest.TestCase):
             MachineManager(profile).import_file(machine_path)
             stdout = StringIO()
             with redirect_stdout(stdout):
-                code = cli_main([
-                    "--profiles-dir", str(profiles_dir),
-                    "stacks", "setup", "coding_agents",
-                    "--orchestrator", "langgraph",
-                    "--runtime", "ollama",
-                    "--model", "local-analysis-small",
-                    "--machine", "local_box",
-                    "--limit", "timeout=30m",
-                    "--tool", "shell=guarded",
-                ])
+                code = cli_main(
+                    [
+                        "--profiles-dir",
+                        str(profiles_dir),
+                        "stacks",
+                        "setup",
+                        "coding_agents",
+                        "--orchestrator",
+                        "langgraph",
+                        "--runtime",
+                        "ollama",
+                        "--model",
+                        "local-analysis-small",
+                        "--machine",
+                        "local_box",
+                        "--limit",
+                        "timeout=30m",
+                        "--tool",
+                        "shell=guarded",
+                    ]
+                )
             self.assertEqual(code, 0)
             payload = json.loads(stdout.getvalue())
             self.assertEqual(payload["stack"]["limits"]["timeout"], "30m")
@@ -3193,7 +4290,14 @@ class MvpTests(unittest.TestCase):
             machine_path.write_text(json.dumps(exported), encoding="utf-8")
             MachineManager(profile).import_file(machine_path)
             stacks = StackManager(profile)
-            stacks.setup("local_stack", orchestrator=None, runtime="ollama", model="local-analysis-small", machine="local_box", access="same_host")
+            stacks.setup(
+                "local_stack",
+                orchestrator=None,
+                runtime="ollama",
+                model="local-analysis-small",
+                machine="local_box",
+                access="same_host",
+            )
             plan = stacks.prepare("local_stack", dry_run=True)
         commands = [item["command"] for item in plan["commands"]]
         self.assertTrue(commands)
@@ -3225,7 +4329,14 @@ class MvpTests(unittest.TestCase):
             machine_path.write_text(json.dumps(exported), encoding="utf-8")
             MachineManager(profile).import_file(machine_path)
             stacks = StackManager(profile)
-            stacks.setup("local_stack", orchestrator=None, runtime="ollama", model="local-analysis-small", machine="local_box", access="same_host")
+            stacks.setup(
+                "local_stack",
+                orchestrator=None,
+                runtime="ollama",
+                model="local-analysis-small",
+                machine="local_box",
+                access="same_host",
+            )
 
             class Completed:
                 returncode = 0
@@ -3265,7 +4376,14 @@ class MvpTests(unittest.TestCase):
             machine_path.write_text(json.dumps(exported), encoding="utf-8")
             MachineManager(profile).import_file(machine_path)
             stacks = StackManager(profile)
-            stacks.setup("local_stack", orchestrator=None, runtime="ollama", model="local-analysis-small", machine="local_box", access="same_host")
+            stacks.setup(
+                "local_stack",
+                orchestrator=None,
+                runtime="ollama",
+                model="local-analysis-small",
+                machine="local_box",
+                access="same_host",
+            )
 
             class Failed:
                 returncode = 7
@@ -3300,7 +4418,14 @@ class MvpTests(unittest.TestCase):
             )
             MachineManager(profile).import_azure_sku("Standard_NC40ads_H100_v5", "uksouth", name="azure_h100_test")
             stacks = StackManager(profile)
-            stacks.setup("remote_stack", orchestrator=None, runtime="vllm", model="local-code-large", machine="azure_h100_test", access="ssh_tunnel")
+            stacks.setup(
+                "remote_stack",
+                orchestrator=None,
+                runtime="vllm",
+                model="local-code-large",
+                machine="azure_h100_test",
+                access="ssh_tunnel",
+            )
             with patch("aiplane.stacks.subprocess.run") as run:
                 result = stacks.start("remote_stack")
         self.assertEqual(result["status"], "planned_not_executed")

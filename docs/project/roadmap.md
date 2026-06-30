@@ -25,7 +25,7 @@ Required outcomes:
 ## Implemented
 
 - Profile loading, validation, templates, selected/default profile handling, ignored local config, and external profile directory support.
-- Ignored local credential references with redacted credential inspection commands.
+- Ignored local credential references with redacted credential inspection commands and provider connection tests for selected managed endpoints.
 - Environment planning and doctor checks for system Python, `venv`, Conda, and Docker execution mode.
 - External tool catalog, doctors, guarded install previews, non-mutating plans, and starter exports for Azure CLI, OpenTofu/Terraform, Pulumi, Vagrant, Packer, Docker/Compose, Dev Container CLI, kubectl, Helm, OpenSSH, Ansible, and benchmark helpers.
 - Provider/model catalog foundations for Ollama, Ollama Cloud placeholder, OpenAI-compatible runtimes, OpenAI, Anthropic, Azure OpenAI, ElevenLabs TTS, Hugging Face, GGUF/local files, and user-defined discovery providers. Checked-in profiles now ship provider definitions without model aliases, and model grouping separates managed-service providers from self-managed runtime sources while preserving managed endpoint metadata for exports, stacks, and orchestrator plans.
@@ -100,7 +100,7 @@ Required outcomes:
 
 7. **Endpoint authentication and credential hygiene**
    - Add first-class plans for reverse proxy or gateway auth in front of public/shared model endpoints.
-   - Support named local credentials for multiple accounts per provider without raw secrets in profiles.
+   - Support named local credentials for multiple accounts per provider without raw secrets in profiles. - Implemented for ignored credentials YAML; continue hardening provider test coverage.
    - Add stronger secret scanning/readiness checks before public release or generated artifact export.
 
 8. **Benchmark and recommendation quality**

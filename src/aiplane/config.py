@@ -70,7 +70,6 @@ def init_local_config(template: str = "local", path: Path | str | None = None, o
     return destination
 
 
-
 def default_profile(path: Path | str | None = None) -> str:
     env_value = os.environ.get("AIPLANE_PROFILE")
     if env_value:
@@ -146,7 +145,12 @@ def list_profile_templates() -> list[str]:
     return sorted(path.name for path in root.iterdir() if path.is_dir())
 
 
-def create_profile(name: str, template: str = "local-dev", overwrite: bool = False, profiles_dir: Path | str | None = None) -> Path:
+def create_profile(
+    name: str,
+    template: str = "local-dev",
+    overwrite: bool = False,
+    profiles_dir: Path | str | None = None,
+) -> Path:
     if not name or name in {".", ".."} or "/" in name or "\\" in name:
         raise ValueError("profile name must be a simple directory name")
     source = profile_templates_root() / template
@@ -307,6 +311,12 @@ def _format_scalar(value: Any) -> str:
     if isinstance(value, (int, float)):
         return str(value)
     text = str(value)
-    if text == "" or text.strip() != text or text in {"null", "true", "false", "None", "True", "False"} or ":" in text or "#" in text:
+    if (
+        text == ""
+        or text.strip() != text
+        or text in {"null", "true", "false", "None", "True", "False"}
+        or ":" in text
+        or "#" in text
+    ):
         return repr(text)
     return text

@@ -7,33 +7,115 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-AZURE_CLI_TIMEOUT_SECONDS = 10
-
 from .config import dump_yaml, parse_yaml
 from .hardware import HardwareManager
 from .model_catalog import ModelCatalog
 from .models import Profile
 from .runtime_catalog import RuntimeCatalog
 
+AZURE_CLI_TIMEOUT_SECONDS = 10
+
 WORKLOAD_CLASSES: dict[str, dict[str, Any]] = {
-    "inference_tiny": {"min_ram_gb": 8, "min_vram_gb": 0, "notes": "CPU/laptop smoke tests and tiny local models"},
-    "inference_small": {"min_ram_gb": 16, "min_vram_gb": 8, "notes": "1B-7B local coding/chat models"},
-    "inference_medium": {"min_ram_gb": 64, "min_vram_gb": 24, "notes": "7B-32B models on a GPU workstation or VM"},
-    "inference_large": {"min_ram_gb": 128, "min_vram_gb": 48, "notes": "32B-70B+ models, high VRAM or multi-GPU"},
-    "training_finetune": {"min_ram_gb": 128, "min_vram_gb": 40, "notes": "fine-tuning/training experiments; storage and isolation also matter"},
-    "batch_embedding_indexing": {"min_ram_gb": 64, "min_vram_gb": 0, "notes": "RAM/CPU/storage-heavy preprocessing and indexing"},
-    "compile_build": {"min_ram_gb": 32, "min_vram_gb": 0, "notes": "CPU/RAM-heavy builds and package compilation"},
-    "media_generation": {"min_ram_gb": 64, "min_vram_gb": 16, "notes": "image/video/audio generation pipelines"},
+    "inference_tiny": {
+        "min_ram_gb": 8,
+        "min_vram_gb": 0,
+        "notes": "CPU/laptop smoke tests and tiny local models",
+    },
+    "inference_small": {
+        "min_ram_gb": 16,
+        "min_vram_gb": 8,
+        "notes": "1B-7B local coding/chat models",
+    },
+    "inference_medium": {
+        "min_ram_gb": 64,
+        "min_vram_gb": 24,
+        "notes": "7B-32B models on a GPU workstation or VM",
+    },
+    "inference_large": {
+        "min_ram_gb": 128,
+        "min_vram_gb": 48,
+        "notes": "32B-70B+ models, high VRAM or multi-GPU",
+    },
+    "training_finetune": {
+        "min_ram_gb": 128,
+        "min_vram_gb": 40,
+        "notes": "fine-tuning/training experiments; storage and isolation also matter",
+    },
+    "batch_embedding_indexing": {
+        "min_ram_gb": 64,
+        "min_vram_gb": 0,
+        "notes": "RAM/CPU/storage-heavy preprocessing and indexing",
+    },
+    "compile_build": {
+        "min_ram_gb": 32,
+        "min_vram_gb": 0,
+        "notes": "CPU/RAM-heavy builds and package compilation",
+    },
+    "media_generation": {
+        "min_ram_gb": 64,
+        "min_vram_gb": 16,
+        "notes": "image/video/audio generation pipelines",
+    },
 }
 
 AZURE_SKU_HINTS: dict[str, dict[str, Any]] = {
-    "Standard_NC4as_T4_v3": {"cpu_cores": 4, "memory_gb": 28, "gpu_vendor": "nvidia", "gpu_model": "T4", "gpu_count": 1, "vram_gb": 16},
-    "Standard_NVadsA10_v5": {"cpu_cores": 18, "memory_gb": 220, "gpu_vendor": "nvidia", "gpu_model": "A10", "gpu_count": 1, "vram_gb": 24},
-    "Standard_NC24ads_A100_v4": {"cpu_cores": 24, "memory_gb": 220, "gpu_vendor": "nvidia", "gpu_model": "A100", "gpu_count": 1, "vram_gb": 80},
-    "Standard_NC40ads_H100_v5": {"cpu_cores": 40, "memory_gb": 320, "gpu_vendor": "nvidia", "gpu_model": "H100 NVL", "gpu_count": 1, "vram_gb": 94},
-    "Standard_ND96asr_v4": {"cpu_cores": 96, "memory_gb": 900, "gpu_vendor": "nvidia", "gpu_model": "A100", "gpu_count": 8, "vram_gb": 80, "total_vram_gb": 640},
-    "Standard_D16s_v5": {"cpu_cores": 16, "memory_gb": 64, "gpu_vendor": "none", "gpu_model": "none", "gpu_count": 0, "vram_gb": 0},
-    "Standard_E32s_v5": {"cpu_cores": 32, "memory_gb": 256, "gpu_vendor": "none", "gpu_model": "none", "gpu_count": 0, "vram_gb": 0},
+    "Standard_NC4as_T4_v3": {
+        "cpu_cores": 4,
+        "memory_gb": 28,
+        "gpu_vendor": "nvidia",
+        "gpu_model": "T4",
+        "gpu_count": 1,
+        "vram_gb": 16,
+    },
+    "Standard_NVadsA10_v5": {
+        "cpu_cores": 18,
+        "memory_gb": 220,
+        "gpu_vendor": "nvidia",
+        "gpu_model": "A10",
+        "gpu_count": 1,
+        "vram_gb": 24,
+    },
+    "Standard_NC24ads_A100_v4": {
+        "cpu_cores": 24,
+        "memory_gb": 220,
+        "gpu_vendor": "nvidia",
+        "gpu_model": "A100",
+        "gpu_count": 1,
+        "vram_gb": 80,
+    },
+    "Standard_NC40ads_H100_v5": {
+        "cpu_cores": 40,
+        "memory_gb": 320,
+        "gpu_vendor": "nvidia",
+        "gpu_model": "H100 NVL",
+        "gpu_count": 1,
+        "vram_gb": 94,
+    },
+    "Standard_ND96asr_v4": {
+        "cpu_cores": 96,
+        "memory_gb": 900,
+        "gpu_vendor": "nvidia",
+        "gpu_model": "A100",
+        "gpu_count": 8,
+        "vram_gb": 80,
+        "total_vram_gb": 640,
+    },
+    "Standard_D16s_v5": {
+        "cpu_cores": 16,
+        "memory_gb": 64,
+        "gpu_vendor": "none",
+        "gpu_model": "none",
+        "gpu_count": 0,
+        "vram_gb": 0,
+    },
+    "Standard_E32s_v5": {
+        "cpu_cores": 32,
+        "memory_gb": 256,
+        "gpu_vendor": "none",
+        "gpu_model": "none",
+        "gpu_count": 0,
+        "vram_gb": 0,
+    },
 }
 
 
@@ -63,17 +145,19 @@ class MachineManager:
         for name, machine in self._machines().items():
             if not isinstance(machine, dict):
                 continue
-            rows.append({
-                "name": name,
-                "provider": (machine.get("stock") or {}).get("provider") or machine.get("provider"),
-                "origin": machine.get("origin"),
-                "placement": machine.get("placement"),
-                "substrate": machine.get("substrate"),
-                "cpu": machine.get("cpu"),
-                "memory": machine.get("memory"),
-                "gpu": machine.get("gpu"),
-                "accelerator_apis": machine.get("accelerator_apis"),
-            })
+            rows.append(
+                {
+                    "name": name,
+                    "provider": (machine.get("stock") or {}).get("provider") or machine.get("provider"),
+                    "origin": machine.get("origin"),
+                    "placement": machine.get("placement"),
+                    "substrate": machine.get("substrate"),
+                    "cpu": machine.get("cpu"),
+                    "memory": machine.get("memory"),
+                    "gpu": machine.get("gpu"),
+                    "accelerator_apis": machine.get("accelerator_apis"),
+                }
+            )
         return sorted(rows, key=lambda row: str(row["name"]))
 
     def show(self, name: str) -> dict[str, Any]:
@@ -82,7 +166,12 @@ class MachineManager:
             raise ValueError(f"unknown machine: {name}")
         return {"name": name, "machine": machine}
 
-    def import_file(self, path: Path, name: str | None = None, overrides: dict[str, Any] | None = None) -> dict[str, Any]:
+    def import_file(
+        self,
+        path: Path,
+        name: str | None = None,
+        overrides: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         payload = _read_payload(path)
         machine = payload.get("machine") if isinstance(payload.get("machine"), dict) else payload
         if not isinstance(machine, dict):
@@ -99,9 +188,20 @@ class MachineManager:
             raise ValueError("invalid machine profile: " + "; ".join(validation["errors"]))
         self.config.setdefault("self_managed_machines", {})[machine_name] = machine
         self._write_config()
-        return {"name": machine_name, "path": str(self.profile.root / "hardware.yaml"), "validation": validation, "machine": machine}
+        return {
+            "name": machine_name,
+            "path": str(self.profile.root / "hardware.yaml"),
+            "validation": validation,
+            "machine": machine,
+        }
 
-    def recommend(self, model: str | None = None, runtime: str | None = None, workload: str | None = None, limit: int | None = None) -> dict[str, Any]:
+    def recommend(
+        self,
+        model: str | None = None,
+        runtime: str | None = None,
+        workload: str | None = None,
+        limit: int | None = None,
+    ) -> dict[str, Any]:
         criteria = self._criteria(model, runtime, workload)
         rows = []
         for name, machine in self._machines().items():
@@ -114,9 +214,27 @@ class MachineManager:
             rows = rows[:limit]
         return {"criteria": criteria, "machines": rows}
 
-    def discover_azure(self, region: str, workload: str | None = None, model: str | None = None, runtime: str | None = None, limit: int = 20) -> dict[str, Any]:
+    def discover_azure(
+        self,
+        region: str,
+        workload: str | None = None,
+        model: str | None = None,
+        runtime: str | None = None,
+        limit: int = 20,
+    ) -> dict[str, Any]:
         criteria = self._criteria(model, runtime, workload)
-        command = ["az", "vm", "list-skus", "--location", region, "--resource-type", "virtualMachines", "--all", "--output", "json"]
+        command = [
+            "az",
+            "vm",
+            "list-skus",
+            "--location",
+            region,
+            "--resource-type",
+            "virtualMachines",
+            "--all",
+            "--output",
+            "json",
+        ]
         source = "static_hints"
         method = "offline"
         azure_cli = self.azure_status(region=region, run_sku_probe=False)
@@ -132,10 +250,14 @@ class MachineManager:
                 if skus:
                     source = "az_vm_list_skus"
                     method = "live"
-                    status = "live Azure CLI discovery succeeded; matching live SKU results override cached/offline results"
+                    status = (
+                        "live Azure CLI discovery succeeded; matching live SKU results override cached/offline results"
+                    )
                     quota = self.azure_quota(region)
                 else:
-                    status = "az CLI SKU query succeeded but returned no supported SKU matches; using built-in SKU hints"
+                    status = (
+                        "az CLI SKU query succeeded but returned no supported SKU matches; using built-in SKU hints"
+                    )
             else:
                 status = f"az CLI SKU query failed or returned no output (exit {completed.returncode}); using built-in SKU hints"
         if not skus:
@@ -145,9 +267,23 @@ class MachineManager:
             fit = _machine_fit(machine, criteria)
             if fit["level"] == "not_recommended":
                 continue
-            candidates.append({"name": machine["name"], **fit, "restrictions": machine.get("restrictions", []), "machine": _machine_summary(machine)})
+            candidates.append(
+                {
+                    "name": machine["name"],
+                    **fit,
+                    "restrictions": machine.get("restrictions", []),
+                    "machine": _machine_summary(machine),
+                }
+            )
         candidates.sort(key=lambda row: (-int(row["score"]), str(row["name"])))
-        result = {"provider": "azure", "region": region, "source": source, "criteria": criteria, "quota": quota, "candidates": candidates[:limit]}
+        result = {
+            "provider": "azure",
+            "region": region,
+            "source": source,
+            "criteria": criteria,
+            "quota": quota,
+            "candidates": candidates[:limit],
+        }
         cache = self._record_discovery("azure", region, criteria, result, method, source, command, status)
         result["discovery"] = {
             "method": method,
@@ -161,28 +297,64 @@ class MachineManager:
 
     def azure_status(self, region: str | None = None, run_sku_probe: bool = False) -> dict[str, Any]:
         az_path = shutil.which("az")
-        status: dict[str, Any] = {"name": "azure_cli", "cli_available": az_path is not None, "path": az_path, "account": {"ok": False}, "sku_query": None}
+        status: dict[str, Any] = {
+            "name": "azure_cli",
+            "cli_available": az_path is not None,
+            "path": az_path,
+            "account": {"ok": False},
+            "sku_query": None,
+        }
         if not az_path:
             status["account"] = {"ok": False, "reason": "az CLI not found on PATH"}
             return status
         account = _run_az(["az", "account", "show", "--output", "json"])
         status["account"] = _az_account_status(account)
         if run_sku_probe and region:
-            query = _run_az(["az", "vm", "list-skus", "--location", region, "--resource-type", "virtualMachines", "--all", "--output", "json"])
+            query = _run_az(
+                [
+                    "az",
+                    "vm",
+                    "list-skus",
+                    "--location",
+                    region,
+                    "--resource-type",
+                    "virtualMachines",
+                    "--all",
+                    "--output",
+                    "json",
+                ]
+            )
             status["sku_query"] = _az_command_status(query)
         return status
 
     def azure_quota(self, region: str) -> dict[str, Any]:
         if not shutil.which("az"):
-            return {"method": "unavailable", "ok": False, "reason": "az CLI not found on PATH", "items": []}
+            return {
+                "method": "unavailable",
+                "ok": False,
+                "reason": "az CLI not found on PATH",
+                "items": [],
+            }
         command = ["az", "vm", "list-usage", "--location", region, "--output", "json"]
         completed = _run_az(command)
         if completed.returncode != 0 or not completed.stdout.strip():
-            return {"method": "live", "ok": False, "reason": f"az vm list-usage failed or returned no output (exit {completed.returncode})", "command": command, "items": []}
+            return {
+                "method": "live",
+                "ok": False,
+                "reason": f"az vm list-usage failed or returned no output (exit {completed.returncode})",
+                "command": command,
+                "items": [],
+            }
         try:
             values = json.loads(completed.stdout)
         except json.JSONDecodeError:
-            return {"method": "live", "ok": False, "reason": "az vm list-usage returned non-JSON output", "command": command, "items": []}
+            return {
+                "method": "live",
+                "ok": False,
+                "reason": "az vm list-usage returned non-JSON output",
+                "command": command,
+                "items": [],
+            }
         items = []
         if isinstance(values, list):
             for item in values:
@@ -192,13 +364,15 @@ class MachineManager:
                 current = _float(item.get("currentValue"))
                 remaining = None if limit is None or current is None else max(limit - current, 0)
                 name = item.get("name") if isinstance(item.get("name"), dict) else {}
-                items.append({
-                    "name": name.get("localizedValue") or name.get("value") or item.get("name"),
-                    "current": current,
-                    "limit": limit,
-                    "remaining": remaining,
-                    "unit": item.get("unit"),
-                })
+                items.append(
+                    {
+                        "name": name.get("localizedValue") or name.get("value") or item.get("name"),
+                        "current": current,
+                        "limit": limit,
+                        "remaining": remaining,
+                        "unit": item.get("unit"),
+                    }
+                )
         return {"method": "live", "ok": True, "command": command, "items": items}
 
     def cache_list(self) -> dict[str, Any]:
@@ -208,15 +382,19 @@ class MachineManager:
             if not isinstance(value, dict):
                 continue
             discovery = value.get("discovery") if isinstance(value.get("discovery"), dict) else {}
-            rows.append({
-                "name": key,
-                "provider": value.get("provider"),
-                "region": value.get("region"),
-                "method": discovery.get("method"),
-                "source": discovery.get("source"),
-                "candidate_count": len(value.get("candidates", [])) if isinstance(value.get("candidates"), list) else 0,
-                "criteria": value.get("criteria", {}),
-            })
+            rows.append(
+                {
+                    "name": key,
+                    "provider": value.get("provider"),
+                    "region": value.get("region"),
+                    "method": discovery.get("method"),
+                    "source": discovery.get("source"),
+                    "candidate_count": len(value.get("candidates", []))
+                    if isinstance(value.get("candidates"), list)
+                    else 0,
+                    "criteria": value.get("criteria", {}),
+                }
+            )
         return {"path": str(self._discovery_cache_path()), "entries": rows}
 
     def cache_clear(self, key: str | None = None) -> dict[str, Any]:
@@ -229,7 +407,11 @@ class MachineManager:
                 self._write_discovery_cache(cache)
             elif path.exists():
                 path.unlink()
-            return {"path": str(path), "cleared": [key] if existed else [], "remaining": len(cache)}
+            return {
+                "path": str(path),
+                "cleared": [key] if existed else [],
+                "remaining": len(cache),
+            }
         count = len(cache)
         if path.exists():
             path.unlink()
@@ -255,19 +437,46 @@ class MachineManager:
         machine = {
             "name": machine_name,
             "origin": "azure_sku",
-            "stock": {"provider": "azure", "machine_tag": machine_name, "stock_sku": sku, "region": region},
+            "stock": {
+                "provider": "azure",
+                "machine_tag": machine_name,
+                "stock_sku": sku,
+                "region": region,
+            },
             "placement": "vm",
             "substrate": "docker",
-            "cpu": {"architecture": "x86_64", "cores": hint.get("cpu_cores"), "threads": hint.get("cpu_cores")},
-            "memory": {"ram_gb": hint.get("memory_gb"), "unified_memory_gb": None, "memory_architecture": "discrete", "memory_bandwidth_gbps": None},
-            "gpu": {"vendor": hint.get("gpu_vendor", "unknown"), "model": hint.get("gpu_model", "unknown"), "count": gpu_count, "vram_gb": vram, "total_vram_gb": hint.get("total_vram_gb", (vram or 0) * (gpu_count or 0)), "indices": None},
+            "cpu": {
+                "architecture": "x86_64",
+                "cores": hint.get("cpu_cores"),
+                "threads": hint.get("cpu_cores"),
+            },
+            "memory": {
+                "ram_gb": hint.get("memory_gb"),
+                "unified_memory_gb": None,
+                "memory_architecture": "discrete",
+                "memory_bandwidth_gbps": None,
+            },
+            "gpu": {
+                "vendor": hint.get("gpu_vendor", "unknown"),
+                "model": hint.get("gpu_model", "unknown"),
+                "count": gpu_count,
+                "vram_gb": vram,
+                "total_vram_gb": hint.get("total_vram_gb", (vram or 0) * (gpu_count or 0)),
+                "indices": None,
+            },
             "accelerator_apis": ["cuda"] if hint.get("gpu_vendor") == "nvidia" else ["cpu"],
             "os": "linux",
             "notes": "Imported from Azure SKU hints; verify region availability, quota, and exact GPU memory before provisioning.",
         }
         return {"name": machine_name, "machine": machine}
 
-    def import_azure_sku(self, sku: str, region: str, name: str | None = None, overrides: dict[str, Any] | None = None) -> dict[str, Any]:
+    def import_azure_sku(
+        self,
+        sku: str,
+        region: str,
+        name: str | None = None,
+        overrides: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         payload = self.azure_machine_from_sku(sku, region, name=name)
         machine = payload["machine"]
         for key, value in (overrides or {}).items():
@@ -277,7 +486,12 @@ class MachineManager:
             raise ValueError("invalid Azure SKU machine profile: " + "; ".join(validation["errors"]))
         self.config.setdefault("self_managed_machines", {})[payload["name"]] = machine
         self._write_config()
-        return {"name": payload["name"], "path": str(self.profile.root / "hardware.yaml"), "validation": validation, "machine": machine}
+        return {
+            "name": payload["name"],
+            "path": str(self.profile.root / "hardware.yaml"),
+            "validation": validation,
+            "machine": machine,
+        }
 
     def profile_remote_plan(self, name: str, host: str, user: str | None = None, port: int = 22) -> dict[str, Any]:
         destination = f"{user + '@' if user else ''}{host}"
@@ -286,23 +500,62 @@ class MachineManager:
             "name": name,
             "mode": "ssh_remote_profile",
             "steps": [
-                {"name": "install-or-update aiplane on the remote machine", "command": ["ssh", "-p", str(port), destination, "<install aiplane>"]},
-                {"name": "export machine profile from remote", "command": ["ssh", "-p", str(port), destination, remote]},
-                {"name": "import on this control machine", "command": ["aiplane", "machines", "import", f"{name}.machine.yaml", "--profile", self.profile.name]},
+                {
+                    "name": "install-or-update aiplane on the remote machine",
+                    "command": [
+                        "ssh",
+                        "-p",
+                        str(port),
+                        destination,
+                        "<install aiplane>",
+                    ],
+                },
+                {
+                    "name": "export machine profile from remote",
+                    "command": ["ssh", "-p", str(port), destination, remote],
+                },
+                {
+                    "name": "import on this control machine",
+                    "command": [
+                        "aiplane",
+                        "machines",
+                        "import",
+                        f"{name}.machine.yaml",
+                        "--profile",
+                        self.profile.name,
+                    ],
+                },
             ],
-            "notes": ["This is a plan only; it does not SSH or copy files yet.", "The same pattern works for self-managed cloud VMs after SSH access is available."],
+            "notes": [
+                "This is a plan only; it does not SSH or copy files yet.",
+                "The same pattern works for self-managed cloud VMs after SSH access is available.",
+            ],
         }
 
     def _criteria(self, model: str | None, runtime: str | None, workload: str | None) -> dict[str, Any]:
-        criteria = {"model": model, "runtime": runtime, "workload": workload, "min_ram_gb": 0.0, "min_vram_gb": 0.0, "recommended_ram_gb": None, "recommended_vram_gb": None}
+        criteria = {
+            "model": model,
+            "runtime": runtime,
+            "workload": workload,
+            "min_ram_gb": 0.0,
+            "min_vram_gb": 0.0,
+            "recommended_ram_gb": None,
+            "recommended_vram_gb": None,
+        }
         if workload:
             if workload not in WORKLOAD_CLASSES:
                 raise ValueError(f"unknown workload: {workload}")
             criteria.update(WORKLOAD_CLASSES[workload])
         if model:
             model_config = ModelCatalog(self.profile).get(model)
-            criteria["min_ram_gb"] = max(float(criteria.get("min_ram_gb") or 0), _float(model_config.get("min_ram_gb")) or 0)
-            criteria["min_vram_gb"] = max(float(criteria.get("min_vram_gb") or 0), _float(model_config.get("min_vram_gb")) or 0)
+            criteria["min_ram_gb"] = max(
+                float(criteria.get("min_ram_gb") or 0),
+                _float(model_config.get("min_ram_gb")) or 0,
+            )
+            criteria["min_vram_gb"] = max(
+                float(criteria.get("min_vram_gb") or 0),
+                _float(model_config.get("min_vram_gb")) or 0,
+            )
             criteria["recommended_ram_gb"] = model_config.get("recommended_ram_gb")
             criteria["recommended_vram_gb"] = model_config.get("recommended_vram_gb")
         if runtime:
@@ -316,7 +569,17 @@ class MachineManager:
         machines = self.config.get("self_managed_machines", {})
         return machines if isinstance(machines, dict) else {}
 
-    def _record_discovery(self, provider: str, region: str, criteria: dict[str, Any], result: dict[str, Any], method: str, source: str, command: list[str], status: str) -> dict[str, Any]:
+    def _record_discovery(
+        self,
+        provider: str,
+        region: str,
+        criteria: dict[str, Any],
+        result: dict[str, Any],
+        method: str,
+        source: str,
+        command: list[str],
+        status: str,
+    ) -> dict[str, Any]:
         cache = self._load_discovery_cache()
         key = _discovery_cache_key(provider, region, criteria)
         previous = cache.get(key) if isinstance(cache.get(key), dict) else None
@@ -330,7 +593,12 @@ class MachineManager:
                 "criteria": criteria,
                 "source": source,
                 "candidates": result.get("candidates", []),
-                "discovery": {"method": method, "source": source, "status": status, "command": command},
+                "discovery": {
+                    "method": method,
+                    "source": source,
+                    "status": status,
+                    "command": command,
+                },
             }
             self._write_discovery_cache(cache)
             action = "overrode_previous" if previous else "created"
@@ -376,7 +644,17 @@ class MachineManager:
 def validate_machine(machine: dict[str, Any]) -> dict[str, Any]:
     errors: list[str] = []
     warnings: list[str] = []
-    for key in ["name", "stock", "placement", "substrate", "cpu", "memory", "gpu", "accelerator_apis", "os"]:
+    for key in [
+        "name",
+        "stock",
+        "placement",
+        "substrate",
+        "cpu",
+        "memory",
+        "gpu",
+        "accelerator_apis",
+        "os",
+    ]:
         if key not in machine:
             errors.append(f"missing {key}")
     if not isinstance(machine.get("stock"), dict):
@@ -388,20 +666,30 @@ def validate_machine(machine: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(machine.get("gpu"), dict):
         errors.append("gpu must be a mapping")
     ram = _float((machine.get("memory") or {}).get("ram_gb")) if isinstance(machine.get("memory"), dict) else None
-    unified = _float((machine.get("memory") or {}).get("unified_memory_gb")) if isinstance(machine.get("memory"), dict) else None
+    unified = (
+        _float((machine.get("memory") or {}).get("unified_memory_gb"))
+        if isinstance(machine.get("memory"), dict)
+        else None
+    )
     vram = _float((machine.get("gpu") or {}).get("vram_gb")) if isinstance(machine.get("gpu"), dict) else None
     if ram is None and unified is None:
         errors.append("memory.ram_gb or memory.unified_memory_gb is required")
     if vram is None and unified is None:
         errors.append("gpu.vram_gb or memory.unified_memory_gb is required")
-    if isinstance(machine.get("gpu"), dict) and machine["gpu"].get("vendor") in {None, ""}:
+    if isinstance(machine.get("gpu"), dict) and machine["gpu"].get("vendor") in {
+        None,
+        "",
+    }:
         warnings.append("gpu.vendor is empty")
     return {"ok": not errors, "errors": errors, "warnings": warnings}
 
 
 def _az_account_status(completed: subprocess.CompletedProcess[str]) -> dict[str, Any]:
     if completed.returncode != 0:
-        return {"ok": False, "reason": f"az account show failed (exit {completed.returncode})"}
+        return {
+            "ok": False,
+            "reason": f"az account show failed (exit {completed.returncode})",
+        }
     try:
         account = json.loads(completed.stdout or "{}")
     except json.JSONDecodeError:
@@ -446,7 +734,9 @@ def _az_command_status(completed: subprocess.CompletedProcess[str]) -> dict[str,
     return {
         "ok": completed.returncode == 0 and bool((completed.stdout or "").strip()),
         "returncode": completed.returncode,
-        "reason": "query succeeded" if completed.returncode == 0 and (completed.stdout or "").strip() else f"query failed or returned no output (exit {completed.returncode})",
+        "reason": "query succeeded"
+        if completed.returncode == 0 and (completed.stdout or "").strip()
+        else f"query failed or returned no output (exit {completed.returncode})",
     }
 
 
@@ -459,7 +749,13 @@ class _AzTimeoutResult:
 
 def _run_az(command: list[str]):
     try:
-        return subprocess.run(command, text=True, capture_output=True, check=False, timeout=AZURE_CLI_TIMEOUT_SECONDS)
+        return subprocess.run(
+            command,
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=AZURE_CLI_TIMEOUT_SECONDS,
+        )
     except subprocess.TimeoutExpired:
         return _AzTimeoutResult(command, AZURE_CLI_TIMEOUT_SECONDS)
 
@@ -498,23 +794,39 @@ def _azure_sku_restrictions(item: dict[str, Any]) -> list[dict[str, Any]]:
     for restriction in restrictions:
         if not isinstance(restriction, dict):
             continue
-        rows.append({
-            "type": restriction.get("type"),
-            "reason_code": restriction.get("reasonCode"),
-            "restriction_info": restriction.get("restrictionInfo"),
-            "values": restriction.get("values", []),
-        })
+        rows.append(
+            {
+                "type": restriction.get("type"),
+                "reason_code": restriction.get("reasonCode"),
+                "restriction_info": restriction.get("restrictionInfo"),
+                "values": restriction.get("values", []),
+            }
+        )
     return rows
 
 
 def _discovery_cache_key(provider: str, region: str, criteria: dict[str, Any]) -> str:
-    parts = [provider, region, str(criteria.get("workload") or "any_workload"), str(criteria.get("model") or "any_model"), str(criteria.get("runtime") or "any_runtime")]
+    parts = [
+        provider,
+        region,
+        str(criteria.get("workload") or "any_workload"),
+        str(criteria.get("model") or "any_model"),
+        str(criteria.get("runtime") or "any_runtime"),
+    ]
     return "__".join(_safe_name(part) for part in parts)
 
 
 def _machine_fit(machine: dict[str, Any], criteria: dict[str, Any]) -> dict[str, Any]:
-    ram = _float((machine.get("memory") or {}).get("ram_gb")) or _float((machine.get("memory") or {}).get("unified_memory_gb")) or 0.0
-    vram = _float((machine.get("gpu") or {}).get("vram_gb")) or _float((machine.get("memory") or {}).get("unified_memory_gb")) or 0.0
+    ram = (
+        _float((machine.get("memory") or {}).get("ram_gb"))
+        or _float((machine.get("memory") or {}).get("unified_memory_gb"))
+        or 0.0
+    )
+    vram = (
+        _float((machine.get("gpu") or {}).get("vram_gb"))
+        or _float((machine.get("memory") or {}).get("unified_memory_gb"))
+        or 0.0
+    )
     min_ram = _float(criteria.get("min_ram_gb")) or 0.0
     min_vram = _float(criteria.get("min_vram_gb")) or 0.0
     rec_ram = _float(criteria.get("recommended_ram_gb"))
@@ -538,11 +850,23 @@ def _machine_fit(machine: dict[str, Any], criteria: dict[str, Any]) -> dict[str,
         score += 15
     if vram > 0:
         score += 10
-    return {"level": "usable" if gaps else "recommended", "score": score, "reason": "; ".join(gaps) if gaps else "meets configured machine fit criteria"}
+    return {
+        "level": "usable" if gaps else "recommended",
+        "score": score,
+        "reason": "; ".join(gaps) if gaps else "meets configured machine fit criteria",
+    }
 
 
 def _machine_summary(machine: dict[str, Any]) -> dict[str, Any]:
-    return {"stock": machine.get("stock"), "placement": machine.get("placement"), "substrate": machine.get("substrate"), "cpu": machine.get("cpu"), "memory": machine.get("memory"), "gpu": machine.get("gpu"), "accelerator_apis": machine.get("accelerator_apis")}
+    return {
+        "stock": machine.get("stock"),
+        "placement": machine.get("placement"),
+        "substrate": machine.get("substrate"),
+        "cpu": machine.get("cpu"),
+        "memory": machine.get("memory"),
+        "gpu": machine.get("gpu"),
+        "accelerator_apis": machine.get("accelerator_apis"),
+    }
 
 
 def _set_machine_value(machine: dict[str, Any], key: str, value: Any) -> None:

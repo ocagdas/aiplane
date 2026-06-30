@@ -31,7 +31,12 @@ class MockCloudBackend:
 class OllamaBackend:
     name = "ollama"
 
-    def __init__(self, endpoint: str = "http://localhost:11434", timeout_seconds: int = 60, headers: Mapping[str, str] | None = None):
+    def __init__(
+        self,
+        endpoint: str = "http://localhost:11434",
+        timeout_seconds: int = 60,
+        headers: Mapping[str, str] | None = None,
+    ):
         self.endpoint = endpoint.rstrip("/")
         self.timeout_seconds = timeout_seconds
         self.headers = dict(headers or {})
@@ -76,7 +81,12 @@ class OllamaBackend:
 class OpenAICompatibleBackend:
     name = "openai_compatible"
 
-    def __init__(self, endpoint: str, timeout_seconds: int = 60, headers: Mapping[str, str] | None = None):
+    def __init__(
+        self,
+        endpoint: str,
+        timeout_seconds: int = 60,
+        headers: Mapping[str, str] | None = None,
+    ):
         self.endpoint = endpoint.rstrip("/")
         self.timeout_seconds = timeout_seconds
         self.headers = dict(headers or {})

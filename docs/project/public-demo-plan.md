@@ -57,6 +57,7 @@ source scripts/setup_env.sh --mode conda --conda-env aiplane --action install --
 aiplane profiles validate local-dev
 aiplane environment doctor --required-only
 aiplane tools matrix
+aiplane providers test openai --credential-ref openai.personal
 ```
 
 Optional quick cuts for alternate `aiplane` CLI install modes:
@@ -80,6 +81,7 @@ What to highlight:
 - mandatory local prerequisites are checked separately from optional workflow tools;
 - `tools matrix` shows complete, partial, and needs-setup workflow categories;
 - `aiplane` itself can run in Conda, venv, native Python, or a local Docker CLI image;
+- managed provider credentials can be checked with a small provider-specific API call without printing secrets;
 - Ollama can be operated natively or through Docker using the official `ollama/ollama` image;
 - nothing is provisioned just by inspecting readiness or running dry-runs.
 
@@ -223,6 +225,7 @@ Use these phrases in the voiceover:
 PYTHONPATH=src python -m aiplane profiles validate local-dev
 PYTHONPATH=src python -m aiplane environment doctor --required-only
 PYTHONPATH=src python -m aiplane tools matrix
+PYTHONPATH=src python -m aiplane providers test openai --credential-ref openai.personal
 PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles profiles validate demo
 PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider ollama --query chat --dry-run --limit 5
 PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider ollama --query chat --limit 10

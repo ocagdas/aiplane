@@ -19,6 +19,8 @@
 - `helm`: Kubernetes packaging for runtime deployments.
 - `openssh-client`: SSH tunnels and remote workstation/VM access.
 - `ansible`: optional later-stage host configuration over SSH.
+- `ruff`: project Python formatter/linter used by `scripts/format.sh check`, `scripts/format.sh fix`, and CI.
+- `black`: tracked optional formatter for teams/editors that expect Black; Ruff is the configured project formatter.
 - `lm-evaluation-harness`: optional model-quality benchmark framework.
 - `vllm-benchmark-scripts`: optional vLLM serving benchmark commands.
 - `locust`: optional endpoint/gateway load-testing framework.
@@ -40,6 +42,8 @@
 | Kubernetes/AKS operations | kubectl | Optional | Inspects and operates Kubernetes resources. | Doctor and install hint; guarded AKS workflows remain planned. |
 | Kubernetes packaging | Helm | Optional | Installs packaged Kubernetes runtime charts. | Doctor and install hint; chart-driven runtime deployment remains planned. |
 | Remote host configuration | Ansible | Optional | Applies repeatable package/service configuration to local VMs, remote VMs, and remote PCs over SSH. | Doctor, install hint, and starter inventory/playbook export; richer host configuration remains planned. |
+| Python formatting/linting | Ruff | Optional | Runs the configured project formatter and lint checks. | Doctor/install hint; `scripts/format.sh check`, `scripts/format.sh fix`, and `scripts/check.sh` are the supported entrypoints. |
+| Black formatter compatibility | Black | Optional | Keeps Black visible for editor/team compatibility, while Ruff remains the configured formatter. | Doctor/install hint. |
 | Model quality benchmark suite | lm-evaluation-harness | Optional | Runs external evaluation harness tasks. | Benchmark doctor/install/plan. |
 | vLLM serving benchmark | vLLM benchmark scripts | Optional | Measures vLLM endpoint serving behavior. | Benchmark doctor/install/plan. |
 | Endpoint load testing | Locust | Optional | Load-tests model endpoints and gateways. | Benchmark doctor/install/plan. |
@@ -85,6 +89,8 @@ Check one tool:
 aiplane tools doctor azure-cli
 aiplane tools doctor docker
 aiplane tools doctor openssh-client
+aiplane tools doctor ruff
+aiplane tools doctor black
 ```
 
 Plan or print starter artifacts for tool workflows without mutating hosts or cloud accounts:
@@ -99,6 +105,16 @@ aiplane tools export ansible
 ```
 
 The output reports command path, detected version where available, install hints, purposes, and service checks where they make sense. For example, Docker checks whether the daemon is reachable; Azure CLI checks whether `az account show` works.
+
+For Python source formatting, use the project helper scripts directly rather than an `aiplane` command:
+
+```bash
+scripts/format.sh check
+scripts/format.sh fix
+scripts/check.sh
+```
+
+The versions used by those scripts are pinned in the `dev` optional dependency group in `pyproject.toml`. CI installs `.[dev]` and runs the same `scripts/check.sh` wrapper.
 
 ## Provisioning and Setup Layers
 

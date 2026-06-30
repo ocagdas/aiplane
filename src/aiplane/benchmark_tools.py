@@ -12,21 +12,34 @@ BENCHMARK_FRAMEWORKS: dict[str, dict[str, Any]] = {
         "kind": "quality_smoke",
         "tool": None,
         "install": "built_in",
-        "best_for": ["quick local sanity checks", "custom evaluator specs", "code-generation smoke tests"],
+        "best_for": [
+            "quick local sanity checks",
+            "custom evaluator specs",
+            "code-generation smoke tests",
+        ],
     },
     "lm-evaluation-harness": {
         "description": "EleutherAI LM Evaluation Harness for standard academic and custom language-model evaluations.",
         "kind": "quality_standard",
         "tool": "lm-evaluation-harness",
         "install": "pip_helper",
-        "best_for": ["standard benchmark tasks", "comparability", "HF/vLLM/API model evaluation"],
+        "best_for": [
+            "standard benchmark tasks",
+            "comparability",
+            "HF/vLLM/API model evaluation",
+        ],
     },
     "vllm-serving": {
         "description": "vLLM serving benchmark commands for endpoint throughput/latency/concurrency checks.",
         "kind": "serving_performance",
         "tool": "vllm-benchmark-scripts",
         "install": "pip_helper_or_runtime_install",
-        "best_for": ["tokens/sec", "latency", "concurrency", "runtime parameter sweeps"],
+        "best_for": [
+            "tokens/sec",
+            "latency",
+            "concurrency",
+            "runtime parameter sweeps",
+        ],
     },
     "locust-load": {
         "description": "Locust load testing for OpenAI-compatible endpoints and gateway throttling/fairness checks.",
@@ -73,14 +86,25 @@ class BenchmarkToolManager:
             }
         return self.tools.install(str(tool_name), dry_run=dry_run, yes=not dry_run)
 
-    def plan(self, name: str, model: str = "MODEL_ALIAS", endpoint: str | None = None, spec: str | None = None) -> dict[str, Any]:
+    def plan(
+        self,
+        name: str,
+        model: str = "MODEL_ALIAS",
+        endpoint: str | None = None,
+        spec: str | None = None,
+    ) -> dict[str, Any]:
         row = self._row(name)
         endpoint = endpoint or "http://localhost:8000/v1"
         if name == "aiplane-smoke":
             command = ["aiplane", "models", "benchmark", model]
             if spec:
                 command.extend(["--spec", spec])
-            return {"name": name, "framework": row, "commands": [{"name": "run", "command": command}], "notes": ["Use --dry-run on aiplane models benchmark to preview prompts/evaluators."]}
+            return {
+                "name": name,
+                "framework": row,
+                "commands": [{"name": "run", "command": command}],
+                "notes": ["Use --dry-run on aiplane models benchmark to preview prompts/evaluators."],
+            }
         if name == "lm-evaluation-harness":
             return {
                 "name": name,
@@ -101,20 +125,37 @@ class BenchmarkToolManager:
                         ],
                     },
                 ],
-                "notes": ["Treat this as a starting template; lm-evaluation-harness model names and args can vary by installed version and task."],
+                "notes": [
+                    "Treat this as a starting template; lm-evaluation-harness model names and args can vary by installed version and task."
+                ],
             }
         if name == "vllm-serving":
             return {
                 "name": name,
                 "framework": row,
                 "commands": [
-                    {"name": "inspect_help", "command": ["vllm", "bench", "serve", "--help"]},
+                    {
+                        "name": "inspect_help",
+                        "command": ["vllm", "bench", "serve", "--help"],
+                    },
                     {
                         "name": "template_serving_benchmark",
-                        "command": ["vllm", "bench", "serve", "--backend", "openai", "--base-url", endpoint, "--model", model],
+                        "command": [
+                            "vllm",
+                            "bench",
+                            "serve",
+                            "--backend",
+                            "openai",
+                            "--base-url",
+                            endpoint,
+                            "--model",
+                            model,
+                        ],
                     },
                 ],
-                "notes": ["Run against an already started vLLM/OpenAI-compatible endpoint. Confirm flags with the installed vLLM version before long runs."],
+                "notes": [
+                    "Run against an already started vLLM/OpenAI-compatible endpoint. Confirm flags with the installed vLLM version before long runs."
+                ],
             }
         if name == "locust-load":
             return {
@@ -122,7 +163,16 @@ class BenchmarkToolManager:
                 "framework": row,
                 "commands": [
                     {"name": "inspect_help", "command": ["locust", "--help"]},
-                    {"name": "template_load_test", "command": ["locust", "-f", "benchmarks/locust_openai.py", "--host", endpoint]},
+                    {
+                        "name": "template_load_test",
+                        "command": [
+                            "locust",
+                            "-f",
+                            "benchmarks/locust_openai.py",
+                            "--host",
+                            endpoint,
+                        ],
+                    },
                 ],
                 "notes": ["Requires a user-provided Locust file that calls the endpoint shape you want to test."],
             }
