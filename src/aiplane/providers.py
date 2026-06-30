@@ -279,10 +279,7 @@ class ProviderRegistry:
         self, name: str, credential_ref: str | None = None, timeout: int | None = None
     ) -> dict[str, Any]:
         providers = self.model_providers(include_removed=True)
-        runtime_providers = (
-            self.profile.models.get("providers", {}) if isinstance(self.profile.models.get("providers"), dict) else {}
-        )
-        provider_config = runtime_providers.get(name, {}) if isinstance(runtime_providers, dict) else {}
+        provider_config = self.catalog.providers().get(name, {})
         if name not in providers and not provider_config:
             raise ValueError(f"unknown provider: {name}")
         if providers.get(name, {}).get("removed"):
@@ -453,11 +450,7 @@ class ProviderRegistry:
     def _azure_openai_deployments(
         self, query: str | None = None, limit: int = DEFAULT_PROVIDER_MODEL_LIMIT
     ) -> ProviderModelsResult:
-        runtime_provider = (
-            self.profile.models.get("providers", {}).get("azure_openai", {})
-            if isinstance(self.profile.models.get("providers"), dict)
-            else {}
-        )
+        runtime_provider = self.catalog.providers().get("azure_openai", {})
         endpoint = str(runtime_provider.get("endpoint") or os.environ.get("AZURE_OPENAI_ENDPOINT") or "").rstrip("/")
         if not endpoint:
             raise ValueError("Azure OpenAI discovery needs provider endpoint or AZURE_OPENAI_ENDPOINT")
@@ -516,11 +509,7 @@ class ProviderRegistry:
     def _elevenlabs_voices(
         self, query: str | None = None, limit: int = DEFAULT_PROVIDER_MODEL_LIMIT
     ) -> ProviderModelsResult:
-        runtime_provider = (
-            self.profile.models.get("providers", {}).get("elevenlabs", {})
-            if isinstance(self.profile.models.get("providers"), dict)
-            else {}
-        )
+        runtime_provider = self.catalog.providers().get("elevenlabs", {})
         endpoint = str(
             runtime_provider.get("endpoint") or os.environ.get("ELEVENLABS_ENDPOINT") or "https://api.elevenlabs.io/v1"
         ).rstrip("/")

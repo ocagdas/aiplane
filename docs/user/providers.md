@@ -10,7 +10,7 @@ Examples:
 - `local_file`: a local model path.
 - `azure_speech`: Azure Speech text-to-speech voice configuration.
 - `elevenlabs`: ElevenLabs hosted text-to-speech voices.
-- `openai`, `anthropic`, `azure_openai`, `ollama_cloud`: managed providers. These are hosted services, so they need endpoint/API-key configuration and curated model aliases before IDE exports can use them. Other catalogs can be added in `model-providers.user.yaml` when their discovery path is reliable for your environment.
+- `openai`, `anthropic`, `azure_openai`, `ollama_cloud`: managed providers. These are hosted services, so they need endpoint/API-key configuration and profile-owned model entries before IDE exports can use them. Other catalogs can be added in `model-providers.user.yaml` when their discovery path is reliable for your environment.
 
 A **runtime** is different. A runtime loads model files into CPU/GPU memory and serves inference. Examples: `ollama`, `vllm`, `tgi`, `llamacpp`, `transformers`, `localai`, `lmstudio`, `faster_whisper`, `diffusers`, and `comfyui`. Managed services such as `azure_speech` and `elevenlabs` are hosted service providers/endpoints, not local runtime-fit targets.
 
@@ -50,11 +50,11 @@ aiplane models list --managed-service-only
 
 ## Managed Providers In Practice
 
-Managed providers are not local runtimes. They become useful to Continue/Cline/Aider/Zed only after you have a profile model alias in `models.yaml`. The flow is:
+Managed providers are not local runtimes. They become useful to Continue/Cline/Aider/Zed only after you have provider credentials/endpoint overrides where needed and a profile-owned model entry in `models.yaml`. The flow is:
 
-1. Configure the managed provider endpoint and API-key environment variable under `providers:` in `models.yaml`.
-2. Add or enable a model alias under `models:`. For Azure OpenAI, the `model` value is the deployment name.
-3. Run `aiplane integrations plan ...` to inspect which aliases, endpoints, and API-key env vars will be used.
+1. Keep model source/provider discovery settings in `model-providers.yaml` or ignored `model-providers.user.yaml`. Keep managed endpoint overrides and credential refs in ignored local provider/credential config when the built-in endpoint default is not enough.
+2. Discover available models/deployments, then add or promote a profile-owned model entry under `models:`. For Azure OpenAI, the `model` value is the deployment name.
+3. Run `aiplane integrations plan ...` to inspect which entries, endpoints, and API-key env vars will be used.
 4. Run `aiplane integrations export ...` and merge the printed config into the target tool.
 
 Examples:
@@ -79,20 +79,7 @@ aiplane models refresh --provider elevenlabs --dry-run --verbose --limit 20
 aiplane models list --provider elevenlabs --role text_to_speech
 ```
 
-For multiple accounts, keep credentials in the ignored local credentials file and reference them by name:
-
-```yaml
-providers:
-  openai:
-    endpoint: https://api.openai.com/v1
-    credential_ref: openai.personal
-  custom_openai_gateway:
-    endpoint: https://llm-gateway.example.com/v1
-    protocol: openai_compatible
-    credential_ref: custom_openai_compatible.lab_gateway
-```
-
-Well-known managed providers have built-in defaults and adapters where safe. Custom providers should specify an endpoint, protocol, and credential reference. The profile should not contain raw API keys.
+For multiple accounts, keep credentials in the ignored local credentials file and reference them by name from local provider overrides or command options. Well-known managed providers have built-in endpoint defaults and adapters where safe. Custom providers should specify an endpoint, protocol, and credential reference in ignored local config. The profile should not contain raw API keys.
 
 Test a managed provider endpoint and credential without printing the secret:
 
@@ -114,7 +101,7 @@ aiplane providers list --runtime ollama
 aiplane providers list --runtime vllm --group-by runtime
 ```
 
-Show one model provider and the profile catalog aliases that come from it:
+Show one model provider and the profile catalog entries that come from it:
 
 ```bash
 aiplane providers show ollama
@@ -150,12 +137,22 @@ Current default online adapters are `ollama`, `huggingface`, `huggingface_gguf`,
 
 ## Provider Configuration Files
 
-Provider definitions are profile-local YAML. The checked-in profile contains provider definitions only; it deliberately does not ship curated model aliases or defaults:
+Model-provider discovery definitions are profile-local YAML. The shipped defaults live under `profile-templates/local-dev/`; the editable `profiles/` directory is local user state and is gitignored. The template keeps `models.yaml` structural only: it does not ship profile-owned model entries, defaults, credentials, discovered model caches, or runtime endpoint overrides.
+
+For the common local setup, use the bootstrap helper:
+
+```bash
+aiplane profiles bootstrap-local
+aiplane profiles bootstrap-local --provider ollama --limit 25
+aiplane profiles bootstrap-local --no-discovery
+```
+
+`bootstrap-local` copies `profile-templates/local-dev` into `profiles/local-dev` when needed, validates the profile, and, unless `--no-discovery` is set, runs a bounded `models refresh` into ignored `models.discovered.yaml`.
 
 - `model-providers.yaml`: default/provider seed entries for this profile.
 - `model-providers.user.yaml`: ignored user additions and overrides. This is where CLI edits go, and it is the extension point for private cloud endpoints or internal catalogs.
 
-If neither file exists, `aiplane` can fall back to its built-in provider seed so a fresh developer checkout still has discovery providers. That seed contains provider metadata, not model aliases. To make the seed explicit, dump it into the profile:
+If neither file exists, `aiplane` can fall back to its built-in provider seed so a fresh developer checkout still has discovery providers. That seed contains provider metadata, not model entries. To make the seed explicit, dump it into the profile:
 
 ```bash
 aiplane providers init-defaults
@@ -181,9 +178,9 @@ aiplane providers clear --scope all
 
 ## Model Catalog Refresh
 
-`aiplane models refresh` imports model-provider catalog entries into the ignored `models.generated.yaml` cache so you can later filter locally by runtime, role, capability, score, RAM/VRAM fit, benchmark results, and target hardware. The checked-in `models.yaml` starts with providers only; generated aliases are repopulated from provider discovery whenever you refresh. It is online-first where an adapter exists, and it is not runtime inventory.
+`aiplane models refresh` imports model-provider catalog entries into the ignored `models.discovered.yaml` cache so you can later filter locally by runtime, role, capability, score, RAM/VRAM fit, benchmark results, and target hardware. The template `models.yaml` starts empty except for `defaults:` and `models:`. Source discovery definitions come from `model-providers.yaml`, ignored user overrides, and built-in source seeds. Runtime/provider endpoint values such as localhost ports are conventional built-in defaults used for planning, exports, and doctor/test hints; they are not proof that a runtime is installed or configured. Discovered entries are repopulated from provider discovery whenever you refresh. It is online-first where an adapter exists, and it is not runtime inventory.
 
-When an online source adapter succeeds, the source result is treated as authoritative for generated/imported aliases when it is not a query or limit-truncated window: new source ids are imported into `models.generated.yaml`, stale generated ids are pruned, and changed source metadata updates generated aliases. Curated aliases in `models.yaml` are preserved by refresh; if a local curated alias points at a returned source id, only source-derived metadata is refreshed while human-maintained fields stay intact. In this context, curated means profile data such as aliases, enabled/disabled state, roles, preferred runtime, manual capability scores, RAM/VRAM overrides, and notes.
+When an online source adapter succeeds, the source result is treated as authoritative for discovered/imported entries when it is not a query or limit-truncated window: new source ids are imported into `models.discovered.yaml`, stale discovered ids are pruned, and changed source metadata updates discovered entries. Profile-owned entries in `models.yaml` are preserved by refresh; if a local profile-owned entry points at a returned source id, only source-derived metadata is refreshed while human-maintained fields stay intact. In this context, profile-owned means human-maintained data such as entry names, enabled/disabled state, roles, preferred runtime, RAM/VRAM overrides, and notes.
 
 When online contact fails or no online adapter exists, refresh reports the error/reason and falls back to local profile entries without pruning or updating.
 
@@ -194,18 +191,65 @@ aiplane models refresh --limit 100 --provider-limit huggingface=500 --provider-l
 aiplane models refresh --provider huggingface --limit 10 --dry-run --verbose
 ```
 
-`--limit` is the default per-provider maximum. Repeat `--provider-limit PROVIDER=COUNT` to override a particular model provider. For example, use a large Hugging Face limit and a smaller/larger provider-specific limit when refreshing all providers. By default refresh prints provider-level counts only; add `--verbose` to include per-model change rows. Refresh output also includes `next_steps` so dry runs and writes show the safe path from discovery, to generated aliases, to reviewed promotion.
+`--limit` is the default per-provider maximum. Repeat `--provider-limit PROVIDER=COUNT` to override a particular model provider. For example, use a large Hugging Face limit and a smaller/larger provider-specific limit when refreshing all providers. By default refresh prints provider-level counts only; add `--verbose` to include per-model change rows. Refresh output also includes `next_steps` so dry runs and writes show the safe path from discovery, to discovered entries, to reviewed promotion.
 
-Review generated aliases before making them curated profile entries. Promotion copies one alias from `models.generated.yaml` into `models.yaml`; by default it removes the generated copy so the curated alias becomes authoritative. Promotion output includes `next_steps` that call out whether the command was a dry run, which file would be or was written, and which validation/export checks to run next. Promotion refuses to overwrite an existing curated target alias unless you pass `--overwrite` after reviewing the existing entry:
+When provider metadata includes popularity fields, `models list` can filter and rank by them after normal provider/source, role, runtime, capability, and hardware filters:
 
 ```bash
-aiplane models promote generated-alias --dry-run
-aiplane models promote generated-alias --as reviewed-alias
-aiplane models promote generated-alias --as reviewed-alias --keep-generated
-aiplane models promote generated-alias --as existing-reviewed-alias --overwrite
+aiplane models list --source huggingface --role chat --min-likes 100 --sort-by likes --limit 10
+aiplane models list --source huggingface --role embedding --sort-by downloads --limit 10
+aiplane models list --provider huggingface --runtime vllm --sort-by popularity --limit 10
 ```
 
-To clear model catalog aliases, use `clear-cache`. This operates on refresh/import data in `models.generated.yaml` plus matching aliases in `models.yaml`; it does not remove or disable model providers from `model-providers.yaml` or `model-providers.user.yaml`. The command reports counts by provider, not every removed alias. By default it includes curated/template aliases in `models.yaml`, so the local model cache and any review-time aliases can be emptied and later repopulated from provider discovery; add `--keep-curated` when you only want to remove generated or legacy refresh-imported aliases:
+Discovered entries are stored per model entry name under `models.discovered.yaml`. A refresh can create an entry like this:
+
+```yaml
+models:
+  ollama-llama3-2-3b:
+    provider: ollama
+    model: llama3.2:3b
+    source: ollama
+    roles: [chat, analysis, generation]
+    supported_runtimes: [ollama]
+    source_metadata:
+      likes: 420
+      downloads: 12000
+    capability_scores:
+      general_chat: 4
+      code_generation: 3
+    capability_score_source: catalog_heuristic
+    imported_by: aiplane_refresh
+```
+
+Runtime fit is stored on each model entry when discovery can infer it, usually as `supported_runtimes` and sometimes `preferred_runtime`. Provider definitions still matter: they describe the provider/source and any default runtime relationship, while the discovered model entry captures model-specific runtime hints and source metadata.
+
+You can use discovered entries directly by name in commands that read the model catalog, because `aiplane` overlays `models.discovered.yaml` with profile-owned entries from `models.yaml`. What you do not get is durable project configuration: discovered entries are ignored cache state, can be removed by `models clear-cache`, and can be updated or pruned by the next authoritative provider refresh.
+
+Review discovered entries before making them profile-owned entries. Promotion copies one discovered entry name from `models.discovered.yaml` into `models.yaml`; the discovered copy is kept by default and the profile-owned entry records `discovered_entry` so the two files remain linked. Use promotion when discovery already found the real model and you want to keep its provider metadata, roles, runtime hints, RAM/VRAM hints, source metadata, popularity fields, and catalog-derived scores:
+
+```bash
+aiplane models promote DISCOVERED_ENTRY_NAME --dry-run
+aiplane models promote DISCOVERED_ENTRY_NAME --as local_chat
+aiplane models promote DISCOVERED_ENTRY_NAME --as local_chat --keep-discovered
+aiplane models promote DISCOVERED_ENTRY_NAME --as existing_entry --overwrite
+```
+
+Use `models add` when you want to create a profile-owned entry with a deliberate local name while still requiring a discovered source. You can resolve the source by discovered alias or by provider/model id. Repeat `--role` for multiple roles. `models add` rejects aliases or provider/model ids that are not present in `models.discovered.yaml`, because it is meant to turn reviewed discovery into stable local configuration, not invent model metadata by hand. This writes to the selected profile's `models.yaml` and records `discovered_entry`:
+
+```bash
+aiplane models add local_chat --alias ollama-llama3-2-3b --role chat --role analysis
+aiplane models add local_chat --provider ollama --model llama3.2:3b --role chat --runtime ollama
+aiplane models add azure_chat --alias azure-openai-gpt-4o-prod --role chat --disable --dry-run
+```
+
+Use `models clone` when the same underlying model should have a second local purpose, role, or note. The target entry still points at the same provider-native `model` value unless you override it with `--set model=...`:
+
+```bash
+aiplane models clone local_chat local_fast_draft --role completion --notes "Fast draft model for local coding tasks."
+aiplane models clone DISCOVERED_ENTRY_NAME local_chat --role chat --runtime ollama --dry-run
+```
+
+To clear model catalog entries, use `clear-cache`. This operates on discovery/import data in `models.discovered.yaml` plus matching profile-owned review entries in `models.yaml`; it does not remove or disable model providers from `model-providers.yaml` or `model-providers.user.yaml`. The command reports counts by provider, not every removed entry. By default it includes profile-owned review entries in `models.yaml`, so the local model cache and review-time entries can be emptied and later repopulated from provider discovery; add `--keep-curated` when you only want to remove discovered/imported entries:
 
 ```bash
 aiplane models clear-cache --dry-run
@@ -217,18 +261,18 @@ aiplane models clear-cache
 Important output fields:
 
 - `source_models_returned`: number of model ids returned by the source catalog for that provider. This is the online source API count where an adapter exists, or the profile catalog fallback count when no online adapter/result is available.
-- `profile_models_before_refresh`: total profile aliases already stored for that provider before this refresh writes anything.
-- `profile_curated_models_before_refresh`: hand-curated/template aliases for that provider. These are preserved by refresh but included by default in `clear-cache` unless `--keep-curated` is used.
-- `profile_refresh_imported_models_before_refresh`: aliases previously imported by `models refresh`. These are written to `models.generated.yaml` and removed by `clear-cache`.
-- `source_models_already_profiled`: returned source ids already represented by profile aliases.
+- `profile_models_before_refresh`: total profile model entries already stored for that provider before this refresh writes anything.
+- `profile_curated_models_before_refresh`: profile-owned/template entries for that provider. These are preserved by refresh but included by default in `clear-cache` unless `--keep-curated` is used.
+- `profile_refresh_imported_models_before_refresh`: entries previously imported by `models refresh`. These are written to `models.discovered.yaml` and removed by `clear-cache`.
+- `source_models_already_profiled`: returned source ids already represented by profile model entries.
 - `source_models_to_import`: returned source ids that would be imported.
 - `source_models_to_update`: returned source ids that already exist locally but have changed source-derived metadata.
 - `source_contacted`: whether an online/source API was contacted successfully. `false` means the result came from fallback/profile data; see `source_discovery_reason` for the error or missing-adapter reason.
 - `source_discovery_method`: where the result came from, for example `source_api` or `profile_catalog` fallback.
-- `prune_enabled`: whether missing source ids are allowed to remove generated aliases. Pruning is enabled only after a successful authoritative online/source response. Query results, limit-truncated source windows, and profile-catalog fallback do not prune.
+- `prune_enabled`: whether missing source ids are allowed to remove discovered entries. Pruning is enabled only after a successful authoritative online/source response. Query results, limit-truncated source windows, and profile-catalog fallback do not prune.
 - `model_changes_count`: number of per-model change rows hidden from the default summary.
-- `model_changes`: shown only with `--verbose`; contains aliases that would be imported/imported, would be updated/updated, or would be removed/removed. In verbose rows, `model.id` is the provider-native model id, `model.source` is the model provider, and `runtime_endpoint` is the configured runtime endpoint such as `ollama`, `vllm`, `transformers`, or `llamacpp`.
-- `next_steps`: command-specific guidance for the safe review flow, such as writing a dry-run refresh, promoting one generated alias, validating the profile, or previewing cache cleanup.
+- `model_changes`: shown only with `--verbose`; contains entries that would be imported/imported, would be updated/updated, or would be removed/removed. In verbose rows, `model.id` is the provider-native model id, `model.source` is the model provider, and `runtime_endpoint` is the configured runtime endpoint such as `ollama`, `vllm`, `transformers`, or `llamacpp`.
+- `next_steps`: command-specific guidance for the safe review flow, such as writing a dry-run refresh, promoting one discovered entry, validating the profile, or previewing cache cleanup.
 
 New entries are enabled by default. Use `--disable-new` to import them disabled.
 
@@ -284,7 +328,7 @@ Online catalog discovery is implemented provider by provider because each source
 
 - Hugging Face Hub has a live online query adapter via its model API.
 - Hugging Face GGUF uses the Hugging Face adapter with a GGUF-oriented search.
-- Ollama has local runtime inventory and pull support; complete public library enumeration still needs a separate catalog adapter or curated index.
-- Azure Speech voices, local files, and other specialist catalogs can be added through user provider config once their API/metadata path is stable enough. Open-weight media models from Hugging Face should normally flow through online refresh into `models.generated.yaml` first.
+- Ollama has local runtime inventory and pull support; complete public library enumeration still needs a separate catalog adapter or maintained index.
+- Azure Speech voices, local files, and other specialist catalogs can be added through user provider config once their API/metadata path is stable enough. Open-weight media models from Hugging Face should normally flow through online refresh into `models.discovered.yaml` first.
 
 Runtime lifecycle support is documented in [Model Sources and Runtimes](runtime-model-map.md).

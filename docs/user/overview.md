@@ -13,7 +13,7 @@ The nearest analogy is not exactly Terraform, Vagrant, or a dev-container tool. 
 - Drive runtime helper operations from the main CLI, including installing, configuring, starting, stopping, checking, and pulling models where a helper is available.
 - Work with Ollama through `aiplane runtimes install/start/stop/pull/list-runtime-models ...` instead of requiring direct `ollama` commands for the common path.
 - List model providers and show which profile catalog entries come from each source.
-- Maintain curated model aliases in `models.yaml` and generated refresh/import aliases in `models.generated.yaml`, with task capability scores, hardware fit metadata, source/runtime mappings, and preferred runtimes.
+- Maintain profile-owned model entries in `models.yaml` and discovery refresh/import entries in `models.discovered.yaml`, with task capability scores, hardware fit metadata, source/runtime mappings, and preferred runtimes.
 - Discover local hardware and compare it with configured hardware templates.
 - Recommend models by capability, model provider, runtime compatibility, ownership, RAM, and VRAM constraints.
 - Export IDE/CLI model endpoint snippets for Continue, Cline, Zed, Aider, and generic OpenAI-compatible clients.
@@ -28,7 +28,7 @@ The nearest analogy is not exactly Terraform, Vagrant, or a dev-container tool. 
 - **Provider / Model Source / Catalog**: Where model identifiers or weights come from, such as the Ollama library, Hugging Face Hub, GGUF files, Azure Speech voices, or a local file path.
 - **Runtime**: The software that loads model weights and serves inference, such as Ollama, vLLM, llama.cpp server, TGI, Transformers, LocalAI, faster-whisper, Diffusers, or ComfyUI.
 - **Runtime Endpoint**: A configured service URL exposed by a runtime, such as local Ollama, vLLM on a shared workstation, or llama.cpp behind an SSH tunnel.
-- **Model**: A profile-approved alias that maps to a source-native model id, hardware requirements, task capability scores, model provider, and supported runtimes.
+- **Model**: A profile-owned entry that maps to a source-native model id, hardware requirements, task capability scores, model provider, and supported runtimes.
 - **Endpoint**: The URL an IDE/CLI uses for inference. For OpenAI-compatible local Ollama this is usually `http://localhost:11434/v1`.
 - **Machine**: A hardware/OS profile for a local PC, shared workstation, VM, or cluster node. A machine can be discovered live or imported from a captured schema.
 - **Stack**: A pairing of machine, runtime, model, and deployment/access settings. It answers questions like “run this model with vLLM on that GPU machine”.

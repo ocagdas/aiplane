@@ -220,17 +220,7 @@ aiplane providers test azure_openai --credential-ref azure_openai.business_a
 aiplane providers test elevenlabs
 ```
 
-Profile/provider entries can then refer to credentials without embedding secret values:
-
-```yaml
-providers:
-  openai:
-    endpoint: https://api.openai.com/v1
-    credential_ref: openai.personal
-  azure_openai:
-    endpoint: https://YOUR-RESOURCE.openai.azure.com
-    credential_ref: azure_openai.business_a
-```
+Provider overrides can then refer to credentials without embedding secret values. Keep account-specific endpoint and credential references in ignored local config, not in the shipped profile template.
 
 ## Profile Templates
 
@@ -253,14 +243,22 @@ Customize files under `profiles/my-local/`. Do not edit `profile-templates/` for
 local machine or team-specific settings unless you intentionally want to change
 the shipped defaults.
 
-Use `--overwrite` only when you want to replace an existing profile with a fresh
-copy of the template:
+Use `profiles repair` when an editable profile exists but one or more template
+files are missing. It copies only missing files by default and preserves existing
+local files unless `--overwrite` is passed:
+
+```bash
+aiplane profiles repair local-dev --file models.yaml
+aiplane profiles repair local-dev --dry-run
+```
+
+Use `--overwrite` only when you want to replace an existing profile or selected
+profile file with a fresh copy of the template:
 
 ```bash
 aiplane profiles create my-local --template local-dev --overwrite
+aiplane profiles repair local-dev --file models.yaml --overwrite
 ```
-
-
 
 ### Default Profile
 

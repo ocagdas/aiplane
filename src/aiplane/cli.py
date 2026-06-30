@@ -27,6 +27,7 @@ from .config import (
     local_config_path,
     load_profile,
     profiles_root,
+    repair_profile,
     resolve_profile_name,
     set_default_profile,
     set_local_config_value,
@@ -234,7 +235,7 @@ def _main(argv: list[str] | None = None) -> int:
     create = profile_sub.add_parser(
         "create",
         help="Create a profile from a template",
-        description="Copy a checked-in profile template into profiles/<name> so it can be customized without changing the template.",
+        description="Copy a shipped profile template into profiles/<name> so it can be customized without changing the template.",
         formatter_class=HelpFormatter,
         epilog="Examples:\n  aiplane profiles create laptop --template local-dev\n  aiplane profiles create cloud-test --template local-dev --overwrite",
     )
@@ -248,6 +249,118 @@ def _main(argv: list[str] | None = None) -> int:
         "--overwrite",
         action="store_true",
         help="Replace an existing profile directory with a fresh copy of the template",
+    )
+    repair = profile_sub.add_parser(
+        "repair",
+        help="Restore missing profile files from a template",
+        description=(
+            "Copy missing YAML files from a shipped profile template into an existing editable profile. "
+            "Existing local files are preserved unless --overwrite is passed."
+        ),
+        formatter_class=HelpFormatter,
+        epilog=(
+            "Examples:\n"
+            "  aiplane profiles repair local-dev --file models.yaml\n"
+            "  aiplane profiles repair local-dev --dry-run\n"
+            "  aiplane profiles repair local-dev --template local-dev --overwrite --file models.yaml"
+        ),
+    )
+    repair.add_argument(
+        "name",
+        nargs="?",
+        help="Editable profile name to repair. If omitted, uses the effective default profile",
+    )
+    repair.add_argument(
+        "--template",
+        default="local-dev",
+        help="Template name from aiplane profiles templates",
+    )
+    repair.add_argument(
+        "--file",
+        action="append",
+        default=[],
+        metavar="FILENAME",
+        help="Profile YAML file to restore, such as models.yaml. Repeat to repair multiple files. Defaults to all missing profile files",
+    )
+    repair.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Replace selected existing profile files with the template copy",
+    )
+    repair.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Preview which files would be copied without writing them",
+    )
+    bootstrap = profile_sub.add_parser(
+        "bootstrap-local",
+        help="Create and optionally discover a local-dev profile",
+        description=(
+            "Create a local editable profile from the shipped template, validate it, and optionally refresh "
+            "provider model discovery into ignored models.discovered.yaml."
+        ),
+        formatter_class=HelpFormatter,
+        epilog=(
+            "Examples:\n"
+            "  aiplane profiles bootstrap-local\n"
+            "  aiplane profiles bootstrap-local --provider ollama --limit 25\n"
+            "  aiplane profiles bootstrap-local --no-discovery\n"
+            "  aiplane profiles bootstrap-local --dry-run"
+        ),
+    )
+    bootstrap.add_argument(
+        "--name",
+        default="local-dev",
+        help="Editable profile name to create or refresh; defaults to local-dev",
+    )
+    bootstrap.add_argument(
+        "--template",
+        default="local-dev",
+        help="Template name from aiplane profiles templates; defaults to local-dev",
+    )
+    bootstrap.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Replace an existing profile directory with a fresh copy of the template before discovery",
+    )
+    bootstrap.add_argument(
+        "--no-discovery",
+        action="store_true",
+        help="Create and validate the profile without refreshing provider model discovery",
+    )
+    bootstrap.add_argument(
+        "--provider",
+        default="all",
+        help="Model provider to refresh after profile creation, or all for every configured provider",
+    )
+    bootstrap.add_argument("--query", help="Optional search query passed to provider catalog adapters")
+    bootstrap.add_argument(
+        "--limit",
+        type=int,
+        default=25,
+        help="Default maximum model ids to read per provider catalog during bootstrap discovery",
+    )
+    bootstrap.add_argument(
+        "--provider-limit",
+        action="append",
+        default=[],
+        metavar="PROVIDER=COUNT",
+        help="Override --limit for one model provider during bootstrap discovery",
+    )
+    bootstrap.add_argument(
+        "--disable-new",
+        action="store_true",
+        help="Write newly discovered entries as disabled; by default they are enabled",
+    )
+    bootstrap.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Include per-model discovery rows in the refresh result",
+    )
+    bootstrap.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Preview create/discovery actions without writing profile files or discovered model cache",
     )
     show = profile_sub.add_parser(
         "show",
@@ -964,6 +1077,89 @@ def _main(argv: list[str] | None = None) -> int:
         help="Default role name, such as chat_model, autocomplete_model, embedding_model, code_model, self_managed_model, completion_model, or reasoning_model",
     )
     models_use.add_argument("name", help="Existing model alias to set as the default for ROLE")
+    models_add = models_sub.add_parser(
+        "add",
+        help="Add a discovered model as a profile-owned entry in models.yaml",
+        description="Create a profile-owned model entry from models.discovered.yaml. Resolve the source either by discovered alias with --alias or by provider/model id with --provider and --model. The discovered entry is kept and the profile-owned entry records discovered_entry for traceability.",
+        formatter_class=HelpFormatter,
+        epilog=(
+            "Examples:\n"
+            "  aiplane models add local_chat --alias ollama-llama3-2-3b --role chat --role analysis\n"
+            "  aiplane models add local_chat --provider ollama --model llama3.2:3b --role chat --runtime ollama\n"
+            "  aiplane models add azure_chat --alias azure-openai-gpt-4o-prod --role chat --disable --dry-run"
+        ),
+    )
+    _profile_arg(models_add)
+    models_add.add_argument("name", help="Profile model entry name to write to models.yaml, such as local_chat")
+    models_add.add_argument(
+        "--alias",
+        dest="discovered_name",
+        help="Discovered model alias from models.discovered.yaml to use as the source",
+    )
+    models_add.add_argument(
+        "--provider", help="Model source/provider name, such as ollama, huggingface, or azure_openai"
+    )
+    models_add.add_argument(
+        "--model", dest="model_id", help="Provider/source-native model id or managed deployment name"
+    )
+    models_add.add_argument("--role", action="append", default=[], help="Usage role; can be repeated")
+    models_add.add_argument(
+        "--runtime",
+        action="append",
+        default=[],
+        dest="supported_runtimes",
+        help="Supported runtime for this entry; can be repeated",
+    )
+    models_add.add_argument(
+        "--preferred-runtime", help="Preferred runtime when more than one runtime can serve the model"
+    )
+    models_add.add_argument("--notes", help="Human notes to store with the model entry")
+    models_add.add_argument(
+        "--set",
+        dest="settings",
+        action="append",
+        default=[],
+        help="Extra model metadata as key=value, such as min_ram_gb=16 or min_vram_gb=0; can be repeated",
+    )
+    models_add.add_argument("--disable", action="store_true", help="Create the entry disabled")
+    models_add.add_argument(
+        "--overwrite", action="store_true", help="Overwrite an existing profile-owned entry after review"
+    )
+    models_add.add_argument("--dry-run", action="store_true", help="Preview the entry without writing models.yaml")
+    models_clone = models_sub.add_parser(
+        "clone",
+        help="Clone a model entry under a new profile name",
+        description="Create a second profile-owned model entry from an existing discovered or profile-owned entry, optionally overriding roles, runtime metadata, notes, and other fields.",
+        formatter_class=HelpFormatter,
+        epilog="Examples:\n  aiplane models clone local_chat local_fast_draft --role completion --notes 'Fast draft model for local coding tasks'\n  aiplane models clone DISCOVERED_ENTRY_NAME local_chat --role chat --runtime ollama --dry-run",
+    )
+    _profile_arg(models_clone)
+    models_clone.add_argument("source", help="Existing discovered or profile-owned model entry name")
+    models_clone.add_argument("target", help="New profile model entry name")
+    models_clone.add_argument("--role", action="append", default=None, help="Replacement usage role; can be repeated")
+    models_clone.add_argument(
+        "--runtime",
+        action="append",
+        default=None,
+        dest="supported_runtimes",
+        help="Replacement supported runtime; can be repeated",
+    )
+    models_clone.add_argument("--preferred-runtime", help="Replacement preferred runtime")
+    models_clone.add_argument("--notes", help="Replacement human notes")
+    models_clone.add_argument(
+        "--set",
+        dest="settings",
+        action="append",
+        default=[],
+        help="Extra model metadata override as key=value; can be repeated",
+    )
+    clone_enabled = models_clone.add_mutually_exclusive_group()
+    clone_enabled.add_argument("--enable", action="store_true", help="Mark the cloned entry enabled")
+    clone_enabled.add_argument("--disable", action="store_true", help="Mark the cloned entry disabled")
+    models_clone.add_argument(
+        "--overwrite", action="store_true", help="Overwrite an existing profile-owned entry after review"
+    )
+    models_clone.add_argument("--dry-run", action="store_true", help="Preview the clone without writing models.yaml")
     models_enable = models_sub.add_parser(
         "enable",
         help="Enable one model alias",
@@ -1044,6 +1240,16 @@ def _main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Show only models with at least one saved aiplane benchmark result",
     )
+    models_list.add_argument(
+        "--min-likes",
+        type=float,
+        help="Require a minimum provider catalog likes count when source metadata includes likes",
+    )
+    models_list.add_argument(
+        "--min-downloads",
+        type=float,
+        help="Require a minimum provider catalog downloads count when source metadata includes downloads",
+    )
     models_list.add_argument("--enabled-only", action="store_true", help="Show only enabled profile models")
     models_list.add_argument(
         "--self-managed-only",
@@ -1067,9 +1273,9 @@ def _main(argv: list[str] | None = None) -> int:
     )
     models_list.add_argument(
         "--sort-by",
-        choices=["name", "avg", "role", "benchmark"],
+        choices=["name", "avg", "role", "benchmark", "likes", "downloads", "popularity"],
         default="name",
-        help="Sort rows by alias name, overall capability average, role-relevant capability score, or latest benchmark score",
+        help="Sort rows by entry name, capability score, role score, benchmark score, provider likes, provider downloads, or combined provider popularity",
     )
     models_list.add_argument(
         "--limit",
@@ -1175,9 +1381,9 @@ def _main(argv: list[str] | None = None) -> int:
         "clear-cache",
         help="Remove model catalog refresh/import aliases",
         description=(
-            "Remove generated refresh/import aliases from models.generated.yaml plus matching curated/template "
-            "aliases from models.yaml by default. Use --keep-curated to remove only generated or legacy "
-            "refresh-imported aliases. Use --dry-run first to preview."
+            "Remove discovery refresh/import entries from models.discovered.yaml plus matching profile-owned review "
+            "entries from models.yaml by default. Use --keep-curated to remove only discovered/imported entries. "
+            "Use --dry-run first to preview."
         ),
         formatter_class=HelpFormatter,
         epilog=(
@@ -1198,41 +1404,49 @@ def _main(argv: list[str] | None = None) -> int:
         "--include-curated",
         action="store_true",
         default=True,
-        help="Remove hand-curated/template aliases from models.yaml too. This is the default and is kept for explicit confirmation/backward-compatible scripts.",
+        help="Remove profile-owned review entries from models.yaml too. This is the default and is kept for explicit confirmation/backward-compatible scripts.",
     )
     curated_clear.add_argument(
         "--keep-curated",
         action="store_true",
-        help="Keep hand-curated/template aliases in models.yaml; remove only generated or legacy refresh-imported aliases.",
+        help="Keep profile-owned entries in models.yaml; remove only discovered/imported entries.",
     )
     models_clear_cache.add_argument(
         "--dry-run",
         action="store_true",
-        help="Show alias counts that would be removed without writing models.yaml",
+        help="Show entry counts that would be removed without writing models.yaml",
     )
     models_promote = models_sub.add_parser(
         "promote",
-        help="Promote a generated model alias into curated models.yaml",
-        description="Copy a reviewed generated/imported alias from models.generated.yaml into curated models.yaml. By default the generated copy is removed after promotion so the curated alias becomes the authoritative profile entry.",
+        help="Promote a discovered model entry into models.yaml",
+        description="Copy a reviewed discovered/imported entry from models.discovered.yaml into profile-owned models.yaml. The discovered copy is kept by default and the profile-owned entry records discovered_entry for traceability.",
         formatter_class=HelpFormatter,
-        epilog="Examples:\n  aiplane models promote GENERATED_ALIAS --dry-run\n  aiplane models promote GENERATED_ALIAS --as REVIEWED_ALIAS\n  aiplane models promote GENERATED_ALIAS --as REVIEWED_ALIAS --overwrite",
+        epilog=(
+            "Examples:\n"
+            "  aiplane models promote DISCOVERED_ENTRY_NAME --dry-run\n"
+            "  aiplane models promote DISCOVERED_ENTRY_NAME --as local_chat\n"
+            "  aiplane models promote DISCOVERED_ENTRY_NAME --as local_chat --keep-discovered\n"
+            "  aiplane models promote DISCOVERED_ENTRY_NAME --as local_chat --overwrite"
+        ),
     )
     _profile_arg(models_promote)
-    models_promote.add_argument("name", help="Generated model alias from models.generated.yaml")
+    models_promote.add_argument("name", help="Discovered model entry from models.discovered.yaml")
     models_promote.add_argument(
         "--as",
         dest="new_name",
-        help="Promote under a cleaner curated alias instead of reusing the generated alias",
+        help="Promote under a cleaner profile-owned entry name instead of reusing the discovered entry name",
     )
     models_promote.add_argument(
-        "--keep-generated",
+        "--keep-discovered",
+        dest="keep_discovered",
         action="store_true",
-        help="Keep the generated alias after writing the curated copy",
+        default=True,
+        help="Keep the discovered entry after writing the profile-owned copy. This is the default and is kept for explicit scripts.",
     )
     models_promote.add_argument(
         "--overwrite",
         action="store_true",
-        help="Overwrite an existing curated target alias after review. Without this, promotion refuses curated alias collisions.",
+        help="Overwrite an existing profile-owned target entry after review. Without this, promotion refuses profile-owned entry collisions.",
     )
     models_promote.add_argument(
         "--dry-run",
@@ -2338,6 +2552,95 @@ def _main(argv: list[str] | None = None) -> int:
                 )
             )
             return 0
+        if args.profile_command == "repair":
+            profile_name = args.name or resolve_profile_name(requested_profile, profiles_dir=profiles_dir)
+            result = repair_profile(
+                profile_name,
+                template=args.template,
+                files=args.file or None,
+                overwrite=args.overwrite,
+                dry_run=args.dry_run,
+                profiles_dir=profiles_dir,
+            )
+            print(_json(result, indent=2, sort_keys=True))
+            return 0
+        if args.profile_command == "bootstrap-local":
+            root = profiles_root(profiles_dir)
+            profile_path = root / args.name
+            created = False
+            would_create = False
+            if args.dry_run:
+                would_create = args.overwrite or not profile_path.exists()
+            elif args.overwrite or not profile_path.exists():
+                profile_path = create_profile(
+                    args.name,
+                    template=args.template,
+                    overwrite=args.overwrite,
+                    profiles_dir=profiles_dir,
+                )
+                created = True
+            profile_exists = profile_path.exists()
+            validation = None
+            discovery = None
+            if profile_exists:
+                profile = load_profile(args.name, workspace, profiles_dir=profiles_dir)
+                validation = _validate_profile(profile)
+                if not args.no_discovery:
+                    catalog = ModelCatalog(profile)
+                    provider_limits = _parse_provider_limits(args.provider_limit)
+                    progress = _refresh_progress()
+                    write = not args.dry_run
+                    try:
+                        if args.provider == "all":
+                            discovery = catalog.refresh_all(
+                                write=write,
+                                enable=not args.disable_new,
+                                query=args.query,
+                                limit=args.limit,
+                                provider_limits=provider_limits,
+                                progress=progress,
+                                verbose=args.verbose,
+                            )
+                        else:
+                            provider_limit = int(provider_limits.get(args.provider, args.limit))
+                            discovery = catalog.refresh(
+                                args.provider,
+                                write=write,
+                                enable=not args.disable_new,
+                                query=args.query,
+                                limit=provider_limit,
+                                progress=progress,
+                                verbose=args.verbose,
+                            )
+                    finally:
+                        if progress:
+                            progress("done", "", "")
+            elif not args.no_discovery:
+                discovery = {
+                    "skipped": True,
+                    "reason": "profile does not exist yet; rerun without --dry-run to create it before discovery",
+                }
+            print(
+                _json(
+                    {
+                        "name": "profiles_bootstrap_local",
+                        "profile": args.name,
+                        "template": args.template,
+                        "path": str(profile_path),
+                        "created": created,
+                        "would_create": would_create,
+                        "overwrite": args.overwrite,
+                        "dry_run": args.dry_run,
+                        "discovery_requested": not args.no_discovery,
+                        "discovery": discovery,
+                        "validation": validation,
+                        "next_steps": _profile_bootstrap_next_steps(args.name, not args.no_discovery, args.dry_run),
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+            )
+            return 0 if validation is None or validation.get("ok", False) else 1
         effective_profile = resolve_profile_name(requested_profile, profiles_dir=profiles_dir)
         profile_name = args.name or effective_profile
         profile = load_profile(profile_name, workspace, profiles_dir=profiles_dir)
@@ -2725,6 +3028,47 @@ def _main(argv: list[str] | None = None) -> int:
         if args.models_command == "use":
             print(_json(catalog.set_default(args.role, args.name), indent=2))
             return 0
+        if args.models_command == "add":
+            print(
+                _json(
+                    catalog.add_model(
+                        args.name,
+                        provider=args.provider,
+                        model_id=args.model_id,
+                        discovered_name=args.discovered_name,
+                        roles=args.role,
+                        supported_runtimes=args.supported_runtimes,
+                        preferred_runtime=args.preferred_runtime,
+                        enabled=not args.disable,
+                        notes=args.notes,
+                        settings=_parse_settings(args.settings),
+                        write=not args.dry_run,
+                        overwrite=args.overwrite,
+                    ),
+                    indent=2,
+                )
+            )
+            return 0
+        if args.models_command == "clone":
+            enabled = True if args.enable else False if args.disable else None
+            print(
+                _json(
+                    catalog.clone_model(
+                        args.source,
+                        args.target,
+                        roles=args.role,
+                        supported_runtimes=args.supported_runtimes,
+                        preferred_runtime=args.preferred_runtime,
+                        enabled=enabled,
+                        notes=args.notes,
+                        settings=_parse_settings(args.settings),
+                        write=not args.dry_run,
+                        overwrite=args.overwrite,
+                    ),
+                    indent=2,
+                )
+            )
+            return 0
         if args.models_command == "enable":
             print(_json(catalog.set_enabled(args.name, True), indent=2))
             return 0
@@ -2828,7 +3172,7 @@ def _main(argv: list[str] | None = None) -> int:
                         args.name,
                         new_name=args.new_name,
                         write=not args.dry_run,
-                        keep_generated=args.keep_generated,
+                        keep_discovered=args.keep_discovered,
                         overwrite=args.overwrite,
                     ),
                     indent=2,
@@ -3244,10 +3588,7 @@ def _main(argv: list[str] | None = None) -> int:
 def _runtime_helper_substrate(profile: object, runtime: str, override: str | None = None) -> str:
     if override:
         return override
-    providers = (
-        getattr(profile, "models", {}).get("providers", {}) if isinstance(getattr(profile, "models", {}), dict) else {}
-    )
-    provider = providers.get(runtime, {}) if isinstance(providers, dict) else {}
+    provider = ModelCatalog(profile).providers().get(runtime, {}) if hasattr(profile, "models") else {}
     substrate = str(provider.get("substrate") or "native") if isinstance(provider, dict) else "native"
     return "docker" if substrate == "docker" else "native"
 
@@ -3300,7 +3641,7 @@ def _profile_summary(profile, default_name: str | None = None) -> dict[str, obje
 
 
 def _profile_selected(profile, default_name: str | None = None) -> dict[str, object]:
-    providers = profile.models.get("providers", {}) if isinstance(profile.models, dict) else {}
+    providers = ModelCatalog(profile).providers()
     models = profile.models.get("models", {}) if isinstance(profile.models, dict) else {}
     targets = profile.targets.get("targets", {}) if isinstance(profile.targets, dict) else {}
     hardware_selected = profile.hardware.get("selected", {}) if isinstance(profile.hardware, dict) else {}
@@ -3354,6 +3695,8 @@ def _model_filter_args(args) -> dict[str, object]:
         "score_source": getattr(args, "score_source", None),
         "min_benchmark_score": getattr(args, "min_benchmark_score", None),
         "require_benchmark": bool(getattr(args, "require_benchmark", False)),
+        "min_likes": getattr(args, "min_likes", None),
+        "min_downloads": getattr(args, "min_downloads", None),
         "max_min_ram_gb": getattr(args, "ram_gb", None),
         "max_min_vram_gb": getattr(args, "vram_gb", None),
     }
@@ -3439,7 +3782,7 @@ def _validate_profile(profile) -> dict[str, object]:
         }
     )
 
-    providers = _dict_value(profile.models.get("providers", {})) if isinstance(profile.models, dict) else {}
+    providers = ModelCatalog(profile).providers()
     models = _dict_value(profile.models.get("models", {})) if isinstance(profile.models, dict) else {}
     defaults = _dict_value(profile.models.get("defaults", {})) if isinstance(profile.models, dict) else {}
     for role, name in defaults.items():
@@ -3577,6 +3920,25 @@ def _environment_doctor_text(payload: dict[str, object]) -> str:
         lines.append("next steps:")
         lines.extend(f"- {note}" for note in notes[:3])
     return "\n".join(lines)
+
+
+def _profile_bootstrap_next_steps(profile: str, discovery_requested: bool, dry_run: bool) -> list[str]:
+    if dry_run:
+        steps = [
+            f"Rerun aiplane profiles bootstrap-local --name {profile} without --dry-run to create or refresh the profile."
+        ]
+    else:
+        steps = [f"Run aiplane profiles validate {profile} after local edits."]
+    if discovery_requested:
+        steps.append(f"Review discovered candidates with aiplane models list --profile {profile} --group-by runtime.")
+        steps.append(
+            "Promote a reviewed discovered entry or add a profile-owned entry before setting defaults or exporting IDE config."
+        )
+    else:
+        steps.append(
+            f"Run aiplane models refresh --profile {profile} when you want to populate models.discovered.yaml."
+        )
+    return steps
 
 
 def _dict_value(value: object) -> dict:

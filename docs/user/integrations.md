@@ -18,7 +18,7 @@ for example a shared workstation or cloud gateway.
 
 ## Plan, Setup, Export
 
-The integration flow has three separate steps. On the checked-in profile, discover or promote aliases first, then pass them explicitly:
+The integration flow has three separate steps. With the shipped profile template, discover or promote model entries first, then pass them explicitly:
 
 ```bash
 aiplane integrations roles continue
@@ -160,7 +160,7 @@ Generate a Continue config bundle from explicit role aliases:
 aiplane integrations export continue --chat CHAT_ALIAS --autocomplete AUTOCOMPLETE_ALIAS --embedding EMBEDDING_ALIAS
 ```
 
-The checked-in profile is provider-only, so discover or promote aliases before exporting. If your local profile has `chat_model`, `autocomplete_model`, and `embedding_model` defaults, you can omit the role flags. To export a single model entry instead, pass `--model <alias>`.
+The shipped profile template keeps `models.yaml` structural, so discover, add, or promote model entries before exporting. If your local profile has `chat_model`, `autocomplete_model`, and `embedding_model` defaults, you can omit the role flags. To export a single model entry instead, pass `--model <alias>`.
 
 For a shared workstation or cloud-hosted OpenAI-compatible endpoint, override the
 endpoint:
@@ -177,7 +177,7 @@ aiplane integrations export continue --model MODEL_ALIAS --endpoint https://llm-
 
 The exporter prints YAML shaped for Continue's configuration. Paste that snippet into Continue's YAML config, normally `~/.continue/config.yaml` on this PC. If the file already has a `models:` section, merge generated entries under the existing list instead of creating duplicate top-level keys.
 
-`--model` is a single-model export. It does not accept multiple values. For Continue's multi-role config, use `--chat`, `--autocomplete`, and `--embedding`; omit all three only when your local profile has curated defaults.
+`--model` is a single-model export. It does not accept multiple values. For Continue's multi-role config, use `--chat`, `--autocomplete`, and `--embedding`; omit all three only when your local profile has profile-owned defaults.
 
 To avoid repeating selection flags, save the plan and export from it:
 

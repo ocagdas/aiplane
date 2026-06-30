@@ -1,9 +1,0 @@
-default: local
-local:
-  provider: ollama-compatible
-  model: null
-  endpoint: http://localhost:11434
-cloud:
-  provider: mock
-  model: null
-  enabled: true

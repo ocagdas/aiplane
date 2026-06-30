@@ -151,11 +151,8 @@ def create_profile(
     overwrite: bool = False,
     profiles_dir: Path | str | None = None,
 ) -> Path:
-    if not name or name in {".", ".."} or "/" in name or "\\" in name:
-        raise ValueError("profile name must be a simple directory name")
-    source = profile_templates_root() / template
-    if not source.is_dir():
-        raise ValueError(f"unknown profile template: {template}")
+    _validate_profile_name(name)
+    source = _profile_template_path(template)
     missing = [filename for filename in CONFIG_FILES.values() if not (source / filename).exists()]
     if missing:
         raise ValueError(f"profile template {template!r} is missing: {', '.join(missing)}")
@@ -166,6 +163,69 @@ def create_profile(
         shutil.rmtree(destination)
     shutil.copytree(source, destination)
     return destination
+
+
+def repair_profile(
+    name: str,
+    template: str = "local-dev",
+    files: list[str] | None = None,
+    overwrite: bool = False,
+    dry_run: bool = False,
+    profiles_dir: Path | str | None = None,
+) -> dict[str, Any]:
+    _validate_profile_name(name)
+    source = _profile_template_path(template)
+    destination = profiles_root(profiles_dir) / name
+    if not destination.is_dir():
+        raise ValueError(f"unknown profile: {name}")
+    requested = files or list(CONFIG_FILES.values())
+    allowed = set(CONFIG_FILES.values())
+    invalid = [filename for filename in requested if filename not in allowed]
+    if invalid:
+        raise ValueError(f"unknown profile file: {', '.join(invalid)}")
+
+    copied: list[str] = []
+    would_copy: list[str] = []
+    skipped_existing: list[str] = []
+    for filename in requested:
+        source_file = source / filename
+        if not source_file.exists():
+            raise ValueError(f"profile template {template!r} is missing: {filename}")
+        destination_file = destination / filename
+        should_copy = overwrite or not destination_file.exists()
+        if not should_copy:
+            skipped_existing.append(filename)
+            continue
+        if dry_run:
+            would_copy.append(filename)
+            continue
+        destination_file.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source_file, destination_file)
+        copied.append(filename)
+    return {
+        "profile": name,
+        "template": template,
+        "path": str(destination),
+        "overwrite": overwrite,
+        "dry_run": dry_run,
+        "copied": copied,
+        "would_copy": would_copy,
+        "skipped_existing": skipped_existing,
+    }
+
+
+def _validate_profile_name(name: str) -> None:
+    if not name or name in {".", ".."} or "/" in name or "\\" in name:
+        raise ValueError("profile name must be a simple directory name")
+
+
+def _profile_template_path(template: str) -> Path:
+    if not template or template in {".", ".."} or "/" in template or "\\" in template:
+        raise ValueError("profile template name must be a simple directory name")
+    source = profile_templates_root() / template
+    if not source.is_dir():
+        raise ValueError(f"unknown profile template: {template}")
+    return source
 
 
 def list_profiles(profiles_dir: Path | str | None = None) -> list[str]:

@@ -24,6 +24,7 @@ from aiplane import config as agent_config
 from aiplane.config import (
     create_profile,
     default_profile,
+    repair_profile,
     init_local_config,
     list_config_templates,
     list_profile_templates,
@@ -102,16 +103,37 @@ def _test_model_fixture() -> dict[str, object]:
     return agent_config.parse_yaml(fixture_path.read_text(encoding="utf-8"))
 
 
+def _ensure_repo_test_profile(name: str, profiles_dir: Path | str | None = None) -> None:
+    if profiles_dir is not None:
+        return
+    destination = Path.cwd() / "profiles" / name
+    if destination.exists():
+        return
+    source = Path.cwd() / "profile-templates" / name
+    if source.is_dir():
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(source, destination)
+
+
 def _load_profile_with_test_models(
     name: str, workspace: Path | None = None, profiles_dir: Path | str | None = None
 ) -> Profile:
+    _ensure_repo_test_profile(name, profiles_dir=profiles_dir)
     profile = _REAL_LOAD_PROFILE(name, workspace, profiles_dir=profiles_dir)
     models = profile.models.get("models") if isinstance(profile.models, dict) else None
-    if isinstance(models, dict) and models:
-        return profile
     fixture = _test_model_fixture()
     profile.models.setdefault("defaults", {}).update(fixture.get("defaults", {}))
-    profile.models.setdefault("models", {}).update(fixture.get("models", {}))
+    if not isinstance(models, dict):
+        profile.models["models"] = {}
+        models = profile.models["models"]
+    for name, model in (fixture.get("models", {}) or {}).items():
+        models.setdefault(name, model)
+    from aiplane.runtime_catalog import PROVIDER_ENDPOINT_DEFAULTS
+
+    providers = profile.models.setdefault("providers", {})
+    if isinstance(providers, dict):
+        for provider_name, provider in PROVIDER_ENDPOINT_DEFAULTS.items():
+            providers.setdefault(provider_name, dict(provider))
     return profile
 
 
@@ -127,15 +149,13 @@ class MvpTests(unittest.TestCase):
         self.assertEqual(profile.name, "local-dev")
         self.assertEqual(profile.tools["mode"], "full_automation")
 
-    def test_shipped_profiles_do_not_hardcode_model_aliases(self) -> None:
-        for rel in [
-            "profile-templates/local-dev/models.yaml",
-            "profiles/local-dev/models.yaml",
-        ]:
-            data = agent_config.parse_yaml((Path.cwd() / rel).read_text(encoding="utf-8"))
-            self.assertEqual(data.get("defaults"), {})
-            self.assertEqual(data.get("models"), {})
-            self.assertIn("providers", data)
+    def test_shipped_profile_template_does_not_hardcode_model_entries(self) -> None:
+        data = agent_config.parse_yaml(
+            (Path.cwd() / "profile-templates/local-dev/models.yaml").read_text(encoding="utf-8")
+        )
+        self.assertEqual(data.get("defaults"), {})
+        self.assertEqual(data.get("models"), {})
+        self.assertNotIn("providers", data)
 
     def test_profile_templates_are_listed(self) -> None:
         self.assertIn("local-dev", list_profile_templates())
@@ -178,6 +198,114 @@ class MvpTests(unittest.TestCase):
             finally:
                 agent_config.project_root = original_project_root
             self.assertEqual(created, custom_profiles / "custom")
+
+    def test_repair_profile_restores_missing_models_yaml_from_template(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            profiles_dir = Path(tmp) / "profiles"
+            create_profile("local-dev", profiles_dir=profiles_dir)
+            models_path = profiles_dir / "local-dev" / "models.yaml"
+            models_path.unlink()
+
+            result = repair_profile("local-dev", files=["models.yaml"], profiles_dir=profiles_dir)
+
+            self.assertEqual(result["copied"], ["models.yaml"])
+            self.assertTrue(models_path.exists())
+            restored = agent_config.parse_yaml(models_path.read_text(encoding="utf-8"))
+            self.assertEqual(restored.get("defaults"), {})
+            self.assertEqual(restored.get("models"), {})
+            self.assertNotIn("providers", restored)
+            profile = _REAL_LOAD_PROFILE("local-dev", Path.cwd(), profiles_dir=profiles_dir)
+            self.assertTrue(cli_module._validate_profile(profile)["ok"])
+
+    def test_profiles_repair_cli_restores_selected_missing_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            profiles_dir = Path(tmp) / "profiles"
+            create_profile("local-dev", profiles_dir=profiles_dir)
+            models_path = profiles_dir / "local-dev" / "models.yaml"
+            models_path.unlink()
+            stdout = StringIO()
+
+            with redirect_stdout(stdout):
+                code = cli_main(
+                    [
+                        "--profiles-dir",
+                        str(profiles_dir),
+                        "profiles",
+                        "repair",
+                        "local-dev",
+                        "--file",
+                        "models.yaml",
+                    ]
+                )
+
+            self.assertEqual(code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(payload["copied"], ["models.yaml"])
+            self.assertEqual(payload["skipped_existing"], [])
+            self.assertTrue(models_path.exists())
+
+    def test_profiles_repair_dry_run_does_not_write(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            profiles_dir = Path(tmp) / "profiles"
+            create_profile("local-dev", profiles_dir=profiles_dir)
+            models_path = profiles_dir / "local-dev" / "models.yaml"
+            models_path.unlink()
+            stdout = StringIO()
+
+            with redirect_stdout(stdout):
+                code = cli_main(
+                    [
+                        "--profiles-dir",
+                        str(profiles_dir),
+                        "profiles",
+                        "repair",
+                        "local-dev",
+                        "--file",
+                        "models.yaml",
+                        "--dry-run",
+                    ]
+                )
+
+            self.assertEqual(code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(payload["would_copy"], ["models.yaml"])
+            self.assertFalse(models_path.exists())
+
+    def test_profiles_bootstrap_local_creates_template_profile_without_discovery(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            profiles_dir = Path(tmp) / "profiles"
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = cli_main(
+                    [
+                        "--profiles-dir",
+                        str(profiles_dir),
+                        "profiles",
+                        "bootstrap-local",
+                        "--no-discovery",
+                    ]
+                )
+            payload = json.loads(stdout.getvalue())
+
+            self.assertEqual(code, 0)
+            self.assertTrue(payload["created"])
+            self.assertFalse(payload["discovery_requested"])
+            self.assertTrue(payload["validation"]["ok"])
+            models_path = profiles_dir / "local-dev" / "models.yaml"
+            self.assertTrue(models_path.exists())
+            self.assertFalse((profiles_dir / "local-dev" / "models.discovered.yaml").exists())
+            models_config = agent_config.parse_yaml(models_path.read_text(encoding="utf-8"))
+            self.assertEqual(models_config.get("defaults"), {})
+            self.assertEqual(models_config.get("models"), {})
+            self.assertNotIn("providers", models_config)
+
+            profile = _REAL_LOAD_PROFILE("local-dev", Path.cwd(), profiles_dir=profiles_dir)
+            runtimes = RuntimeCatalog(profile).list(include_gui=True)
+            ollama = next(row for row in runtimes if row["name"] == "ollama")
+            self.assertFalse(ollama["configured"])
+            self.assertTrue(ollama["enabled"])
+            self.assertEqual(ollama["endpoint"], "http://localhost:11434")
+            self.assertEqual(ModelCatalog(profile).providers()["ollama"]["origin"], "default_runtime_catalog")
 
     def test_profiles_root_uses_env_var(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1592,7 +1720,7 @@ class MvpTests(unittest.TestCase):
 
             self.assertEqual(written["changes"]["imported"], 2)
             self.assertEqual(written["changes"]["removed"], 0)
-            self.assertTrue((root / "models.generated.yaml").exists())
+            self.assertTrue((root / "models.discovered.yaml").exists())
             if (root / "models.yaml").exists():
                 self.assertIn(
                     "local-chat-small:",
@@ -1602,10 +1730,10 @@ class MvpTests(unittest.TestCase):
             names = {row["name"] for row in rows}
             self.assertIn("ollama-new-embed-model-latest", names)
             self.assertIn("ollama-new-coder-1b-base", names)
-            self.assertIn(
-                "enabled: true",
-                (root / "models.generated.yaml").read_text(encoding="utf-8"),
-            )
+            discovered_text = (root / "models.discovered.yaml").read_text(encoding="utf-8")
+            self.assertIn("This file is generated by aiplane model discovery", discovered_text)
+            self.assertIn("Do not edit it manually", discovered_text)
+            self.assertIn("enabled: true", discovered_text)
 
     def test_models_refresh_default_omits_per_model_changes_until_verbose(self) -> None:
         discovered = ProviderModelsResult("ollama", "provider_api", ["new-model:1b"], "test discovery")
@@ -1865,7 +1993,7 @@ class MvpTests(unittest.TestCase):
                 }
             }
             (root / "models.yaml").write_text(agent_config.dump_yaml(models_config), encoding="utf-8")
-            (root / "models.generated.yaml").write_text(agent_config.dump_yaml(generated_config), encoding="utf-8")
+            (root / "models.discovered.yaml").write_text(agent_config.dump_yaml(generated_config), encoding="utf-8")
             profile = Profile(
                 "tmp",
                 root,
@@ -1891,7 +2019,7 @@ class MvpTests(unittest.TestCase):
             self.assertIn("without --dry-run", preview["next_steps"][0])
             self.assertIn(
                 "generated-provider-chat",
-                (root / "models.generated.yaml").read_text(encoding="utf-8"),
+                (root / "models.discovered.yaml").read_text(encoding="utf-8"),
             )
 
             written = ModelCatalog(profile).promote_generated(
@@ -1901,11 +2029,12 @@ class MvpTests(unittest.TestCase):
             self.assertIn("next_steps", written)
             self.assertIn("models.yaml", written["next_steps"][0])
             curated_text = (root / "models.yaml").read_text(encoding="utf-8")
-            generated_text = (root / "models.generated.yaml").read_text(encoding="utf-8")
+            generated_text = (root / "models.discovered.yaml").read_text(encoding="utf-8")
             self.assertIn("reviewed-provider-chat:", curated_text)
             self.assertIn("promoted_from: generated-provider-chat", curated_text)
+            self.assertIn("discovered_entry: generated-provider-chat", curated_text)
             self.assertNotIn("imported_by", curated_text)
-            self.assertNotIn("generated-provider-chat:", generated_text)
+            self.assertIn("generated-provider-chat:", generated_text)
 
     def test_models_promote_refuses_curated_alias_collision_without_overwrite(
         self,
@@ -1935,7 +2064,7 @@ class MvpTests(unittest.TestCase):
                 }
             }
             (root / "models.yaml").write_text(agent_config.dump_yaml(models_config), encoding="utf-8")
-            (root / "models.generated.yaml").write_text(agent_config.dump_yaml(generated_config), encoding="utf-8")
+            (root / "models.discovered.yaml").write_text(agent_config.dump_yaml(generated_config), encoding="utf-8")
             profile = Profile(
                 "tmp",
                 root,
@@ -1957,6 +2086,241 @@ class MvpTests(unittest.TestCase):
             preview = ModelCatalog(profile).promote_generated("generated-provider-chat", write=False, overwrite=True)
             self.assertTrue(preview["target_exists"])
             self.assertTrue(preview["overwrite"])
+
+    def test_models_add_writes_curated_profile_entry(self) -> None:
+        source = load_profile("local-dev", Path.cwd())
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            models_config = {"providers": {"ollama": {"runtime": "ollama"}}, "models": {}}
+            (root / "models.yaml").write_text(agent_config.dump_yaml(models_config), encoding="utf-8")
+            (root / "models.discovered.yaml").write_text(
+                agent_config.dump_yaml(
+                    {
+                        "models": {
+                            "ollama-llama3-2-3b": {
+                                "provider": "ollama",
+                                "model": "llama3.2:3b",
+                                "roles": ["chat", "analysis"],
+                                "supported_runtimes": ["ollama"],
+                                "capability_scores": {"general_chat": 4, "code_generation": 3},
+                                "capability_score_source": "catalog_heuristic",
+                                "imported_by": "aiplane_refresh",
+                            }
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            profile = Profile(
+                "tmp",
+                root,
+                Path.cwd(),
+                source.hardware,
+                source.backends,
+                source.repository,
+                source.tools,
+                source.approvals,
+                source.environment,
+                models_config,
+                source.targets,
+                source.orchestrators,
+            )
+
+            result = ModelCatalog(profile).add_model(
+                "local_chat",
+                provider="ollama",
+                model_id="llama3.2:3b",
+                roles=["chat"],
+                supported_runtimes=["ollama"],
+                preferred_runtime="ollama",
+                notes="Local chat model",
+                settings={"min_ram_gb": 8, "min_vram_gb": 0},
+                write=True,
+            )
+
+            self.assertEqual(result["added"], 1)
+            self.assertEqual(result["discovered_entry"], "ollama-llama3-2-3b")
+            self.assertEqual(result["model"]["model"], "llama3.2:3b")
+            self.assertEqual(result["model"]["discovered_entry"], "ollama-llama3-2-3b")
+            self.assertEqual(result["model"]["capability_scores"]["general_chat"], 4)
+            self.assertEqual(result["model"]["capability_score_source"], "catalog_heuristic")
+            written = (root / "models.yaml").read_text(encoding="utf-8")
+            self.assertIn("local_chat:", written)
+            self.assertIn("discovered_entry: ollama-llama3-2-3b", written)
+            self.assertIn("roles: [chat]", written)
+            self.assertIn("min_ram_gb: 8", written)
+
+    def test_models_add_can_use_discovered_entry_name_and_rejects_missing_discovery(self) -> None:
+        source = load_profile("local-dev", Path.cwd())
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            models_config = {"providers": {"ollama": {"runtime": "ollama"}}, "models": {}}
+            (root / "models.yaml").write_text(agent_config.dump_yaml(models_config), encoding="utf-8")
+            (root / "models.discovered.yaml").write_text(
+                agent_config.dump_yaml(
+                    {
+                        "models": {
+                            "ollama-llama3-2-3b": {
+                                "provider": "ollama",
+                                "model": "llama3.2:3b",
+                                "roles": ["chat", "analysis"],
+                                "supported_runtimes": ["ollama"],
+                                "imported_by": "aiplane_refresh",
+                            }
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            profile = Profile(
+                "tmp",
+                root,
+                Path.cwd(),
+                source.hardware,
+                source.backends,
+                source.repository,
+                source.tools,
+                source.approvals,
+                source.environment,
+                models_config,
+                source.targets,
+                source.orchestrators,
+            )
+
+            result = ModelCatalog(profile).add_model(
+                "local_chat",
+                discovered_name="ollama-llama3-2-3b",
+                roles=["chat"],
+                write=False,
+            )
+            self.assertEqual(result["model"]["model"], "llama3.2:3b")
+            self.assertEqual(result["model"]["discovered_entry"], "ollama-llama3-2-3b")
+
+            with self.assertRaisesRegex(ValueError, "discovered model entry not found"):
+                ModelCatalog(profile).add_model("missing", provider="ollama", model_id="missing:1b", write=False)
+            with self.assertRaisesRegex(ValueError, "discovered model entry not found"):
+                ModelCatalog(profile).add_model("missing", discovered_name="ollama-missing", write=False)
+
+    def test_models_clone_creates_second_entry_with_overrides(self) -> None:
+        source = load_profile("local-dev", Path.cwd())
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            models_config = {
+                "providers": {"ollama": {"runtime": "ollama"}},
+                "models": {
+                    "local_chat": {
+                        "provider": "ollama",
+                        "model": "llama3.2:3b",
+                        "roles": ["chat"],
+                        "enabled": True,
+                    }
+                },
+            }
+            (root / "models.yaml").write_text(agent_config.dump_yaml(models_config), encoding="utf-8")
+            profile = Profile(
+                "tmp",
+                root,
+                Path.cwd(),
+                source.hardware,
+                source.backends,
+                source.repository,
+                source.tools,
+                source.approvals,
+                source.environment,
+                models_config,
+                source.targets,
+                source.orchestrators,
+            )
+
+            result = ModelCatalog(profile).clone_model(
+                "local_chat",
+                "local_fast_draft",
+                roles=["completion"],
+                notes="Fast draft model for local coding tasks.",
+                write=True,
+            )
+
+            self.assertEqual(result["cloned"], 1)
+            self.assertEqual(result["model"]["model"], "llama3.2:3b")
+            self.assertEqual(result["model"]["roles"], ["completion"])
+            written = (root / "models.yaml").read_text(encoding="utf-8")
+            self.assertIn("local_fast_draft:", written)
+            self.assertIn("cloned_from: local_chat", written)
+            self.assertIn("Fast draft model", written)
+
+    def test_models_add_cli_dry_run_does_not_write(self) -> None:
+        source = load_profile("local-dev", Path.cwd())
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            profiles_dir = root / "profiles"
+            profile_root = profiles_dir / "tmp"
+            profile_root.mkdir(parents=True)
+            for name, data in {
+                "hardware.yaml": source.hardware,
+                "backends.yaml": source.backends,
+                "repository.yaml": source.repository,
+                "tools.yaml": source.tools,
+                "approvals.yaml": source.approvals,
+                "environment.yaml": source.environment,
+                "targets.yaml": source.targets,
+                "orchestrators.yaml": source.orchestrators,
+            }.items():
+                (profile_root / name).write_text(agent_config.dump_yaml(data), encoding="utf-8")
+            (profile_root / "models.yaml").write_text(
+                agent_config.dump_yaml({"providers": {"ollama": {"runtime": "ollama"}}, "models": {}}),
+                encoding="utf-8",
+            )
+            (profile_root / "models.discovered.yaml").write_text(
+                agent_config.dump_yaml(
+                    {
+                        "models": {
+                            "ollama-llama3-2-3b": {
+                                "provider": "ollama",
+                                "model": "llama3.2:3b",
+                                "source": "ollama",
+                                "roles": ["chat", "analysis"],
+                                "supported_runtimes": ["ollama"],
+                                "imported_by": "aiplane_refresh",
+                            }
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = cli_main(
+                    [
+                        "--profiles-dir",
+                        str(profiles_dir),
+                        "models",
+                        "add",
+                        "--profile",
+                        "tmp",
+                        "local_chat",
+                        "--provider",
+                        "ollama",
+                        "--model",
+                        "llama3.2:3b",
+                        "--role",
+                        "chat",
+                        "--runtime",
+                        "ollama",
+                        "--set",
+                        "min_ram_gb=8",
+                        "--dry-run",
+                    ]
+                )
+
+            self.assertEqual(code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(payload["would_add"], 1)
+            self.assertEqual(payload["discovered_entry"], "ollama-llama3-2-3b")
+            self.assertEqual(payload["model"]["discovered_entry"], "ollama-llama3-2-3b")
+            self.assertNotIn("capability_scores", payload["model"])
+            self.assertIn("without --dry-run", payload["next_steps"][0])
+            self.assertNotIn("local_chat:", (profile_root / "models.yaml").read_text(encoding="utf-8"))
 
     def test_models_promote_cli_dry_run(self) -> None:
         source = load_profile("local-dev", Path.cwd())
@@ -1980,7 +2344,7 @@ class MvpTests(unittest.TestCase):
                 agent_config.dump_yaml({"providers": {"ollama": {"runtime": "ollama"}}, "models": {}}),
                 encoding="utf-8",
             )
-            (profile_root / "models.generated.yaml").write_text(
+            (profile_root / "models.discovered.yaml").write_text(
                 agent_config.dump_yaml(
                     {
                         "models": {
@@ -2017,6 +2381,7 @@ class MvpTests(unittest.TestCase):
             self.assertEqual(payload["target"], "reviewed-provider-chat")
             self.assertEqual(payload["would_promote"], 1)
             self.assertIn("next_steps", payload)
+            self.assertTrue(payload["keep_discovered"])
             self.assertIn("without --dry-run", payload["next_steps"][0])
 
     def test_refresh_verbose_rows_use_model_source_and_runtime_endpoint_names(
@@ -2401,6 +2766,65 @@ class MvpTests(unittest.TestCase):
         payload = json.loads(stdout.getvalue())
         self.assertLessEqual(len(payload), 3)
 
+    def test_models_list_filters_and_sorts_by_provider_popularity(self) -> None:
+        source = load_profile("local-dev", Path.cwd())
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            models_config = {"providers": {"huggingface": {"runtime": "vllm"}}, "models": {}}
+            discovered_config = {
+                "models": {
+                    "hf-low": {
+                        "provider": "vllm",
+                        "model": "org/low",
+                        "source": "huggingface",
+                        "roles": ["chat"],
+                        "enabled": True,
+                        "source_metadata": {"likes": 5, "downloads": 1000},
+                    },
+                    "hf-high": {
+                        "provider": "vllm",
+                        "model": "org/high",
+                        "source": "huggingface",
+                        "roles": ["chat"],
+                        "enabled": True,
+                        "source_metadata": {"likes": 50, "downloads": 500},
+                    },
+                    "hf-downloads": {
+                        "provider": "vllm",
+                        "model": "org/downloads",
+                        "source": "huggingface",
+                        "roles": ["embedding"],
+                        "enabled": True,
+                        "source_metadata": {"likes": 10, "downloads": "2,500"},
+                    },
+                }
+            }
+            (root / "models.yaml").write_text(agent_config.dump_yaml(models_config), encoding="utf-8")
+            (root / "models.discovered.yaml").write_text(agent_config.dump_yaml(discovered_config), encoding="utf-8")
+            profile = Profile(
+                "tmp",
+                root,
+                Path.cwd(),
+                source.hardware,
+                source.backends,
+                source.repository,
+                source.tools,
+                source.approvals,
+                source.environment,
+                models_config,
+                source.targets,
+                source.orchestrators,
+            )
+
+            catalog = ModelCatalog(profile)
+            rows = catalog.sort_rows(catalog.filter({"roles": ["chat"], "min_likes": 10}), sort_by="likes")
+            self.assertEqual([row["name"] for row in rows], ["hf-high"])
+            self.assertEqual(rows[0]["likes"], 50)
+
+            rows = catalog.sort_rows(catalog.filter({"source": "huggingface"}), sort_by="downloads")
+            self.assertEqual(rows[0]["name"], "hf-downloads")
+            self.assertEqual(rows[0]["downloads"], 2500)
+
     def test_models_pull_can_plan_huggingface_download(self) -> None:
         stdout = StringIO()
         with redirect_stdout(stdout):
@@ -2684,7 +3108,7 @@ class MvpTests(unittest.TestCase):
                 }
             }
             (root / "models.yaml").write_text(agent_config.dump_yaml(models_config), encoding="utf-8")
-            (root / "models.generated.yaml").write_text(agent_config.dump_yaml(generated_config), encoding="utf-8")
+            (root / "models.discovered.yaml").write_text(agent_config.dump_yaml(generated_config), encoding="utf-8")
             profile = Profile(
                 "demo",
                 root,

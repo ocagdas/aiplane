@@ -36,7 +36,7 @@ Do not leave roadmap, handoff, or command coverage stale after adding commands, 
 - Prefer plan, doctor, dry-run, and export flows before mutating hosts, runtimes, or cloud accounts.
 - Keep generated/cache/local files out of git: `.aiplane/`, generated model caches, PID/log files, and runtime state must remain ignored.
 - Preserve the distinction between provider/model source, runtime, runtime endpoint, profile model alias, machine, stack, and integration export.
-- Managed providers such as OpenAI, Anthropic, Azure OpenAI, and Ollama Cloud are sources/endpoints; they become useful to tools through curated aliases in `models.yaml`.
+- Managed providers such as OpenAI, Anthropic, Azure OpenAI, and Ollama Cloud are sources/endpoints; they become useful to tools through profile-owned model entries in `models.yaml`.
 - Do not make broad cloud apply, arbitrary shell execution through MCP, secret writes, or IDE file edits implicit.
 - Use official external tools instead of reimplementing their domain: Docker/Compose, OpenSSH, Azure CLI, OpenTofu/Terraform/Pulumi, Vagrant, Packer, Dev Container CLI, Ansible, kubectl, and Helm.
 - OpenTofu is the default provider-agnostic IaC direction; Terraform is supported for teams standardized on it; Pulumi is optional for language-native IaC.

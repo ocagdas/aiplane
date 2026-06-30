@@ -67,7 +67,7 @@ aiplane runtimes use MODEL_ALIAS tgi
 ```
 
 This writes `preferred_runtime` to the editable profile model entry. It does not
-modify the checked-in profile template.
+modify the shipped profile template.
 
 Check runtime availability:
 
@@ -98,7 +98,7 @@ aiplane runtimes <command> --profile <profile> <runtime> [--model <model>] [--dr
 
 Common options:
 
-- `--profile`: selects the editable profile, for example `local-dev`. The profile provides runtime endpoints, model aliases, default models, and provider config.
+- `--profile`: selects the editable profile, for example `local-dev`. The profile provides model aliases, default models, source-provider config, and any explicit local endpoint overrides. Without overrides, runtime endpoints come from built-in conventional defaults and still need doctor/test checks before use.
 - `<runtime>`: the runtime/provider name to operate on, such as `ollama`, `vllm`, `tgi`, `transformers`, `localai`, `llamacpp`, or `lmstudio`.
 - `--model`: model alias or runtime-native model id. It can be a configured alias like `MODEL_ALIAS`, a Hugging Face id like `Provider/Code-Large-Instruct`, a raw Ollama id like `text-generation:0.5b`, a direct GGUF URL for llama.cpp, or `all` where the runtime supports it.
 - `--dry-run`: prints the helper command and delegated runtime command without installing packages, downloading models, starting services, or changing files.
@@ -118,7 +118,7 @@ Lifecycle commands:
 - `list-runtime-models`: asks the runtime/provider for available models when it exposes a model-list API, otherwise falls back to configured catalog entries.
 - `doctor`: checks runtime availability directly from `aiplane`; it does not call install/update/pull.
 
-Model catalog refresh is separate from runtime inventory. The checked-in profile is provider-only: curated aliases are optional local entries in `models.yaml`, while generated refresh/import aliases live in the ignored `models.generated.yaml` cache. `models refresh` works
+Model catalog refresh is separate from runtime inventory. The shipped profile template keeps `models.yaml` structural: profile-owned model entries are optional local entries in `models.yaml`, while discovery refresh/import entries live in the ignored `models.discovered.yaml` cache. Runtime endpoint defaults are conventional built-ins, not evidence that a runtime is installed. `models refresh` works
 against model providers, not runtime endpoints:
 
 ```bash
@@ -141,7 +141,7 @@ rows are hidden by default and shown with `--verbose`; those rows use
 `model.id`/`model.source` for the model source and `runtime_endpoint` for the
 configured runtime endpoint.
 `prune_enabled: true` means a successful authoritative online source response is being used
-as the source of truth for stale generated ids. Curated aliases in `models.yaml` are preserved by refresh. `models clear-cache` includes curated aliases by default unless `--keep-curated` is used, so discovery state can be cleared and repopulated from providers. Profile-catalog fallback never updates
+as the source of truth for stale discovered ids. Profile-owned model entries in `models.yaml` are preserved by refresh. `models clear-cache` includes profile-owned review entries by default unless `--keep-curated` is used, so discovery state can be cleared and repopulated from providers. Profile-catalog fallback never updates
 or prunes.
 
 Runtime inventory is queried separately with `aiplane runtimes
@@ -223,8 +223,8 @@ Grouping meanings:
 - `provider`: groups by model source/catalog, such as `ollama`, `huggingface`, `huggingface_gguf`, or `local_file`.
 - `source`: same source/catalog value as `provider`; kept as an explicit source field in model rows.
 - `provider-kind`: groups first by ownership (`self_managed` or `managed_service`) and then by provider/source.
-- `runtime`: groups by each supported runtime. A model may appear in more than one runtime group when it can run under multiple runtimes, for example vLLM, TGI, and Transformers. Managed-service aliases appear under `no_runtime`; `preferred_runtime` and `supported_runtimes` are ignored for managed-service aliases so they cannot be combined with local runtime config.
-- `model`: groups by provider-native model id. This is useful when multiple profile aliases point at the same underlying model id. It is less useful when equivalent models use different naming schemes across sources.
+- `runtime`: groups by each supported runtime. A model may appear in more than one runtime group when it can run under multiple runtimes, for example vLLM, TGI, and Transformers. Managed-service entries appear under `no_runtime`; `preferred_runtime` and `supported_runtimes` are ignored for managed-service entries so they cannot be combined with local runtime config.
+- `model`: groups by provider-native model id. This is useful when multiple profile-owned entries point at the same underlying model id. It is less useful when equivalent models use different naming schemes across sources.
 - defaults grouped by `provider`: shows which default roles, such as `chat_model`, `autocomplete_model`, `embedding_model`, `self_managed_model`, or `reasoning_model`, resolve to each provider.
 
 ## Current Runtime Policy
@@ -267,7 +267,7 @@ These commands delegate to `scripts/provider_helper.sh`. Direct helper usage sti
 scripts/provider_helper.sh --provider vllm --action start --model MODEL_ALIAS --dry-run
 ```
 
-Audio, image, and video generation should come from provider discovery or deliberately promoted aliases, not hard-coded showcase defaults. Use online catalog refresh to populate ignored `models.generated.yaml`, then filter the generated candidates by role, runtime, RAM/VRAM, and target hardware. Promote only the specific alias you have reviewed and chosen for a real workflow.
+Audio, image, and video generation should come from provider discovery or deliberately promoted entries, not hard-coded showcase defaults. Use online catalog refresh to populate ignored `models.discovered.yaml`, then filter the discovered candidates by role, runtime, RAM/VRAM, and target hardware. Promote only the specific alias you have reviewed and chosen for a real workflow.
 
 ```bash
 aiplane providers models huggingface --online --query text-to-speech --limit 20

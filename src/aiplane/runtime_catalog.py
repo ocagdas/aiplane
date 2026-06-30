@@ -187,6 +187,192 @@ SOURCE_DEFINITIONS: dict[str, dict[str, Any]] = {
 }
 
 
+PROVIDER_ENDPOINT_DEFAULTS: dict[str, dict[str, Any]] = {
+    "ollama": {
+        "ownership": "self_managed",
+        "access": {"kind": "same_host"},
+        "substrate": "native",
+        "runtime": "ollama",
+        "protocol": "ollama_api",
+        "endpoint": "http://localhost:11434",
+        "enabled": True,
+        "timeout_seconds": 60,
+        "origin": "default_runtime_catalog",
+        "notes": "Conventional Ollama endpoint default. Doctor/test commands still verify whether Ollama is actually installed, running, and has the model pulled.",
+    },
+    "vllm": {
+        "ownership": "self_managed",
+        "access": {"kind": "same_host"},
+        "substrate": "docker",
+        "runtime": "vllm",
+        "protocol": "openai_compatible",
+        "endpoint": "http://localhost:8000/v1",
+        "enabled": False,
+        "origin": "default_runtime_catalog",
+        "notes": "Conventional vLLM OpenAI-compatible endpoint default. Enable or override only after deploying the runtime.",
+    },
+    "lmstudio": {
+        "ownership": "self_managed",
+        "access": {"kind": "same_host"},
+        "substrate": "native",
+        "runtime": "lmstudio",
+        "protocol": "openai_compatible",
+        "endpoint": "http://localhost:1234/v1",
+        "enabled": False,
+        "origin": "default_runtime_catalog",
+        "notes": "Conventional LM Studio local server endpoint default. Start/configure LM Studio before use.",
+    },
+    "llamacpp": {
+        "ownership": "self_managed",
+        "access": {"kind": "same_host"},
+        "substrate": "native",
+        "runtime": "llamacpp",
+        "protocol": "openai_compatible",
+        "endpoint": "http://localhost:8080/v1",
+        "enabled": False,
+        "origin": "default_runtime_catalog",
+        "notes": "Conventional llama.cpp server endpoint default. Start/configure llama-server before use.",
+    },
+    "tgi": {
+        "ownership": "self_managed",
+        "access": {"kind": "same_host"},
+        "substrate": "docker",
+        "runtime": "tgi",
+        "protocol": "openai_compatible",
+        "endpoint": "http://localhost:8081/v1",
+        "enabled": False,
+        "origin": "default_runtime_catalog",
+        "notes": "Conventional TGI endpoint default. Enable or override only after deploying the runtime.",
+    },
+    "transformers": {
+        "ownership": "self_managed",
+        "access": {"kind": "library"},
+        "substrate": "venv",
+        "runtime": "transformers",
+        "protocol": "python_library",
+        "enabled": False,
+        "origin": "default_runtime_catalog",
+        "notes": "Library runtime; no HTTP endpoint is implied.",
+    },
+    "localai": {
+        "ownership": "self_managed",
+        "access": {"kind": "same_host"},
+        "substrate": "docker",
+        "runtime": "localai",
+        "protocol": "openai_compatible",
+        "endpoint": "http://localhost:8082/v1",
+        "enabled": False,
+        "origin": "default_runtime_catalog",
+        "notes": "Conventional LocalAI endpoint default. Enable or override only after deploying the runtime.",
+    },
+    "comfyui": {
+        "ownership": "self_managed",
+        "access": {"kind": "same_host"},
+        "substrate": "native",
+        "runtime": "comfyui",
+        "protocol": "local_api",
+        "endpoint": "http://localhost:8188",
+        "enabled": False,
+        "origin": "default_runtime_catalog",
+        "notes": "Conventional ComfyUI endpoint default. Start/configure ComfyUI before use.",
+    },
+    "faster_whisper": {
+        "ownership": "self_managed",
+        "access": {"kind": "library"},
+        "substrate": "venv",
+        "runtime": "faster_whisper",
+        "protocol": "python_library",
+        "enabled": False,
+        "origin": "default_runtime_catalog",
+        "notes": "Library runtime; no HTTP endpoint is implied.",
+    },
+    "diffusers": {
+        "ownership": "self_managed",
+        "access": {"kind": "library"},
+        "substrate": "venv",
+        "runtime": "diffusers",
+        "protocol": "python_library",
+        "enabled": False,
+        "origin": "default_runtime_catalog",
+        "notes": "Library runtime; no HTTP endpoint is implied.",
+    },
+    "openai": {
+        "ownership": "managed_service",
+        "access": {"kind": "hosted_api"},
+        "substrate": "managed_service",
+        "runtime": "openai",
+        "protocol": "openai_compatible",
+        "endpoint": "https://api.openai.com/v1",
+        "api_key_env": "OPENAI_API_KEY",
+        "enabled": False,
+        "origin": "default_runtime_catalog",
+        "notes": "Hosted service endpoint default. Enable only after selecting profile-owned model entries and configuring credentials.",
+    },
+    "anthropic": {
+        "ownership": "managed_service",
+        "access": {"kind": "hosted_api"},
+        "substrate": "managed_service",
+        "runtime": "anthropic",
+        "protocol": "anthropic_api",
+        "endpoint": "https://api.anthropic.com",
+        "api_key_env": "ANTHROPIC_API_KEY",
+        "enabled": False,
+        "origin": "default_runtime_catalog",
+        "notes": "Hosted service endpoint default. Enable only after configuring credentials.",
+    },
+    "azure_openai": {
+        "ownership": "managed_service",
+        "access": {"kind": "hosted_api"},
+        "substrate": "azure",
+        "runtime": "azure_openai",
+        "protocol": "azure_openai",
+        "endpoint": "",
+        "api_version": "2024-02-01",
+        "api_key_env": "AZURE_OPENAI_API_KEY",
+        "enabled": False,
+        "origin": "default_runtime_catalog",
+        "notes": "Set endpoint to your Azure OpenAI resource URL and use deployment names as model ids.",
+    },
+    "ollama_cloud": {
+        "ownership": "managed_service",
+        "access": {"kind": "hosted_api"},
+        "substrate": "managed_service",
+        "runtime": "ollama_cloud",
+        "protocol": "ollama_api",
+        "endpoint": "https://ollama.com",
+        "api_key_env": "OLLAMA_API_KEY",
+        "enabled": False,
+        "origin": "default_runtime_catalog",
+        "notes": "Hosted Ollama-style endpoint default. Enable only when configured for your account.",
+    },
+    "azure_speech": {
+        "ownership": "managed_service",
+        "access": {"kind": "hosted_api"},
+        "substrate": "azure",
+        "runtime": "azure_speech",
+        "protocol": "azure_speech",
+        "endpoint": "",
+        "api_key_env": "AZURE_SPEECH_KEY",
+        "region_env": "AZURE_SPEECH_REGION",
+        "enabled": False,
+        "origin": "default_runtime_catalog",
+        "notes": "Azure AI Speech service defaults. Configure endpoint/region/credentials before use.",
+    },
+    "elevenlabs": {
+        "ownership": "managed_service",
+        "access": {"kind": "hosted_api"},
+        "substrate": "managed_service",
+        "runtime": "elevenlabs",
+        "protocol": "elevenlabs_tts",
+        "endpoint": "https://api.elevenlabs.io/v1",
+        "api_key_env": "ELEVENLABS_API_KEY",
+        "enabled": False,
+        "origin": "default_runtime_catalog",
+        "notes": "ElevenLabs hosted TTS endpoint default. Enable only after configuring credentials.",
+    },
+}
+
+
 class RuntimeCatalog:
     def __init__(self, profile: Profile):
         self.profile = profile
@@ -206,7 +392,7 @@ class RuntimeCatalog:
                     "description": runtime["description"],
                     "gui_required": bool(runtime.get("gui_required", False)),
                     "managed_by_helper": runtime.get("managed_by_helper", False),
-                    "configured": name in providers,
+                    "configured": name in self._profile_provider_overrides(),
                     "enabled": bool(provider.get("enabled", True)) if provider else False,
                     "endpoint": provider.get("endpoint"),
                     "protocol": runtime.get("protocol"),
@@ -546,9 +732,16 @@ class RuntimeCatalog:
             "roles": model.get("roles", []),
         }
 
-    def _providers(self) -> dict[str, dict[str, Any]]:
+    def _profile_provider_overrides(self) -> dict[str, dict[str, Any]]:
         providers = self.models_config.get("providers", {})
         return providers if isinstance(providers, dict) else {}
+
+    def _providers(self) -> dict[str, dict[str, Any]]:
+        providers = {name: dict(value) for name, value in PROVIDER_ENDPOINT_DEFAULTS.items()}
+        for name, value in self._profile_provider_overrides().items():
+            if isinstance(value, dict):
+                providers[name] = {**providers.get(name, {}), **value, "origin": "profile"}
+        return providers
 
     def _models(self) -> dict[str, dict[str, Any]]:
         generated = self.generated_models_config.get("models", {})
@@ -558,7 +751,7 @@ class RuntimeCatalog:
         return {**generated_models, **curated_models}
 
     def _load_generated_models_config(self) -> dict[str, Any]:
-        path = self.profile.root / "models.generated.yaml"
+        path = self.profile.root / "models.discovered.yaml"
         if not path.exists():
             return {}
         data = parse_yaml(path.read_text(encoding="utf-8"))

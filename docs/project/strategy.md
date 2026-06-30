@@ -39,7 +39,7 @@ AI coding setups are fragmented:
 - Profile-based configuration for providers, models, runtimes, hardware, machines, stacks, tools, credentials references, approvals, and policy.
 - Environment planning for system Python, `venv`, Conda, and Docker execution modes.
 - Readiness checks through `doctor` commands.
-- Provider/model discovery and curated profile aliases.
+- Provider/model discovery and profile-owned model entries.
 - Hardware and machine inventory with model-fit recommendations.
 - Stack planning that binds a machine, runtime, primary model, optional orchestrator, and access policy.
 - Non-mutating config exports for IDEs, CLI agents, MCP clients, tools, and starter deployment artifacts.

@@ -4,12 +4,12 @@ This page shows common ways to combine profiles, model sources, runtimes, setup,
 
 ## Terminology Used Here
 
-- **Profile**: the editable configuration set under `profiles/<name>/`. It owns defaults, model aliases, runtime endpoints, machines, targets, tools, and approvals.
+- **Profile**: the editable configuration set under `profiles/<name>/`. It owns defaults, model aliases, local overrides, machines, targets, tools, and approvals. Runtime endpoint values are built-in conventional defaults unless the profile or local ignored config overrides them.
 - **Model source** or **model provider**: where model ids or files come from, such as Ollama Library, Hugging Face Hub, GGUF repos, Azure Speech voices, managed-provider catalogs, or local files.
 - **Runtime**: software that serves or loads the model, such as Ollama, vLLM, TGI, llama.cpp, Transformers, LocalAI, or LM Studio.
 - **Runtime endpoint**: the configured service a client calls, usually an OpenAI-compatible `/v1` URL.
-- **Curated model alias**: a human-maintained entry in `models.yaml`. Defaults should point at curated aliases.
-- **Generated model alias**: an entry imported by `models refresh` into `models.generated.yaml`.
+- **Profile-owned model entry**: a human-maintained entry in the selected profile's `models.yaml`. Defaults should point at profile-owned entries.
+- **Discovered model entry**: a temporary discovery entry imported by `models refresh` into ignored `models.discovered.yaml`.
 - **Plan**: explain a selection or action without changing runtime or IDE config.
 - **Setup**: prepare the selected runtime/model where helpers support it.
 - **Export**: print configuration text for another tool. Export does not install extensions or edit settings files.
@@ -55,7 +55,7 @@ aiplane integrations export continue --chat CHAT_ALIAS --autocomplete AUTOCOMPLE
 What happens:
 
 - `roles` shows that Continue can use `chat`, `autocomplete`, and `embedding` selections.
-- `plan` explains the chosen aliases, runtimes, endpoints, and reasons. On the checked-in provider-only profile, pass explicit aliases discovered into `models.generated.yaml` or promoted into local `models.yaml`.
+- `plan` explains the chosen aliases, runtimes, endpoints, and reasons. On a freshly bootstrapped profile, pass explicit aliases discovered into `models.discovered.yaml` or added/promoted into local `models.yaml`.
 - `setup` starts missing selected runtimes and pulls missing selected models where helper support exists. It does not install the runtime.
 - `export` prints the Continue YAML to paste or merge into Continue config.
 
@@ -115,7 +115,7 @@ How to think about it:
 
 ## Workflow 5: Refresh Source Catalogs Without Breaking Defaults
 
-Use this when you want local searchable model-source data in the ignored generated cache. The shipped profile has no model defaults; local defaults should be added only after discovery and review.
+Use this when you want local searchable model-source data in the ignored discovery cache. The shipped profile has no model defaults; local defaults should be added only after discovery and review.
 
 ```bash
 aiplane models refresh --provider huggingface --query text-generation --limit 25 --dry-run --verbose
@@ -127,10 +127,10 @@ aiplane models list --runtime vllm --capability code_generation>=4 --enabled-onl
 
 Storage rules:
 
-- Curated aliases live in `models.yaml`.
-- Generated refresh/import aliases live in `models.generated.yaml`.
-- Curated aliases win if the same alias exists in both files.
-- Refresh can update source metadata on a curated alias, but it must not delete curated aliases or remove profile defaults. Use `models clear-cache` when you intentionally want to clear generated and curated review aliases.
+- Profile-owned model entries live in `models.yaml`.
+- Discovery refresh/import entries live in `models.discovered.yaml`.
+- Profile-owned entries in `models.yaml` win if the same entry name exists in both files.
+- Refresh can update source metadata on a profile-owned entry, but it must not delete profile-owned entries or remove profile defaults. Use `models clear-cache` when you intentionally want to clear discovered entries and profile-owned review entries.
 
 Cleanup:
 
@@ -140,7 +140,7 @@ aiplane models clear-cache --provider huggingface --dry-run
 aiplane models clear-cache
 ```
 
-Use `--keep-curated` when you want to preserve curated aliases in `models.yaml` and clear only generated or legacy refresh-imported aliases.
+Use `--keep-curated` when you want to preserve profile-owned entries in `models.yaml` and clear only discovered refresh/import entries.
 
 ## Workflow 6: Choose or Change Model Defaults
 
@@ -157,8 +157,8 @@ aiplane profiles validate
 
 Practical tips:
 
-- Defaults should point at curated aliases in `models.yaml`, not generated discovery entries.
-- Use `models list --role chat --sort-by role`, `models list --role text_to_speech`, `models list --role image_generation --runtime diffusers`, or `models list --role video_generation --runtime diffusers` to inspect curated and generated candidates.
+- Defaults should point at profile-owned entries in `models.yaml`, not discovered model entries.
+- Use `models list --role chat --sort-by role`, `models list --role text_to_speech`, `models list --role image_generation --runtime diffusers`, or `models list --role video_generation --runtime diffusers` to inspect profile-owned and discovered candidates.
 - Use `profiles validate` after changing defaults to catch missing aliases.
 
 ## Workflow 7: vLLM or TGI on a GPU Host
@@ -273,8 +273,8 @@ aiplane integrations plan continue --chat CHAT_ALIAS --autocomplete AUTOCOMPLETE
 
 Common fixes:
 
-- Missing model alias: run provider discovery into `models.generated.yaml`, promote a reviewed alias if you want a curated default, or pass explicit `--chat`/`--autocomplete`/`--embedding` aliases.
+- Missing model entry: run provider discovery into `models.discovered.yaml`, promote a reviewed entry or use `models add` if you want a profile-owned default, or pass explicit `--chat`/`--autocomplete`/`--embedding` entries.
 - Runtime not reachable: run `runtimes prerequisites <runtime>`, then preview `runtimes install <runtime> --dry-run` or `runtimes start <runtime> --dry-run` where helper support exists.
 - Model not pulled: run `runtimes pull <runtime> --model <alias>`.
 - Wrong IDE endpoint: rerun `integrations plan/export` with `--endpoint`.
-- Catalog too noisy: use `models clear-cache --dry-run`, review whether curated aliases are included, and add `--keep-curated` if you only want to clear generated entries.
+- Catalog too noisy: use `models clear-cache --dry-run`, review whether profile-owned entries are included, and add `--keep-curated` if you only want to clear discovered entries.
