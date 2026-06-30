@@ -108,6 +108,13 @@ Required outcomes:
    - Add benchmark comparison across models, runtimes, and machines.
    - Defer automated code execution grading until sandboxing and language runners are designed.
 
+9. **Test-suite performance and isolation** - Planned
+   - Keep the full automated suite useful as a PR gate without letting local generated caches or external-machine state dominate runtime.
+   - Split the large MVP test module into focused files by area so slow tests and ownership are easier to see.
+   - Continue replacing repeated full-catalog enrichment with cached or single-pass helpers where behavior is unchanged.
+   - Evaluate `pytest-xdist` only after filesystem, environment-variable, and profile-fixture isolation are strong enough for safe parallel execution.
+   - Keep quality intact: optimize hot paths and fixtures, not assertions or behavioral coverage.
+
 ## Planned But Not Implemented
 
 - `aiplane launch` wrappers for Continue, Codex, Claude Code, Cursor, or Ollama `launch`.

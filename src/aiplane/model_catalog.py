@@ -12,6 +12,7 @@ from .secrets import CredentialStore
 
 
 GENERATED_MODELS_FILE = "models.generated.yaml"
+_GENERATED_CONFIG_CACHE: dict[tuple[Path, int, int], dict[str, Any]] = {}
 
 
 @dataclass(frozen=True)
@@ -703,8 +704,16 @@ class ModelCatalog:
         path = self._generated_path()
         if not path.exists():
             return {}
+        stat = path.stat()
+        cache_key = (path.resolve(), stat.st_mtime_ns, stat.st_size)
+        cached = _GENERATED_CONFIG_CACHE.get(cache_key)
+        if cached is not None:
+            return cached
         data = parse_yaml(path.read_text(encoding="utf-8"))
-        return data if isinstance(data, dict) else {}
+        parsed = data if isinstance(data, dict) else {}
+        _GENERATED_CONFIG_CACHE.clear()
+        _GENERATED_CONFIG_CACHE[cache_key] = parsed
+        return parsed
 
     def _write_generated_config(self) -> Path:
         from .config import dump_yaml

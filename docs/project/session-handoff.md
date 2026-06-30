@@ -51,7 +51,8 @@ Known in-progress areas:
 - provider-specific IaC/playbook/template hardening;
 - broader deployment apply paths;
 - endpoint authentication/gateway planning;
-- benchmark metrics, comparisons, and repeated-run summaries.
+- benchmark metrics, comparisons, and repeated-run summaries;
+- test-suite performance/isolation hardening beyond the current hot-path fixes.
 
 ## Validation Baseline
 
@@ -108,5 +109,6 @@ The **Cloud, VM, and workstation tool integrations** milestone is now in progres
 4. Expand `environment doctor` only where it improves setup clarity without turning optional workflows into mandatory prerequisites.
 5. Public demo planning is appropriate once the beta-hardening docs are committed and the tool matrix/doctor checks remain green.
 6. Add stack/orchestrator schema support for managed endpoint bindings and future agent-to-agent role graphs before exposing deeper autonomous workflows.
+7. Park further test-suite optimization as a planned roadmap milestone. Current local `scripts/check.sh` timing after hot-path fixes is about 49 seconds for 173 tests; next work should focus on fixture isolation, splitting `tests/test_mvp.py`, and safe single-pass catalog helpers.
 
 The media demo segment is now planned as discovery-first AI media selection: use online provider refresh into ignored generated aliases, filter by role/runtime/target hardware, show the Azure/GPU resource command path, fast-forward the generation job, and play the generated clip at the end.

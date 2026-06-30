@@ -54,12 +54,15 @@ class ProviderRegistry:
     ) -> list[dict[str, Any]] | dict[str, Any]:
         runtime_filter = {str(value) for value in runtimes or [] if value}
         rows = []
+        catalog_by_provider: dict[str, list[dict[str, Any]]] = {}
+        for row in self.catalog.list():
+            catalog_by_provider.setdefault(str(row.get("provider") or ""), []).append(row)
         for name, source in self.model_providers().items():
             if source.get("removed") and not include_disabled:
                 continue
             if source.get("enabled") is False and not include_disabled:
                 continue
-            catalog_models = [row for row in self.catalog.list() if row.get("provider") == name]
+            catalog_models = catalog_by_provider.get(name, [])
             if not catalog_models and not include_empty:
                 continue
             row = {
