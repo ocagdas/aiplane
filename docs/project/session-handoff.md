@@ -93,22 +93,27 @@ Results:
 
 ## Current Follow-Up Work
 
-The **Tool/task matrix and setup doctor expansion** milestone started with workflow-level readiness summaries in `tools matrix`. The current local matrix reports cloud, configuration, remote, and VM workflows as complete; container as partial; and benchmark, IaC, image-build, and Kubernetes as needing setup.
+The roadmap milestones are now grouped into three bands:
 
-The next roadmap milestone, **Provider discovery and model import**, is now in progress. Work now includes provider-only shipped profiles, ignored provider override YAML, discovery-derived media roles, ElevenLabs managed TTS voice discovery, generated cache clearing by default, and `next_steps` guidance from provider discovery to generated aliases to reviewed local promotion.
+- **Demo / PR Merge Readiness**: manual demo validation plus release hygiene/CI gates.
+- **Next Hardening**: provider discovery/import, tool doctors, stack/endpoint hardening, and cloud/VM/workstation workflows.
+- **Later Expansion**: runtime packaging, IDE/MCP/agent-tool expansion, benchmark quality, and test-suite isolation.
+
+The immediate pre-merge activity is manual demo validation. Rehearse the disposable-profile demo path from clean setup through provider discovery, filtered model selection, Continue export, MCP export, stack dry-runs, and Azure discovery. Keep the run inspect-first and verify that output is concise and free of secrets, raw account identifiers, subscription IDs, tenant IDs, and private local notes.
+
+Provider discovery and model import remain the first hardening milestone after the demo-readiness pass. Work now includes provider-only shipped profiles, ignored provider override YAML, discovery-derived media roles, ElevenLabs managed TTS voice discovery, generated cache clearing by default, and `next_steps` guidance from provider discovery to generated aliases to reviewed local promotion.
 
 Checked-in profiles now contain provider definitions without model aliases or defaults. Ollama runtime helpers now support both the default native path and `--substrate docker` using the official `ollama/ollama` image. `models refresh` repopulates ignored `models.generated.yaml` from configured providers, user provider extensions live in ignored `model-providers.user.yaml`, and `models clear-cache` includes curated/template aliases by default; use `--keep-curated` to preserve curated aliases and clear only generated or legacy refresh-imported entries. `models list --group-by provider-kind` now nests aliases by ownership and provider/source, while runtime grouping places managed-service aliases under `no_runtime` and ignores runtime-fit fields on those aliases instead of treating provider names or `preferred_runtime` values as local runtime candidates. Managed-service endpoint metadata should still remain available to stacks, orchestrator exports, and future agent-to-agent role plans where the framework calls a hosted endpoint directly.
 
-The **Cloud, VM, and workstation tool integrations** milestone is now in progress from a public-demo angle. `docs/project/public-demo-plan.md` captures the intro narration, three-minute outline, discovery-first command flow, repeatability points, Azure redaction warning, and readiness gates for showcasing local, endpoint, MCP, stack, and Azure discovery workflows. The plan now uses a disposable `/tmp` profile, writes generated aliases only outside the repo, derives aliases from `models list` JSON, and avoids undefined model placeholders in the demo path.
+`docs/project/public-demo-plan.md` captures the intro narration, three-minute outline, discovery-first command flow, repeatability points, Azure redaction warning, and readiness gates for showcasing local, endpoint, MCP, stack, and Azure discovery workflows. The plan uses a disposable `/tmp` profile, writes generated aliases only outside the repo, derives aliases from `models list` JSON, and avoids undefined model placeholders in the demo path.
 
 ## Next Useful Work
 
-1. Review and commit the restored public `strategy.md`, `roadmap.md`, and `session-handoff.md` files after human inspection.
-2. Keep scanning changed tracked files for secret-like content and private/local-only planning terms before publication.
-3. Continue tightening README, user docs, command coverage, and roadmap around current behavior rather than future claims.
-4. Expand `environment doctor` only where it improves setup clarity without turning optional workflows into mandatory prerequisites.
-5. Public demo planning is appropriate once the beta-hardening docs are committed and the tool matrix/doctor checks remain green.
-6. Add stack/orchestrator schema support for managed endpoint bindings and future agent-to-agent role graphs before exposing deeper autonomous workflows.
-7. Park further test-suite optimization as a planned roadmap milestone. Current local `scripts/check.sh` timing after hot-path fixes is about 49 seconds for 173 tests; next work should focus on fixture isolation, splitting `tests/test_mvp.py`, and safe single-pass catalog helpers.
+1. Run manual validation against the demo targets using the disposable-profile flow in `docs/project/public-demo-plan.md`.
+2. Confirm CI format, lint, and test jobs stay green after the final branch push.
+3. Keep scanning changed tracked files for secret-like content and private/local-only planning terms before publication.
+4. Treat any demo command that errors, prints unsafe identifiers, or implies mutation without explicit apply as a pre-merge fix.
+5. Do not add new feature scope before the demo merge unless manual validation exposes a real blocker.
+6. Park further test-suite optimization as a planned roadmap milestone. Current local `scripts/check.sh` timing after hot-path fixes is about 49 seconds for 173 tests; next work should focus on fixture isolation, splitting `tests/test_mvp.py`, and safe single-pass catalog helpers.
 
 The media demo segment is now planned as discovery-first AI media selection: use online provider refresh into ignored generated aliases, filter by role/runtime/target hardware, show the Azure/GPU resource command path, fast-forward the generation job, and play the generated clip at the end.

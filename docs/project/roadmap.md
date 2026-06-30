@@ -58,57 +58,70 @@ Required outcomes:
 - Benchmarking: smoke/custom tasks and framework planning exist; repeated runs, token metrics, comparison views, and sandboxed grading remain planned.
 - IDE/CLI integration: config export exists; deeper Cursor, JetBrains, Windsurf, Copilot, Codex, and Claude Code integration remains research/planned.
 
-## Planned Next Milestones
+## Planned Milestones
 
-1. **Tool/task matrix and setup doctor expansion** - In progress
-   - Keep `environment doctor` as the default human setup check with text output.
-   - Grow doctor scope as new tool families are integrated.
-   - Keep every external tool mapped to the tasks it enables, whether it is mandatory or optional, and whether `aiplane` can attempt installation.
-   - Add workflow-level readiness summaries to `tools matrix` so release review and demos can quickly identify complete, partial, and not-yet-ready tool categories. - Started.
+### Demo / PR Merge Readiness
 
-2. **Provider discovery and model import** - In progress
-   - Add richer Azure OpenAI deployment discovery.
+1. **Manual demo validation** - Current
+   - Rehearse the disposable-profile demo path from clean setup through provider discovery, filtered model selection, Continue export, MCP export, stack dry-runs, and Azure discovery.
+   - Keep all demo commands inspect-first: use doctors, dry-runs, generated aliases, and exports before mutation.
+   - Verify terminal output is concise enough for recording and does not show secrets, raw account identifiers, tenant IDs, subscription IDs, or private local notes.
+   - Confirm the prepared media clip/audio is generated outside the tracked repo and can be played at the end of the recording.
+
+2. **Release hygiene and CI gate** - Current
+   - Keep `scripts/format.sh check`, `python -m ruff check src tests`, and the pytest suite passing in separate CI jobs.
+   - Keep README, user docs, command coverage, roadmap, handoff notes, and tests aligned with any behavior changes.
+   - Keep ignored/generated state out of git, especially credentials, generated model caches, local strategy notes, logs, PID files, and demo artifacts.
+   - Treat secret scans and GitHub history cleanup verification as merge blockers.
+
+### Next Hardening
+
+3. **Provider discovery and model import** - In progress
+   - Harden Azure OpenAI deployment discovery and provider-specific live credential tests.
    - Add Anthropic/OpenAI discovery fallbacks where APIs or maintained catalogs allow it.
-   - Keep `models promote` as the reviewed flow from generated provider entry to editable local profile model.
    - Keep checked-in profiles provider-only; model aliases and defaults should come from ignored generated caches or deliberate local promotion.
-   - Keep demo and user docs discovery-first so examples do not assume shipped model defaults.
-   - Make refresh/promote output explain the safe next step from dry-run discovery to generated aliases to curated model aliases. - Started.
+   - Keep `models promote` as the reviewed flow from generated provider entry to editable local profile model.
+   - Make refresh/promote output explain the safe next step from dry-run discovery to generated aliases to curated model aliases.
 
-3. **Cloud, VM, and workstation tool integrations** - In progress
-   - Use OpenTofu as the default provider-agnostic IaC target, Terraform as a compatible alternative, and Pulumi as an optional language-native IaC path.
-   - Harden Vagrant, Packer, Ansible, Dev Container, and IaC starter exports into provider-specific workflows.
-   - Keep local install, local VM provisioning, remote VM provisioning, remote PC setup, and cloud provisioning distinct.
-   - Prepare a public demo plan that shows repeatable local, endpoint, MCP, stack, and Azure discovery workflows without unsafe mutation. - Started; disposable-profile discovery, alias extraction, Continue export, MCP, stack, media, and Azure discovery steps are now documented.
+4. **Tool/task matrix and setup doctor expansion** - In progress
+   - Keep `environment doctor` as the default human setup check with text output.
+   - Keep every external tool mapped to the workflows it enables, whether it is mandatory or optional, and whether `aiplane` can attempt installation.
+   - Grow doctor scope as new tool families are integrated without turning optional workflows into mandatory prerequisites.
+   - Keep workflow-level readiness summaries in `tools matrix` useful for release review and demos.
 
-4. **Stack lifecycle hardening**
+5. **Stack lifecycle and endpoint hardening** - Planned
    - Improve same-host lifecycle result reporting and status verification after prepare/start.
    - Add Docker-aware stack lifecycle paths after same-host helper execution is stable.
    - Let stacks bind managed-service model endpoints where the runtime field represents a hosted protocol or endpoint contract, while keeping those entries out of self-managed runtime fit checks.
+   - Add first-class plans for reverse proxy or gateway auth in front of public/shared model endpoints.
    - Keep remote execution boundaries explicit for SSH/Azure/AKS stacks.
 
-5. **Runtime packaging and deployment reproducibility**
+6. **Cloud, VM, and workstation workflow hardening** - In progress
+   - Use OpenTofu as the default provider-agnostic IaC target, Terraform as a compatible alternative, and Pulumi as an optional language-native IaC path.
+   - Harden Vagrant, Packer, Ansible, Dev Container, and IaC starter exports into provider-specific workflows.
+   - Keep local install, local VM provisioning, remote VM provisioning, remote PC setup, and cloud provisioning distinct.
+   - Keep public demo paths focused on repeatable local, endpoint, MCP, stack, and Azure discovery workflows without unsafe mutation.
+
+### Later Expansion
+
+7. **Runtime packaging and deployment reproducibility** - Planned
    - Broaden tests for stack export content across runtime/orchestrator combinations.
    - Add cache mounts, richer GPU flags, environment variables, and auth notes.
    - Keep image builds, registry pushes, VM creation, and cloud apply explicit and previewable.
 
-6. **IDE, MCP, and agent-tool integrations**
+8. **IDE, MCP, and agent-tool integrations** - Planned
    - Maintain Continue, Cline, Zed, Aider, generic OpenAI-compatible, and MCP config exports as config-level integrations.
    - Keep model endpoint export separate from MCP tool export.
    - Add planned agent-to-agent coordination support as profile/stack/orchestrator metadata: roles, model aliases, endpoints, tool policies, approvals, and audit labels for frameworks such as LangGraph, CrewAI, AutoGen, Semantic Kernel, and OpenHands.
    - Keep agent-to-agent work focused on setup, policy, export, and repeatability; do not turn `aiplane` into the autonomous agent runner.
    - Research deeper IDE/tool integrations before adding brittle custom paths.
 
-7. **Endpoint authentication and credential hygiene**
-   - Add first-class plans for reverse proxy or gateway auth in front of public/shared model endpoints.
-   - Support named local credentials for multiple accounts per provider without raw secrets in profiles. - Implemented for ignored credentials YAML; continue hardening provider test coverage.
-   - Add stronger secret scanning/readiness checks before public release or generated artifact export.
-
-8. **Benchmark and recommendation quality**
+9. **Benchmark and recommendation quality** - Planned
    - Add repeated benchmark runs, timing/token metrics, and local result summaries.
    - Add benchmark comparison across models, runtimes, and machines.
    - Defer automated code execution grading until sandboxing and language runners are designed.
 
-9. **Test-suite performance and isolation** - Planned
+10. **Test-suite performance and isolation** - Planned
    - Keep the full automated suite useful as a PR gate without letting local generated caches or external-machine state dominate runtime.
    - Split the large MVP test module into focused files by area so slow tests and ownership are easier to see.
    - Continue replacing repeated full-catalog enrichment with cached or single-pass helpers where behavior is unchanged.
