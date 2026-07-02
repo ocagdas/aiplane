@@ -137,6 +137,7 @@ On screen:
 ```bash
 aiplane providers list --group-by ownership
 aiplane providers list --group-by runtime
+aiplane --profiles-dir /tmp/aiplane-demo-profiles imodels refresh
 aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider ollama --query chat --dry-run --limit 5
 aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider ollama --query chat --limit 10
 aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider ollama --query code --limit 10

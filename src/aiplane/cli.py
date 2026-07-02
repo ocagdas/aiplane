@@ -1275,12 +1275,24 @@ def _main(argv: list[str] | None = None) -> int:
     models_list.add_argument(
         "--ram-gb",
         type=float,
-        help="Available RAM; filters out models whose configured minimum RAM exceeds this",
+        metavar="GB",
+        help="Available RAM in GB; filters out models whose configured/estimated minimum RAM exceeds this",
     )
     models_list.add_argument(
         "--vram-gb",
         type=float,
-        help="Available VRAM; filters out models whose configured minimum VRAM exceeds this",
+        metavar="GB",
+        help="Available VRAM in GB; filters out models whose configured/estimated minimum VRAM exceeds this",
+    )
+    models_list.add_argument(
+        "--gpu-vendor",
+        choices=["generic", "none", "cpu", "nvidia", "amd", "apple", "intel", "mixed"],
+        help="Available GPU vendor; filters out models with explicit incompatible vendor requirements",
+    )
+    models_list.add_argument(
+        "--accelerator-api",
+        choices=["any", "generic", "cpu", "cuda", "rocm", "metal", "vulkan", "openvino"],
+        help="Available accelerator API; filters out models with explicit incompatible API requirements",
     )
     models_list.add_argument(
         "--sort-by",
@@ -1343,7 +1355,7 @@ def _main(argv: list[str] | None = None) -> int:
         help="Refresh model-provider model catalog entries",
         description="Refresh the editable profile catalog from model providers. Providers are model catalogs or artifact sources such as Ollama Library, Hugging Face Hub, GGUF sources, Azure Speech voices, or local files. Runtimes such as vLLM, TGI, llama.cpp, Transformers, and LM Studio are execution engines and are managed under aiplane runtimes. Refresh is online-first where a source adapter exists, then falls back to the profile catalog for sources without an online adapter or temporarily unavailable APIs.",
         formatter_class=HelpFormatter,
-        epilog="Examples:\n  aiplane models refresh --dry-run\n  aiplane models refresh --provider huggingface --query text-generation --limit 500 --dry-run\n  aiplane models refresh --limit 100 --provider-limit huggingface=500 --provider-limit ollama=500 --dry-run\n  aiplane models refresh --provider huggingface --limit 10 --dry-run --verbose\n  aiplane models refresh --disable-new",
+        epilog="Examples:\n  aiplane models refresh --dry-run\n  aiplane models refresh --provider huggingface --query text-generation --limit 500 --dry-run\n  aiplane models refresh --provider huggingface --reset-cache --dry-run\n  aiplane models refresh --limit 100 --provider-limit huggingface=500 --provider-limit ollama=500 --dry-run\n  aiplane models refresh --provider huggingface --limit 10 --dry-run --verbose\n  aiplane models refresh --disable-new",
     )
     _profile_arg(models_refresh)
     models_refresh.add_argument(
@@ -1360,6 +1372,11 @@ def _main(argv: list[str] | None = None) -> int:
         "--disable-new",
         action="store_true",
         help="Write newly imported model entries as disabled; by default they are enabled",
+    )
+    models_refresh.add_argument(
+        "--reset-cache",
+        action="store_true",
+        help="Clear existing refresh/import entries for the refreshed provider(s) before pulling a fresh catalog",
     )
     models_refresh.add_argument(
         "--include-empty-providers",
@@ -3189,6 +3206,50 @@ def _main(argv: list[str] | None = None) -> int:
         if args.models_command == "refresh":
             write = not args.dry_run
             provider_limits = _parse_provider_limits(args.provider_limit)
+            reset_cache_result = None
+            if args.reset_cache:
+                if args.provider == "all":
+                    reset_results = {}
+                    skipped = []
+                    for provider_row in ProviderRegistry(profile).list(include_empty=True):
+                        provider_name = str(provider_row.get("name", ""))
+                        if provider_name == "local_file":
+                            skipped.append(
+                                {"name": provider_name, "reason": "local_file has no remote catalog to repopulate"}
+                            )
+                            continue
+                        if provider_row.get("enabled") is False:
+                            skipped.append({"name": provider_name, "reason": "model provider is disabled"})
+                            continue
+                        reset_results[provider_name] = catalog.clear_imported(
+                            provider_name=provider_name,
+                            write=write,
+                            include_curated=True,
+                        )
+                    reset_cache_result = {
+                        "name": "model_catalog_refresh_reset_cache",
+                        "write": write,
+                        "provider": "all",
+                        "include_curated": True,
+                        "results": reset_results,
+                        "skipped": skipped,
+                    }
+                elif args.provider == "local_file":
+                    reset_cache_result = {
+                        "name": "model_catalog_refresh_reset_cache",
+                        "write": write,
+                        "provider": "local_file",
+                        "include_curated": True,
+                        "skipped": [
+                            {"name": "local_file", "reason": "local_file has no remote catalog to repopulate"}
+                        ],
+                    }
+                else:
+                    reset_cache_result = catalog.clear_imported(
+                        provider_name=args.provider,
+                        write=write,
+                        include_curated=True,
+                    )
             progress = _refresh_progress()
             try:
                 if args.provider == "all":
@@ -3216,6 +3277,8 @@ def _main(argv: list[str] | None = None) -> int:
             finally:
                 if progress:
                     progress("done", "", "")
+            if reset_cache_result is not None:
+                result["reset_cache"] = reset_cache_result
             print(_json(result, indent=2))
             return 0
         if args.models_command == "clear-cache":
@@ -3776,6 +3839,8 @@ def _model_filter_args(args) -> dict[str, object]:
         "min_downloads": getattr(args, "min_downloads", None),
         "max_min_ram_gb": getattr(args, "ram_gb", None),
         "max_min_vram_gb": getattr(args, "vram_gb", None),
+        "gpu_vendor": getattr(args, "gpu_vendor", None),
+        "accelerator_api": getattr(args, "accelerator_api", None),
     }
 
 

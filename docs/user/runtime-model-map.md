@@ -219,6 +219,17 @@ aiplane models list --group-by model
 aiplane models defaults --group-by provider
 ```
 
+Model rows include hardware requirement hints where available: `min_ram_gb`, `recommended_ram_gb`, `min_vram_gb`, `recommended_vram_gb`, `resource_estimate_source`, `gpu_vendor_requirement`, and `accelerator_api_requirements`. These values come from profile metadata, provider/discovery metadata when supported, or aiplane's current parameter-size/role heuristic for discovered models. They are meant for filtering and planning; validate with real runtime startup and benchmarks before provisioning hardware.
+
+You can filter by target hardware capacity and explicit accelerator requirements:
+
+```bash
+aiplane models list --runtime ollama --role chat --ram-gb 64 --vram-gb 24 --sort-by benchmark --limit 3
+aiplane models list --runtime vllm --gpu-vendor nvidia --accelerator-api cuda --ram-gb 64 --vram-gb 24
+```
+
+`--gpu-vendor` and `--accelerator-api` only use explicit model metadata such as `required_gpu_vendor` or `required_accelerator_apis`; entries without explicit vendor/API requirements are treated as generic.
+
 Grouping meanings:
 
 - `provider`: groups by model source/catalog, such as `ollama`, `huggingface`, `huggingface_gguf`, or `local_file`.

@@ -190,7 +190,7 @@ aiplane models remove local_gguf --dry-run
 aiplane models remove local_gguf
 ```
 
-Discovered entries in `models.discovered.yaml` are provider/cache state. Leave them to `models refresh` or provider-scoped cache clearing instead of deleting them one alias at a time.
+Discovered entries in `models.discovered.yaml` are provider/cache state. Leave them to `models refresh` or provider-scoped cache clearing instead of deleting them one alias at a time. Likewise, `models enable` and `models disable` apply only to profile-owned aliases in `models.yaml`; promote or add a discovered model first when you want persistent enablement policy.
 
 Clear all local-file aliases/imports from the profile/cache with provider-scoped cache clearing:
 
@@ -283,7 +283,7 @@ aiplane providers clear --scope all
 
 ## Model Catalog Refresh
 
-`aiplane models refresh` imports model-provider catalog entries into the ignored `models.discovered.yaml` cache so you can later filter locally by runtime, role, capability, score, RAM/VRAM fit, benchmark results, and target hardware. The template `models.yaml` starts empty except for `defaults:` and `models:`. Source discovery definitions come from `model-providers.yaml`, ignored user overrides, and built-in source seeds. Runtime/provider endpoint values such as localhost ports are conventional built-in defaults used for planning, exports, and doctor/test hints; they are not proof that a runtime is installed or configured. Discovered entries are repopulated from provider discovery whenever you refresh. It is online-first where an adapter exists, and it is not runtime inventory.
+`aiplane models refresh` imports model-provider catalog entries into the ignored `models.discovered.yaml` cache so you can later filter locally by runtime, role, capability, score, RAM/VRAM fit, explicit GPU vendor/API requirements, benchmark results, and target hardware. The template `models.yaml` starts empty except for `defaults:` and `models:`. Source discovery definitions come from `model-providers.yaml`, ignored user overrides, and built-in source seeds. Runtime/provider endpoint values such as localhost ports are conventional built-in defaults used for planning, exports, and doctor/test hints; they are not proof that a runtime is installed or configured. Discovered entries are repopulated from provider discovery whenever you refresh. It is online-first where an adapter exists, and it is not runtime inventory.
 
 When an online source adapter succeeds, the source result is treated as authoritative for discovered/imported entries when it is not a query or limit-truncated window: new source ids are imported into `models.discovered.yaml`, stale discovered ids are pruned, and changed source metadata updates discovered entries. Profile-owned entries in `models.yaml` are preserved by refresh; if a local profile-owned entry points at a returned source id, only source-derived metadata is refreshed while human-maintained fields stay intact. In this context, profile-owned means human-maintained data such as entry names, enabled/disabled state, roles, preferred runtime, RAM/VRAM overrides, and notes.
 
@@ -361,6 +361,14 @@ aiplane models clear-cache --dry-run
 aiplane models clear-cache --provider huggingface --dry-run
 aiplane models clear-cache --provider huggingface --keep-curated --dry-run
 aiplane models clear-cache
+```
+
+Use `models refresh --reset-cache` when you want the clear and refresh phases in one command. It clears refresh/import entries for the refreshed provider before querying the source catalog again. With `--provider all`, `local_file` is skipped because local paths have no remote catalog to repopulate from:
+
+```bash
+aiplane models refresh --provider huggingface --reset-cache --dry-run
+aiplane models refresh --provider huggingface --reset-cache
+aiplane models refresh --reset-cache --dry-run
 ```
 
 Important output fields:

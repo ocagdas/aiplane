@@ -1917,6 +1917,95 @@ class MvpTests(unittest.TestCase):
         self.assertEqual(result["results"]["ollama"]["source_discovery_method"], "source_api")
         self.assertEqual(result["results"]["ollama"]["source_models_to_import"], 1)
 
+    def test_models_enable_disable_rejects_discovered_cache_entry(self) -> None:
+        source = load_profile("local-dev", Path.cwd())
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            models_config = {"models": {}}
+            generated_config = {
+                "models": {
+                    "discovered_local": {
+                        "provider": "ollama",
+                        "source": "ollama",
+                        "model": "llama3.2:3b",
+                        "enabled": True,
+                        "imported_by": "aiplane_refresh",
+                    }
+                }
+            }
+            (root / "models.yaml").write_text(agent_config.dump_yaml(models_config), encoding="utf-8")
+            (root / "models.discovered.yaml").write_text(agent_config.dump_yaml(generated_config), encoding="utf-8")
+            profile = Profile(
+                name="tmp",
+                root=root,
+                workspace=Path.cwd(),
+                hardware=source.hardware,
+                backends=source.backends,
+                repository=source.repository,
+                tools=source.tools,
+                approvals=source.approvals,
+                environment=source.environment,
+                models=models_config,
+                targets=source.targets,
+                orchestrators=source.orchestrators,
+            )
+            with self.assertRaisesRegex(ValueError, "discovered model entry is cache state"):
+                ModelCatalog(profile).set_enabled("discovered_local", False)
+            discovered_text = (root / "models.discovered.yaml").read_text(encoding="utf-8")
+        self.assertIn("enabled: true", discovered_text)
+
+    def test_models_refresh_reset_cache_previews_clear_before_refresh(self) -> None:
+        source = load_profile("local-dev", Path.cwd())
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            profiles_dir = root / "profiles"
+            shutil.copytree(source.root, profiles_dir / "local-dev")
+            profile_root = profiles_dir / "local-dev"
+            discovered_config = {
+                "models": {
+                    "ollama-old-model-latest": {
+                        "provider": "ollama",
+                        "source": "ollama",
+                        "model": "old-model:latest",
+                        "enabled": True,
+                        "imported_by": "aiplane_refresh",
+                    }
+                }
+            }
+            (profile_root / "models.discovered.yaml").write_text(
+                agent_config.dump_yaml(discovered_config),
+                encoding="utf-8",
+            )
+            discovered = ProviderModelsResult("ollama", "provider_api", ["fresh:1b"], "mock ok")
+            with patch.object(ProviderRegistry, "models", return_value=discovered):
+                stdout = StringIO()
+                with redirect_stdout(stdout):
+                    code = cli_main(
+                        [
+                            "--profiles-dir",
+                            str(profiles_dir),
+                            "models",
+                            "refresh",
+                            "--profile",
+                            "local-dev",
+                            "--provider",
+                            "ollama",
+                            "--reset-cache",
+                            "--dry-run",
+                            "--verbose",
+                        ]
+                    )
+        self.assertEqual(code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["reset_cache"]["name"], "model_catalog_clear_cache")
+        self.assertEqual(payload["reset_cache"]["provider"], "ollama")
+        self.assertGreaterEqual(payload["reset_cache"]["would_remove"], 1)
+        self.assertIn(
+            {"name": "ollama", "count": payload["reset_cache"]["would_remove"]},
+            payload["reset_cache"]["provider_counts"],
+        )
+        self.assertEqual(payload["changes"]["would_import"], 1)
+
     def test_model_catalog_clear_cache_removes_only_refresh_imports(self) -> None:
         source = load_profile("local-dev", Path.cwd())
         models_config = json.loads(json.dumps(source.models))
@@ -5033,6 +5122,82 @@ exit 0
         self.assertEqual(result["environment_mode"], "system")
         self.assertEqual(result["results"][0]["evaluation"]["type"], "command")
         self.assertIn("command", result["results"][0]["evaluation"])
+
+    def test_models_list_rows_include_resource_requirements(self) -> None:
+        source = load_profile("local-dev", Path.cwd())
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            models_config = {
+                "models": {
+                    "gpu_model": {
+                        "provider": "vllm",
+                        "source": "huggingface",
+                        "model": "org/model-7b",
+                        "enabled": True,
+                        "min_ram_gb": 16,
+                        "recommended_ram_gb": 32,
+                        "min_vram_gb": 8,
+                        "recommended_vram_gb": 16,
+                        "resource_estimate_source": "configured",
+                        "required_gpu_vendor": "nvidia",
+                        "required_accelerator_apis": ["cuda"],
+                    }
+                }
+            }
+            (root / "models.yaml").write_text(agent_config.dump_yaml(models_config), encoding="utf-8")
+            profile = Profile(
+                name="tmp",
+                root=root,
+                workspace=Path.cwd(),
+                hardware=source.hardware,
+                backends=source.backends,
+                repository=source.repository,
+                tools=source.tools,
+                approvals=source.approvals,
+                environment=source.environment,
+                models=models_config,
+                targets=source.targets,
+                orchestrators=source.orchestrators,
+            )
+            rows = ModelCatalog(profile).filter({"gpu_vendor": "nvidia", "accelerator_api": "cuda"})
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["min_ram_gb"], 16.0)
+        self.assertEqual(rows[0]["recommended_ram_gb"], 32.0)
+        self.assertEqual(rows[0]["min_vram_gb"], 8.0)
+        self.assertEqual(rows[0]["recommended_vram_gb"], 16.0)
+        self.assertEqual(rows[0]["resource_estimate_source"], "configured")
+        self.assertEqual(rows[0]["gpu_vendor_requirement"], "nvidia")
+        self.assertEqual(rows[0]["accelerator_api_requirements"], ["cuda"])
+        self.assertEqual(ModelCatalog(profile).filter({"gpu_vendor": "amd"}), [])
+
+    def test_discovered_model_resource_requirements_are_marked_as_heuristic(self) -> None:
+        entry = _discovered_model_entry("ollama", "example-model:7b", enable=True)
+        source = load_profile("local-dev", Path.cwd())
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            models_config = {"models": {}}
+            generated_config = {"models": {"ollama-example-model-7b": entry}}
+            (root / "models.yaml").write_text(agent_config.dump_yaml(models_config), encoding="utf-8")
+            (root / "models.discovered.yaml").write_text(agent_config.dump_yaml(generated_config), encoding="utf-8")
+            profile = Profile(
+                name="tmp",
+                root=root,
+                workspace=Path.cwd(),
+                hardware=source.hardware,
+                backends=source.backends,
+                repository=source.repository,
+                tools=source.tools,
+                approvals=source.approvals,
+                environment=source.environment,
+                models=models_config,
+                targets=source.targets,
+                orchestrators=source.orchestrators,
+            )
+            rows = ModelCatalog(profile).filter({"max_min_ram_gb": 64, "max_min_vram_gb": 64})
+        self.assertEqual(rows[0]["resource_estimate_source"], "catalog_heuristic:parameter_size_and_role")
+        self.assertEqual(rows[0]["min_ram_gb"], entry["min_ram_gb"])
+        self.assertEqual(rows[0]["min_vram_gb"], entry["min_vram_gb"])
+        self.assertEqual(rows[0]["gpu_vendor_requirement"], "generic")
 
     def test_models_filter_can_require_saved_benchmark_score(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

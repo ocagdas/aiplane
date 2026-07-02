@@ -130,7 +130,8 @@ Storage rules:
 - Profile-owned model entries live in `models.yaml`.
 - Discovery refresh/import entries live in `models.discovered.yaml`.
 - Profile-owned entries in `models.yaml` win if the same entry name exists in both files.
-- Refresh can update source metadata on a profile-owned entry, but it must not delete profile-owned entries or remove profile defaults. Use `models clear-cache` when you intentionally want to clear discovered entries and profile-owned review entries.
+- Refresh can update source metadata on a profile-owned entry, but it must not delete profile-owned entries or remove profile defaults. Use `models clear-cache` when you intentionally want to clear discovered entries and profile-owned review entries, or `models refresh --reset-cache` when you want clear-then-refresh in one step.
+- Enable/disable is persistent profile policy, so `models enable` and `models disable` write only profile-owned entries in `models.yaml`; discovered-only cache entries must be added or promoted first.
 
 Cleanup:
 
@@ -138,6 +139,7 @@ Cleanup:
 aiplane models clear-cache --dry-run
 aiplane models clear-cache --provider huggingface --dry-run
 aiplane models clear-cache
+aiplane models refresh --provider huggingface --reset-cache --dry-run
 ```
 
 Use `--keep-curated` when you want to preserve profile-owned entries in `models.yaml` and clear only discovered refresh/import entries.
