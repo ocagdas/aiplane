@@ -13,6 +13,7 @@ JSON_KEY_ORDER = [
     "orchestrator",
     "runtime",
     "model",
+    "parameter_count_b",
     "provider",
     "supported_providers",
     "supported_orchestrators",

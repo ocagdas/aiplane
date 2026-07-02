@@ -22,7 +22,7 @@ chat UI before the provider/session contracts are stable.
    - Ongoing: validate more client-specific config shapes as tools evolve.
 
 2. **CLI wrapper commands - Partially implemented**
-   - Implemented: `aiplane chat`, which resolves a configured Ollama model alias and delegates to `ollama run <model>`.
+   - Implemented: `aiplane chat`, which resolves a configured Ollama-runnable model alias and delegates to `ollama run <model>`.
    - Planned: broader launch wrappers around stable tool-native CLIs such as `ollama launch`, Continue CLI, Codex-style tools, or Claude Code where support is explicit.
 
 3. **Thin `aiplane session` layer - Planned**
@@ -107,7 +107,7 @@ A full custom active chat/session UI is medium effort and easy to overbuild. The
 better first implementation is a thin command layer. Current status:
 
 ```bash
-# Implemented: Ollama-native chat wrapper for configured Ollama aliases.
+# Implemented: Ollama-native chat wrapper for configured Ollama-runnable aliases.
 aiplane chat
 
 # Planned / not implemented yet:
@@ -143,7 +143,7 @@ delegate the interactive UX to Ollama.
 Start with:
 
 1. Continue config generation for VS Code. - **Implemented**
-2. `aiplane chat` wrapper for `ollama run`. - **Implemented for local Ollama aliases**
+2. `aiplane chat` wrapper for `ollama run`. - **Implemented for local Ollama-runnable aliases**
 3. `aiplane launch` wrapper for `ollama launch` where supported. - **Planned, not implemented**
 4. Cline/Zed/Aider exporter or wrapper research against their documented endpoint/MCP/config surfaces. - **Exporters implemented; wrappers still planned/research**
 5. Minimal session metadata/audit around those launches. - **Planned, not implemented**

@@ -17,10 +17,11 @@ from pathlib import Path
 from aiplane.approvals import ApprovalHandler
 from aiplane.audit import AuditLogger
 from aiplane.benchmarks import BenchmarkRunner
+from aiplane.backends import BackendResult, OllamaBackend
 from aiplane.cli import main as cli_main
 import aiplane.cli as cli_module
 import aiplane.mcp as mcp_module
-from aiplane.code_tasks import CodeTaskRunner
+from aiplane.code_tasks import CodeTaskResult, CodeTaskRunner
 from aiplane import config as agent_config
 from aiplane.config import (
     create_profile,
@@ -3494,6 +3495,68 @@ class MvpTests(unittest.TestCase):
         )
         self.assertIn("add email validation", result.output)
 
+    def test_code_write_executes_huggingface_gguf_alias_through_ollama(self) -> None:
+        profile = load_profile("local-dev", Path.cwd())
+        profile.models.setdefault("models", {})["hf-gguf-chat"] = {
+            "provider": "llamacpp",
+            "source": "huggingface_gguf",
+            "model": "Example/Chat-GGUF",
+            "enabled": True,
+            "supported_runtimes": ["llamacpp", "ollama"],
+            "preferred_runtime": "ollama",
+            "roles": ["chat"],
+        }
+
+        class FakeOllama:
+            def chat(self, model: str, prompt: str):
+                return BackendResult("ollama", f"{model}: {prompt[:12]}")
+
+        with (
+            patch("aiplane.runtime_catalog.RuntimeCatalog.runtime_available", return_value={"name": "ollama", "available": True, "reason": "ok"}),
+            patch("aiplane.model_catalog.ModelCatalog._ollama_backend", return_value=FakeOllama()),
+        ):
+            result = CodeTaskRunner(profile, AuditLogger(profile)).write(
+                "hf-gguf-chat", "add email validation", dry_run=False
+            )
+        self.assertFalse(result.dry_run)
+        self.assertIn("hf.co/Example/Chat-GGUF", result.output)
+
+    def test_ollama_backend_timeout_message_points_to_runtime_commands(self) -> None:
+        backend = OllamaBackend(timeout_seconds=3)
+        with patch("aiplane.backends.urlopen", side_effect=TimeoutError("timed out")):
+            with self.assertRaisesRegex(RuntimeError, "Ollama request timed out") as raised:
+                backend.chat("hf.co/Example/Chat-GGUF", "hello")
+        message = str(raised.exception)
+        self.assertIn("aiplane runtimes status ollama", message)
+        self.assertIn("aiplane runtimes pull ollama --model hf.co/Example/Chat-GGUF", message)
+        self.assertNotIn("ollama serve", message)
+
+    def test_code_write_cli_passes_timeout_override(self) -> None:
+        stdout = StringIO()
+        with (
+            patch.object(
+                CodeTaskRunner,
+                "write",
+                return_value=CodeTaskResult("write", "local-analysis-small", "prompt", "ok", False),
+            ) as write,
+            redirect_stdout(stdout),
+        ):
+            code = cli_main(
+                [
+                    "code",
+                    "write",
+                    "--model",
+                    "local-analysis-small",
+                    "--task",
+                    "add email validation",
+                    "--timeout-seconds",
+                    "180",
+                ]
+            )
+        self.assertEqual(code, 0)
+        self.assertEqual(stdout.getvalue().strip(), "ok")
+        self.assertEqual(write.call_args.kwargs["timeout_seconds"], 180)
+
     def test_code_runner_blocks_path_escape(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             workspace = Path(tmp) / "workspace"
@@ -3574,6 +3637,47 @@ class MvpTests(unittest.TestCase):
         self.assertEqual(actions.count("pull"), 1)
         self.assertLess(actions.index("install"), actions.index("start"))
         self.assertLess(actions.index("start"), actions.index("pull"))
+
+    def test_integrations_setup_pulls_huggingface_gguf_alias_through_ollama(self) -> None:
+        profile = load_profile("local-dev", Path.cwd())
+        profile.models.setdefault("models", {})["hf-gguf-chat"] = {
+            "provider": "llamacpp",
+            "model": "Example/Chat-GGUF",
+            "enabled": True,
+            "roles": ["chat"],
+            "source": "huggingface_gguf",
+            "supported_runtimes": ["llamacpp", "ollama"],
+            "preferred_runtime": "ollama",
+            "capabilities": {
+                "scores": {"general_chat": 3, "reasoning": 3, "tool_use": 2},
+            },
+        }
+        completed = subprocess.CompletedProcess(["scripts/provider_helper.sh"], 0, "+ ollama pull hf.co/Example/Chat-GGUF\n", "")
+        with (
+            patch(
+                "aiplane.integrations.RuntimeCatalog.runtime_available",
+                return_value={"available": True, "reason": "endpoint ok"},
+            ),
+            patch.object(
+                IntegrationManager,
+                "_model_presence",
+                return_value={"available": False, "reason": "provider is disabled", "provider": "llamacpp"},
+            ),
+            patch.object(IntegrationManager, "_run_with_progress", return_value=completed) as run_with_progress,
+        ):
+            result = IntegrationManager(profile).setup(
+                "openai-compatible",
+                model_name="hf-gguf-chat",
+                runtime="ollama",
+                dry_run=False,
+                yes=True,
+            )
+        pull_actions = [action for action in result["actions"] if action["action"] == "pull"]
+        self.assertEqual(len(pull_actions), 1)
+        self.assertEqual(pull_actions[0]["status"], "succeeded")
+        self.assertEqual(pull_actions[0]["runtime"], "ollama")
+        self.assertEqual(pull_actions[0]["model"], "hf-gguf-chat")
+        run_with_progress.assert_called_once()
 
     def test_integrations_setup_requires_yes_when_not_dry_run(self) -> None:
         profile = load_profile("local-dev", Path.cwd())
@@ -4279,6 +4383,20 @@ class MvpTests(unittest.TestCase):
         self.assertEqual(command, "ollama run provider-chat-small:8b")
         override = IntegrationManager(profile).run_chat("local-analysis-small", dry_run=True)
         self.assertEqual(override, "ollama run provider-text-small:0.5b")
+
+    def test_chat_wrapper_dry_run_resolves_huggingface_gguf_for_ollama(self) -> None:
+        profile = load_profile("local-dev", Path.cwd())
+        profile.models.setdefault("models", {})["hf-gguf-chat"] = {
+            "provider": "llamacpp",
+            "source": "huggingface_gguf",
+            "model": "Example/Chat-GGUF",
+            "enabled": True,
+            "supported_runtimes": ["llamacpp", "ollama"],
+            "preferred_runtime": "llamacpp",
+            "roles": ["chat"],
+        }
+        command = IntegrationManager(profile).run_chat("hf-gguf-chat", dry_run=True)
+        self.assertEqual(command, "ollama run hf.co/Example/Chat-GGUF")
 
     def test_disabled_general_candidate_is_configured(self) -> None:
         profile = load_profile("local-dev", Path.cwd())
@@ -5095,6 +5213,88 @@ exit 0
         self.assertIn("docker run", ollama_docker.stdout)
         self.assertIn("ollama/ollama:latest", ollama_docker.stdout)
 
+        with tempfile.TemporaryDirectory() as tmp:
+            profiles_dir = Path(tmp) / "profiles"
+            profile_dir = profiles_dir / "local-dev"
+            shutil.copytree(Path("profile-templates/local-dev"), profile_dir)
+            (profile_dir / "models.yaml").write_text(
+                """models:
+  hf_gguf_chat:
+    provider: llamacpp
+    source: huggingface_gguf
+    model: Example/Chat-GGUF
+    enabled: true
+    supported_runtimes: [llamacpp, ollama]
+    preferred_runtime: ollama
+    roles: [chat]
+""",
+                encoding="utf-8",
+            )
+            env = os.environ.copy()
+            env["AIPLANE_PROFILES_DIR"] = str(profiles_dir)
+            ollama_hf = subprocess.run(
+                [
+                    "scripts/provider_helper.sh",
+                    "--provider",
+                    "ollama",
+                    "--action",
+                    "pull",
+                    "--profile",
+                    "local-dev",
+                    "--model",
+                    "hf_gguf_chat",
+                    "--dry-run",
+                ],
+                cwd=root,
+                env=env,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            ollama_remove = subprocess.run(
+                [
+                    "scripts/provider_helper.sh",
+                    "--provider",
+                    "ollama",
+                    "--action",
+                    "remove",
+                    "--profile",
+                    "local-dev",
+                    "--model",
+                    "hf_gguf_chat",
+                    "--dry-run",
+                ],
+                cwd=root,
+                env=env,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            ollama_clear = subprocess.run(
+                [
+                    "scripts/provider_helper.sh",
+                    "--provider",
+                    "ollama",
+                    "--action",
+                    "clear",
+                    "--profile",
+                    "local-dev",
+                    "--dry-run",
+                ],
+                cwd=root,
+                env=env,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+        self.assertEqual(ollama_hf.returncode, 0, ollama_hf.stderr)
+        self.assertIn("ollama pull hf.co/Example/Chat-GGUF", ollama_hf.stdout)
+        self.assertEqual(ollama_remove.returncode, 0, ollama_remove.stderr)
+        self.assertIn("ollama rm hf.co/Example/Chat-GGUF", ollama_remove.stdout)
+        self.assertEqual(ollama_clear.returncode, 0, ollama_clear.stderr)
+        self.assertIn("ollama list | awk", ollama_clear.stdout)
+        self.assertIn("xargs -r -n1 ollama rm", ollama_clear.stdout)
+
     def test_runtime_lifecycle_reports_unavailable_helper_for_planned_runtime(
         self,
     ) -> None:
@@ -5131,6 +5331,22 @@ exit 0
         self.assertEqual(payload["runtime"], "vllm")
         self.assertFalse(payload["ok"])
         self.assertTrue(payload["missing_required"])
+
+    def test_runtime_remove_and_clear_require_confirmation(self) -> None:
+        stdout = StringIO()
+        with redirect_stdout(stdout):
+            code = cli_main(["runtimes", "remove", "ollama", "--model", "local-chat-small"])
+        self.assertEqual(code, 2)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["name"], "runtime_destructive_confirmation_required")
+        self.assertEqual(payload["action"], "remove")
+
+        stdout = StringIO()
+        with redirect_stdout(stdout):
+            code = cli_main(["runtimes", "clear", "ollama"])
+        self.assertEqual(code, 2)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["action"], "clear")
 
     def test_aiplane_runtime_lifecycle_delegates_to_provider_helper(self) -> None:
         stdout = StringIO()
@@ -5580,6 +5796,39 @@ exit 0
         self.assertEqual(rows[0]["min_ram_gb"], entry["min_ram_gb"])
         self.assertEqual(rows[0]["min_vram_gb"], entry["min_vram_gb"])
         self.assertEqual(rows[0]["gpu_vendor_requirement"], "generic")
+
+    def test_models_list_can_filter_and_sort_by_parameter_count(self) -> None:
+        source = load_profile("local-dev", Path.cwd())
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            models_config = {
+                "models": {
+                    "small": {"provider": "ollama", "model": "example:3b", "enabled": True, "roles": ["chat"]},
+                    "medium": {"provider": "ollama", "model": "example:14b", "enabled": True, "roles": ["chat"]},
+                    "large": {"provider": "ollama", "model": "example:40B", "enabled": True, "roles": ["chat"]},
+                    "unknown": {"provider": "ollama", "model": "example:latest", "enabled": True, "roles": ["chat"]},
+                }
+            }
+            (root / "models.yaml").write_text(agent_config.dump_yaml(models_config), encoding="utf-8")
+            profile = Profile(
+                name="tmp",
+                root=root,
+                workspace=Path.cwd(),
+                hardware=source.hardware,
+                backends=source.backends,
+                repository=source.repository,
+                tools=source.tools,
+                approvals=source.approvals,
+                environment=source.environment,
+                models=models_config,
+                targets=source.targets,
+                orchestrators=source.orchestrators,
+            )
+            catalog = ModelCatalog(profile)
+            rows = catalog.filter({"min_parameters_b": 7, "max_parameters_b": 35})
+            sorted_rows = catalog.sort_rows(rows, sort_by="parameters")
+        self.assertEqual([row["name"] for row in sorted_rows], ["medium"])
+        self.assertEqual(sorted_rows[0]["parameter_count_b"], 14.0)
 
     def test_models_filter_can_require_saved_benchmark_score(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

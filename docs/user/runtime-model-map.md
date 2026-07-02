@@ -109,8 +109,10 @@ Lifecycle commands:
 - `install`: installs the runtime where supported. Examples: pip install for `vllm`/`transformers`, Docker image pull for `tgi`/`localai`, Ollama official installer for `ollama`. Real installs run a prerequisites preflight first; if required host tools are missing, `aiplane` prints the missing tools and Ubuntu/Debian package hints instead of delegating to the helper.
 - `update`: updates one runtime where supported. Usually pip upgrade, Docker image pull, or the Ollama installer update path.
 - `update-installed`: intended with runtime `all`; updates helper-managed runtimes where `aiplane` has an update path. Use `--dry-run` first.
-- `pull`: downloads model files where the runtime has a meaningful download path. Ollama uses `ollama pull`; vLLM/TGI/Transformers use Hugging Face snapshot download; llama.cpp can download a direct GGUF URL; LocalAI is model-file/config based. Managed-service providers such as OpenAI, Anthropic, Azure OpenAI, Ollama Cloud, Azure Speech, and ElevenLabs do not support local model pull; configure credentials and test the endpoint instead. Managed-service aliases cannot be bundled with, assigned to, installed for, or started as local runtimes.
+- `pull`: downloads model files where the runtime has a meaningful download path. Ollama uses `ollama pull` for Ollama-library aliases, raw Ollama model ids, and resolvable Hugging Face GGUF aliases via `hf.co/<repo>`; arbitrary local files or non-GGUF Hugging Face repos still need an import/runtime-specific path. vLLM/TGI/Transformers use Hugging Face snapshot download; llama.cpp can download a direct GGUF URL; LocalAI is model-file/config based. Managed-service providers such as OpenAI, Anthropic, Azure OpenAI, Ollama Cloud, Azure Speech, and ElevenLabs do not support local model pull; configure credentials and test the endpoint instead. Managed-service aliases cannot be bundled with, assigned to, installed for, or started as local runtimes.
 - `repull`: refreshes models already present in a runtime when the runtime can list them. Ollama supports this directly by reading `ollama list` and re-running `ollama pull` for each listed model. Other runtimes generally cannot reliably enumerate local caches, so `repull` refreshes the selected/configured model when possible.
+- `remove`: removes one pulled runtime model where supported. Ollama delegates to `ollama rm`; use `--dry-run` first and pass `--yes` for real deletion through `aiplane runtimes remove`. This does not remove profile aliases from `models.yaml` or discovered catalog entries.
+- `clear`: removes all pulled runtime models where supported. Ollama delegates to `ollama list` plus `ollama rm`; use `--dry-run` first and pass `--yes` for real deletion through `aiplane runtimes clear`. This does not clear the aiplane discovery cache.
 - `start`: starts a helper-managed background process where supported. PID/log files are written under `.aiplane/runtimes/`.
 - `stop`: stops a helper-managed background process.
 - `restart`: runs `stop` then `start` for helper-managed runtimes.
@@ -148,6 +150,10 @@ list-runtime-models <runtime>`. For Ollama, runtime inventory comes from the
 local `/api/tags` endpoint and means "models already pulled here", not "every
 model in the public Ollama library".
 
+Catalog entries and pulled runtime files are deliberately separate. Use `aiplane models list` to inspect configured/imported aliases, `aiplane models remove NAME` to delete one profile-owned alias, and `aiplane models clear-cache` to clear discovered/imported catalog entries. Use `aiplane runtimes list-runtime-models ollama`, `aiplane runtimes remove ollama --model NAME --yes`, and `aiplane runtimes clear ollama --yes` for the actual Ollama model store.
+
+Code task commands use the provider HTTP/API timeout rather than the native interactive CLI wait behavior. For large first-run Ollama models, use `--timeout-seconds`, for example `aiplane code write --model MODEL_ALIAS --task "..." --timeout-seconds 180`.
+
 Online source-catalog querying currently exists for Hugging Face Hub, NVIDIA
 open model repos on Hugging Face, Hugging Face GGUF searches, and Ollama Library.
 Other model providers fall back to profile catalog entries until dedicated adapters
@@ -167,6 +173,10 @@ aiplane runtimes install ollama --substrate docker --dry-run
 aiplane runtimes start ollama --substrate docker --dry-run
 aiplane runtimes install vllm --dry-run
 aiplane runtimes pull vllm --model MODEL_ALIAS --dry-run
+aiplane runtimes remove ollama --model MODEL_ALIAS --dry-run
+aiplane runtimes remove ollama --model MODEL_ALIAS --yes
+aiplane runtimes clear ollama --dry-run
+aiplane runtimes clear ollama --yes
 aiplane runtimes start vllm --model MODEL_ALIAS --dry-run
 aiplane runtimes status vllm
 aiplane runtimes stop vllm
@@ -218,7 +228,7 @@ aiplane models list --group-by model
 aiplane models defaults --group-by provider
 ```
 
-Model rows include hardware requirement hints where available: `min_ram_gb`, `recommended_ram_gb`, `min_vram_gb`, `recommended_vram_gb`, `resource_estimate_source`, `gpu_vendor_requirement`, and `accelerator_api_requirements`. These values come from profile metadata, provider/discovery metadata when supported, or aiplane's current parameter-size/role heuristic for discovered models. They are meant for filtering and planning; validate with real runtime startup and benchmarks before provisioning hardware.
+Model rows include model-size and hardware requirement hints where available: `parameter_count_b`, `min_ram_gb`, `recommended_ram_gb`, `min_vram_gb`, `recommended_vram_gb`, `resource_estimate_source`, `gpu_vendor_requirement`, and `accelerator_api_requirements`. `parameter_count_b` is inferred from model ids such as `7b`, `14B`, or `40b`; if no size marker exists it is `0`. Resource values come from profile metadata, provider/discovery metadata when supported, or aiplane's current parameter-size/role heuristic for discovered models. They are meant for filtering and planning; validate with real runtime startup and benchmarks before provisioning hardware.
 
 You can filter by the active hardware profile or by explicit target capacity and accelerator requirements. `--fits-hardware` derives RAM, VRAM, GPU vendor, and accelerator API filters from `aiplane hardware active`; explicit flags remain useful when planning for another target. Imported machine profiles and external machine files are used by `hardware recommend` and `machines recommend`, and first-class `models list --machine` / `--hardware-file` filtering is planned:
 
@@ -226,6 +236,7 @@ You can filter by the active hardware profile or by explicit target capacity and
 aiplane models list --fits-hardware
 aiplane models list --runtime ollama --role chat --fits-hardware --sort-by benchmark --limit 3
 aiplane models list --runtime ollama --role chat --ram-gb 64 --vram-gb 24 --sort-by benchmark --limit 3
+aiplane models list --runtime ollama --role chat --min-parameters-b 7 --max-parameters-b 14 --sort-by parameters --limit 5
 aiplane models list --runtime vllm --gpu-vendor nvidia --accelerator-api cuda --ram-gb 64 --vram-gb 24
 ```
 
@@ -262,6 +273,10 @@ aiplane runtimes install ollama --substrate docker --dry-run
 aiplane runtimes start ollama --substrate docker --dry-run
 aiplane runtimes install vllm --dry-run
 aiplane runtimes pull vllm --model MODEL_ALIAS --dry-run
+aiplane runtimes remove ollama --model MODEL_ALIAS --dry-run
+aiplane runtimes remove ollama --model MODEL_ALIAS --yes
+aiplane runtimes clear ollama --dry-run
+aiplane runtimes clear ollama --yes
 aiplane runtimes start vllm --model MODEL_ALIAS --dry-run
 aiplane runtimes status vllm
 aiplane runtimes stop vllm

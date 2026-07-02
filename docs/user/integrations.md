@@ -30,7 +30,7 @@ aiplane integrations export continue --chat CHAT_ALIAS --autocomplete AUTOCOMPLE
 ```
 
 - `plan` prints the decision: selected model aliases, provider, runtime, endpoint, supported runtimes, capability scores, role score, and the reason each model was selected. It does not start services, pull models, edit IDE files, or print the final target config.
-- `setup --dry-run` uses the plan and prints the runtime/model preparation actions that would be needed, such as installing a missing helper-managed runtime, starting Ollama/vLLM, or pulling a selected model.
+- `setup --dry-run` uses the plan and prints the runtime/model preparation actions that would be needed, such as installing a missing helper-managed runtime, starting Ollama/vLLM, or pulling a selected model. Pulls are only planned/executed when the selected runtime has a known pull path for that source: Ollama-library aliases through Ollama, Hugging Face GGUF aliases through Ollama's `hf.co/...` pull form when resolvable, Hugging Face-style aliases through vLLM/TGI/Transformers, and direct GGUF URLs through llama.cpp. If a selected source/runtime pair still has no automated pull path, setup reports a skipped pull with the reason instead of delegating a command that cannot work.
 - `setup` executes supported helper actions by default; `setup --dry-run` previews them. During live helper actions, `aiplane` streams helper output to stderr, so Ollama pull progress such as downloaded bytes, total size, speed, and ETA remains visible when Ollama reports it. It is the task-level setup command for IDE/tool integrations, so you do not have to run runtime install/start/pull commands by hand after selecting aliases.
 - `export` prints the target config snippet to paste into Continue, Cline, Zed, Aider, or a generic OpenAI-compatible client.
 
@@ -131,7 +131,7 @@ For VS Code, the first concrete path is Continue:
 aiplane runtimes install ollama --dry-run
 aiplane runtimes install ollama
 aiplane runtimes start ollama
-aiplane runtimes pull ollama --model MODEL_ALIAS
+aiplane runtimes pull ollama --model OLLAMA_ALIAS
 ```
 
 3. Generate the Continue config bundle from selected aliases:
@@ -354,7 +354,7 @@ This is the step after environment preparation: once `environment doctor`, runti
 
 ## CLI Chat Wrapper
 
-For local Ollama models, `aiplane` can resolve the model alias and delegate to
+For local Ollama-runnable models, `aiplane` can resolve the model alias and delegate to
 Ollama's native chat CLI:
 
 ```bash

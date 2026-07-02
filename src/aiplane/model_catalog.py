@@ -382,6 +382,7 @@ class ModelCatalog:
                     "provider": source_provider,
                     "source": source_provider,
                     "model": model.get("model"),
+                    "parameter_count_b": _parameter_billions(str(model.get("model") or "")),
                     "capability_avg_score": _capability_average(capabilities),
                     "latest_benchmark": latest_benchmark,
                     "ownership": ownership,
@@ -468,6 +469,13 @@ class ModelCatalog:
                 and _number_or_none(model.get("min_vram_gb")) > float(min_vram)
             ):
                 continue
+            min_parameters = filters.get("min_parameters_b")
+            parameters = _parameter_billions(str(model.get("model") or ""))
+            if min_parameters is not None and parameters < float(min_parameters):
+                continue
+            max_parameters = filters.get("max_parameters_b")
+            if max_parameters is not None and (parameters <= 0 or parameters > float(max_parameters)):
+                continue
             gpu_vendor = filters.get("gpu_vendor")
             if gpu_vendor and not _matches_gpu_vendor_requirement(model, str(gpu_vendor)):
                 continue
@@ -533,6 +541,15 @@ class ModelCatalog:
                 key=lambda row: (
                     -float(row.get("likes") or 0),
                     -float(row.get("downloads") or 0),
+                    -float(row.get("capability_avg_score", 0)),
+                    str(row.get("name", "")),
+                ),
+            )
+        if sort_by == "parameters":
+            return sorted(
+                ranked_rows,
+                key=lambda row: (
+                    -float(row.get("parameter_count_b") or 0),
                     -float(row.get("capability_avg_score", 0)),
                     str(row.get("name", "")),
                 ),
@@ -1192,14 +1209,32 @@ class ModelCatalog:
             raise RuntimeError(output or f"ollama pull failed for {model_id}")
         return output
 
-    def complete(self, name: str, prompt: str) -> BackendResult:
+    def complete(self, name: str, prompt: str, timeout_seconds: int | None = None) -> BackendResult:
         model = self.get(name)
         provider_name = self._runtime_for_model(name, model)
         if provider_name in {"ollama", "ollama_cloud"}:
-            return self._ollama_backend(provider_name).chat(str(model.get("model")), prompt)
+            return self._ollama_backend(provider_name, timeout_seconds=timeout_seconds).chat(self._execution_model_id(provider_name, model), prompt)
         if self._is_openai_compatible(provider_name):
-            return self._openai_compatible_backend(provider_name).chat(str(model.get("model")), prompt)
+            return self._openai_compatible_backend(provider_name, timeout_seconds=timeout_seconds).chat(str(model.get("model")), prompt)
         raise ValueError(f"execution is not wired for runtime/provider: {provider_name}")
+
+    def _execution_model_id(self, runtime_name: str, model: dict[str, Any]) -> str:
+        model_id = str(model.get("model") or "")
+        if runtime_name != "ollama":
+            return model_id
+        from .runtime_catalog import RuntimeCatalog
+
+        runtime_catalog = RuntimeCatalog(self.profile)
+        source = runtime_catalog.source_for_model(model)
+        supported = runtime_catalog.compatible_runtimes_for_entry(model, include_gui=True)
+        if source == "huggingface_gguf" and "ollama" in supported:
+            if model_id.startswith("hf.co/"):
+                return model_id
+            if model_id.startswith(("http://", "https://")):
+                return model_id
+            if "/" in model_id:
+                return f"hf.co/{model_id}"
+        return model_id
 
     def _runtime_for_model(self, name: str, model: dict[str, Any]) -> str:
         provider_name = str(model.get("provider") or "")
@@ -1225,7 +1260,7 @@ class ModelCatalog:
             f"No supported runtime is running for model {name}. Supported runtimes: {supported}. {details}"
         )
 
-    def _ollama_backend(self, provider_name: str) -> OllamaBackend:
+    def _ollama_backend(self, provider_name: str, timeout_seconds: int | None = None) -> OllamaBackend:
         provider = self.providers().get(provider_name, {})
         endpoint = str(
             provider.get(
@@ -1233,7 +1268,7 @@ class ModelCatalog:
                 "http://localhost:11434" if provider_name == "ollama" else "https://ollama.com",
             )
         )
-        timeout = int(provider.get("timeout_seconds", 60))
+        timeout = int(timeout_seconds or provider.get("timeout_seconds", 60))
         headers = {}
         credential_ref = str(provider.get("credential_ref") or "")
         api_key = CredentialStore().api_key(credential_ref) if credential_ref else None
@@ -1244,10 +1279,10 @@ class ModelCatalog:
             headers["Authorization"] = "Bearer " + api_key
         return OllamaBackend(endpoint, timeout, headers)
 
-    def _openai_compatible_backend(self, provider_name: str) -> OpenAICompatibleBackend:
+    def _openai_compatible_backend(self, provider_name: str, timeout_seconds: int | None = None) -> OpenAICompatibleBackend:
         provider = self.providers().get(provider_name, {})
         endpoint = self._openai_compatible_endpoint(provider_name, provider)
-        timeout = int(provider.get("timeout_seconds", 60))
+        timeout = int(timeout_seconds or provider.get("timeout_seconds", 60))
         headers = {}
         credential_ref = str(provider.get("credential_ref") or "")
         api_key = CredentialStore().api_key(credential_ref) if credential_ref else None

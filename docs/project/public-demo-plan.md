@@ -40,7 +40,7 @@ Show that `aiplane` gives a structured path from intent to usable AI environment
 
 ## Quick Exec Demo Path
 
-Use this short command path when you want a compact local execution demo with the default `local-dev` profile. It uses an Ollama-provider alias for the native chat wrapper; `openai-compatible` is only for HTTP clients that speak OpenAI-style `/v1` APIs, not for the native `aiplane chat` path.
+Use this short command path when you want a compact local execution demo with the default `local-dev` profile. It uses an Ollama-runnable alias for the native chat wrapper; `openai-compatible` is only for HTTP clients that speak OpenAI-style `/v1` APIs, not for the native `aiplane chat` path.
 
 ```bash
 # Install and validate the CLI/profile.
@@ -49,14 +49,15 @@ conda activate aiplane
 aiplane profiles validate local-dev
 aiplane environment doctor --required-only
 
-# Discover current hardware and choose an Ollama-native chat alias that fits it.
+# Discover current hardware and choose an Ollama-runnable chat alias that fits it.
 aiplane hardware discover --select-closest --dry-run
 aiplane models refresh --provider ollama --query chat --dry-run --limit 5
 aiplane models refresh --provider ollama --query chat --limit 10
-aiplane models list --provider ollama --runtime ollama --role chat --capability 'general_chat>=2' --fits-hardware --enabled-only --sort-by role --limit 5
-# The output includes role_score and role_capabilities; chat is scored from general_chat, reasoning, and tool_use.
+aiplane models list --runtime ollama --role chat --capability 'general_chat>=2' --fits-hardware --enabled-only --max-parameters-b 14 --ram-gb 32 --vram-gb 3 --sort-by role --limit 5
+aiplane models list --runtime ollama --role chat --enabled-only --min-parameters-b 7 --max-parameters-b 14 --sort-by parameters --limit 5
+# The output includes role_score, role_capabilities, and parameter_count_b when it can be inferred.
 # `--sort-by benchmark` is separate and uses saved benchmark results when they exist.
-OLLAMA_CHAT_ALIAS="$(aiplane models list --provider ollama --runtime ollama --role chat --capability 'general_chat>=2' --fits-hardware --enabled-only --sort-by role --limit 1 --name-only)"
+OLLAMA_CHAT_ALIAS="$(aiplane models list --runtime ollama --role chat --capability 'general_chat>=2' --fits-hardware --enabled-only --max-parameters-b 14 --ram-gb 32 --vram-gb 3 --sort-by role --limit 1 --name-only)"
 printf 'ollama_chat=%s\n' "$OLLAMA_CHAT_ALIAS"
 
 # Show the local hardware guardrail before any real pull/start.
@@ -74,15 +75,20 @@ aiplane integrations setup openai-compatible --model "$OLLAMA_CHAT_ALIAS"
 aiplane chat --model "$OLLAMA_CHAT_ALIAS" --dry-run
 aiplane chat --model "$OLLAMA_CHAT_ALIAS"
 
-# One-shot model tasks from the CLI.
+# One-shot model tasks from the CLI. Check runtime readiness before the live call.
+aiplane runtimes status ollama
+aiplane runtimes list-runtime-models ollama
+# Native chat uses `ollama run` and may wait longer during first model load; code tasks use the HTTP API timeout.
 aiplane code write --model "$OLLAMA_CHAT_ALIAS" --task "write a Python function that validates an email address" --dry-run
+aiplane code write --model "$OLLAMA_CHAT_ALIAS" --task "write a Python function that validates an email address" --timeout-seconds 180
 aiplane code analyze --model "$OLLAMA_CHAT_ALIAS" src/aiplane/cli.py --dry-run
 
 # Continue config is a separate export step.
 aiplane integrations export continue --chat "$OLLAMA_CHAT_ALIAS"
 ```
 
-If setup appears to be doing a real install/start/pull, it now reports per-step progress to stderr. The native chat wrapper requires an Ollama-provider alias because it delegates to `ollama run <model-id>`.
+If setup appears to be doing a real install/start/pull, it now reports per-step progress to stderr. The native chat wrapper requires an Ollama-runnable alias because it delegates to `ollama run <model-id>`; Ollama-library aliases and resolvable Hugging Face GGUF aliases can both work.
+Large first-run models can time out while Ollama is loading them; use `aiplane runtimes status ollama`, `aiplane runtimes list-runtime-models ollama`, and a smaller `--runtime ollama` alias for the live recording path when needed.
 
 Key points to say explicitly:
 
@@ -482,8 +488,8 @@ aiplane --profiles-dir /tmp/aiplane-demo-profiles machines discover azure --prof
 Use this checklist when rehearsing the live execution part of the demo on `local-dev` without the disposable profile flags:
 
 ```bash
-# Pick only an Ollama-provider alias for native chat.
-OLLAMA_CHAT_ALIAS="$(aiplane models list --provider ollama --role chat --enabled-only --sort-by role --limit 1 --name-only)"
+# Pick an Ollama-runnable alias for native chat.
+OLLAMA_CHAT_ALIAS="$(aiplane models list --runtime ollama --role chat --enabled-only --max-parameters-b 14 --ram-gb 32 --vram-gb 3 --sort-by role --limit 1 --name-only)"
 printf 'ollama_chat=%s\n' "$OLLAMA_CHAT_ALIAS"
 aiplane models show "$OLLAMA_CHAT_ALIAS"
 
@@ -496,7 +502,10 @@ aiplane chat --model "$OLLAMA_CHAT_ALIAS" --dry-run
 aiplane chat --model "$OLLAMA_CHAT_ALIAS"
 
 # CLI task prompts. Keep dry-run for recording unless the runtime is ready and output timing is rehearsed.
+aiplane runtimes status ollama
+aiplane runtimes list-runtime-models ollama
 aiplane code write --model "$OLLAMA_CHAT_ALIAS" --task "write a Python function that validates an email address" --dry-run
+aiplane code write --model "$OLLAMA_CHAT_ALIAS" --task "write a Python function that validates an email address" --timeout-seconds 180
 aiplane code analyze --model "$OLLAMA_CHAT_ALIAS" src/aiplane/cli.py --dry-run
 
 # Continue export after setup.

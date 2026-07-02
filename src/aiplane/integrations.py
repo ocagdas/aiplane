@@ -360,16 +360,34 @@ class IntegrationManager:
             if not model_status["available"] and runtime_name:
                 pull_key = f"{runtime_name}:{model_name}"
                 if pull_key not in seen_pull:
-                    actions.append(
-                        self._setup_action(
-                            runtime_name,
-                            "pull",
-                            model_name,
-                            dry_run=dry_run,
-                            execute=not dry_run and yes,
-                            reason=model_status["reason"],
+                    pull_check = self._runtime_pull_support(runtime_name, selected)
+                    if pull_check["supported"]:
+                        actions.append(
+                            self._setup_action(
+                                runtime_name,
+                                "pull",
+                                model_name,
+                                dry_run=dry_run,
+                                execute=not dry_run and yes,
+                                reason=model_status["reason"],
+                            )
                         )
-                    )
+                    else:
+                        actions.append(
+                            {
+                                "role": role,
+                                "runtime": runtime_name,
+                                "model": model_name,
+                                "action": "pull",
+                                "status": "skipped",
+                                "reason": pull_check["reason"],
+                                "model_status_reason": model_status["reason"],
+                                "provider": selected.get("provider"),
+                                "source": selected.get("source"),
+                                "runtime_model": selected.get("model"),
+                                "supported_pull_sources": pull_check["supported_sources"],
+                            }
+                        )
                     seen_pull.add(pull_key)
             else:
                 actions.append(
@@ -536,6 +554,42 @@ class IntegrationManager:
             return shutil.which("ollama") is None
         return False
 
+    def _runtime_pull_support(self, runtime: str, selected: dict[str, Any]) -> dict[str, Any]:
+        provider = str(selected.get("provider") or "")
+        source = str(selected.get("source") or provider)
+        runtime_model = str(selected.get("model") or "")
+        supported_sources = {
+            "ollama": ["ollama", "huggingface_gguf"],
+            "vllm": ["huggingface", "nvidia"],
+            "tgi": ["huggingface", "nvidia"],
+            "transformers": ["huggingface", "nvidia"],
+        }
+        if runtime == "llamacpp":
+            if runtime_model.startswith(("http://", "https://")) and runtime_model.lower().endswith(".gguf"):
+                return {"supported": True, "supported_sources": ["direct_gguf_url"]}
+            return {
+                "supported": False,
+                "supported_sources": ["direct_gguf_url"],
+                "reason": (
+                    "llama.cpp setup can only pull direct GGUF URLs; use a direct .gguf URL, "
+                    "preconfigure LLAMACPP_MODEL_PATH, or download the file manually"
+                ),
+            }
+        allowed = supported_sources.get(runtime, [])
+        if source in allowed or provider in allowed:
+            return {"supported": True, "supported_sources": allowed}
+        if runtime in {"localai", "lmstudio"}:
+            return {
+                "supported": False,
+                "supported_sources": [],
+                "reason": f"{runtime} model downloads are manual or runtime-specific in this milestone",
+            }
+        return {
+            "supported": False,
+            "supported_sources": allowed,
+            "reason": f"aiplane does not currently know how to pull source {source!r} through runtime {runtime!r}",
+        }
+
     def _setup_action(
         self,
         runtime: str,
@@ -665,15 +719,35 @@ class IntegrationManager:
     def chat_command(self, model_name: str | None = None) -> list[str]:
         model_name = model_name or self._default_model_name("chat_model", "self_managed_model", "code_model")
         model = self.catalog.get(model_name)
-        provider_name = str(model.get("provider"))
-        if provider_name != "ollama":
+        ollama_model_id = self._ollama_model_id(model)
+        if not ollama_model_id:
+            provider_name = str(model.get("provider") or "unknown")
             runtime = str(model.get("preferred_runtime") or provider_name or "unknown")
+            supported = RuntimeCatalog(self.profile).supported_runtimes(model_name)
             raise ValueError(
-                f"chat wrapper currently supports local Ollama provider aliases only; "
-                f"model {model_name!r} uses provider {provider_name!r} and runtime {runtime!r}. "
-                "Select an alias with `aiplane models list --provider ollama --role chat --name-only`."
+                f"chat wrapper currently supports aliases that can run through local Ollama; "
+                f"model {model_name!r} uses provider {provider_name!r}, preferred runtime {runtime!r}, "
+                f"and supported runtimes {supported}. "
+                "Select an alias with `aiplane models list --runtime ollama --role chat --name-only`."
             )
-        return ["ollama", "run", str(model.get("model"))]
+        return ["ollama", "run", ollama_model_id]
+
+    def _ollama_model_id(self, model: dict[str, Any]) -> str:
+        runtime_catalog = RuntimeCatalog(self.profile)
+        provider = str(model.get("provider") or "")
+        source = runtime_catalog.source_for_model(model)
+        model_id = str(model.get("model") or "")
+        supported = runtime_catalog.compatible_runtimes_for_entry(model, include_gui=True)
+        if provider == "ollama":
+            return model_id
+        if source == "huggingface_gguf" and "ollama" in supported:
+            if model_id.startswith("hf.co/"):
+                return model_id
+            if model_id.startswith(("http://", "https://")):
+                return ""
+            if "/" in model_id:
+                return f"hf.co/{model_id}"
+        return ""
 
     def run_chat(self, model_name: str | None = None, dry_run: bool = False) -> str:
         command = self.chat_command(model_name)

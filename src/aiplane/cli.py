@@ -1367,6 +1367,18 @@ def _main(argv: list[str] | None = None) -> int:
         help="Available VRAM in GB; filters out models whose configured/estimated minimum VRAM exceeds this",
     )
     models_list.add_argument(
+        "--min-parameters-b",
+        type=float,
+        metavar="B",
+        help="Minimum model parameter count in billions, inferred from model ids such as 7b or 40B",
+    )
+    models_list.add_argument(
+        "--max-parameters-b",
+        type=float,
+        metavar="B",
+        help="Maximum model parameter count in billions, inferred from model ids such as 7b or 40B",
+    )
+    models_list.add_argument(
         "--gpu-vendor",
         choices=["generic", "none", "cpu", "nvidia", "amd", "apple", "intel", "mixed"],
         help="Available GPU vendor; filters out models with explicit incompatible vendor requirements",
@@ -1378,9 +1390,9 @@ def _main(argv: list[str] | None = None) -> int:
     )
     models_list.add_argument(
         "--sort-by",
-        choices=["name", "avg", "role", "benchmark", "likes", "downloads", "popularity"],
+        choices=["name", "avg", "role", "benchmark", "likes", "downloads", "popularity", "parameters"],
         default="name",
-        help="Sort rows by entry name, capability score, role score, benchmark score, provider likes, provider downloads, or combined provider popularity",
+        help="Sort rows by entry name, capability score, role score, benchmark score, provider likes, provider downloads, combined provider popularity, or inferred parameter count",
     )
     models_list.add_argument(
         "--limit",
@@ -1647,6 +1659,7 @@ def _main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Print the prompt without calling the provider",
     )
+    code_analyze.add_argument("--timeout-seconds", type=int, help="Override provider request timeout for this code task")
     code_analyze.add_argument("target", help="File path inside the workspace")
     code_complete = code_sub.add_parser(
         "complete",
@@ -1662,6 +1675,7 @@ def _main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Print the prompt without calling the provider",
     )
+    code_complete.add_argument("--timeout-seconds", type=int, help="Override provider request timeout for this code task")
     code_complete.add_argument("target", help="File path inside the workspace")
     code_write = code_sub.add_parser(
         "write",
@@ -1677,6 +1691,7 @@ def _main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Print the prompt without calling the provider",
     )
+    code_write.add_argument("--timeout-seconds", type=int, help="Override provider request timeout for this code task")
 
     integrations_cmd = _command(
         subparsers,
@@ -2367,6 +2382,8 @@ def _main(argv: list[str] | None = None) -> int:
         "status",
         "pull",
         "repull",
+        "remove",
+        "clear",
         "runtime-list",
     ]:
         command_name = "list-runtime-models" if lifecycle_action == "runtime-list" else lifecycle_action
@@ -2395,6 +2412,11 @@ def _main(argv: list[str] | None = None) -> int:
             "--dry-run",
             action="store_true",
             help="Print the helper command and delegated runtime commands without executing changes",
+        )
+        lifecycle.add_argument(
+            "--yes",
+            action="store_true",
+            help="Confirm destructive runtime actions such as remove or clear",
         )
 
     tools_cmd = _command(
@@ -3452,11 +3474,11 @@ def _main(argv: list[str] | None = None) -> int:
         profile = load_profile(effective_profile, workspace, profiles_dir=profiles_dir)
         runner = CodeTaskRunner(profile, AuditLogger(profile))
         if args.code_command == "analyze":
-            result = runner.analyze(args.model, Path(args.target), dry_run=args.dry_run)
+            result = runner.analyze(args.model, Path(args.target), dry_run=args.dry_run, timeout_seconds=args.timeout_seconds)
         elif args.code_command == "complete":
-            result = runner.complete(args.model, Path(args.target), args.line, dry_run=args.dry_run)
+            result = runner.complete(args.model, Path(args.target), args.line, dry_run=args.dry_run, timeout_seconds=args.timeout_seconds)
         else:
-            result = runner.write(args.model, args.task, dry_run=args.dry_run)
+            result = runner.write(args.model, args.task, dry_run=args.dry_run, timeout_seconds=args.timeout_seconds)
         print(result.output)
         return 0
 
@@ -3772,6 +3794,8 @@ def _main(argv: list[str] | None = None) -> int:
             "status",
             "pull",
             "repull",
+            "remove",
+            "clear",
             "list-runtime-models",
         }
         if args.runtimes_command in lifecycle_actions:
@@ -3807,6 +3831,20 @@ def _main(argv: list[str] | None = None) -> int:
                 print(_json(payload, indent=2))
                 return 2
             helper_action = "list" if args.runtimes_command == "list-runtime-models" else args.runtimes_command
+            if args.runtimes_command in {"remove", "clear"} and not args.dry_run and not args.yes:
+                print(
+                    _json(
+                        {
+                            "name": "runtime_destructive_confirmation_required",
+                            "runtime": args.runtime,
+                            "action": args.runtimes_command,
+                            "model": args.model,
+                            "reason": "runtime model deletion requires --yes; use --dry-run to preview",
+                        },
+                        indent=2,
+                    )
+                )
+                return 2
             if args.runtimes_command == "install" and not args.dry_run:
                 prerequisites = catalog.prerequisites(args.runtime)
                 if not prerequisites.get("ok"):
@@ -4017,6 +4055,8 @@ def _model_filter_args(args) -> dict[str, object]:
         "min_downloads": getattr(args, "min_downloads", None),
         "max_min_ram_gb": getattr(args, "ram_gb", None),
         "max_min_vram_gb": getattr(args, "vram_gb", None),
+        "min_parameters_b": getattr(args, "min_parameters_b", None),
+        "max_parameters_b": getattr(args, "max_parameters_b", None),
         "gpu_vendor": getattr(args, "gpu_vendor", None),
         "accelerator_api": getattr(args, "accelerator_api", None),
     }

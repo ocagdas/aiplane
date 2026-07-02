@@ -40,6 +40,8 @@ Actions:
   --action status         Show provider status
   --action pull           Pull provider models when supported
   --action repull         Re-pull models already present in a runtime when discoverable; Ollama supports this directly
+  --action remove         Remove one pulled runtime model where supported; Ollama supports this directly
+  --action clear          Remove all pulled runtime models where supported; Ollama supports this directly
   --action list           List provider models when supported
 
 Options:
@@ -54,6 +56,8 @@ Examples:
   scripts/provider_helper.sh --provider ollama --action install --substrate docker --dry-run
   scripts/provider_helper.sh --provider ollama --action start
   scripts/provider_helper.sh --provider ollama --action pull --model MODEL_ALIAS
+  scripts/provider_helper.sh --provider ollama --action remove --model MODEL_ALIAS --dry-run
+  scripts/provider_helper.sh --provider ollama --action clear --dry-run
   scripts/provider_helper.sh --provider ollama --action repull
   scripts/provider_helper.sh --provider all --action update-installed --dry-run
   scripts/provider_helper.sh --provider openai --action configure
@@ -182,7 +186,7 @@ case "$SUBSTRATE" in
 esac
 
 case "$ACTION" in
-  doctor|configure|install|update|update-installed|start|stop|restart|status|pull|repull|list) ;;
+  doctor|configure|install|update|update-installed|start|stop|restart|status|pull|repull|remove|clear|list) ;;
   *) echo "Unsupported action: $ACTION" >&2; exit 2 ;;
 esac
 
@@ -422,7 +426,11 @@ PYEOF
         start_managed "$provider" "${start_command[@]}"
       fi
       ;;
-    pull|repull)
+    pull|repull|remove|clear)
+      if [[ "$ACTION" == "remove" || "$ACTION" == "clear" ]]; then
+        echo "$provider runtime cache deletion is not automated. Remove files through the runtime/provider cache tooling."
+        return 0
+      fi
       if [[ "$ACTION" == "repull" ]]; then
         echo "$provider cannot discover already downloaded model cache entries reliably. Re-pulling the selected/configured model instead."
       fi
@@ -449,7 +457,7 @@ cloud_action() {
       cloud_doctor "$provider"
       run bash -lc "$(aiplane_cmd) models doctor --profile '$PROFILE'"
       ;;
-    install|update|update-installed|start|stop|restart|pull|repull|list)
+    install|update|update-installed|start|stop|restart|pull|repull|remove|clear|list)
       echo "$provider does not have a local runtime for action '$ACTION'. Use --action configure or --action doctor."
       ;;
   esac
@@ -488,7 +496,7 @@ all_action() {
       scripts/provider_helper.sh --provider ollama --action repull --profile "$PROFILE" --model "$MODEL" $(dry_run_args) || true
       echo "For vLLM/TGI/Transformers, use --provider <runtime> --action pull --model <alias> to refresh a selected Hugging Face snapshot."
       ;;
-    install|start|stop|restart|pull|list)
+    install|start|stop|restart|pull|remove|clear|list)
       echo "Action '$ACTION' with --provider all currently applies only to Ollama. Use a specific runtime for broader control."
       PROVIDER="ollama"
       ollama_action

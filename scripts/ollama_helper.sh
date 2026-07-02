@@ -29,6 +29,8 @@ Actions:
   --action doctor      Run endpoint status and aiplane model diagnostics
   --action pull        Pull one configured model, a raw Ollama model id, or all configured Ollama models
   --action repull      Re-pull models already present in the local Ollama store, or configured models with --model all
+  --action remove      Remove one pulled model from the local Ollama store
+  --action clear       Remove all pulled models from the local Ollama store
   --action list        List local models known to Ollama
 
 Options:
@@ -46,6 +48,8 @@ Examples:
   scripts/ollama_helper.sh --action pull --model MODEL_ALIAS
   scripts/ollama_helper.sh --action pull --model all
   scripts/ollama_helper.sh --action repull
+  scripts/ollama_helper.sh --action remove --model MODEL_ALIAS
+  scripts/ollama_helper.sh --action clear --dry-run
   scripts/ollama_helper.sh --action doctor
 USAGE
 }
@@ -95,11 +99,34 @@ repull_models() {
     return 0
   fi
   if [[ "$DRY_RUN" -eq 1 ]]; then
-    echo "+ ollama list | xargs -r -n1 ollama pull"
+    echo "+ ollama list | awk 'NR > 1 && NF {print \$1}' | xargs -r -n1 ollama pull"
     return 0
   fi
   pulled_model_ids | while read -r model_id; do
     [[ -n "$model_id" ]] && run ollama pull "$model_id"
+  done
+}
+
+remove_model() {
+  if [[ -z "$MODEL" || "$MODEL" == "all" ]]; then
+    echo "remove requires --model with one configured alias or runtime model id; use --action clear for all pulled models" >&2
+    exit 2
+  fi
+  model_id="$(resolve_model_id)"
+  if [[ -z "$model_id" ]]; then
+    echo "Unknown configured model '$MODEL'. Use an Ollama alias, a Hugging Face GGUF alias compatible with Ollama, or a raw id like provider-text-small:0.5b or hf.co/provider/model." >&2
+    exit 1
+  fi
+  run ollama rm "$model_id"
+}
+
+clear_models() {
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    echo "+ ollama list | awk 'NR > 1 && NF {print \$1}' | xargs -r -n1 ollama rm"
+    return 0
+  fi
+  pulled_model_ids | while read -r model_id; do
+    [[ -n "$model_id" ]] && run ollama rm "$model_id"
   done
 }
 
@@ -109,7 +136,7 @@ case "$SUBSTRATE" in
 esac
 
 case "$ACTION" in
-  install|update|start|stop|restart|status|doctor|pull|repull|list) ;;
+  install|update|start|stop|restart|status|doctor|pull|repull|remove|clear|list) ;;
   *) echo "Unsupported action: $ACTION" >&2; exit 2 ;;
 esac
 
@@ -306,15 +333,43 @@ from pathlib import Path
 import sys
 from aiplane.config import load_profile
 from aiplane.model_catalog import ModelCatalog
+
+
+def ollama_pull_id(model):
+    provider = str(model.get("provider") or "")
+    source = str(model.get("source") or provider)
+    model_id = str(model.get("model") or "")
+    supported = [
+        str(value)
+        for value in model.get("supported_runtimes") or model.get("suitable_runtimes") or []
+    ]
+    preferred = str(model.get("preferred_runtime") or "")
+    if preferred and preferred not in supported:
+        supported.insert(0, preferred)
+    if provider == "ollama":
+        return model_id
+    if source == "huggingface_gguf" and "ollama" in supported:
+        if model_id.startswith("hf.co/"):
+            return model_id
+        if model_id.startswith(("http://", "https://")):
+            return ""
+        if "/" in model_id:
+            return f"hf.co/{model_id}"
+    return ""
+
+
 profile = load_profile(sys.argv[1], Path.cwd())
 for name, model in ModelCatalog(profile).models().items():
-    if model.get("provider") == "ollama" and model.get("enabled", True):
-        print(f"{name}	{model.get('model')}")
+    if not model.get("enabled", True):
+        continue
+    model_id = ollama_pull_id(model)
+    if model_id:
+        print(f"{name}	{model_id}")
 PYMODEL
 }
 
 resolve_model_id() {
-  if [[ "$MODEL" == *":"* ]]; then
+  if [[ "$MODEL" == hf.co/* || "$MODEL" == *":"* ]]; then
     printf '%s
 ' "$MODEL"
     return 0
@@ -331,7 +386,7 @@ pull_models() {
   fi
   model_id="$(resolve_model_id)"
   if [[ -z "$model_id" ]]; then
-    echo "Unknown configured model '$MODEL'. Use --model all or a raw Ollama id like provider-text-small:0.5b." >&2
+    echo "Unknown configured model '$MODEL'. Use --model all, an Ollama alias, a Hugging Face GGUF alias compatible with Ollama, or a raw id like provider-text-small:0.5b or hf.co/provider/model." >&2
     exit 1
   fi
   run ollama pull "$model_id"
@@ -351,7 +406,7 @@ repull_models() {
     return 0
   fi
   if [[ "$DRY_RUN" -eq 1 ]]; then
-    echo "+ ollama list | xargs -r -n1 ollama pull"
+    echo "+ ollama list | awk 'NR > 1 && NF {print \$1}' | xargs -r -n1 ollama pull"
     return 0
   fi
   pulled_model_ids | while read -r model_id; do
@@ -389,7 +444,7 @@ if [[ "$SUBSTRATE" == "docker" ]]; then
       else
         model_id="$(resolve_model_id)"
         if [[ -z "$model_id" ]]; then
-          echo "Unknown configured model '$MODEL'. Use --model all or a raw Ollama id like provider-text-small:0.5b." >&2
+          echo "Unknown configured model '$MODEL'. Use --model all, an Ollama alias, a Hugging Face GGUF alias compatible with Ollama, or a raw id like provider-text-small:0.5b or hf.co/provider/model." >&2
           exit 1
         fi
         docker_exec_ollama pull "$model_id"
@@ -406,6 +461,27 @@ if [[ "$SUBSTRATE" == "docker" ]]; then
         [[ -n "$model_id" ]] && docker_exec_ollama pull "$model_id"
       else
         docker_exec_ollama list
+      fi
+      ;;
+    remove)
+      if [[ -z "$MODEL" || "$MODEL" == "all" ]]; then
+        echo "remove requires --model with one configured alias or runtime model id; use --action clear for all pulled models" >&2
+        exit 2
+      fi
+      model_id="$(resolve_model_id)"
+      if [[ -z "$model_id" ]]; then
+        echo "Unknown configured model '$MODEL'. Use an Ollama alias, a Hugging Face GGUF alias compatible with Ollama, or a raw id like provider-text-small:0.5b or hf.co/provider/model." >&2
+        exit 1
+      fi
+      docker_exec_ollama rm "$model_id"
+      ;;
+    clear)
+      if [[ "$DRY_RUN" -eq 1 ]]; then
+        echo "+ docker exec $OLLAMA_DOCKER_CONTAINER ollama list | xargs -r -n1 docker exec $OLLAMA_DOCKER_CONTAINER ollama rm"
+      else
+        docker exec "$OLLAMA_DOCKER_CONTAINER" ollama list | awk 'NR > 1 && NF {print $1}' | while read -r model_id; do
+          [[ -n "$model_id" ]] && docker_exec_ollama rm "$model_id"
+        done
       fi
       ;;
     list)
@@ -439,6 +515,12 @@ else
       ;;
     repull)
       repull_models
+      ;;
+    remove)
+      remove_model
+      ;;
+    clear)
+      clear_models
       ;;
     list)
       list_ollama
