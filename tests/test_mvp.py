@@ -3407,6 +3407,54 @@ class MvpTests(unittest.TestCase):
         with self.assertRaises(PermissionError):
             IntegrationManager(profile).setup("continue", dry_run=False, yes=False)
 
+    def test_integrations_setup_success_omits_captured_output(self) -> None:
+        profile = load_profile("local-dev", Path.cwd())
+        completed = subprocess.CompletedProcess(
+            ["scripts/provider_helper.sh"],
+            0,
+            "+ ollama pull command-r7b\n",
+            "\x1b[?25lpulling manifest\rsuccess\n",
+        )
+        with patch.object(IntegrationManager, "_run_with_progress", return_value=completed):
+            action = IntegrationManager(profile)._setup_action(
+                "ollama",
+                "pull",
+                "local-chat-small",
+                dry_run=False,
+                execute=True,
+                reason="test pull",
+            )
+        self.assertEqual(action["status"], "succeeded")
+        self.assertEqual(action["returncode"], 0)
+        self.assertNotIn("stdout", action)
+        self.assertNotIn("stderr", action)
+        self.assertNotIn("stdout_tail", action)
+        self.assertNotIn("stderr_tail", action)
+
+    def test_integrations_setup_failure_includes_sanitized_output_tail(self) -> None:
+        profile = load_profile("local-dev", Path.cwd())
+        completed = subprocess.CompletedProcess(
+            ["scripts/provider_helper.sh"],
+            1,
+            "+ ollama pull missing-model\n",
+            "\x1b[?25lpulling manifest\r\x1b[31merror: not found\x1b[0m\n",
+        )
+        with patch.object(IntegrationManager, "_run_with_progress", return_value=completed):
+            action = IntegrationManager(profile)._setup_action(
+                "ollama",
+                "pull",
+                "local-chat-small",
+                dry_run=False,
+                execute=True,
+                reason="test pull",
+            )
+        self.assertEqual(action["status"], "failed")
+        self.assertEqual(action["returncode"], 1)
+        self.assertNotIn("stdout", action)
+        self.assertNotIn("stderr", action)
+        self.assertEqual(action["stdout_tail"], ["+ ollama pull missing-model"])
+        self.assertEqual(action["stderr_tail"], ["pulling manifest", "error: not found"])
+
     def test_integrations_plan_and_setup_cli(self) -> None:
         stdout = StringIO()
         with redirect_stdout(stdout):
