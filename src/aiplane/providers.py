@@ -14,6 +14,7 @@ from .config import dump_yaml, parse_yaml
 from .model_catalog import ModelCatalog, ModelStatus, model_source
 from .models import Profile
 from .secrets import CredentialStore
+from .runtime_catalog import PROVIDER_ENDPOINT_DEFAULTS
 
 
 DEFAULT_PROVIDER_MODEL_LIMIT = 500
@@ -21,6 +22,25 @@ DEFAULT_MODEL_PROVIDERS_FILE = "model-providers.yaml"
 USER_MODEL_PROVIDERS_FILE = "model-providers.user.yaml"
 LEGACY_DEFAULT_SOURCE_PROVIDERS_FILE = "source-providers.yaml"
 LEGACY_USER_SOURCE_PROVIDERS_FILE = "source-providers.user.yaml"
+
+SUPPORTED_CATALOG_ADAPTERS = {
+    "profile_catalog",
+    "huggingface",
+    "huggingface_gguf",
+    "ollama",
+    "civitai",
+    "azure_openai",
+    "elevenlabs",
+}
+SUPPORTED_ENDPOINT_FAMILIES = {
+    "openai",
+    "custom_openai_compatible",
+    "anthropic",
+    "azure_openai",
+    "ollama_cloud",
+    "azure_speech",
+    "elevenlabs",
+}
 
 
 @dataclass(frozen=True)
@@ -50,17 +70,21 @@ class ProviderRegistry:
         runtimes: list[str] | None = None,
         group_by: str | None = None,
         include_empty: bool = True,
-        include_disabled: bool = False,
+        status: str = "all",
     ) -> list[dict[str, Any]] | dict[str, Any]:
+        if status not in {"enabled", "disabled", "all"}:
+            raise ValueError("provider status must be enabled, disabled, or all")
         runtime_filter = {str(value) for value in runtimes or [] if value}
         rows = []
         catalog_by_provider: dict[str, list[dict[str, Any]]] = {}
         for row in self.catalog.list():
             catalog_by_provider.setdefault(str(row.get("provider") or ""), []).append(row)
-        for name, source in self.model_providers().items():
-            if source.get("removed") and not include_disabled:
+        for name, source in self.model_providers(include_removed=True).items():
+            removed = bool(source.get("removed"))
+            enabled = bool(source.get("enabled", True)) and not removed
+            if status == "enabled" and not enabled:
                 continue
-            if source.get("enabled") is False and not include_disabled:
+            if status == "disabled" and enabled:
                 continue
             catalog_models = catalog_by_provider.get(name, [])
             if not catalog_models and not include_empty:
@@ -68,9 +92,16 @@ class ProviderRegistry:
             row = {
                 "name": name,
                 "description": source.get("description"),
+                "ownership": _provider_ownership(source),
                 "typical_runtimes": source.get("typical_runtimes", []),
-                "online_adapter": source.get("online_adapter"),
-                "enabled": bool(source.get("enabled", True)),
+                "endpoint_family": source.get("endpoint_family"),
+                "catalog_adapter": _provider_catalog_adapter(source),
+                "auth": source.get("auth", {"required": False, "method": "none"}),
+                "credential_ref": source.get("credential_ref"),
+                "api_key_env": source.get("api_key_env"),
+                "endpoint": source.get("endpoint"),
+                "enabled": enabled,
+                "removed": removed,
                 "profile_models_count": len(catalog_models),
                 "has_profile_catalog_entries": bool(catalog_models),
             }
@@ -87,11 +118,57 @@ class ProviderRegistry:
         if name not in providers or providers[name].get("removed"):
             raise ValueError(f"unknown catalog provider: {name}")
         catalog_models = [row for row in self.catalog.list() if row.get("provider") == name]
+        provider = providers[name]
         return {
             "name": name,
-            **providers[name],
+            **provider,
+            "ownership": _provider_ownership(provider),
             "profile_models_count": len(catalog_models),
             "profile_models": catalog_models,
+        }
+
+    def endpoint_families(self) -> dict[str, Any]:
+        rows = []
+        for name, provider in sorted(PROVIDER_ENDPOINT_DEFAULTS.items()):
+            if provider.get("ownership") != "managed_service" or name not in SUPPORTED_ENDPOINT_FAMILIES:
+                continue
+            rows.append(
+                {
+                    "name": name,
+                    "protocol": provider.get("protocol"),
+                    "endpoint": provider.get("endpoint") or None,
+                    "api_key_env": provider.get("api_key_env"),
+                    "access_kind": (provider.get("access") or {}).get("kind"),
+                    "notes": provider.get("notes"),
+                }
+            )
+        rows.append(
+            {
+                "name": "custom_openai_compatible",
+                "protocol": "openai_compatible",
+                "endpoint": None,
+                "api_key_env": None,
+                "access_kind": "hosted_api",
+                "notes": "Use for a provider or gateway that implements OpenAI-compatible /v1/models and inference routes.",
+            }
+        )
+        adapter_notes = {
+            "profile_catalog": "No live catalog API. Use manually curated profile/discovered entries.",
+            "huggingface": "Hugging Face Hub model API, optionally scoped by author.",
+            "huggingface_gguf": "Hugging Face Hub search filtered for GGUF-style artifacts.",
+            "ollama": "Ollama model catalog adapter.",
+            "civitai": "Civitai model catalog adapter.",
+            "azure_openai": "Azure OpenAI deployments API; requires endpoint and credentials.",
+            "elevenlabs": "ElevenLabs voices API; requires credentials.",
+        }
+        return {
+            "name": "provider_types",
+            "endpoint_families": sorted(rows, key=lambda row: str(row["name"])),
+            "catalog_adapters": [
+                {"name": name, "requires_code": False, "notes": adapter_notes[name]}
+                for name in sorted(SUPPORTED_CATALOG_ADAPTERS)
+            ],
+            "unsupported_provider_api_note": "If a provider does not match one of these endpoint families/catalog adapters, add code for a new adapter before enabling live discovery or tests.",
         }
 
     def set_enabled(self, name: str, enabled: bool) -> dict[str, Any]:
@@ -126,17 +203,52 @@ class ProviderRegistry:
         name: str,
         description: str = "",
         typical_runtimes: list[str] | None = None,
-        online_adapter: str | None = None,
+        catalog_adapter: str | None = None,
         enabled: bool = True,
+        ownership: str | None = None,
+        endpoint_family: str | None = None,
+        endpoint: str | None = None,
+        credential_ref: str | None = None,
+        api_key_env: str | None = None,
+        auth_method: str = "none",
+        requires_credentials: bool = False,
     ) -> dict[str, Any]:
         _validate_provider_name(name)
+        runtimes = [str(value) for value in typical_runtimes or [] if value]
+        resolved_ownership = ownership or ("managed_service" if endpoint_family else "self_managed")
+        if resolved_ownership not in {"self_managed", "managed_service"}:
+            raise ValueError("provider ownership must be self_managed or managed_service")
+        if resolved_ownership == "managed_service" and runtimes:
+            raise ValueError("managed-service providers use --endpoint-family, not --runtime")
+        if resolved_ownership == "self_managed" and endpoint_family:
+            raise ValueError("self-managed providers use --runtime, not --endpoint-family")
+        if endpoint_family and endpoint_family not in SUPPORTED_ENDPOINT_FAMILIES:
+            raise ValueError("unsupported endpoint family; run providers endpoint-types to see supported API families")
+        resolved_catalog_adapter = catalog_adapter or "profile_catalog"
+        if resolved_catalog_adapter not in SUPPORTED_CATALOG_ADAPTERS:
+            raise ValueError("unsupported catalog adapter; use one of: " + ", ".join(sorted(SUPPORTED_CATALOG_ADAPTERS)))
+        if auth_method not in {"none", "api_key", "bearer", "oauth2", "custom"}:
+            raise ValueError("provider auth method must be none, api_key, bearer, oauth2, or custom")
+        if auth_method != "none":
+            requires_credentials = True
         config = self._user_source_provider_config()
-        config[name] = {
+        row: dict[str, Any] = {
+            "ownership": resolved_ownership,
             "description": description or f"User-defined model provider {name}",
-            "typical_runtimes": typical_runtimes or [],
-            "online_adapter": online_adapter or "profile_catalog",
+            "typical_runtimes": runtimes,
+            "catalog_adapter": resolved_catalog_adapter,
+            "auth": {"required": bool(requires_credentials), "method": auth_method},
             "enabled": enabled,
         }
+        if endpoint_family:
+            row["endpoint_family"] = endpoint_family
+        if endpoint:
+            row["endpoint"] = endpoint
+        if credential_ref:
+            row["credential_ref"] = credential_ref
+        if api_key_env:
+            row["api_key_env"] = api_key_env
+        config[name] = row
         path = self._write_user_source_provider_config(config)
         return {"name": name, **config[name], "path": str(path)}
 
@@ -161,6 +273,41 @@ class ProviderRegistry:
             "name": "model_provider_defaults",
             "path": str(path),
             "providers": sorted(providers),
+        }
+
+    def update_defaults(self) -> dict[str, Any]:
+        path = self.profile.root / DEFAULT_MODEL_PROVIDERS_FILE
+        existing = (
+            _provider_mapping(parse_yaml(path.read_text(encoding="utf-8")), origin="default")
+            if path.exists()
+            else {}
+        )
+        providers = self.default_model_providers()
+        preserved_enabled = []
+        added = []
+        updated = []
+        for name, provider in providers.items():
+            previous = existing.get(name, {})
+            if "enabled" in previous:
+                provider["enabled"] = bool(previous["enabled"])
+                preserved_enabled.append(name)
+            if name in existing:
+                updated.append(name)
+            else:
+                added.append(name)
+        path.write_text(dump_yaml(providers), encoding="utf-8")
+        return {
+            "name": "model_provider_defaults_update",
+            "path": str(path),
+            "providers": sorted(providers),
+            "added": sorted(added),
+            "updated": sorted(updated),
+            "preserved_enabled": sorted(preserved_enabled),
+            "notes": [
+                "Provider properties were refreshed from built-in defaults.",
+                "Existing enabled/disabled values in model-providers.yaml were preserved.",
+                "User overrides in model-providers.user.yaml were not modified.",
+            ],
         }
 
     def clear_config(self, scope: str) -> dict[str, Any]:
@@ -207,7 +354,7 @@ class ProviderRegistry:
     def default_model_providers(self) -> dict[str, dict[str, Any]]:
         from .runtime_catalog import SOURCE_DEFINITIONS
 
-        return {name: {**value, "enabled": True, "origin": "default"} for name, value in SOURCE_DEFINITIONS.items()}
+        return {name: {**value, "enabled": bool(value.get("enabled", True)), "origin": "default"} for name, value in SOURCE_DEFINITIONS.items()}
 
     def _default_source_provider_config(self) -> dict[str, Any]:
         path = self.profile.root / DEFAULT_MODEL_PROVIDERS_FILE
@@ -251,19 +398,27 @@ class ProviderRegistry:
         group_by: str,
         key_filter: set[str] | None = None,
     ) -> dict[str, Any]:
-        if group_by != "runtime":
-            raise ValueError("catalog providers can only be grouped by runtime")
+        if group_by not in {"runtime", "ownership"}:
+            raise ValueError("catalog providers can only be grouped by runtime or ownership")
         groups: dict[str, list[dict[str, Any]]] = {}
         for row in rows:
-            keys = [str(value) for value in row.get("typical_runtimes") or ["none"]]
-            if key_filter:
-                keys = [key for key in keys if key in key_filter]
+            if group_by == "ownership":
+                keys = [str(row.get("ownership") or "unknown")]
+            else:
+                keys = [str(value) for value in row.get("typical_runtimes") or ["none"]]
+                if key_filter:
+                    keys = [key for key in keys if key in key_filter]
             for key in keys:
                 groups.setdefault(key, []).append(row)
+        if group_by == "ownership":
+            ordered_keys = [key for key in ["self_managed", "managed_service"] if key in groups]
+            ordered_keys.extend(sorted(key for key in groups if key not in set(ordered_keys)))
+        else:
+            ordered_keys = sorted(groups)
         return {
             "name": "providers",
             "group_by": group_by,
-            "groups": {key: sorted(value, key=lambda item: str(item["name"])) for key, value in sorted(groups.items())},
+            "groups": {key: sorted(groups[key], key=lambda item: str(item["name"])) for key in ordered_keys},
         }
 
     def doctor(self, name: str | None = None) -> list[ModelStatus]:
@@ -279,7 +434,7 @@ class ProviderRegistry:
         self, name: str, credential_ref: str | None = None, timeout: int | None = None
     ) -> dict[str, Any]:
         providers = self.model_providers(include_removed=True)
-        provider_config = self.catalog.providers().get(name, {})
+        provider_config = {**providers.get(name, {}), **self.catalog.providers().get(name, {})}
         if name not in providers and not provider_config:
             raise ValueError(f"unknown provider: {name}")
         if providers.get(name, {}).get("removed"):
@@ -360,8 +515,9 @@ class ProviderRegistry:
                     result["reason"] = "unexpected ElevenLabs voices response"
                 return result
 
+            endpoint_family = str(provider_config.get("endpoint_family") or "")
             protocol = str(provider_config.get("protocol") or providers.get(name, {}).get("protocol") or "")
-            if name == "openai" or "openai_compatible" in protocol or endpoint.endswith("/v1"):
+            if name == "openai" or endpoint_family in {"openai", "custom_openai_compatible"} or "openai_compatible" in protocol or endpoint.endswith("/v1"):
                 endpoint = endpoint or "https://api.openai.com/v1"
                 url = f"{endpoint}/models"
                 payload = _json_get(
@@ -432,11 +588,23 @@ class ProviderRegistry:
         query: str | None = None,
         limit: int = DEFAULT_PROVIDER_MODEL_LIMIT,
     ) -> ProviderModelsResult | None:
-        adapter = str(self.model_providers().get(name, {}).get("online_adapter") or name)
+        provider_config = self.model_providers().get(name, {})
+        adapter = str(_provider_catalog_adapter(provider_config) or name)
         if adapter == "huggingface" or name == "huggingface":
-            return self._huggingface_models(query=query, limit=limit)
+            return self._huggingface_models(
+                query=query,
+                limit=limit,
+                provider=name,
+                author=provider_config.get("huggingface_author"),
+            )
         if adapter == "huggingface_gguf" or name == "huggingface_gguf":
-            return self._huggingface_models(query=query, limit=limit, gguf=True)
+            return self._huggingface_models(
+                query=query,
+                limit=limit,
+                gguf=True,
+                provider=name,
+                author=provider_config.get("huggingface_author"),
+            )
         if adapter == "civitai" or name == "civitai":
             return self._civitai_models(query=query, limit=limit)
         if adapter == "ollama" or name == "ollama":
@@ -575,6 +743,8 @@ class ProviderRegistry:
         query: str | None = None,
         limit: int = DEFAULT_PROVIDER_MODEL_LIMIT,
         gguf: bool = False,
+        provider: str | None = None,
+        author: object | None = None,
     ) -> ProviderModelsResult:
         params: dict[str, str | int] = {
             "limit": max(1, min(int(limit), DEFAULT_PROVIDER_MODEL_LIMIT)),
@@ -583,6 +753,8 @@ class ProviderRegistry:
         }
         if query:
             params["search"] = query
+        if author:
+            params["author"] = str(author)
         if gguf:
             search = str(params.get("search") or "")
             if "gguf" not in search.lower():
@@ -613,10 +785,10 @@ class ProviderRegistry:
                     ]
                     if key in item
                 }
-        provider = "huggingface_gguf" if gguf else "huggingface"
+        result_provider = provider or ("huggingface_gguf" if gguf else "huggingface")
         unique_ids = sorted(dict.fromkeys(ids))
         return ProviderModelsResult(
-            provider,
+            result_provider,
             "source_api",
             unique_ids,
             f"queried Hugging Face Hub API: {url}",
@@ -724,6 +896,22 @@ def _text_get(
         return response.read().decode("utf-8", errors="replace")
 
 
+
+def _provider_ownership(provider: dict[str, Any]) -> str:
+    if provider.get("ownership"):
+        return str(provider.get("ownership"))
+    if provider.get("endpoint_family"):
+        return "managed_service"
+    runtimes = {str(value) for value in provider.get("typical_runtimes", []) if value}
+    managed = {"openai", "anthropic", "azure_openai", "ollama_cloud", "azure_speech", "elevenlabs"}
+    return "managed_service" if runtimes and runtimes.issubset(managed) else "self_managed"
+
+
+def _provider_catalog_adapter(provider: dict[str, Any]) -> str | None:
+    value = provider.get("catalog_adapter") or provider.get("online_adapter")
+    return str(value) if value else None
+
+
 def _provider_mapping(data: dict[str, Any], origin: str, keep_origin: bool = True) -> dict[str, Any]:
     if isinstance(data.get("providers"), dict):
         data = data["providers"]
@@ -731,6 +919,8 @@ def _provider_mapping(data: dict[str, Any], origin: str, keep_origin: bool = Tru
     for name, value in data.items():
         if isinstance(value, dict):
             row = dict(value)
+            if "catalog_adapter" not in row and "online_adapter" in row:
+                row["catalog_adapter"] = row.pop("online_adapter")
             if keep_origin:
                 row.setdefault("origin", origin)
             result[str(name)] = row

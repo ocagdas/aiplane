@@ -34,19 +34,19 @@ High-level implemented areas:
 
 - profiles, local config, ignored credential references, provider credential tests, and validation;
 - environment planning/doctor checks for system Python, `venv`, Conda, and Docker, with setup helpers that bootstrap ignored `profiles/local-dev` before profile-aware checks;
-- provider/model catalogs, structural shipped profile config, ignored discovery cache review, direct profile-owned model add/clone, runtime/source mapping, local model defaults, and benchmark smoke checks;
+- provider/model catalogs including NVIDIA Hugging Face-scoped open model discovery, structural shipped profile config, ignored discovery cache review, direct profile-owned model add/clone, runtime/source mapping, local model defaults, and benchmark smoke checks;
 - hardware discovery, machine inventory, Azure SKU discovery/import, and stack planning;
 - tool doctors/plans/exports for infrastructure, quality, and automation tools;
 - integration exports for Continue, Cline, Zed, Aider, OpenAI-compatible clients, and MCP client snippets;
 - starter agent app planning/export;
-- MCP stdio server with read tools and narrow audited writes;
+- MCP stdio server with read tools, provider ownership/status grouping, and narrow audited writes;
 - policy, approvals, secret redaction, and audit foundations.
 
 Known in-progress areas:
 
 - richer managed-provider discovery and provider-specific live credential tests;
 - managed-service endpoint binding for stacks/orchestrator exports without mixing those models into self-managed runtime-fit checks;
-- agent-to-agent role metadata and config export for established orchestrator frameworks;
+- agent-to-agent role metadata, config export for established orchestrator frameworks, and a planned `aiplane` agent skill package that documents safe assistant workflows and MCP usage;
 - remote execution and Docker-aware stack lifecycle;
 - provider-specific IaC/playbook/template hardening;
 - broader deployment apply paths;
@@ -103,7 +103,7 @@ The roadmap milestones are now grouped into three bands:
 
 The immediate pre-merge activity is manual demo validation. Rehearse the disposable-profile demo path from clean setup through provider discovery, filtered model selection, Continue export, MCP export, stack dry-runs, and Azure discovery. Keep the run inspect-first and verify that output is concise and free of secrets, raw account identifiers, subscription IDs, tenant IDs, and private local notes.
 
-Provider discovery and model import remain the first hardening milestone after the demo-readiness pass. Work now includes structural shipped profile templates, ignored provider/source override YAML, built-in runtime/provider endpoint defaults, discovery-derived media roles, ElevenLabs managed TTS voice discovery, discovery cache clearing by default, direct `models add`/`models clone`, and `next_steps` guidance from provider discovery to discovered entries to reviewed local promotion.
+Provider discovery and model import remain the first hardening milestone after the demo-readiness pass. Work now includes structural shipped profile templates, NVIDIA Hugging Face-scoped provider discovery, provider default refresh with enabled-flag preservation, ignored provider/source override YAML, built-in runtime/provider endpoint defaults, discovery-derived media roles, ElevenLabs managed TTS voice discovery, discovery cache clearing by default, direct `models add`/`models clone`, and `next_steps` guidance from provider discovery to discovered entries to reviewed local promotion.
 
 Shipped profile templates now keep `models.yaml` limited to structural defaults and profile-owned model entries; provider/source definitions live in model-provider config and runtime/provider endpoints come from conventional built-in defaults unless locally overridden. Ollama runtime helpers now support both the default native path and `--substrate docker` using the official `ollama/ollama` image. `profiles bootstrap-local` can create/validate the default editable profile and optionally populate ignored `models.discovered.yaml`. `models refresh` repopulates ignored `models.discovered.yaml` from configured providers, user provider extensions live in ignored `model-providers.user.yaml`, `models add` writes deliberate local entries to `models.yaml` from discovered aliases or discovered provider/model matches, `models clone` writes second local entries, and `models clear-cache` includes profile-owned review entries by default; use `--keep-curated` to preserve profile-owned entries and clear only discovered refresh/import entries. `models list --group-by provider-kind` now nests aliases by ownership and provider/source, while runtime grouping places managed-service aliases under `no_runtime` and ignores runtime-fit fields on those aliases instead of treating provider names or `preferred_runtime` values as local runtime candidates. Managed-service endpoint metadata should still remain available to stacks, orchestrator exports, and future agent-to-agent role plans where the framework calls a hosted endpoint directly.
 

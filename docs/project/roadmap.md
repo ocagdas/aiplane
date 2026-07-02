@@ -28,9 +28,9 @@ Required outcomes:
 - Ignored local credential references with redacted credential inspection commands and provider connection tests for selected managed endpoints.
 - Environment planning and doctor checks for system Python, `venv`, Conda, and Docker execution mode; setup helpers install the CLI and bootstrap ignored `profiles/local-dev` from the shipped template before profile-aware checks.
 - External tool catalog, doctors, guarded install previews, non-mutating plans, and starter exports for Azure CLI, OpenTofu/Terraform, Pulumi, Vagrant, Packer, Docker/Compose, Dev Container CLI, kubectl, Helm, OpenSSH, Ansible, and benchmark helpers.
-- Provider/model catalog foundations for Ollama, Ollama Cloud placeholder, OpenAI-compatible runtimes, OpenAI, Anthropic, Azure OpenAI, ElevenLabs TTS, Hugging Face, GGUF/local files, and user-defined discovery providers. Shipped profile templates keep `models.yaml` structural, runtime/provider endpoint values live as conventional built-in defaults with local override support, and model grouping separates managed-service providers from self-managed runtime sources while preserving managed endpoint metadata for exports, stacks, and orchestrator plans.
+- Provider/model catalog foundations for Ollama, Ollama Cloud placeholder, OpenAI-compatible runtimes, OpenAI, Anthropic, Azure OpenAI, ElevenLabs TTS, Hugging Face, NVIDIA Hugging Face-scoped open model repos, GGUF/local files, and user-defined discovery providers. Shipped profile templates keep `models.yaml` structural, runtime/provider endpoint values live as conventional built-in defaults with local override support, and model grouping separates managed-service providers from self-managed runtime sources while preserving managed endpoint metadata for exports, stacks, and orchestrator plans.
 - Ignored discovered provider/model cache flow plus `profiles bootstrap-local`, `models add`, `models clone`, and `models promote` as reviewed paths into editable local profile YAML; `models clear-cache` clears discovered entries and profile-owned review entries by default so discovery can be repopulated from providers.
-- Runtime/source mapping for Ollama, Hugging Face, GGUF/local files, vLLM, TGI, Transformers, llama.cpp, LocalAI, LM Studio, and selected media runtimes.
+- Runtime/source mapping for Ollama, Hugging Face, NVIDIA Hugging Face-style repos, GGUF/local files, vLLM, TGI, Transformers, llama.cpp, LocalAI, LM Studio, and selected media runtimes.
 - Runtime helper delegation through `aiplane runtimes ...` where supported by `scripts/provider_helper.sh`, including Ollama native and Docker substrate paths plus vLLM/TGI-style runtimes.
 - Hardware discovery, active hardware selection, machine schema/templates, model-fit checks, and hardware-aware recommendations.
 - Machine inventory commands for import/list/show/validate/recommend, Azure SKU discovery/import, cache list/clear, Azure status, and remote profiling plans.
@@ -50,7 +50,7 @@ Required outcomes:
 
 ## In Progress
 
-- Provider discovery: Ollama, Hugging Face, Hugging Face GGUF, OpenAI-compatible `/v1/models`, Azure OpenAI deployment paths, structural shipped profile templates, ignored user provider overrides, and discovery-derived AI media roles exist; richer managed-provider and specialist media catalog discovery needs hardening.
+- Provider discovery: Ollama, Hugging Face, NVIDIA Hugging Face-scoped repos, Hugging Face GGUF, OpenAI-compatible `/v1/models`, Azure OpenAI deployment paths, structural shipped profile templates, profile-local provider default refresh with enabled-flag preservation, ignored user provider overrides, and discovery-derived AI media roles exist; richer managed-provider and specialist media catalog discovery needs hardening.
 - Runtime and stack lifecycle: same-host/local helpers exist; remote execution, endpoint authentication, GPU mapping, service management, and production tuning remain early.
 - Tool integrations: doctors, install previews, plans, and starter exports exist; provider-specific modules/playbooks/templates remain planned.
 - Azure deployment: planning, doctor checks, and narrow VM apply exist; broader AKS/cloud apply needs hardening before expansion.
@@ -70,7 +70,7 @@ Required outcomes:
 
 2. **Release hygiene and CI gate** - Current
    - Keep `scripts/format.sh check`, `python -m ruff check src tests`, and the pytest suite passing in separate CI jobs.
-   - Keep README, user docs, command coverage, roadmap, handoff notes, and tests aligned with any behavior changes.
+   - Keep README, user docs, command coverage, roadmap, handoff notes, MCP coverage, planned/implemented agent skills, and tests aligned during pre-PR cleanup and recurring MCP/skills synchronization checkpoints.
    - Keep ignored/generated state out of git, especially credentials, discovered model caches, local strategy notes, logs, PID files, and demo artifacts.
    - Treat secret scans and GitHub history cleanup verification as merge blockers.
 
@@ -112,6 +112,9 @@ Required outcomes:
 8. **IDE, MCP, and agent-tool integrations** - Planned
    - Maintain Continue, Cline, Zed, Aider, generic OpenAI-compatible, and MCP config exports as config-level integrations.
    - Keep model endpoint export separate from MCP tool export.
+   - Add recurring MCP coverage checkpoints, including pre-PR cleanup: compare current CLI/options with MCP tools, expose read/planning/export features when useful to agents, and keep risky mutation CLI-only or deferred until guardrails and audit semantics are clear. These checkpoints are periodic, not required after every feature or at every milestone.
+   - Add a versioned `aiplane` agent skill target for Codex-style and other skill-capable assistants. The skill should document safe workflows, command selection, MCP usage, provider/model/runtime concepts, docs/test maintenance, and release-boundary checks.
+   - Keep skills distinct from MCP: skills are assistant instructions and workflow guidance; MCP is the live callable tool surface.
    - Add planned agent-to-agent coordination support as profile/stack/orchestrator metadata: roles, model entries, endpoints, tool policies, approvals, and audit labels for frameworks such as LangGraph, CrewAI, AutoGen, Semantic Kernel, and OpenHands.
    - Keep agent-to-agent work focused on setup, policy, export, and repeatability; do not turn `aiplane` into the autonomous agent runner.
    - Research deeper IDE/tool integrations before adding brittle custom paths.

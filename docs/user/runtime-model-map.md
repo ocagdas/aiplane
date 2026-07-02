@@ -109,7 +109,7 @@ Lifecycle commands:
 - `install`: installs the runtime where supported. Examples: pip install for `vllm`/`transformers`, Docker image pull for `tgi`/`localai`, Ollama official installer for `ollama`. Real installs run a prerequisites preflight first; if required host tools are missing, `aiplane` prints the missing tools and Ubuntu/Debian package hints instead of delegating to the helper.
 - `update`: updates one runtime where supported. Usually pip upgrade, Docker image pull, or the Ollama installer update path.
 - `update-installed`: intended with runtime `all`; updates helper-managed runtimes where `aiplane` has an update path. Use `--dry-run` first.
-- `pull`: downloads model files where the runtime has a meaningful download path. Ollama uses `ollama pull`; vLLM/TGI/Transformers use Hugging Face snapshot download; llama.cpp can download a direct GGUF URL; LocalAI is model-file/config based.
+- `pull`: downloads model files where the runtime has a meaningful download path. Ollama uses `ollama pull`; vLLM/TGI/Transformers use Hugging Face snapshot download; llama.cpp can download a direct GGUF URL; LocalAI is model-file/config based. Managed-service providers such as OpenAI, Anthropic, Azure OpenAI, Ollama Cloud, Azure Speech, and ElevenLabs do not support local model pull; configure credentials and test the endpoint instead. Managed-service aliases cannot be bundled with, assigned to, installed for, or started as local runtimes.
 - `repull`: refreshes models already present in a runtime when the runtime can list them. Ollama supports this directly by reading `ollama list` and re-running `ollama pull` for each listed model. Other runtimes generally cannot reliably enumerate local caches, so `repull` refreshes the selected/configured model when possible.
 - `start`: starts a helper-managed background process where supported. PID/log files are written under `.aiplane/runtimes/`.
 - `stop`: stops a helper-managed background process.
@@ -149,9 +149,10 @@ list-runtime-models <runtime>`. For Ollama, runtime inventory comes from the
 local `/api/tags` endpoint and means "models already pulled here", not "every
 model in the public Ollama library".
 
-Online source-catalog querying currently exists for Hugging Face Hub, Hugging
-Face GGUF searches, and Ollama Library. Other model providers fall back to profile
-catalog entries until dedicated adapters are added. Use `--limit` for the default
+Online source-catalog querying currently exists for Hugging Face Hub, NVIDIA
+open model repos on Hugging Face, Hugging Face GGUF searches, and Ollama Library.
+Other model providers fall back to profile catalog entries until dedicated adapters
+are added. Use `--limit` for the default
 per-provider import window and repeated `--provider-limit PROVIDER=COUNT` for
 provider-specific overrides.
 
@@ -298,7 +299,7 @@ Helper-managed background processes write PID and log files under:
 There is value in supporting native, `venv`, Conda, and Docker installation modes, but they fit different runtimes:
 
 - **Native install**: best for Ollama, system services, GPU drivers, Docker, and host tools such as `llama-server` when you want direct access to host CPU/GPU devices.
-- **venv**: good for Python runtimes such as vLLM and Transformers when you want isolation from system Python without Conda.
+- **venv**: good for Python runtimes such as vLLM and Transformers when you want isolation from system Python without Conda. This is also the common path for NVIDIA Hugging Face-style models when using vLLM or direct Transformers scripts.
 - **Conda**: useful for GPU/PyTorch/CUDA stacks where Conda packages solve binary compatibility more predictably on a workstation.
 - **Docker**: best for repeatable runtime servers such as TGI, LocalAI, vLLM containers, and shared/cloud VM deployments. Docker is also the cleanest route to package a working setup for reuse.
 

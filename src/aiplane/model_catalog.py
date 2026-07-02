@@ -1105,6 +1105,16 @@ class ModelCatalog:
         raise ValueError(f"execution is not wired for runtime/provider: {provider_name}")
 
     def _runtime_for_model(self, name: str, model: dict[str, Any]) -> str:
+        provider_name = str(model.get("provider") or "")
+        provider = self.providers().get(provider_name, {})
+        if ownership_for_model(model, provider) == "managed_service":
+            runtime_fields = [field for field in ["preferred_runtime", "supported_runtimes"] if model.get(field)]
+            if runtime_fields:
+                raise ValueError(
+                    f"managed-service model {name!r} cannot define local runtime fields: {', '.join(runtime_fields)}"
+                )
+            return provider_name
+
         from .runtime_catalog import RuntimeCatalog
 
         runtime_catalog = RuntimeCatalog(self.profile)

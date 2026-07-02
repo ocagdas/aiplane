@@ -96,6 +96,18 @@ conda_env_exists() {
   conda env list | awk 'NF && $1 !~ /^#/ {print $1}' | grep -Fxq "$CONDA_ENV"
 }
 
+ensure_conda_python() {
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    return 0
+  fi
+  if conda run -n "$CONDA_ENV" python --version >/dev/null 2>&1; then
+    return 0
+  fi
+  echo "Conda environment exists but does not contain Python: $CONDA_ENV" >&2
+  echo "Installing python=3.13 into the existing Conda environment." >&2
+  run conda install -n "$CONDA_ENV" python=3.13 -y || return $?
+}
+
 write_conda_activation_helper() {
   mkdir -p "$PROJECT_ROOT/.aiplane"
   local helper="$PROJECT_ROOT/.aiplane/activate-conda-$CONDA_ENV.sh"
@@ -282,6 +294,7 @@ install_conda() {
     echo "Check with: conda env list" >&2
     return 1
   fi
+  ensure_conda_python || return $?
   if [[ "$UPDATE_PIP" -eq 1 ]]; then
     run conda run -n "$CONDA_ENV" python -m pip install --upgrade pip || return $?
   fi
@@ -425,10 +438,11 @@ activation_hint() {
         echo "Activated Conda environment: $CONDA_ENV"
       else
         echo "Conda environment $CONDA_ENV is installed, but this script was executed, not sourced."
-        echo "A child script cannot activate Conda in your parent shell. Practical options:"
-        echo "  source scripts/setup_env.sh --mode conda --conda-env $CONDA_ENV --action install --install-mode $INSTALL_MODE"
+        echo "A child script cannot activate Conda in your parent shell. Activate it now with one of:"
         echo "  source .aiplane/activate-conda-$CONDA_ENV.sh"
         echo "  conda activate $CONDA_ENV"
+        echo "Next time, you can source the installer if you want activation to persist automatically:"
+        echo "  source scripts/setup_env.sh --mode conda --conda-env $CONDA_ENV --action install --install-mode $INSTALL_MODE"
         echo "Verify environments with:"
         echo "  conda env list"
       fi

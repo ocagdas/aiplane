@@ -42,7 +42,7 @@ from .model_catalog import ModelCatalog, expand_capability_filters
 from .orchestrators import OrchestratorCatalog
 from .output import json_dumps as _json
 from .policy import PolicyEngine
-from .providers import ProviderRegistry
+from .providers import ProviderRegistry, SUPPORTED_CATALOG_ADAPTERS, SUPPORTED_ENDPOINT_FAMILIES
 from .remote import RemoteManager
 from .secrets import CredentialStore, credentials_path
 from .router import Router
@@ -1353,7 +1353,7 @@ def _main(argv: list[str] | None = None) -> int:
     models_refresh.add_argument(
         "--include-empty-providers",
         action="store_true",
-        help="Deprecated compatibility flag; refresh now uses configured model providers even when the model cache is empty",
+        help="Ignored legacy flag; refresh uses configured model providers even when the model cache is empty",
     )
     models_refresh.add_argument(
         "--query",
@@ -1404,7 +1404,7 @@ def _main(argv: list[str] | None = None) -> int:
         "--include-curated",
         action="store_true",
         default=True,
-        help="Remove profile-owned review entries from models.yaml too. This is the default and is kept for explicit confirmation/backward-compatible scripts.",
+        help="Remove profile-owned review entries from models.yaml too. This is the default and is kept for explicit confirmation.",
     )
     curated_clear.add_argument(
         "--keep-curated",
@@ -1902,7 +1902,7 @@ def _main(argv: list[str] | None = None) -> int:
         "providers",
         "List and inspect model catalog providers",
         "Providers are source catalogs such as Ollama library, Hugging Face, GGUF repositories, or local files. Runtimes are handled by aiplane runtimes.",
-        "Examples:\n  aiplane providers list\n  aiplane providers list --runtime ollama\n  aiplane providers list --runtime vllm --group-by runtime\n  aiplane providers show ollama\n  aiplane providers models ollama",
+        "Examples:\n  aiplane providers list\n  aiplane providers list --status disabled\n  aiplane providers list --runtime ollama\n  aiplane providers list --runtime vllm --group-by runtime\n  aiplane providers list --group-by ownership\n  aiplane providers show ollama\n  aiplane providers models ollama",
     )
     providers_sub = providers_cmd.add_subparsers(dest="providers_command", required=True, metavar="command")
     providers_list = providers_sub.add_parser(
@@ -1910,7 +1910,7 @@ def _main(argv: list[str] | None = None) -> int:
         help="List model catalog providers",
         description="List model providers that supply downloadable model identifiers or artifacts. Runtimes such as vLLM, TGI, llama.cpp, and Transformers are listed under aiplane runtimes.",
         formatter_class=HelpFormatter,
-        epilog="Examples:\n  aiplane providers list\n  aiplane providers list --runtime ollama\n  aiplane providers list --runtime vllm --group-by runtime",
+        epilog="Examples:\n  aiplane providers list\n  aiplane providers list --status enabled\n  aiplane providers list --status disabled\n  aiplane providers list --runtime ollama\n  aiplane providers list --runtime vllm --group-by runtime\n  aiplane providers list --group-by ownership",
     )
     _profile_arg(providers_list)
     providers_list.add_argument(
@@ -1920,14 +1920,15 @@ def _main(argv: list[str] | None = None) -> int:
         help="Only show catalog providers whose models are typically served by this runtime; can be repeated",
     )
     providers_list.add_argument(
-        "--include-disabled",
-        action="store_true",
-        help="Also show providers disabled or removed in the profile model_providers config",
+        "--status",
+        choices=["enabled", "disabled", "all"],
+        default="all",
+        help="Filter providers by enabled state. Defaults to all providers.",
     )
     providers_list.add_argument(
         "--group-by",
-        choices=["runtime"],
-        help="Group catalog providers by typical runtime",
+        choices=["runtime", "ownership"],
+        help="Group catalog providers by typical runtime or ownership",
     )
     providers_show = providers_sub.add_parser(
         "show",
@@ -1937,6 +1938,18 @@ def _main(argv: list[str] | None = None) -> int:
     )
     _profile_arg(providers_show)
     providers_show.add_argument("name", help="Provider name, such as ollama, huggingface, or huggingface_gguf")
+    providers_endpoint_types = providers_sub.add_parser(
+        "endpoint-types",
+        help="List supported provider API families and catalog adapters",
+        description="List the provider API families and catalog discovery adapters that user-added providers can declare. New API shapes require a code update before they can be used safely.",
+        formatter_class=HelpFormatter,
+        epilog=(
+            "Examples:\n"
+            "  aiplane providers endpoint-types\n"
+            "  aiplane providers add my_gateway --ownership managed_service --endpoint-family custom_openai_compatible --catalog-adapter profile_catalog --auth-method bearer --api-key-env MY_GATEWAY_API_KEY"
+        ),
+    )
+    _profile_arg(providers_endpoint_types)
     providers_models = providers_sub.add_parser(
         "models",
         help="List catalog provider models",
@@ -1986,14 +1999,40 @@ def _main(argv: list[str] | None = None) -> int:
     providers_add.add_argument("name", help="Provider name to add")
     providers_add.add_argument("--description", default="", help="Human-readable provider description")
     providers_add.add_argument(
+        "--ownership",
+        choices=["self_managed", "managed_service"],
+        help="Provider ownership. Defaults to managed_service when --endpoint-family is used, otherwise self_managed.",
+    )
+    providers_add.add_argument(
         "--runtime",
         action="append",
         default=[],
-        help="Typical compatible runtime; can be repeated",
+        help="Self-managed compatible runtime; can be repeated. Do not use for managed-service providers.",
     )
     providers_add.add_argument(
-        "--online-adapter",
-        help="Adapter to reuse, such as profile_catalog, huggingface, huggingface_gguf, ollama, civitai, or azure_openai",
+        "--endpoint-family",
+        choices=sorted(SUPPORTED_ENDPOINT_FAMILIES),
+        help="Managed-service endpoint/API family. If the provider does not match one of these, aiplane needs a code update.",
+    )
+    providers_add.add_argument(
+        "--catalog-adapter",
+        choices=sorted(SUPPORTED_CATALOG_ADAPTERS),
+        default="profile_catalog",
+        help="Catalog discovery adapter/API shape to reuse. Use profile_catalog when the catalog is manually curated.",
+    )
+    providers_add.add_argument("--endpoint", help="Default endpoint URL for this provider, when applicable")
+    providers_add.add_argument("--credential-ref", help="Default credential ref, such as openai.personal")
+    providers_add.add_argument("--api-key-env", help="Environment variable that provides the API key/token")
+    providers_add.add_argument(
+        "--auth-method",
+        choices=["none", "api_key", "bearer", "oauth2", "custom"],
+        default="none",
+        help="Authentication style required by the provider/catalog API",
+    )
+    providers_add.add_argument(
+        "--requires-credentials",
+        action="store_true",
+        help="Mark this provider/catalog as requiring credentials even if the auth method is custom or configured elsewhere",
     )
     providers_add.add_argument("--disabled", action="store_true", help="Add the provider disabled")
     providers_init = providers_sub.add_parser(
@@ -2008,6 +2047,13 @@ def _main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Replace an existing model-providers.yaml file",
     )
+    providers_update = providers_sub.add_parser(
+        "update-defaults",
+        help="Refresh profile provider defaults from this aiplane version",
+        description="Update model-providers.yaml from built-in defaults while preserving existing enabled/disabled values and leaving model-providers.user.yaml untouched.",
+        formatter_class=HelpFormatter,
+    )
+    _profile_arg(providers_update)
     providers_clear = providers_sub.add_parser(
         "clear",
         help="Clear provider config files",
@@ -2987,7 +3033,12 @@ def _main(argv: list[str] | None = None) -> int:
             print(_json(manager.use(args.mode), indent=2, sort_keys=True))
             return 0
         if args.environment_command == "doctor":
-            payload = ToolchainManager(profile).environment_doctor(include_optional=not args.required_only)
+            progress = _stderr_line_progress()
+            payload = ToolchainManager(profile).environment_doctor(
+                include_optional=not args.required_only,
+                progress=progress,
+            )
+            progress("")
             if args.format == "text":
                 print(_environment_doctor_text(payload))
             else:
@@ -3391,15 +3442,17 @@ def _main(argv: list[str] | None = None) -> int:
                     registry.list(
                         runtimes=args.runtime,
                         group_by=args.group_by,
-                        include_disabled=args.include_disabled,
+                        status=args.status,
                     ),
                     indent=2,
-                    sort_keys=True,
                 )
             )
             return 0
         if args.providers_command == "show":
             print(_json(registry.show(args.name), indent=2, sort_keys=True))
+            return 0
+        if args.providers_command == "endpoint-types":
+            print(_json(registry.endpoint_families(), indent=2, sort_keys=True))
             return 0
         if args.providers_command == "models":
             result = registry.models(args.name, query=args.query, limit=args.limit, online=args.online)
@@ -3423,8 +3476,15 @@ def _main(argv: list[str] | None = None) -> int:
                         args.name,
                         description=args.description,
                         typical_runtimes=args.runtime,
-                        online_adapter=args.online_adapter,
+                        catalog_adapter=args.catalog_adapter,
                         enabled=not args.disabled,
+                        ownership=args.ownership,
+                        endpoint_family=args.endpoint_family,
+                        endpoint=args.endpoint,
+                        credential_ref=args.credential_ref,
+                        api_key_env=args.api_key_env,
+                        auth_method=args.auth_method,
+                        requires_credentials=args.requires_credentials,
                     ),
                     indent=2,
                 )
@@ -3432,6 +3492,9 @@ def _main(argv: list[str] | None = None) -> int:
             return 0
         if args.providers_command == "init-defaults":
             print(_json(registry.init_defaults(overwrite=args.overwrite), indent=2))
+            return 0
+        if args.providers_command == "update-defaults":
+            print(_json(registry.update_defaults(), indent=2, sort_keys=True))
             return 0
         if args.providers_command == "clear":
             print(_json(registry.clear_config(args.scope), indent=2))
@@ -3843,9 +3906,29 @@ def _validate_profile(profile) -> dict[str, object]:
     }
 
 
+def _stderr_line_progress():
+    longest = 0
+
+    def progress(message: str) -> None:
+        nonlocal longest
+        if not message:
+            if longest:
+                sys.stderr.write("\r" + " " * longest + "\r")
+                sys.stderr.flush()
+                longest = 0
+            return
+        text = f"{message}..."
+        longest = max(longest, len(text))
+        sys.stderr.write("\r" + text.ljust(longest))
+        sys.stderr.flush()
+
+    return progress
+
+
 def _environment_doctor_text(payload: dict[str, object]) -> str:
     summary = payload.get("summary", {}) if isinstance(payload.get("summary"), dict) else {}
     rows: list[dict[str, str]] = []
+    tool_rows: list[dict[str, str]] = []
     for section in [
         "installed",
         "missing_installable_by_aiplane",
@@ -3861,7 +3944,7 @@ def _environment_doctor_text(payload: dict[str, object]) -> str:
                 if isinstance(needed_for, list)
                 else str(needed_for or "")
             )
-            rows.append(
+            tool_rows.append(
                 {
                     "name": str(item.get("name") or ""),
                     "kind": "tool",
@@ -3870,6 +3953,12 @@ def _environment_doctor_text(payload: dict[str, object]) -> str:
                     "why": why or str(item.get("description") or ""),
                 }
             )
+    rows.extend(
+        sorted(
+            tool_rows,
+            key=lambda row: (0 if row["required"] == "mandatory" else 1, row["status"] != "installed", row["name"]),
+        )
+    )
     values = payload.get("runtime_prerequisites", [])
     for item in values if isinstance(values, list) else []:
         if not isinstance(item, dict):

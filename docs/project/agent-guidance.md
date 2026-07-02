@@ -29,13 +29,18 @@ When changing behavior, update these together in the same change whenever releva
 
 Do not leave roadmap, handoff, or command coverage stale after adding commands, changing defaults, or moving a feature between planned/in-progress/implemented.
 
+## Compatibility Policy
+
+`aiplane` has not been deployed or released as a stable public interface yet. Until the human owner says otherwise, do not add backward-compatibility shims, deprecated aliases, or legacy behavior solely to preserve older local commands. Prefer the clean current interface, and keep README, user docs, command coverage, roadmap/handoff notes, and tests aligned with that interface.
+
 ## Implementation Rules
 
 - Coding tools and assistants must never commit, push, tag, publish releases, or open PRs from this repository. They may inspect `git status`/`git diff` and prepare changes; the human owner performs all git write/publish operations.
 - Treat secret sanitation as a release blocker: before finalizing, scan changed files for API keys, tokens, passwords, private keys, personal data, and tenant/account identifiers. Never add real secrets to tracked files; use ignored local credentials and env-var references instead.
 - Prefer plan, doctor, dry-run, and export flows before mutating hosts, runtimes, or cloud accounts.
 - Keep generated/cache/local files out of git: `.aiplane/`, generated model caches, PID/log files, and runtime state must remain ignored.
-- Preserve the distinction between provider/model source, runtime, runtime endpoint, profile model alias, machine, stack, and integration export.
+- Preserve the distinction between provider/model source, runtime, runtime endpoint, profile model alias, machine, stack, integration export, MCP tool surface, and agent skill guidance.
+- During pre-PR merge cleanup, tidy-up, release review, or a recurring MCP/skills synchronization checkpoint, audit the public CLI/options against docs, command coverage, MCP tools, planned/implemented agent skills, and tests. These checkpoints should happen periodically, not continuously after every feature and not at every regular milestone. Bring MCP and skills into sync where appropriate, explicitly leave risky operations out of MCP/skills when guardrails are not ready, and run or add focused tests for the synced surface.
 - Managed providers such as OpenAI, Anthropic, Azure OpenAI, and Ollama Cloud are sources/endpoints; they become useful to tools through profile-owned model entries in `models.yaml`.
 - Do not make broad cloud apply, arbitrary shell execution through MCP, secret writes, or IDE file edits implicit.
 - Use official external tools instead of reimplementing their domain: Docker/Compose, OpenSSH, Azure CLI, OpenTofu/Terraform/Pulumi, Vagrant, Packer, Dev Container CLI, Ansible, kubectl, and Helm.

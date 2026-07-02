@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import shlex
 import shutil
+from collections.abc import Callable
 import subprocess
 from pathlib import Path
 
@@ -629,9 +630,22 @@ class ToolchainManager:
     def tool_status(self, name: str) -> dict[str, object]:
         return self._tool_row(name)
 
-    def environment_doctor(self, include_optional: bool = True) -> dict[str, object]:
-        rows = self.list() if include_optional else [self._tool_row(name) for name in CORE_TOOLCHAIN]
-        runtime_rows = _runtime_prerequisite_rows(self.profile, include_optional=include_optional)
+    def environment_doctor(
+        self,
+        include_optional: bool = True,
+        progress: Callable[[str], None] | None = None,
+    ) -> dict[str, object]:
+        tool_names = sorted(TOOLCHAIN) if include_optional else CORE_TOOLCHAIN
+        rows = []
+        for name in tool_names:
+            if progress:
+                progress(f"checking tool {name}")
+            rows.append(self._tool_row(name))
+        runtime_rows = _runtime_prerequisite_rows(
+            self.profile,
+            include_optional=include_optional,
+            progress=progress,
+        )
         installable_missing = [row for row in rows if not row["installed"] and row.get("install_mode") == "automated"]
         manual_missing = [row for row in rows if not row["installed"] and row.get("install_mode") != "automated"]
         installed = [row for row in rows if row["installed"]]
@@ -987,7 +1001,11 @@ variable "region" {{
     raise ValueError(f"tool export is not available for {name}")
 
 
-def _runtime_prerequisite_rows(profile: Profile, include_optional: bool) -> list[dict[str, object]]:
+def _runtime_prerequisite_rows(
+    profile: Profile,
+    include_optional: bool,
+    progress: Callable[[str], None] | None = None,
+) -> list[dict[str, object]]:
     catalog = RuntimeCatalog(profile)
     runtimes = ["ollama", "vllm", "tgi", "transformers", "localai"] if include_optional else ["ollama", "vllm"]
     runtimes = [
@@ -996,6 +1014,8 @@ def _runtime_prerequisite_rows(profile: Profile, include_optional: bool) -> list
     ]
     rows: list[dict[str, object]] = []
     for runtime in dict.fromkeys(runtimes):
+        if progress:
+            progress(f"checking runtime prerequisite {runtime}")
         payload = catalog.prerequisites(runtime)
         ok = bool(payload.get("ok"))
         notes = list(payload.get("notes", [])) if isinstance(payload.get("notes"), list) else []
@@ -1092,7 +1112,7 @@ def _runtime_setup_commands(runtime: str, payload: dict[str, object]) -> list[st
         commands.extend(
             [
                 "aiplane models list --role text_to_speech",
-                "aiplane providers list --include-disabled --runtime azure_speech",
+                "aiplane providers list --status all --runtime azure_speech",
             ]
         )
     if runtime == "diffusers":

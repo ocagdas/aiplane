@@ -81,7 +81,8 @@ it activates the environment before returning to the same shell. If the script i
 executed normally,
 it cannot activate the parent shell, so it writes `.aiplane/activate-conda-<env>.sh`
 and prints activation commands. The helper verifies that the Conda environment
-is visible after creation and fails with a clear error if it is not. During
+is visible after creation and, during install, repairs an existing Conda
+environment that is missing Python by installing `python=3.13` into it. During
 install, it also runs
 `aiplane profiles bootstrap-local --no-discovery` before the profile-aware sanity
 check, so a fresh clone gets an ignored `profiles/local-dev` directory from the
@@ -236,7 +237,7 @@ providers:
 
 `api_key_env` is preferred because target tools such as Continue and Aider can read environment variables without `aiplane` printing raw secrets. For internal discovery/checks, `aiplane` can also read an `api_key` from the ignored credentials file, but `credentials show` redacts it.
 
-Inspect configured refs without exposing secrets:
+Inspect configured refs without exposing secrets. If no credentials file exists yet, `credentials list` returns an empty list without printing the missing path; `credentials show` still errors for a ref that is not configured:
 
 ```bash
 aiplane credentials list

@@ -6,6 +6,7 @@ Examples:
 
 - `ollama`: Ollama model library names such as `text-generation:0.5b`.
 - `huggingface`: Hugging Face Hub repos such as `Provider/Code-Large-Instruct`.
+- `nvidia`: NVIDIA open model repos on Hugging Face, including Nemotron language, reasoning, retrieval, speech, vision, and safety models.
 - `huggingface_gguf`: GGUF files hosted on Hugging Face or similar file stores.
 - `local_file`: a local model path.
 - `azure_speech`: Azure Speech text-to-speech voice configuration.
@@ -13,6 +14,8 @@ Examples:
 - `openai`, `anthropic`, `azure_openai`, `ollama_cloud`: managed providers. These are hosted services, so they need endpoint/API-key configuration and profile-owned model entries before IDE exports can use them. Other catalogs can be added in `model-providers.user.yaml` when their discovery path is reliable for your environment.
 
 A **runtime** is different. A runtime loads model files into CPU/GPU memory and serves inference. Examples: `ollama`, `vllm`, `tgi`, `llamacpp`, `transformers`, `localai`, `lmstudio`, `faster_whisper`, `diffusers`, and `comfyui`. Managed services such as `azure_speech` and `elevenlabs` are hosted service providers/endpoints, not local runtime-fit targets.
+
+For NVIDIA open model repos, the practical local/runtime targets currently modeled in `aiplane` are `vllm`, `tgi`, and `transformers`, because those repos are Hugging Face-style model artifacts. NVIDIA-optimized deployment paths such as NIM, TensorRT-LLM, and SGLang can be represented later as runtime helpers, but they are not first-class `aiplane` runtime helpers yet.
 
 An **endpoint** is the URL a client calls, for example `http://localhost:11434/v1` for Ollama's OpenAI-compatible API.
 
@@ -46,11 +49,25 @@ aiplane models list --self-managed-only
 aiplane models list --managed-service-only
 ```
 
-`provider-kind` groups first by ownership (`self_managed` or `managed_service`) and then by provider/source. Keep `provider` populated for managed services; it identifies the hosted service or endpoint family. Managed-service models are not runtime-fit candidates, so runtime grouping places them under `no_runtime`; `preferred_runtime` and `supported_runtimes` are ignored for managed-service aliases.
+`provider-kind` groups first by ownership (`self_managed` or `managed_service`) and then by provider/source. `providers list --group-by ownership` gives the same ownership split at the provider/source level before any model aliases are added. Keep `provider` populated for managed services; it identifies the hosted service or endpoint family. Managed-service models are not runtime-fit candidates, so runtime grouping places them under `no_runtime`; `preferred_runtime` and `supported_runtimes` are ignored for managed-service aliases.
+
+Managed-service providers do not have local model weights for `aiplane` to pull. `aiplane models pull` and `aiplane runtimes pull` are for self-managed runtimes/sources such as Ollama, Hugging Face/vLLM/TGI/Transformers, GGUF, or local files. For OpenAI, Anthropic, Azure OpenAI, Ollama Cloud, Azure Speech, and ElevenLabs, configure credentials/endpoints and test reachability instead of pulling a model.
+
+Managed-service model aliases must not be combined with local runtime fields. `preferred_runtime` and `supported_runtimes` are ignored in list/grouping output and rejected by runtime operations and execution paths. Use `provider`, `endpoint_family`, credentials, and endpoint configuration instead.
 
 ## Managed Providers In Practice
 
-Managed providers are not local runtimes. They become useful to Continue/Cline/Aider/Zed only after you have provider credentials/endpoint overrides where needed and a profile-owned model entry in `models.yaml`. The flow is:
+Managed providers are not local runtimes. They sit in `aiplane` as hosted provider endpoint families plus optional catalog discovery adapters:
+
+1. `providers endpoint-types` shows which hosted API families and catalog adapters `aiplane` understands. If a provider uses a different API shape, live discovery/test support needs a code update.
+2. `model-providers.yaml` or ignored `model-providers.user.yaml` records provider metadata: ownership, endpoint family, catalog adapter, auth requirement, and default credential env var or endpoint.
+3. `providers models PROVIDER --online` can discover provider models/deployments only when a catalog adapter exists and credentials are configured when required. Otherwise use `profile_catalog` and add model aliases manually.
+4. `models add`/`models promote` creates profile-owned aliases under `models:`. For Azure OpenAI, the alias `model` value is the deployment name.
+5. `models list` and `models show` expose these aliases as `managed_service` entries under `no_runtime`; they are not runtime-fit candidates.
+6. `integrations plan/export` turns selected aliases into IDE/tool config using the provider endpoint, protocol, and API-key environment variable.
+7. `aiplane run` or `models test` can use managed aliases only through provider endpoint support and policy/credential checks; runtime bundle/install/start/pull paths remain self-managed only.
+
+The practical flow is:
 
 1. Keep model source/provider discovery settings in `model-providers.yaml` or ignored `model-providers.user.yaml`. Keep managed endpoint overrides and credential refs in ignored local provider/credential config when the built-in endpoint default is not enough.
 2. Discover available models/deployments, then add or promote a profile-owned model entry under `models:`. For Azure OpenAI, the `model` value is the deployment name.
@@ -81,6 +98,38 @@ aiplane models list --provider elevenlabs --role text_to_speech
 
 For multiple accounts, keep credentials in the ignored local credentials file and reference them by name from local provider overrides or command options. Well-known managed providers have built-in endpoint defaults and adapters where safe. Custom providers should specify an endpoint, protocol, and credential reference in ignored local config. The profile should not contain raw API keys.
 
+Example ignored `.aiplane/credentials.yaml` with multiple accounts:
+
+```yaml
+providers:
+  openai:
+    accounts:
+      personal:
+        api_key_env: OPENAI_PERSONAL_API_KEY
+        endpoint: https://api.openai.com/v1
+      business_a:
+        api_key_env: OPENAI_BUSINESS_A_API_KEY
+        endpoint: https://api.openai.com/v1
+  azure_openai:
+    accounts:
+      business_a:
+        api_key_env: AZURE_OPENAI_BUSINESS_A_KEY
+        endpoint: https://YOUR-RESOURCE.openai.azure.com
+        api_version: 2024-02-01
+  anthropic:
+    accounts:
+      personal:
+        api_key_env: ANTHROPIC_PERSONAL_API_KEY
+```
+
+Set the environment variables in your shell, shell profile, direnv, or secret manager. Then inspect refs without exposing secrets:
+
+```bash
+aiplane credentials list
+aiplane credentials show openai.personal
+aiplane credentials show azure_openai.business_a
+```
+
 Test a managed provider endpoint and credential without printing the secret:
 
 ```bash
@@ -93,13 +142,34 @@ The test command currently has live adapters for Azure OpenAI deployment listing
 
 ## Provider Commands
 
-List known model providers:
+List known model providers. The list includes `ownership` so you can distinguish `self_managed` model sources from `managed_service` providers:
 
 ```bash
 aiplane providers list
+aiplane providers list --status enabled
+aiplane providers list --status disabled
+aiplane providers list --status all
+aiplane providers list --group-by ownership
 aiplane providers list --runtime ollama
 aiplane providers list --runtime vllm --group-by runtime
 ```
+
+Enable or disable providers without editing YAML directly:
+
+```bash
+aiplane providers disable nvidia
+aiplane providers enable nvidia
+aiplane providers disable all
+aiplane providers enable all
+```
+
+Refresh the profile-local default provider list after updating `aiplane`:
+
+```bash
+aiplane providers update-defaults
+```
+
+`update-defaults` rewrites `model-providers.yaml` from the current built-in provider definitions, preserving existing `enabled` values in that file and leaving `model-providers.user.yaml` untouched. This lets code updates add providers or update provider metadata without overwriting a provider you disabled manually or through `providers disable`. Prefer this command over hand-editing provider files.
 
 Show one model provider and the profile catalog entries that come from it:
 
@@ -127,13 +197,14 @@ Query an online catalog where an adapter exists:
 aiplane providers models ollama --online --query model_row --limit 500
 aiplane providers models huggingface --online --query text-generation --limit 500
 aiplane providers models huggingface --online --query text-to-speech --limit 50
+aiplane providers models nvidia --online --query Nemotron --limit 50
 aiplane providers models elevenlabs --online --query voice --limit 20
 aiplane providers models huggingface --online --query text-to-image --limit 50
 aiplane providers models huggingface --online --query text-to-video --limit 50
 aiplane providers models huggingface_gguf --online --query llama-3.1-8b --limit 500
 ```
 
-Current default online adapters are `ollama`, `huggingface`, `huggingface_gguf`, `azure_openai` deployments when endpoint/key configuration is present, and `elevenlabs` voices when `ELEVENLABS_API_KEY` or a credential reference is configured. Hugging Face discovery can return media pipeline metadata that `models refresh` maps into roles such as `text_to_speech`, `image_generation`, and `video_generation` before candidates are filtered or promoted. If an online query fails or the provider has no adapter yet, `aiplane` falls back to the profile catalog and includes the reason. Fallback is non-destructive: it does not update or prune local entries because it is only re-reading the local profile.
+Current default catalog adapters are `ollama`, `huggingface`, `nvidia`, `huggingface_gguf`, `azure_openai` deployments when endpoint/key configuration is present, and `elevenlabs` voices when `ELEVENLABS_API_KEY` or a credential reference is configured. The `nvidia` provider uses the Hugging Face adapter scoped to NVIDIA-owned repos. Hugging Face discovery can return media pipeline metadata that `models refresh` maps into roles such as `text_to_speech`, `image_generation`, and `video_generation` before candidates are filtered or promoted. If an online query fails or the provider has no adapter yet, `aiplane` falls back to the profile catalog and includes the reason. Fallback is non-destructive: it does not update or prune local entries because it is only re-reading the local profile.
 
 ## Provider Configuration Files
 
@@ -161,10 +232,16 @@ aiplane providers init-defaults --overwrite
 
 Without `--overwrite`, `init-defaults` writes `model-providers.yaml` only when it does not already exist. If the file exists, the command exits with an error instead of replacing your provider config.
 
-To add, disable, enable, remove, or clear provider config:
+Provider APIs are not universally standardized. A user-added provider must declare one of the endpoint families and catalog adapters listed by `aiplane providers endpoint-types`. If the provider uses a different catalog API, auth scheme, pagination shape, or deployment/listing API, `aiplane` needs a code update before live discovery or provider tests can support it. Use `--catalog-adapter profile_catalog` for providers whose model list is curated manually instead of fetched from a live API.
+
+Use `--runtime` only for `self_managed` providers that supply model artifacts for local runtimes. Use `--endpoint-family` for `managed_service` providers. Managed services can declare `--auth-method`, `--api-key-env`, `--credential-ref`, and `--endpoint`; raw keys still belong in environment variables or ignored `.aiplane/credentials.yaml`, not provider YAML.
+
+To inspect supported provider API shapes and add, disable, enable, remove, or clear provider config:
 
 ```bash
-aiplane providers add private_hf --runtime vllm --online-adapter huggingface
+aiplane providers endpoint-types
+aiplane providers add private_hf --ownership self_managed --runtime vllm --catalog-adapter huggingface
+aiplane providers add my_gateway --ownership managed_service --endpoint-family custom_openai_compatible --catalog-adapter profile_catalog --endpoint https://gateway.example.com/v1 --auth-method bearer --api-key-env MY_GATEWAY_API_KEY
 aiplane providers disable ollama
 aiplane providers enable all
 aiplane providers remove local_file

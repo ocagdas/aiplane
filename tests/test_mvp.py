@@ -6,7 +6,7 @@ import subprocess
 import shutil
 import tempfile
 import threading
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from io import BytesIO, StringIO
 import unittest
@@ -28,6 +28,7 @@ from aiplane.config import (
     init_local_config,
     list_config_templates,
     list_profile_templates,
+    parse_yaml,
     load_local_config,
     load_profile,
     resolve_profile_name,
@@ -603,6 +604,17 @@ class MvpTests(unittest.TestCase):
             self.assertIn("[REDACTED_SECRET]", output)
             self.assertNotIn("dummy-api-key-value-123456", output)
 
+    def test_credentials_cli_missing_file_lists_empty_without_path_noise(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "missing-credentials.yaml"
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = cli_main(["credentials", "list", "--path", str(path)])
+        self.assertEqual(code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload, {"name": "credentials", "credentials": []})
+        self.assertNotIn("missing-credentials.yaml", stdout.getvalue())
+
     def test_router_blocks_secret_cloud_escalation(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             profile = load_profile("local-dev", Path(tmp))
@@ -844,6 +856,28 @@ class MvpTests(unittest.TestCase):
         result = response["result"]
         self.assertIn("local-dev", result["structuredContent"]["profiles"])
         self.assertEqual(result["content"][0]["type"], "text")
+
+    def test_mcp_provider_list_supports_status_and_ownership_grouping(self) -> None:
+        server = AiplaneMcpServer(Path.cwd())
+        response = server.handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 25,
+                "method": "tools/call",
+                "params": {
+                    "name": "aiplane.providers.list",
+                    "arguments": {"status": "all", "group_by": "ownership"},
+                },
+            }
+        )
+        self.assertIsNotNone(response)
+        payload = response["result"]["structuredContent"]
+        self.assertEqual(payload["group_by"], "ownership")
+        self.assertEqual(list(payload["groups"])[:2], ["self_managed", "managed_service"])
+        self.assertIn("self_managed", payload["groups"])
+        self.assertIn("managed_service", payload["groups"])
+        self.assertTrue(any(row["name"] == "nvidia" for row in payload["groups"]["self_managed"]))
+        self.assertTrue(any(row["name"] == "openai" for row in payload["groups"]["managed_service"]))
 
     def test_mcp_server_can_list_ranked_models(self) -> None:
         server = AiplaneMcpServer(Path.cwd())
@@ -2921,6 +2955,13 @@ class MvpTests(unittest.TestCase):
         self.assertTrue(any(row["name"] == "managed-chat-small" for row in payload["groups"]["no_runtime"]))
         self.assertFalse(any(row["name"] == "managed-chat-small" for row in payload["groups"].get("ollama", [])))
 
+        with self.assertRaisesRegex(ValueError, "managed-service model"):
+            RuntimeCatalog(profile).set_preferred_runtime("managed-chat-small", "ollama")
+        with self.assertRaisesRegex(ValueError, "cannot be bundled"):
+            RuntimeCatalog(profile).bundle_plan("ollama", "managed-chat-small")
+        with self.assertRaisesRegex(ValueError, "cannot define local runtime fields"):
+            catalog.complete("managed-chat-small", "hello")
+
     def test_model_show_includes_provider_config(self) -> None:
         profile = load_profile("local-dev", Path.cwd())
         model = ModelCatalog(profile).show("local-analysis-small")
@@ -3592,13 +3633,67 @@ class MvpTests(unittest.TestCase):
         self.assertIn("ollama", names)
         for managed in ["openai", "anthropic", "azure_openai", "ollama_cloud"]:
             self.assertIn(managed, names)
-        disabled_names = {row["name"] for row in ProviderRegistry(profile).list(include_disabled=True)}
-        self.assertIn("elevenlabs", disabled_names)
         by_name = {row["name"]: row for row in rows}
-        self.assertEqual(by_name["azure_openai"]["online_adapter"], "azure_openai")
-        self.assertEqual(by_name["openai"]["online_adapter"], "profile_catalog")
+        self.assertEqual(by_name["azure_openai"]["catalog_adapter"], "azure_openai")
+        self.assertEqual(by_name["azure_openai"]["ownership"], "managed_service")
+        self.assertEqual(by_name["openai"]["catalog_adapter"], "profile_catalog")
+        self.assertEqual(by_name["openai"]["endpoint_family"], "openai")
+        self.assertEqual(by_name["openai"]["typical_runtimes"], [])
+        self.assertEqual(by_name["openai"]["auth"], {"required": True, "method": "bearer"})
+        self.assertEqual(by_name["nvidia"]["ownership"], "self_managed")
         ollama = by_name["ollama"]
         self.assertIn("ollama", ollama["typical_runtimes"])
+
+        enabled_names = {row["name"] for row in ProviderRegistry(profile).list(status="enabled")}
+        disabled_names = {row["name"] for row in ProviderRegistry(profile).list(status="disabled")}
+        self.assertIn("ollama", enabled_names)
+        self.assertNotIn("local_file", enabled_names)
+        self.assertIn("local_file", disabled_names)
+        self.assertIn("azure_speech", disabled_names)
+
+    def test_provider_list_cli_groups_by_ownership(self) -> None:
+        stdout = StringIO()
+        with redirect_stdout(stdout):
+            code = cli_main(["providers", "list", "--group-by", "ownership"])
+        self.assertEqual(code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["group_by"], "ownership")
+        self.assertEqual(list(payload["groups"])[:2], ["self_managed", "managed_service"])
+        self.assertIn("self_managed", payload["groups"])
+        self.assertIn("managed_service", payload["groups"])
+        self.assertTrue(any(row["name"] == "nvidia" for row in payload["groups"]["self_managed"]))
+        self.assertTrue(any(row["name"] == "openai" for row in payload["groups"]["managed_service"]))
+
+    def test_provider_list_cli_filters_by_status(self) -> None:
+        stdout = StringIO()
+        with redirect_stdout(stdout):
+            code = cli_main(["providers", "list", "--status", "disabled"])
+        self.assertEqual(code, 0)
+        rows = json.loads(stdout.getvalue())
+        names = {row["name"] for row in rows}
+        self.assertIn("local_file", names)
+        self.assertTrue(all(not row["enabled"] for row in rows))
+        self.assertTrue(all(row["ownership"] in {"self_managed", "managed_service"} for row in rows))
+
+    def test_provider_endpoint_types_cli_lists_supported_api_shapes(self) -> None:
+        stdout = StringIO()
+        with redirect_stdout(stdout):
+            code = cli_main(["providers", "endpoint-types"])
+        self.assertEqual(code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["name"], "provider_types")
+        families = {row["name"] for row in payload["endpoint_families"]}
+        adapters = {row["name"] for row in payload["catalog_adapters"]}
+        self.assertIn("custom_openai_compatible", families)
+        self.assertIn("azure_openai", families)
+        self.assertIn("profile_catalog", adapters)
+        self.assertIn("huggingface", adapters)
+
+    def test_provider_add_cli_rejects_unsupported_api_family(self) -> None:
+        stderr = StringIO()
+        with redirect_stderr(stderr), self.assertRaises(SystemExit):
+            cli_main(["providers", "add", "bad_gateway", "--endpoint-family", "not_real_api"] )
+        self.assertIn("invalid choice", stderr.getvalue())
 
     def test_provider_enable_disable_cli_updates_user_provider_config(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -3627,9 +3722,80 @@ class MvpTests(unittest.TestCase):
                 registry.init_defaults()
             cleared = registry.clear_config("all")
             self.assertTrue(cleared["suppresses_hardcoded_fallback"])
-            self.assertEqual(ProviderRegistry(profile).list(include_disabled=True), [])
+            self.assertEqual(ProviderRegistry(profile).list(status="all"), [])
             reinitialized = registry.init_defaults(overwrite=True)
             self.assertIn("huggingface", reinitialized["providers"])
+            self.assertIn("nvidia", reinitialized["providers"])
+            nvidia = registry.model_providers()["nvidia"]
+            self.assertEqual(nvidia["catalog_adapter"], "huggingface")
+            self.assertEqual(nvidia["huggingface_author"], "nvidia")
+            self.assertEqual(nvidia["typical_runtimes"], ["vllm", "tgi", "transformers"])
+
+    def test_provider_update_defaults_preserves_enabled_flags(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            profile_root = root / "local-dev"
+            profile_root.mkdir()
+            (profile_root / "model-providers.yaml").write_text(
+                "ollama:\n"
+                "  description: stale ollama description\n"
+                "  typical_runtimes: [old_runtime]\n"
+                "  catalog_adapter: profile_catalog\n"
+                "  enabled: false\n"
+                "huggingface:\n"
+                "  description: stale huggingface description\n"
+                "  typical_runtimes: [vllm]\n"
+                "  catalog_adapter: huggingface\n"
+                "  enabled: true\n",
+                encoding="utf-8",
+            )
+            profile = Profile("local-dev", profile_root, root, {}, {}, {}, {}, {}, {}, {}, {}, {})
+            result = ProviderRegistry(profile).update_defaults()
+            providers = ProviderRegistry(profile).model_providers(include_removed=True)
+        self.assertEqual(result["name"], "model_provider_defaults_update")
+        self.assertIn("nvidia", result["added"])
+        self.assertIn("ollama", result["preserved_enabled"])
+        self.assertFalse(providers["ollama"]["enabled"])
+        self.assertEqual(providers["ollama"]["typical_runtimes"], ["ollama"])
+        self.assertEqual(providers["ollama"]["description"], "Ollama model library and local pull store")
+        self.assertTrue(providers["huggingface"]["enabled"])
+        self.assertIn("nvidia", providers)
+
+    def test_provider_update_defaults_leaves_user_disabled_override_untouched(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            shutil.copytree(Path.cwd() / "profile-templates" / "local-dev", root / "local-dev")
+            profile = load_profile("local-dev", Path.cwd(), profiles_dir=root)
+            registry = ProviderRegistry(profile)
+            registry.set_enabled("nvidia", False)
+            result = registry.update_defaults()
+            providers = ProviderRegistry(profile).model_providers(include_removed=True)
+            user_config = parse_yaml((profile.root / "model-providers.user.yaml").read_text(encoding="utf-8"))
+        self.assertIn("nvidia", result["updated"])
+        self.assertFalse(providers["nvidia"]["enabled"])
+        self.assertFalse(user_config["nvidia"]["enabled"])
+
+    def test_provider_update_defaults_cli(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            shutil.copytree(Path.cwd() / "profile-templates" / "local-dev", root / "local-dev")
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = cli_main(
+                    [
+                        "--profiles-dir",
+                        str(root),
+                        "providers",
+                        "update-defaults",
+                        "--profile",
+                        "local-dev",
+                    ]
+                )
+        self.assertEqual(code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["name"], "model_provider_defaults_update")
+        self.assertIn("nvidia", payload["providers"])
+        self.assertIn("nvidia", payload["preserved_enabled"])
 
     def test_provider_registry_reads_legacy_source_provider_files(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -3640,7 +3806,7 @@ class MvpTests(unittest.TestCase):
                 "legacyhub:\n"
                 "  description: Legacy provider\n"
                 "  typical_runtimes: [vllm]\n"
-                "  online_adapter: profile_catalog\n"
+                "  catalog_adapter: profile_catalog\n"
                 "  enabled: true\n",
                 encoding="utf-8",
             )
@@ -3658,7 +3824,7 @@ class MvpTests(unittest.TestCase):
                 {},
                 {},
             )
-            rows = ProviderRegistry(profile).list(include_disabled=True)
+            rows = ProviderRegistry(profile).list(status="all")
             self.assertEqual([row["name"] for row in rows], ["legacyhub"])
 
     def test_provider_doctor_filters_by_model_provider(self) -> None:
@@ -3697,7 +3863,7 @@ class MvpTests(unittest.TestCase):
             payload = json.loads(stdout.getvalue())
             self.assertEqual(payload["scope"], "all")
             profile = load_profile("local-dev", Path.cwd(), profiles_dir=root)
-            self.assertEqual(ProviderRegistry(profile).list(include_disabled=True), [])
+            self.assertEqual(ProviderRegistry(profile).list(status="all"), [])
 
     def test_provider_add_and_remove_use_user_provider_config(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -3709,9 +3875,23 @@ class MvpTests(unittest.TestCase):
                 "myhub",
                 description="Private hub",
                 typical_runtimes=["vllm"],
-                online_adapter="huggingface",
+                catalog_adapter="huggingface",
             )
-            self.assertEqual(added["online_adapter"], "huggingface")
+            self.assertEqual(added["catalog_adapter"], "huggingface")
+            self.assertEqual(added["ownership"], "self_managed")
+            managed = registry.add(
+                "my_gateway",
+                description="Managed gateway",
+                ownership="managed_service",
+                endpoint_family="custom_openai_compatible",
+                catalog_adapter="profile_catalog",
+                endpoint="https://gateway.example.com/v1",
+                api_key_env="MY_GATEWAY_API_KEY",
+                auth_method="bearer",
+            )
+            self.assertEqual(managed["endpoint_family"], "custom_openai_compatible")
+            self.assertEqual(managed["auth"], {"required": True, "method": "bearer"})
+            self.assertEqual(managed["typical_runtimes"], [])
             self.assertIn("myhub", registry.model_providers())
             removed = registry.remove("myhub")
             self.assertTrue(removed["removed"])
@@ -3769,6 +3949,33 @@ class MvpTests(unittest.TestCase):
             result = ProviderRegistry(profile).models("huggingface", online=True, query="code", limit=1)
         self.assertEqual(result.source, "source_api")
         self.assertEqual(result.models, ["Provider/Test-Coder"])
+
+    def test_provider_models_can_query_nvidia_huggingface_scope_with_mocked_http(self) -> None:
+        profile = load_profile("local-dev", Path.cwd())
+        payload = [{"modelId": "nvidia/Nemotron-Test", "author": "nvidia"}]
+        requested_urls: list[str] = []
+
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def read(self):
+                return json.dumps(payload).encode("utf-8")
+
+        def fake_urlopen(request, timeout=20):
+            requested_urls.append(str(request.full_url))
+            return FakeResponse()
+
+        with patch("aiplane.providers.urlopen", side_effect=fake_urlopen):
+            result = ProviderRegistry(profile).models("nvidia", online=True, query="Nemotron", limit=1)
+        self.assertEqual(result.provider, "nvidia")
+        self.assertEqual(result.source, "source_api")
+        self.assertEqual(result.models, ["nvidia/Nemotron-Test"])
+        self.assertIn("author=nvidia", requested_urls[0])
+        self.assertIn("search=Nemotron", requested_urls[0])
 
     def test_provider_models_can_query_azure_openai_deployments_with_mocked_http(
         self,
@@ -3950,6 +4157,11 @@ class MvpTests(unittest.TestCase):
         grouped = catalog.models_by_runtime("vllm")
         names = {row["name"] for row in grouped["models"]["vllm"]}
         self.assertIn("provider-code-large-vllm", names)
+        nvidia_entry = {"provider": "nvidia", "model": "nvidia/Nemotron-Test", "source": "nvidia"}
+        self.assertEqual(
+            catalog.compatible_runtimes_for_entry(nvidia_entry),
+            ["vllm", "tgi", "transformers"],
+        )
 
     def test_runtime_catalog_shows_model_runtimes_and_preference(self) -> None:
         profile = load_profile("local-dev", Path.cwd())
@@ -4094,6 +4306,70 @@ class MvpTests(unittest.TestCase):
         self.assertIn(bootstrap, completed.stdout)
         self.assertIn(doctor, completed.stdout)
         self.assertLess(completed.stdout.index(bootstrap), completed.stdout.index(doctor))
+
+    def test_setup_env_conda_install_repairs_existing_env_without_python(self) -> None:
+        root = Path.cwd()
+        with tempfile.TemporaryDirectory() as tmp:
+            fakebin = Path(tmp) / "bin"
+            fakebin.mkdir()
+            log_path = Path(tmp) / "conda.log"
+            state_path = Path(tmp) / "python-installed"
+            conda = fakebin / "conda"
+            conda.write_text(
+                """#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >> "$CONDALOG"
+if [[ "$1 $2" == "env list" ]]; then
+  printf 'aiplane /tmp/aiplane\n'
+  exit 0
+fi
+if [[ "$1" == "run" ]]; then
+  if [[ "${4:-}" == "python" && "${5:-}" == "--version" && ! -f "$CONDA_PYTHON_INSTALLED" ]]; then
+    printf 'python: command not found\n' >&2
+    exit 127
+  fi
+  if [[ "${4:-}" == "python" && ! -f "$CONDA_PYTHON_INSTALLED" ]]; then
+    exit 127
+  fi
+  exit 0
+fi
+if [[ "$1" == "install" ]]; then
+  touch "$CONDA_PYTHON_INSTALLED"
+  exit 0
+fi
+exit 0
+""",
+                encoding="utf-8",
+            )
+            conda.chmod(0o755)
+            env = os.environ.copy()
+            env["PATH"] = f"{fakebin}{os.pathsep}{env.get('PATH', '')}"
+            env["CONDALOG"] = str(log_path)
+            env["CONDA_PYTHON_INSTALLED"] = str(state_path)
+            completed = subprocess.run(
+                [
+                    "scripts/setup_env.sh",
+                    "--mode",
+                    "conda",
+                    "--conda-env",
+                    "aiplane",
+                    "--action",
+                    "install",
+                    "--editable",
+                    "--activate",
+                    "0",
+                ],
+                cwd=root,
+                env=env,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            conda_log = log_path.read_text(encoding="utf-8")
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("Conda environment exists but does not contain Python: aiplane", completed.stderr)
+        self.assertIn("+ conda install -n aiplane python=3.13 -y", completed.stdout)
+        self.assertIn("install -n aiplane python=3.13 -y", conda_log)
 
     def test_provider_helper_runtime_dry_runs(self) -> None:
         root = Path.cwd()
@@ -4436,9 +4712,12 @@ class MvpTests(unittest.TestCase):
 
     def test_environment_doctor_cli_groups_installable_tools(self) -> None:
         stdout = StringIO()
-        with redirect_stdout(stdout):
+        stderr = StringIO()
+        with redirect_stdout(stdout), redirect_stderr(stderr):
             code = cli_main(["environment", "doctor", "--required-only", "--format", "json"])
         self.assertEqual(code, 0)
+        self.assertIn("checking tool", stderr.getvalue())
+        self.assertIn("\r", stderr.getvalue())
         payload = json.loads(stdout.getvalue())
         self.assertEqual(payload["name"], "environment_doctor")
         self.assertIn("summary", payload)
@@ -4481,6 +4760,16 @@ class MvpTests(unittest.TestCase):
         self.assertIn("WHY", output)
         self.assertIn("mandatory", output)
         self.assertIn("runtime", output)
+        tool_lines = [line for line in output.splitlines() if "  tool" in line]
+        mandatory_indexes = [index for index, line in enumerate(tool_lines) if " mandatory" in line]
+        optional_indexes = [index for index, line in enumerate(tool_lines) if " optional" in line]
+        if mandatory_indexes and optional_indexes:
+            self.assertLess(max(mandatory_indexes), min(optional_indexes))
+        for indexes in [mandatory_indexes, optional_indexes]:
+            installed_indexes = [index for index in indexes if " installed" in tool_lines[index]]
+            missing_indexes = [index for index in indexes if " missing" in tool_lines[index]]
+            if installed_indexes and missing_indexes:
+                self.assertLess(max(installed_indexes), min(missing_indexes))
 
     def test_benchmark_framework_cli_plans_and_install_dry_run(self) -> None:
         stdout = StringIO()

@@ -124,7 +124,22 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
     },
     "aiplane.providers.list": {
         "type": "object",
-        "properties": {"profile": {"type": "string"}},
+        "properties": {
+            "profile": {"type": "string"},
+            "status": {
+                "type": "string",
+                "enum": ["enabled", "disabled", "all"],
+                "default": "all",
+            },
+            "group_by": {
+                "type": "string",
+                "enum": ["runtime", "ownership"],
+            },
+            "runtime": {
+                "type": "array",
+                "items": {"type": "string"},
+            },
+        },
         "additionalProperties": False,
     },
     "aiplane.providers.models": {
@@ -386,7 +401,11 @@ class AiplaneMcpServer:
 
     def _call_profile_tool(self, name: str, arguments: dict[str, Any], profile: Profile) -> Any:
         if name == "aiplane.providers.list":
-            return ProviderRegistry(profile).list()
+            return ProviderRegistry(profile).list(
+                runtimes=_string_list(arguments.get("runtime")),
+                group_by=str(arguments.get("group_by") or "") or None,
+                status=str(arguments.get("status") or "all"),
+            )
         if name == "aiplane.providers.models":
             result = ProviderRegistry(profile).models(str(arguments.get("provider") or ""))
             return result.__dict__
@@ -582,3 +601,11 @@ def _tool_content(value: Any) -> dict[str, Any]:
 
 def _dict(value: object) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
+
+
+def _string_list(value: object) -> list[str]:
+    if isinstance(value, list):
+        return [str(item) for item in value if item]
+    if isinstance(value, str) and value:
+        return [value]
+    return []

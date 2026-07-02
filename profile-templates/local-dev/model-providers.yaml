@@ -1,60 +1,112 @@
+ollama:
+  ownership: self_managed
+  description: Ollama model library and local pull store
+  typical_runtimes: [ollama]
+  catalog_adapter: ollama
+  enabled: true
+  origin: default
 huggingface:
-  description: Hugging Face Hub model repositories with tokenizer, config, and weights
-  typical_runtimes: [transformers, vllm, tgi]
-  online_adapter: huggingface
+  ownership: self_managed
+  description: Hugging Face Hub model repos with tokenizer/config/weights
+  typical_runtimes: [vllm, tgi, transformers]
+  catalog_adapter: huggingface
+  enabled: true
+  origin: default
+nvidia:
+  ownership: self_managed
+  description: NVIDIA open model repos on Hugging Face, including Nemotron language, reasoning, retrieval, speech, vision, and safety models
+  typical_runtimes: [vllm, tgi, transformers]
+  catalog_adapter: huggingface
+  huggingface_author: nvidia
   enabled: true
   origin: default
 huggingface_gguf:
-  description: Hugging Face GGUF repositories commonly served by llama.cpp-style runtimes
-  typical_runtimes: [llamacpp, lmstudio, localai]
-  online_adapter: huggingface_gguf
+  ownership: self_managed
+  description: GGUF model files hosted on Hugging Face or another file store
+  typical_runtimes: [llamacpp, localai, ollama]
+  catalog_adapter: huggingface_gguf
   enabled: true
   origin: default
 local_file:
-  description: User-maintained local/manual model source entries
-  typical_runtimes: [llamacpp, transformers]
-  online_adapter: profile_catalog
+  ownership: self_managed
+  description: Local model path, usually GGUF, ONNX, checkpoint, or runtime-specific files
   enabled: false
+  catalog_adapter: profile_catalog
+  typical_runtimes: [llamacpp, localai, faster_whisper, diffusers, comfyui]
   origin: default
-ollama:
-  description: Ollama model library and local pull store
-  typical_runtimes: [ollama]
-  online_adapter: ollama
+azure_speech:
+  ownership: managed_service
+  description: Azure AI Speech voice deployments and voice names
+  enabled: false
+  endpoint_family: azure_speech
+  api_key_env: AZURE_SPEECH_KEY
+  auth:
+    required: true
+    method: api_key
+  typical_runtimes: []
+  catalog_adapter: profile_catalog
+  origin: default
+elevenlabs:
+  ownership: managed_service
+  description: ElevenLabs hosted text-to-speech voices and voice models
+  endpoint_family: elevenlabs
+  endpoint: 'https://api.elevenlabs.io/v1'
+  api_key_env: ELEVENLABS_API_KEY
+  auth:
+    required: true
+    method: api_key
+  typical_runtimes: []
+  catalog_adapter: elevenlabs
   enabled: true
   origin: default
 openai:
+  ownership: managed_service
   description: OpenAI hosted model catalog and deployments
-  typical_runtimes: [openai]
-  online_adapter: profile_catalog
+  endpoint_family: openai
+  endpoint: 'https://api.openai.com/v1'
+  api_key_env: OPENAI_API_KEY
+  auth:
+    required: true
+    method: bearer
+  typical_runtimes: []
+  catalog_adapter: profile_catalog
   enabled: true
   origin: default
 anthropic:
+  ownership: managed_service
   description: Anthropic hosted model catalog
-  typical_runtimes: [anthropic]
-  online_adapter: profile_catalog
+  endpoint_family: anthropic
+  endpoint: 'https://api.anthropic.com'
+  api_key_env: ANTHROPIC_API_KEY
+  auth:
+    required: true
+    method: api_key
+  typical_runtimes: []
+  catalog_adapter: profile_catalog
   enabled: true
   origin: default
 azure_openai:
+  ownership: managed_service
   description: Azure OpenAI deployments in a configured Azure OpenAI resource
-  typical_runtimes: [azure_openai]
-  online_adapter: azure_openai
+  endpoint_family: azure_openai
+  api_key_env: AZURE_OPENAI_API_KEY
+  auth:
+    required: true
+    method: api_key
+  typical_runtimes: []
+  catalog_adapter: azure_openai
   enabled: true
   origin: default
 ollama_cloud:
+  ownership: managed_service
   description: Ollama Cloud hosted catalog and endpoints
-  typical_runtimes: [ollama_cloud]
-  online_adapter: profile_catalog
-  enabled: true
-  origin: default
-azure_speech:
-  description: Azure AI Speech managed text-to-speech voices
-  typical_runtimes: [azure_speech]
-  online_adapter: profile_catalog
-  enabled: false
-  origin: default
-elevenlabs:
-  description: ElevenLabs hosted text-to-speech voices and voice models
-  typical_runtimes: [elevenlabs]
-  online_adapter: elevenlabs
+  endpoint_family: ollama_cloud
+  endpoint: 'https://ollama.com'
+  api_key_env: OLLAMA_API_KEY
+  auth:
+    required: true
+    method: bearer
+  typical_runtimes: []
+  catalog_adapter: profile_catalog
   enabled: true
   origin: default

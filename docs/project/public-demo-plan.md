@@ -135,6 +135,7 @@ Voiceover:
 On screen:
 
 ```bash
+aiplane providers list --group-by ownership
 aiplane providers list --group-by runtime
 aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider ollama --query chat --dry-run --limit 5
 aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider ollama --query chat --limit 10
@@ -160,16 +161,52 @@ printf 'chat=%s autocomplete=%s embedding=%s\n' "$CHAT_ALIAS" "$AUTOCOMPLETE_ALI
 
 Voiceover:
 
-> The top-down shape is provider, model purpose, runtime, hardware, then tool integration. Discovery can pull provider results into an ignored discovery cache. Then we filter by role, runtime, RAM, VRAM, score signals, and target hardware before adding the reviewed candidate into stable profile-owned model config.
+> The top-down shape is provider, model purpose, runtime, hardware, then tool integration. Provider ownership separates self-managed sources from managed services. Discovery can pull provider results into an ignored discovery cache, but managed-service providers such as OpenAI, Anthropic, Azure OpenAI, Ollama Cloud, Azure Speech, and ElevenLabs do not have local model weights for aiplane to pull. Then we filter by role, runtime, RAM, VRAM, score signals, and target hardware before adding the reviewed candidate into stable profile-owned model config.
 
 What to highlight:
 
+- `providers list --group-by ownership` separates `self_managed` sources from `managed_service` providers.
 - `models refresh --dry-run` shows next steps without writing.
 - `models.discovered.yaml` is ignored review state with a generated-file banner.
 - `models add --alias` shows the reviewed path from discovered candidate to stable profile-owned model entry.
 - `models clone` shows why a second local entry can point at the same real model for a different purpose.
 - `models list --group-by runtime` and role/hardware filters show structure.
 - Hardware fit is a recommendation signal, not a hidden install/deploy action.
+- Managed-service providers are configured and tested through credentials/endpoints; use provider tests instead of model pull commands.
+
+Managed-provider credential reminder for the demo:
+
+```bash
+# Keep this file ignored/local. Do not commit raw API keys.
+mkdir -p .aiplane
+$EDITOR .aiplane/credentials.yaml
+
+# Example refs inside .aiplane/credentials.yaml:
+# providers:
+#   openai:
+#     accounts:
+#       personal:
+#         api_key_env: OPENAI_PERSONAL_API_KEY
+#         endpoint: https://api.openai.com/v1
+#       business_a:
+#         api_key_env: OPENAI_BUSINESS_A_API_KEY
+#         endpoint: https://api.openai.com/v1
+#   azure_openai:
+#     accounts:
+#       business_a:
+#         api_key_env: AZURE_OPENAI_BUSINESS_A_KEY
+#         endpoint: https://YOUR-RESOURCE.openai.azure.com
+#         api_version: 2024-02-01
+
+aiplane credentials list
+aiplane credentials show openai.personal
+aiplane providers list --group-by ownership
+aiplane credentials list
+aiplane providers test openai --credential-ref openai.personal
+aiplane providers test azure_openai --credential-ref azure_openai.business_a
+```
+
+Recording note: show the redacted `credentials list/show` output, not the editor with real values. Use `api_key_env` and shell/secret-manager environment variables for actual secrets.
 
 ### 1:30-2:00 - Runtime Setup, Pull, And Chat
 

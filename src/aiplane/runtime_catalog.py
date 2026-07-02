@@ -14,6 +14,7 @@ from .models import Profile
 
 RUNTIME_DEFINITIONS: dict[str, dict[str, Any]] = {
     "ollama": {
+        "ownership": "self_managed",
         "description": "Local/headless Ollama runtime with its own model library and Modelfile/GGUF import path",
         "managed_by_helper": True,
         "gui_required": False,
@@ -23,6 +24,7 @@ RUNTIME_DEFINITIONS: dict[str, dict[str, Any]] = {
         "install_hint": "scripts/provider_helper.sh --provider ollama --action install",
     },
     "azure_speech": {
+        "ownership": "managed_service",
         "description": "Azure AI Speech managed text-to-speech service",
         "managed_by_helper": False,
         "gui_required": False,
@@ -40,7 +42,7 @@ RUNTIME_DEFINITIONS: dict[str, dict[str, Any]] = {
         "managed_by_helper": True,
         "gui_required": False,
         "protocol": "openai_compatible",
-        "model_sources": ["huggingface"],
+        "model_sources": ["huggingface", "nvidia"],
         "good_for": [
             "shared GPU workstation",
             "Azure/AWS GPU VM",
@@ -62,7 +64,7 @@ RUNTIME_DEFINITIONS: dict[str, dict[str, Any]] = {
         "managed_by_helper": True,
         "gui_required": False,
         "protocol": "openai_compatible",
-        "model_sources": ["huggingface"],
+        "model_sources": ["huggingface", "nvidia"],
         "good_for": ["server inference", "containerized GPU endpoints"],
         "install_hint": "Run the ghcr.io/huggingface/text-generation-inference container or native TGI install",
     },
@@ -71,7 +73,7 @@ RUNTIME_DEFINITIONS: dict[str, dict[str, Any]] = {
         "managed_by_helper": "partial",
         "gui_required": False,
         "protocol": "python_library",
-        "model_sources": ["huggingface"],
+        "model_sources": ["huggingface", "nvidia"],
         "good_for": ["experiments", "training", "fine-tuning", "evaluation scripts"],
         "install_hint": "python -m pip install transformers accelerate torch",
     },
@@ -133,19 +135,35 @@ RUNTIME_DEFINITIONS: dict[str, dict[str, Any]] = {
 
 SOURCE_DEFINITIONS: dict[str, dict[str, Any]] = {
     "ollama": {
+        "ownership": "self_managed",
         "description": "Ollama model library and local pull store",
         "typical_runtimes": ["ollama"],
+        "catalog_adapter": "ollama",
     },
     "huggingface": {
+        "ownership": "self_managed",
         "description": "Hugging Face Hub model repos with tokenizer/config/weights",
         "typical_runtimes": ["vllm", "tgi", "transformers"],
+        "catalog_adapter": "huggingface",
+    },
+    "nvidia": {
+        "ownership": "self_managed",
+        "description": "NVIDIA open model repos on Hugging Face, including Nemotron language, reasoning, retrieval, speech, vision, and safety models",
+        "typical_runtimes": ["vllm", "tgi", "transformers"],
+        "catalog_adapter": "huggingface",
+        "huggingface_author": "nvidia",
     },
     "huggingface_gguf": {
+        "ownership": "self_managed",
         "description": "GGUF model files hosted on Hugging Face or another file store",
         "typical_runtimes": ["llamacpp", "localai", "ollama"],
+        "catalog_adapter": "huggingface_gguf",
     },
     "local_file": {
+        "ownership": "self_managed",
         "description": "Local model path, usually GGUF, ONNX, checkpoint, or runtime-specific files",
+        "enabled": False,
+        "catalog_adapter": "profile_catalog",
         "typical_runtimes": [
             "llamacpp",
             "localai",
@@ -155,34 +173,63 @@ SOURCE_DEFINITIONS: dict[str, dict[str, Any]] = {
         ],
     },
     "azure_speech": {
+        "ownership": "managed_service",
         "description": "Azure AI Speech voice deployments and voice names",
-        "typical_runtimes": ["azure_speech"],
-        "online_adapter": "profile_catalog",
+        "enabled": False,
+        "endpoint_family": "azure_speech",
+        "api_key_env": "AZURE_SPEECH_KEY",
+        "auth": {"required": True, "method": "api_key"},
+        "typical_runtimes": [],
+        "catalog_adapter": "profile_catalog",
     },
     "elevenlabs": {
+        "ownership": "managed_service",
         "description": "ElevenLabs hosted text-to-speech voices and voice models",
-        "typical_runtimes": ["elevenlabs"],
-        "online_adapter": "elevenlabs",
+        "endpoint_family": "elevenlabs",
+        "endpoint": "https://api.elevenlabs.io/v1",
+        "api_key_env": "ELEVENLABS_API_KEY",
+        "auth": {"required": True, "method": "api_key"},
+        "typical_runtimes": [],
+        "catalog_adapter": "elevenlabs",
     },
     "openai": {
+        "ownership": "managed_service",
         "description": "OpenAI hosted model catalog and deployments",
-        "typical_runtimes": ["openai"],
-        "online_adapter": "profile_catalog",
+        "endpoint_family": "openai",
+        "endpoint": "https://api.openai.com/v1",
+        "api_key_env": "OPENAI_API_KEY",
+        "auth": {"required": True, "method": "bearer"},
+        "typical_runtimes": [],
+        "catalog_adapter": "profile_catalog",
     },
     "anthropic": {
+        "ownership": "managed_service",
         "description": "Anthropic hosted model catalog",
-        "typical_runtimes": ["anthropic"],
-        "online_adapter": "profile_catalog",
+        "endpoint_family": "anthropic",
+        "endpoint": "https://api.anthropic.com",
+        "api_key_env": "ANTHROPIC_API_KEY",
+        "auth": {"required": True, "method": "api_key"},
+        "typical_runtimes": [],
+        "catalog_adapter": "profile_catalog",
     },
     "azure_openai": {
+        "ownership": "managed_service",
         "description": "Azure OpenAI deployments in a configured Azure OpenAI resource",
-        "typical_runtimes": ["azure_openai"],
-        "online_adapter": "azure_openai",
+        "endpoint_family": "azure_openai",
+        "api_key_env": "AZURE_OPENAI_API_KEY",
+        "auth": {"required": True, "method": "api_key"},
+        "typical_runtimes": [],
+        "catalog_adapter": "azure_openai",
     },
     "ollama_cloud": {
+        "ownership": "managed_service",
         "description": "Ollama Cloud hosted catalog and endpoints",
-        "typical_runtimes": ["ollama_cloud"],
-        "online_adapter": "profile_catalog",
+        "endpoint_family": "ollama_cloud",
+        "endpoint": "https://ollama.com",
+        "api_key_env": "OLLAMA_API_KEY",
+        "auth": {"required": True, "method": "bearer"},
+        "typical_runtimes": [],
+        "catalog_adapter": "profile_catalog",
     },
 }
 
@@ -560,6 +607,10 @@ class RuntimeCatalog:
 
     def set_preferred_runtime(self, model_name: str, runtime: str) -> dict[str, Any]:
         model = self._model(model_name)
+        if self._model_ownership(model) == "managed_service":
+            raise ValueError(
+                f"managed-service model {model_name!r} cannot use a local runtime; configure provider endpoint credentials instead"
+            )
         supported = self.supported_runtimes(model_name, include_gui=True)
         if runtime not in supported:
             raise ValueError(
@@ -576,6 +627,15 @@ class RuntimeCatalog:
         if mode not in {"docker", "conda"}:
             raise ValueError("mode must be docker or conda")
         model = self._model(model_name)
+        if self._model_ownership(model) == "managed_service":
+            raise ValueError(
+                f"managed-service model {model_name!r} cannot be bundled with runtime {runtime!r}; use provider credentials/endpoints and integration export instead"
+            )
+        supported = self.compatible_runtimes_for_entry(model, include_gui=True)
+        if runtime not in supported:
+            raise ValueError(
+                f"runtime {runtime!r} is not supported by model {model_name!r}; supported: {', '.join(supported) or 'none'}"
+            )
         model_id = str(model.get("model") or model_name)
         files = {
             "Dockerfile": _dockerfile_for_runtime(runtime, model_id),
@@ -763,6 +823,15 @@ class RuntimeCatalog:
         if not isinstance(model, dict):
             raise ValueError(f"unknown model: {name}")
         return model
+
+    def _model_ownership(self, model: dict[str, Any]) -> str:
+        if model.get("ownership"):
+            return str(model.get("ownership"))
+        provider = self._providers().get(str(model.get("provider") or ""), {})
+        if provider.get("ownership"):
+            return str(provider.get("ownership"))
+        provider_name = str(model.get("provider") or "")
+        return "managed_service" if provider_name in PROVIDER_ENDPOINT_DEFAULTS else "self_managed"
 
 
 def _dockerfile_for_runtime(runtime: str, model_id: str) -> str:

@@ -92,8 +92,6 @@ class CredentialStore:
                 )
         return {
             "name": "credentials",
-            "path": str(self.path),
-            "exists": self.path.exists(),
             "credentials": rows,
         }
 
