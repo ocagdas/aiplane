@@ -49,12 +49,22 @@ conda activate aiplane
 aiplane profiles validate local-dev
 aiplane environment doctor --required-only
 
-# Discover Ollama source models and choose an Ollama-native chat alias.
+# Discover current hardware and choose an Ollama-native chat alias that fits it.
+aiplane hardware discover --select-closest --dry-run
 aiplane models refresh --provider ollama --query chat --dry-run --limit 5
 aiplane models refresh --provider ollama --query chat --limit 10
-aiplane models list --provider ollama --role chat --enabled-only --sort-by role --limit 5
-OLLAMA_CHAT_ALIAS="$(aiplane models list --provider ollama --role chat --enabled-only --sort-by role --limit 1 --name-only)"
+aiplane models list --provider ollama --runtime ollama --role chat --capability 'general_chat>=2' --fits-hardware --enabled-only --sort-by role --limit 5
+# The output includes role_score and role_capabilities; chat is scored from general_chat, reasoning, and tool_use.
+# `--sort-by benchmark` is separate and uses saved benchmark results when they exist.
+OLLAMA_CHAT_ALIAS="$(aiplane models list --provider ollama --runtime ollama --role chat --capability 'general_chat>=2' --fits-hardware --enabled-only --sort-by role --limit 1 --name-only)"
 printf 'ollama_chat=%s\n' "$OLLAMA_CHAT_ALIAS"
+
+# Show the local hardware guardrail before any real pull/start.
+aiplane models clone "$OLLAMA_CHAT_ALIAS" demo_too_large --role chat --set min_ram_gb=999999 --set min_vram_gb=999999 --overwrite --dry-run
+aiplane models clone "$OLLAMA_CHAT_ALIAS" demo_too_large --role chat --set min_ram_gb=999999 --set min_vram_gb=999999 --overwrite
+aiplane run --model demo_too_large --dry-run "Hello world" || true
+aiplane run --model demo_too_large --dry-run --ignore-hardware-fit "Hello world"
+aiplane models remove demo_too_large
 
 # Preview and run setup. Setup is the check/prepare step; export remains non-mutating.
 aiplane integrations setup openai-compatible --model "$OLLAMA_CHAT_ALIAS" --dry-run
@@ -81,7 +91,9 @@ Key points to say explicitly:
 - Providers, models, runtimes, machines, stacks, credentials, and integrations are separate concepts.
 - Generated discovery entries are review buffers; profile-owned model entries are deliberate configuration.
 - Doctors, dry-runs, plans, and exports come before mutation.
-- Model selection can be grouped and filtered by provider, runtime, role, capability/score, RAM/VRAM, and target hardware.
+- Model selection can be grouped and filtered by provider, runtime, role, capability/score, RAM/VRAM, and target hardware; `--fits-hardware` composes with capability filters, role-score sorting, and `--limit 1`.
+- Local model runs fail before pull/start when active hardware minimums are not met, unless `--ignore-hardware-fit` is passed.
+- The `demo_too_large` clone is a disposable guardrail example: it points at the same real model but carries impossible resource requirements so the rejection is deterministic.
 - The longer-term direction includes custom profiling/scoring, richer benchmark data, orchestrator exports, and remote/cloud resource planning.
 
 ## Disposable Demo Profile
@@ -356,14 +368,17 @@ On screen:
 ```bash
 aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --group-by provider-kind --limit 20
 aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --group-by runtime --limit 20
-aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --role chat --runtime ollama --ram-gb 16 --vram-gb 0 --sort-by role --limit 5
+aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --role chat --runtime ollama --capability 'general_chat>=2' --fits-hardware --sort-by role --limit 5
+BEST_FIT_ALIAS="$(aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --role chat --runtime ollama --capability 'general_chat>=2' --fits-hardware --sort-by role --limit 1 --name-only)"
+printf 'best_fit=%s\n' "$BEST_FIT_ALIAS"
+# `--sort-by role` is the score sort for the requested role; `avg` is the broad average score.
 aiplane --profiles-dir /tmp/aiplane-demo-profiles hardware recommend --profile demo
 aiplane --profiles-dir /tmp/aiplane-demo-profiles models benchmark --profile demo --task generation "$CHAT_ALIAS" --dry-run
 ```
 
 Voiceover:
 
-> Model choice is not just a name in a config file. aiplane can group by provider kind or runtime, filter by purpose and target hardware, and rank candidates using catalog signals. Hardware recommendation and benchmark results are separate inputs. The roadmap is to make scoring more extensible: local benchmark results, custom profiling, and team-specific suitability signals.
+> Model choice is not just a name in a config file. aiplane can group by provider kind or runtime, filter by purpose, capability threshold, and active hardware, then rank candidates by the requested role score and pick the top result with `--limit 1`. Hardware recommendation and benchmark results are separate inputs. The roadmap is to make scoring more extensible: local benchmark results, custom profiling, and team-specific suitability signals.
 
 ### 1:10-1:45 - Remote/Azure Resource Discovery For Media
 

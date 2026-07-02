@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from .audit import AuditLogger
 from .backends import BackendResult
+from .hardware import HardwareManager
 from .model_catalog import ModelCatalog
 from .models import AuditEvent, Profile
 from .policy import PolicyEngine
@@ -21,6 +22,7 @@ class Router:
         prefer_escalation: bool = False,
         model_name: str | None = None,
         dry_run: bool = False,
+        ignore_hardware_fit: bool = False,
     ) -> BackendResult:
         if prefer_escalation and contains_secret(task):
             self.audit.record(
@@ -38,6 +40,22 @@ class Router:
         local = bool(selected["model"].get("local", False))
         action = f"model:{selected['name']}"
 
+        if local and not ignore_hardware_fit:
+            fit = HardwareManager(self.profile).check_model_fit(selected["model"])
+            if not fit.usable:
+                self.audit.record(
+                    AuditEvent(
+                        "route",
+                        self.profile.name,
+                        action,
+                        "blocked",
+                        {"provider": provider, "reason": fit.reason, "hardware_fit": False},
+                    )
+                )
+                raise RuntimeError(
+                    f"model does not satisfy active hardware requirements: {fit.reason}; "
+                    "rerun with --ignore-hardware-fit to override"
+                )
         if not local:
             self._check_cloud_allowed(task)
 

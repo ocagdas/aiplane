@@ -220,9 +220,11 @@ aiplane models defaults --group-by provider
 
 Model rows include hardware requirement hints where available: `min_ram_gb`, `recommended_ram_gb`, `min_vram_gb`, `recommended_vram_gb`, `resource_estimate_source`, `gpu_vendor_requirement`, and `accelerator_api_requirements`. These values come from profile metadata, provider/discovery metadata when supported, or aiplane's current parameter-size/role heuristic for discovered models. They are meant for filtering and planning; validate with real runtime startup and benchmarks before provisioning hardware.
 
-You can filter by target hardware capacity and explicit accelerator requirements. Today these filters take explicit RAM/VRAM/vendor/API values; imported machine profiles and external machine files are used by `hardware recommend` and `machines recommend`, and first-class `models list --machine` / `--hardware-file` filtering is planned:
+You can filter by the active hardware profile or by explicit target capacity and accelerator requirements. `--fits-hardware` derives RAM, VRAM, GPU vendor, and accelerator API filters from `aiplane hardware active`; explicit flags remain useful when planning for another target. Imported machine profiles and external machine files are used by `hardware recommend` and `machines recommend`, and first-class `models list --machine` / `--hardware-file` filtering is planned:
 
 ```bash
+aiplane models list --fits-hardware
+aiplane models list --runtime ollama --role chat --fits-hardware --sort-by benchmark --limit 3
 aiplane models list --runtime ollama --role chat --ram-gb 64 --vram-gb 24 --sort-by benchmark --limit 3
 aiplane models list --runtime vllm --gpu-vendor nvidia --accelerator-api cuda --ram-gb 64 --vram-gb 24
 ```

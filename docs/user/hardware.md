@@ -8,6 +8,9 @@ resource limits, and remote target capacity explicit in profiles.
 
 ```bash
 aiplane hardware discover
+aiplane hardware discover --select-closest --dry-run
+aiplane hardware discover --select-closest
+aiplane hardware clear
 aiplane hardware active
 aiplane hardware show
 aiplane hardware templates
@@ -24,7 +27,11 @@ aiplane hardware export-machine --name local_box > local_box.machine.yaml
 - `discover`: probes the current machine for CPU count, RAM, visible
   NVIDIA/AMD GPUs where local tools are available, and closest matching
   hardware templates. Use this when you want to dump what `aiplane` can see on
-  the current host without changing profile config.
+  the current host without changing profile config. Add `--select-closest` to
+  update the active hardware template, or combine it with `--dry-run` to preview
+  that write first.
+- `clear`: resets selected hardware state back to `local_auto`. Raw discovery is
+  not cached, so there is no separate discovery cache to clear.
 - `active`: prints only the selected hardware config, including template origin,
   custom status, current values, and the normalized effective machine used for
   recommendations.
@@ -48,6 +55,9 @@ Quick ways to show the current host:
 
 ```bash
 aiplane hardware discover
+aiplane hardware discover --select-closest --dry-run
+aiplane hardware discover --select-closest
+aiplane hardware clear
 aiplane hardware active
 aiplane hardware show
 ```
@@ -154,7 +164,9 @@ by recommendation. If a profile is hand-edited into a shape that no longer comes
 from a template, it should be treated as custom.
 
 Use `local_auto` when you want discovery to describe the current machine and
-report the closest matching templates without committing to a fixed shape. Use a
+report the closest matching templates without committing to a fixed shape. Use
+`aiplane hardware discover --select-closest` when you want discovery to update
+the selected template to the nearest match. Use a
 named template when you want runs, deployment plans, or integration exports to
 be tied to an intended target such as a CPU laptop, NVIDIA workstation, AMD
 unified-memory workstation, cloud GPU VM, or AKS GPU pool.

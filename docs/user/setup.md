@@ -301,10 +301,16 @@ aiplane profiles remove old-local --dry-run
 aiplane profiles remove old-local --yes
 ```
 
-Hardware discovery is under the `hardware` command family, not `profiles`:
+Hardware discovery is under the `hardware` command family, not `profiles`.
+`profiles bootstrap-local` runs hardware discovery by default when the profile
+exists or has just been created, and can set the active hardware template to the
+closest discovered match:
 
 ```bash
+aiplane profiles bootstrap-local
+aiplane profiles bootstrap-local --select-closest-hardware
 aiplane hardware discover
+aiplane hardware discover --select-closest --dry-run
 aiplane hardware active
 aiplane hardware export-machine --name local_box > local_box.machine.yaml
 ```

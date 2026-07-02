@@ -315,11 +315,7 @@ def _main(argv: list[str] | None = None) -> int:
             "the profile directory that would be removed. Runtime caches, credentials, and model weights are not deleted."
         ),
         formatter_class=HelpFormatter,
-        epilog=(
-            "Examples:\n"
-            "  aiplane profiles remove old-local --dry-run\n"
-            "  aiplane profiles remove old-local --yes"
-        ),
+        epilog=("Examples:\n  aiplane profiles remove old-local --dry-run\n  aiplane profiles remove old-local --yes"),
     )
     remove.add_argument("name", help="Editable profile name to remove")
     remove.add_argument(
@@ -344,6 +340,7 @@ def _main(argv: list[str] | None = None) -> int:
             "Examples:\n"
             "  aiplane profiles bootstrap-local\n"
             "  aiplane profiles bootstrap-local --provider ollama --limit 25\n"
+            "  aiplane profiles bootstrap-local --select-closest-hardware\n"
             "  aiplane profiles bootstrap-local --no-discovery\n"
             "  aiplane profiles bootstrap-local --dry-run"
         ),
@@ -367,6 +364,16 @@ def _main(argv: list[str] | None = None) -> int:
         "--no-discovery",
         action="store_true",
         help="Create and validate the profile without refreshing provider model discovery",
+    )
+    bootstrap.add_argument(
+        "--no-hardware-discovery",
+        action="store_true",
+        help="Skip local hardware discovery during bootstrap",
+    )
+    bootstrap.add_argument(
+        "--select-closest-hardware",
+        action="store_true",
+        help="Set active hardware to the closest discovered template during bootstrap",
     )
     bootstrap.add_argument(
         "--provider",
@@ -451,6 +458,11 @@ def _main(argv: list[str] | None = None) -> int:
         "--dry-run",
         action="store_true",
         help="Show selected model and prompt without calling the provider",
+    )
+    run.add_argument(
+        "--ignore-hardware-fit",
+        action="store_true",
+        help="Allow a local model run even when active hardware minimums are not satisfied",
     )
     run.add_argument("task", help="Prompt/task text to send to the selected model")
 
@@ -538,10 +550,30 @@ def _main(argv: list[str] | None = None) -> int:
     hardware_discover = hardware_sub.add_parser(
         "discover",
         help="Probe local CPU/RAM/GPU resources",
-        description="Discover local hardware and show closest matching hardware templates.",
+        description="Discover local hardware and show closest matching hardware templates. Optionally select the closest template.",
         formatter_class=HelpFormatter,
     )
     _profile_arg(hardware_discover)
+    hardware_discover.add_argument(
+        "--select-closest",
+        action="store_true",
+        help="Update active hardware selection to the closest discovered template",
+    )
+    hardware_discover.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Preview the closest-template selection without writing hardware.yaml",
+    )
+    hardware_clear = hardware_sub.add_parser(
+        "clear",
+        help="Reset selected hardware to local_auto",
+        description="Clear the mutable selected hardware state and reset the profile to local_auto. Raw discovery is not cached.",
+        formatter_class=HelpFormatter,
+    )
+    _profile_arg(hardware_clear)
+    hardware_clear.add_argument(
+        "--dry-run", action="store_true", help="Preview the reset without writing hardware.yaml"
+    )
     hardware_doctor = hardware_sub.add_parser(
         "doctor",
         help="Check hardware/model fit",
@@ -1316,6 +1348,11 @@ def _main(argv: list[str] | None = None) -> int:
         "--managed-service-only",
         action="store_true",
         help="Show only managed-service models if the profile defines any",
+    )
+    models_list.add_argument(
+        "--fits-hardware",
+        action="store_true",
+        help="Filter to models whose minimum RAM/VRAM/vendor/API requirements fit the active hardware profile",
     )
     models_list.add_argument(
         "--ram-gb",
@@ -2715,9 +2752,17 @@ def _main(argv: list[str] | None = None) -> int:
             profile_exists = profile_path.exists()
             validation = None
             discovery = None
+            hardware = None
             if profile_exists:
                 profile = load_profile(args.name, workspace, profiles_dir=profiles_dir)
                 validation = _validate_profile(profile)
+                if not args.no_hardware_discovery:
+                    manager = HardwareManager(profile)
+                    hardware = (
+                        manager.select_closest_discovered(dry_run=args.dry_run)
+                        if args.select_closest_hardware
+                        else manager.discover()
+                    )
                 if not args.no_discovery:
                     catalog = ModelCatalog(profile)
                     provider_limits = _parse_provider_limits(args.provider_limit)
@@ -2748,11 +2793,12 @@ def _main(argv: list[str] | None = None) -> int:
                     finally:
                         if progress:
                             progress("done", "", "")
-            elif not args.no_discovery:
-                discovery = {
-                    "skipped": True,
-                    "reason": "profile does not exist yet; rerun without --dry-run to create it before discovery",
-                }
+            elif not args.no_discovery or not args.no_hardware_discovery:
+                skipped = "profile does not exist yet; rerun without --dry-run to create it before discovery"
+                if not args.no_discovery:
+                    discovery = {"skipped": True, "reason": skipped}
+                if not args.no_hardware_discovery:
+                    hardware = {"skipped": True, "reason": skipped}
             print(
                 _json(
                     {
@@ -2766,6 +2812,8 @@ def _main(argv: list[str] | None = None) -> int:
                         "dry_run": args.dry_run,
                         "discovery_requested": not args.no_discovery,
                         "discovery": discovery,
+                        "hardware_discovery_requested": not args.no_hardware_discovery,
+                        "hardware": hardware,
                         "validation": validation,
                         "next_steps": _profile_bootstrap_next_steps(args.name, not args.no_discovery, args.dry_run),
                     },
@@ -2798,6 +2846,7 @@ def _main(argv: list[str] | None = None) -> int:
             prefer_escalation=args.escalate,
             model_name=args.model,
             dry_run=args.dry_run,
+            ignore_hardware_fit=args.ignore_hardware_fit,
         )
         print(result.text)
         return 0
@@ -2893,7 +2942,13 @@ def _main(argv: list[str] | None = None) -> int:
             )
             return 0
         if args.hardware_command == "discover":
-            print(_json(manager.discover(), indent=2, sort_keys=True))
+            result = (
+                manager.select_closest_discovered(dry_run=args.dry_run) if args.select_closest else manager.discover()
+            )
+            print(_json(result, indent=2, sort_keys=True))
+            return 0
+        if args.hardware_command == "clear":
+            print(_json(manager.clear_selection(dry_run=args.dry_run), indent=2, sort_keys=True))
             return 0
         if args.hardware_command == "recommend":
             print(
@@ -3218,6 +3273,8 @@ def _main(argv: list[str] | None = None) -> int:
             return 0
         if args.models_command == "list":
             filters = _model_filter_args(args)
+            if args.fits_hardware:
+                filters.update(_active_hardware_model_filters(profile))
             rows = catalog.sort_rows(
                 catalog.filter(filters),
                 sort_by=args.sort_by,
@@ -3916,6 +3973,26 @@ def _refresh_cli_payload(result: dict[str, object], verbose: bool) -> dict[str, 
     payload.pop("results", None)
     payload["provider_summary"] = provider_summary
     return payload
+
+
+def _active_hardware_model_filters(profile) -> dict[str, object]:
+    machine = HardwareManager(profile).machine()
+    memory = machine.get("memory", {}) if isinstance(machine.get("memory"), dict) else {}
+    gpu = machine.get("gpu", {}) if isinstance(machine.get("gpu"), dict) else {}
+    filters: dict[str, object] = {}
+    ram = memory.get("ram_gb") or memory.get("unified_memory_gb")
+    if ram is not None:
+        filters["max_min_ram_gb"] = ram
+    vram = gpu.get("vram_gb") or memory.get("unified_memory_gb")
+    if vram is not None:
+        filters["max_min_vram_gb"] = vram
+    vendor = gpu.get("vendor")
+    if vendor:
+        filters["gpu_vendor"] = str(vendor)
+    accelerator_apis = machine.get("accelerator_apis")
+    if isinstance(accelerator_apis, list) and accelerator_apis:
+        filters["accelerator_api"] = str(accelerator_apis[0])
+    return filters
 
 
 def _model_filter_args(args) -> dict[str, object]:

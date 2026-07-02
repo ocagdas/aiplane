@@ -135,6 +135,54 @@ class HardwareManager:
         self._write_config()
         return self.active_config()
 
+    def select_closest_discovered(self, dry_run: bool = False) -> dict[str, Any]:
+        discovered = self.discover()
+        closest = discovered.get("closest_profiles", [])
+        selected = closest[0] if closest else None
+        result: dict[str, Any] = {
+            "discovered": discovered,
+            "selected": None,
+            "would_select": None,
+            "dry_run": dry_run,
+        }
+        if not isinstance(selected, dict) or not selected.get("name"):
+            result["note"] = "no close hardware template match was found"
+            return result
+        template_name = str(selected["name"])
+        result["would_select" if dry_run else "selected"] = template_name
+        if not dry_run:
+            result["active"] = self.use_template(template_name)
+        return result
+
+    def clear_selection(self, dry_run: bool = False) -> dict[str, Any]:
+        template = self.templates().get("local_auto")
+        result = {
+            "active": "local_auto",
+            "dry_run": dry_run,
+            "would_clear": dry_run,
+            "cleared": not dry_run,
+        }
+        if dry_run:
+            return result
+        self.config["active"] = "local_auto"
+        if isinstance(template, dict):
+            self.config["selected"] = {
+                "origin": "local_auto",
+                "custom": False,
+                "values": _template_values(template),
+            }
+        else:
+            self.config.pop("selected", None)
+        self._write_config()
+        result["selection"] = self.active_config()
+        return result
+
+    def check_model_fit(self, model: dict[str, Any]) -> HardwareFit:
+        discovered = self.discover()
+        machine = self.machine(discovered)
+        fit_basis = _discovered_from_machine(machine, discovered)
+        return _fit_model(model, fit_basis)
+
     def _write_config(self) -> None:
         path = self.profile.root / "hardware.yaml"
         path.write_text(dump_yaml(self.config), encoding="utf-8")
@@ -159,6 +207,8 @@ class HardwareManager:
     def doctor(self, model_name: str | None = None) -> dict[str, Any]:
         catalog = ModelCatalog(self.profile)
         discovered = self.discover()
+        machine = self.machine(discovered)
+        fit_basis = _discovered_from_machine(machine, discovered)
         if model_name:
             model_rows = [catalog.show(model_name)]
         else:
@@ -166,13 +216,14 @@ class HardwareManager:
         needs_fit: list[dict[str, Any]] = []
         no_fit_required: list[dict[str, Any]] = []
         for row in model_rows:
-            fit = _fit_model(row, discovered)
+            fit = _fit_model(row, fit_basis)
             payload = fit.__dict__
             if bool(row.get("local", False)):
                 needs_fit.append(payload)
             else:
                 no_fit_required.append(payload)
         return {
+            "machine": machine,
             "needs_fit_check": needs_fit,
             "no_local_fit_check_required": no_fit_required,
         }
@@ -485,17 +536,17 @@ def _score_template(template: dict[str, Any], discovered: dict[str, Any]) -> tup
         if isinstance(gpu, dict) and "vram_mb" in gpu:
             max_vram_gb = max(max_vram_gb, float(gpu["vram_mb"]) / 1024)
 
-    vendor = str(template.get("vendor", "")).lower()
-    gpu = str(template.get("gpu", "")).lower()
-    profile_type = str(template.get("type", "")).lower()
+    vendor = str(template.get("gpu_vendor") or template.get("vendor") or "").lower()
+    gpu_count = _resolve_number(template.get("gpu_count"), None)
+    placement = str(template.get("placement") or template.get("type") or "").lower()
 
-    if gpu == "none" and not gpus:
+    if vendor in {"none", "cpu"} and not gpus:
         score += 40
         reasons.append("no local GPU discovered")
     if vendor and vendor in vendors:
         score += 50
         reasons.append(f"{vendor} GPU discovered")
-    if not gpus and "local" in profile_type and gpu in {"none", "auto"}:
+    if not gpus and placement in {"same_host", "workstation"} and gpu_count in (None, 0):
         score += 20
         reasons.append("local CPU/system-memory profile")
     if max_vram_gb:

@@ -233,9 +233,7 @@ class MvpTests(unittest.TestCase):
 
             stdout = StringIO()
             with redirect_stdout(stdout):
-                code = cli_main(
-                    ["--profiles-dir", str(profiles_dir), "profiles", "remove", "local-dev"]
-                )
+                code = cli_main(["--profiles-dir", str(profiles_dir), "profiles", "remove", "local-dev"])
 
             self.assertEqual(code, 0)
             preview = json.loads(stdout.getvalue())
@@ -244,9 +242,7 @@ class MvpTests(unittest.TestCase):
 
             stdout = StringIO()
             with redirect_stdout(stdout):
-                code = cli_main(
-                    ["--profiles-dir", str(profiles_dir), "profiles", "remove", "local-dev", "--yes"]
-                )
+                code = cli_main(["--profiles-dir", str(profiles_dir), "profiles", "remove", "local-dev", "--yes"])
 
             self.assertEqual(code, 0)
             removed = json.loads(stdout.getvalue())
@@ -324,6 +320,26 @@ class MvpTests(unittest.TestCase):
             payload = json.loads(stdout.getvalue())
             self.assertEqual(payload["would_copy"], ["models.yaml"])
             self.assertFalse(models_path.exists())
+
+    def test_profiles_bootstrap_local_includes_hardware_discovery(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            profiles_dir = Path(tmp) / "profiles"
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = cli_main(
+                    [
+                        "--profiles-dir",
+                        str(profiles_dir),
+                        "profiles",
+                        "bootstrap-local",
+                        "--no-discovery",
+                        "--select-closest-hardware",
+                    ]
+                )
+            self.assertEqual(code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertTrue(payload["hardware_discovery_requested"])
+            self.assertTrue(payload["hardware"]["selected"])
 
     def test_profiles_bootstrap_local_creates_template_profile_without_discovery(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -709,6 +725,28 @@ class MvpTests(unittest.TestCase):
             )
             self.assertIn("local-code-small", result.text)
             self.assertIn("provider-code-small:1.5b", result.text)
+
+    def test_router_blocks_local_model_when_hardware_minimums_fail_unless_overridden(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            profile = load_profile("local-dev", Path(tmp))
+            profile.models.setdefault("models", {})["too-large-local"] = {
+                "provider": "ollama",
+                "model": "huge:latest",
+                "local": True,
+                "enabled": True,
+                "min_ram_gb": 100000,
+                "min_vram_gb": 0,
+            }
+            router = Router(profile, AuditLogger(profile))
+            with self.assertRaisesRegex(RuntimeError, "hardware requirements"):
+                router.route("explain setup", model_name="too-large-local", dry_run=True)
+            result = router.route(
+                "explain setup",
+                model_name="too-large-local",
+                dry_run=True,
+                ignore_hardware_fit=True,
+            )
+            self.assertEqual(result.backend, "dry_run")
 
     def test_router_run_blocks_managed_service_model_when_policy_disabled(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1228,6 +1266,53 @@ class MvpTests(unittest.TestCase):
         self.assertNotIn("nvidia_consumer_gpu", names)
         self.assertNotIn("nvidia_workstation_gpu", names)
         self.assertTrue(all(row["score"] > 0 for row in closest))
+
+    def test_hardware_discover_can_select_closest_and_clear_selection(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            profiles_dir = Path(tmp) / "profiles"
+            create_profile("local-dev", profiles_dir=profiles_dir)
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = cli_main(
+                    [
+                        "--profiles-dir",
+                        str(profiles_dir),
+                        "hardware",
+                        "discover",
+                        "--profile",
+                        "local-dev",
+                        "--select-closest",
+                        "--dry-run",
+                    ]
+                )
+            self.assertEqual(code, 0)
+            preview = json.loads(stdout.getvalue())
+            self.assertTrue(preview["would_select"])
+
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = cli_main(
+                    [
+                        "--profiles-dir",
+                        str(profiles_dir),
+                        "hardware",
+                        "discover",
+                        "--profile",
+                        "local-dev",
+                        "--select-closest",
+                    ]
+                )
+            self.assertEqual(code, 0)
+            selected = json.loads(stdout.getvalue())
+            self.assertEqual(selected["selected"], preview["would_select"])
+
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = cli_main(["--profiles-dir", str(profiles_dir), "hardware", "clear", "--profile", "local-dev"])
+            self.assertEqual(code, 0)
+            cleared = json.loads(stdout.getvalue())
+            self.assertTrue(cleared["cleared"])
+            self.assertEqual(cleared["selection"]["origin"], "local_auto")
 
     def test_hardware_doctor_checks_model_fit(self) -> None:
         profile = load_profile("local-dev", Path.cwd())
@@ -3156,6 +3241,17 @@ class MvpTests(unittest.TestCase):
         self.assertEqual(code, 0)
         payload = json.loads(stdout.getvalue())
         self.assertLessEqual(len(payload), 3)
+
+    def test_models_list_can_filter_by_active_hardware(self) -> None:
+        stdout = StringIO()
+        with redirect_stdout(stdout):
+            code = cli_main(["models", "list", "--profile", "local-dev", "--fits-hardware"])
+        self.assertEqual(code, 0)
+        rows = json.loads(stdout.getvalue())
+        self.assertTrue(rows)
+        machine = HardwareManager(load_profile("local-dev", Path.cwd())).machine()
+        memory = machine["memory"]["ram_gb"] or machine["memory"].get("unified_memory_gb")
+        self.assertTrue(all(float(row.get("min_ram_gb") or 0) <= float(memory) for row in rows))
 
     def test_models_list_name_only_supports_cli_alias_selection(self) -> None:
         stdout = StringIO()
