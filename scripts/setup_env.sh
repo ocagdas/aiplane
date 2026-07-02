@@ -1,5 +1,21 @@
 #!/usr/bin/env bash
-set -euo pipefail
+
+AIPLANE_SETUP_SOURCED=0
+AIPLANE_SETUP_ORIGINAL_NOUNSET=off
+AIPLANE_SETUP_ORIGINAL_PIPEFAIL=off
+if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then
+  AIPLANE_SETUP_SOURCED=1
+  case "$-" in
+    *u*) AIPLANE_SETUP_ORIGINAL_NOUNSET=on ;;
+  esac
+  if set -o | grep -q '^pipefail[[:space:]]*on'; then
+    AIPLANE_SETUP_ORIGINAL_PIPEFAIL=on
+  fi
+  set -u -o pipefail
+else
+  set -euo pipefail
+fi
+
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MODE="venv"
@@ -96,6 +112,7 @@ EOF
   echo "Wrote activation helper: $helper"
 }
 
+main() {
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --mode)
@@ -154,24 +171,24 @@ while [[ $# -gt 0 ]]; do
       ;;
     -h|--help)
       usage
-      exit 0
+      return 0
       ;;
     *)
       echo "Unknown argument: $1" >&2
       usage >&2
-      exit 2
+      return 2
       ;;
   esac
 done
 
 case "$MODE" in
   local|venv|conda|docker) ;;
-  *) echo "Unsupported mode: $MODE" >&2; exit 2 ;;
+  *) echo "Unsupported mode: $MODE" >&2; return 2 ;;
 esac
 
 case "$ACTION" in
   install|doctor|test) ;;
-  *) echo "Unsupported action: $ACTION" >&2; exit 2 ;;
+  *) echo "Unsupported action: $ACTION" >&2; return 2 ;;
 esac
 
 case "$INSTALL_MODE" in
@@ -182,7 +199,7 @@ case "$INSTALL_MODE" in
   static|snapshot)
     INSTALL_MODE="static"
     ;;
-  *) echo "Unsupported install mode: $INSTALL_MODE" >&2; exit 2 ;;
+  *) echo "Unsupported install mode: $INSTALL_MODE" >&2; return 2 ;;
 esac
 
 cd "$PROJECT_ROOT"
@@ -233,42 +250,42 @@ python_for_mode() {
 install_local() {
   echo "Installing aiplane in $(install_label) mode into the current Python environment."
   if [[ "$UPDATE_PIP" -eq 1 ]]; then
-    run "$PYTHON_BIN" -m pip install --upgrade pip
+    run "$PYTHON_BIN" -m pip install --upgrade pip || return $?
   fi
-  run "$PYTHON_BIN" -m pip install $(pip_install_args)
+  run "$PYTHON_BIN" -m pip install $(pip_install_args) || return $?
 }
 
 install_venv() {
   echo "Installing aiplane in $(install_label) mode into venv: $VENV_PATH"
   if [[ ! -d "$VENV_PATH" ]]; then
-    run "$PYTHON_BIN" -m venv "$VENV_PATH"
+    run "$PYTHON_BIN" -m venv "$VENV_PATH" || return $?
   fi
   if [[ "$UPDATE_PIP" -eq 1 ]]; then
-    run "$VENV_PATH/bin/python" -m pip install --upgrade pip
+    run "$VENV_PATH/bin/python" -m pip install --upgrade pip || return $?
   fi
-  run "$VENV_PATH/bin/python" -m pip install $(pip_install_args)
+  run "$VENV_PATH/bin/python" -m pip install $(pip_install_args) || return $?
 }
 
 install_conda() {
   echo "Installing aiplane in $(install_label) mode into Conda env: $CONDA_ENV"
   if ! conda_available; then
     echo "conda is not on PATH" >&2
-    exit 1
+    return 1
   fi
   if ! conda_env_exists; then
-    run conda create -n "$CONDA_ENV" python=3.13 -y
+    run conda create -n "$CONDA_ENV" python=3.13 -y || return $?
   else
     echo "Conda environment already exists: $CONDA_ENV"
   fi
   if [[ "$DRY_RUN" -eq 0 ]] && ! conda_env_exists; then
     echo "Conda environment was not created or is not visible: $CONDA_ENV" >&2
     echo "Check with: conda env list" >&2
-    exit 1
+    return 1
   fi
   if [[ "$UPDATE_PIP" -eq 1 ]]; then
-    run conda run -n "$CONDA_ENV" python -m pip install --upgrade pip
+    run conda run -n "$CONDA_ENV" python -m pip install --upgrade pip || return $?
   fi
-  run conda run -n "$CONDA_ENV" python -m pip install $(pip_install_args)
+  run conda run -n "$CONDA_ENV" python -m pip install $(pip_install_args) || return $?
   if [[ "$DRY_RUN" -eq 0 ]]; then
     write_conda_activation_helper
   fi
@@ -278,7 +295,7 @@ install_docker() {
   echo "Installing aiplane in $(install_label) mode into Docker image: $DOCKER_IMAGE"
   if ! command -v docker >/dev/null 2>&1 && [[ "$DRY_RUN" -eq 0 ]]; then
     echo "docker is not on PATH" >&2
-    exit 1
+    return 1
   fi
   mkdir -p "$PROJECT_ROOT/.aiplane/docker"
   local dockerfile="$PROJECT_ROOT/.aiplane/docker/setup_env.Dockerfile"
@@ -296,12 +313,14 @@ EOF
 FROM $DOCKER_BASE_IMAGE
 WORKDIR /opt/aiplane
 COPY . /opt/aiplane
-RUN python -m pip install --upgrade pip && python -m pip install -e /opt/aiplane
+RUN python -m pip install --upgrade pip \
+    && python -m pip install -e /opt/aiplane \
+    && python -m aiplane profiles bootstrap-local --no-discovery
 WORKDIR /opt/aiplane
 EOF
       ;;
   esac
-  run docker build -t "$DOCKER_IMAGE" -f "$dockerfile" "$PROJECT_ROOT"
+  run docker build -t "$DOCKER_IMAGE" -f "$dockerfile" "$PROJECT_ROOT" || return $?
 }
 
 docker_run_aiplane() {
@@ -322,6 +341,23 @@ docker_run_shell() {
       ;;
     static)
       run docker run --rm "$DOCKER_IMAGE" sh -lc "$*"
+      ;;
+  esac
+}
+
+bootstrap_local_profile() {
+  case "$MODE" in
+    local)
+      run "$PYTHON_BIN" -m aiplane profiles bootstrap-local --no-discovery
+      ;;
+    venv)
+      run "$VENV_PATH/bin/python" -m aiplane profiles bootstrap-local --no-discovery
+      ;;
+    conda)
+      run conda run -n "$CONDA_ENV" python -m aiplane profiles bootstrap-local --no-discovery
+      ;;
+    docker)
+      docker_run_aiplane profiles bootstrap-local --no-discovery
       ;;
   esac
 }
@@ -421,18 +457,45 @@ case "$ACTION" in
   install)
     echo "Install mode: $(install_label)"
     case "$MODE" in
-      local) install_local ;;
-      venv) install_venv ;;
-      conda) install_conda ;;
-      docker) install_docker ;;
+      local) install_local || return $? ;;
+      venv) install_venv || return $? ;;
+      conda) install_conda || return $? ;;
+      docker) install_docker || return $? ;;
     esac
-    doctor_mode
-    activation_hint
+    bootstrap_local_profile || return $?
+    doctor_mode || return $?
+    activation_hint || return $?
     ;;
   doctor)
-    doctor_mode
+    doctor_mode || return $?
     ;;
   test)
-    test_mode
+    test_mode || return $?
     ;;
 esac
+}
+
+if main "$@"; then
+  AIPLANE_SETUP_STATUS=0
+else
+  AIPLANE_SETUP_STATUS=$?
+fi
+
+if [[ "$AIPLANE_SETUP_SOURCED" -eq 1 ]]; then
+  if [[ "$AIPLANE_SETUP_ORIGINAL_NOUNSET" == "on" ]]; then
+    set -u
+  else
+    set +u
+  fi
+  if [[ "$AIPLANE_SETUP_ORIGINAL_PIPEFAIL" == "on" ]]; then
+    set -o pipefail
+  else
+    set +o pipefail
+  fi
+  unset AIPLANE_SETUP_ORIGINAL_NOUNSET
+  unset AIPLANE_SETUP_ORIGINAL_PIPEFAIL
+  unset AIPLANE_SETUP_SOURCED
+  return "$AIPLANE_SETUP_STATUS"
+fi
+
+exit "$AIPLANE_SETUP_STATUS"

@@ -24,6 +24,7 @@ python -m pip install -e .
 Verify the package is installed in that same environment:
 
 ```bash
+python -m aiplane profiles bootstrap-local --no-discovery
 python -m aiplane profiles list
 python -m pip show aiplane
 ```
@@ -36,6 +37,7 @@ python -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -e .
+aiplane profiles bootstrap-local --no-discovery
 aiplane profiles list
 ```
 
@@ -48,12 +50,27 @@ python -m pip install -e .
 
 ### Install Dependencies in Conda
 
+For a fresh system with Git and Conda or Miniforge/Miniconda installed:
+
+```bash
+git clone https://github.com/ocagdas/aiplane.git
+cd aiplane
+source scripts/setup_env.sh --mode conda --conda-env aiplane --action install --editable
+aiplane profiles list
+aiplane environment doctor --required-only
+```
+
+The helper creates the Conda environment when missing, installs this checkout in
+editable mode, bootstraps ignored `profiles/local-dev`, and returns to the same
+shell with the environment active when sourced. Manual equivalent:
+
 ```bash
 cd aiplane
 conda create -n aiplane python=3.13 -y
 conda activate aiplane
 python -m pip install --upgrade pip
 python -m pip install -e .
+aiplane profiles bootstrap-local --no-discovery
 aiplane profiles list
 ```
 
@@ -128,6 +145,7 @@ When adding a new command, test at least one representative JSON output shape if
 ## Useful Smoke Checks
 
 ```bash
+PYTHONPATH=src python -m aiplane profiles bootstrap-local --no-discovery
 PYTHONPATH=src python -m aiplane profiles list
 PYTHONPATH=src python -m aiplane providers list --profile local-dev
 PYTHONPATH=src python -m aiplane providers models --profile local-dev ollama

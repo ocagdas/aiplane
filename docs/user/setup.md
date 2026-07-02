@@ -23,6 +23,30 @@ scripts/setup_env.sh --mode docker --action install --editable --docker-image ai
 scripts/setup_env.sh --mode docker --action install --static --docker-image aiplane:snapshot --dry-run
 ```
 
+Fresh Conda install on a new machine:
+
+```bash
+# Prerequisites: git and Conda or Miniforge/Miniconda are installed, and conda is on PATH.
+git clone https://github.com/ocagdas/aiplane.git
+cd aiplane
+conda --version
+
+# Recommended: source the helper so the new environment remains active.
+source scripts/setup_env.sh --mode conda --conda-env aiplane --action install --editable
+
+# Verify the installed CLI and bootstrapped local profile.
+aiplane profiles list
+aiplane profiles show local-dev
+aiplane environment doctor --required-only
+aiplane tools matrix
+```
+
+For a snapshot install that is isolated from later source edits, use `--static`
+instead of `--editable`. When sourced, the helper returns to the same shell with
+the Conda environment active and restores the caller's shell options. If you
+execute the setup helper instead of sourcing it, activate afterward with
+`source .aiplane/activate-conda-aiplane.sh` or `conda activate aiplane`.
+
 Install into a project-local venv:
 
 ```bash
@@ -53,10 +77,15 @@ conda activate aiplane
 ```
 
 For Conda installs, `--activate` defaults to `1`. If the setup script is sourced,
-it activates the environment before returning. If the script is executed normally,
+it activates the environment before returning to the same shell. If the script is
+executed normally,
 it cannot activate the parent shell, so it writes `.aiplane/activate-conda-<env>.sh`
-and prints activation commands. The helper now verifies that the Conda environment
-is visible after creation and fails with a clear error if it is not.
+and prints activation commands. The helper verifies that the Conda environment
+is visible after creation and fails with a clear error if it is not. During
+install, it also runs
+`aiplane profiles bootstrap-local --no-discovery` before the profile-aware sanity
+check, so a fresh clone gets an ignored `profiles/local-dev` directory from the
+shipped template.
 
 Check Conda environments with:
 
@@ -135,8 +164,10 @@ source scripts/activate_env.sh venv
 source scripts/activate_env.sh conda aiplane
 ```
 
-`setup_env.sh --action install` runs a sanity check automatically and then prints
-the matching activation command.
+`setup_env.sh --action install` bootstraps `profiles/local-dev` from the shipped
+template when needed, runs a sanity check automatically, and then prints the
+matching activation command. `scripts/activate_env.sh` performs the same
+idempotent no-discovery bootstrap after activation.
 
 
 ## Local Config

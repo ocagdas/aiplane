@@ -33,7 +33,7 @@ These restored docs are public-facing contributor context and intentionally avoi
 High-level implemented areas:
 
 - profiles, local config, ignored credential references, provider credential tests, and validation;
-- environment planning/doctor checks for system Python, `venv`, Conda, and Docker;
+- environment planning/doctor checks for system Python, `venv`, Conda, and Docker, with setup helpers that bootstrap ignored `profiles/local-dev` before profile-aware checks;
 - provider/model catalogs, structural shipped profile config, ignored discovery cache review, direct profile-owned model add/clone, runtime/source mapping, local model defaults, and benchmark smoke checks;
 - hardware discovery, machine inventory, Azure SKU discovery/import, and stack planning;
 - tool doctors/plans/exports for infrastructure, quality, and automation tools;

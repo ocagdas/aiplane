@@ -50,12 +50,16 @@ Key points to say explicitly:
 
 ## Disposable Demo Profile
 
+Complete the Conda install step in Video 1 before running these prep commands, or
+run it once before recording. The command blocks below assume the `aiplane`
+console script is available from the active Conda environment.
+
 Use a temporary profile directory for recording so machine imports, discovered entries, and stack setup rehearsals do not change `profiles/local-dev`:
 
 ```bash
 rm -rf /tmp/aiplane-demo-profiles /tmp/demo-local-cpu.machine.yaml
-PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles profiles create demo --template local-dev
-PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles profiles validate demo
+aiplane --profiles-dir /tmp/aiplane-demo-profiles profiles create demo --template local-dev
+aiplane --profiles-dir /tmp/aiplane-demo-profiles profiles validate demo
 ```
 
 Use `--profiles-dir /tmp/aiplane-demo-profiles --profile demo` on commands that intentionally write profile state, such as model refresh, machine import, or stack setup. Keep read-only commands on `local-dev` when you want to show the normal project profile.
@@ -67,8 +71,8 @@ Use `--profiles-dir /tmp/aiplane-demo-profiles --profile demo` on commands that 
 On screen:
 
 ```bash
-PYTHONPATH=src python -m aiplane --help
-PYTHONPATH=src python -m aiplane profiles validate local-dev
+aiplane --help
+aiplane profiles validate local-dev
 ```
 
 Voiceover:
@@ -84,15 +88,32 @@ What to highlight:
 
 ### 0:25-0:55 - Install `aiplane`
 
-Conda option, recommended for the demo:
+Fresh-system Conda option, recommended for the demo. Start from a shell where
+Git and Conda or Miniforge/Miniconda are installed and `conda` is on `PATH`:
 
 ```bash
 git clone https://github.com/ocagdas/aiplane.git
 cd aiplane
-source scripts/setup_env.sh --mode conda --conda-env aiplane --action install --editable
+conda --version
+
+# Regular installer flow.
+scripts/setup_env.sh --mode conda --conda-env aiplane --action install --editable
+conda activate aiplane
+
+# Convenience flow: source the setup helper if you want activation to persist automatically.
+# source scripts/setup_env.sh --mode conda --conda-env aiplane --action install --editable
+
+aiplane profiles list
 aiplane environment doctor --required-only
 aiplane tools matrix
 ```
+
+The setup helper creates the Conda environment if it is missing, upgrades pip,
+installs this checkout, bootstraps ignored `profiles/local-dev` from the shipped
+template with discovery disabled, runs the profile-aware sanity check, and prints
+activation commands. Executing it like a regular installer is the clearest demo
+path; sourcing it is a convenience option when you want the Conda environment to
+remain active in the same shell automatically.
 
 `--editable` means a source-linked development install. For Conda, venv, or the current Python environment, it runs `pip install -e .`, so changes in this checkout are visible immediately without reinstalling. For a snapshot-style install, use `--static`; that runs a normal install and later source edits require reinstalling.
 
@@ -114,26 +135,26 @@ Voiceover:
 On screen:
 
 ```bash
-PYTHONPATH=src python -m aiplane providers list --group-by runtime
-PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider ollama --query chat --dry-run --limit 5
-PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider ollama --query chat --limit 10
-PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider ollama --query code --limit 10
-PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider ollama --query embed --limit 10
-PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --group-by runtime --limit 10
-PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --runtime ollama --role chat --ram-gb 16 --vram-gb 0 --sort-by role --limit 5
-DISCOVERED_CHAT=$(PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --runtime ollama --role chat --enabled-only --sort-by role --limit 1 | python -c 'import json,sys; print(json.load(sys.stdin)[0]["name"])')
+aiplane providers list --group-by runtime
+aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider ollama --query chat --dry-run --limit 5
+aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider ollama --query chat --limit 10
+aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider ollama --query code --limit 10
+aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider ollama --query embed --limit 10
+aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --group-by runtime --limit 10
+aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --runtime ollama --role chat --ram-gb 16 --vram-gb 0 --sort-by role --limit 5
+DISCOVERED_CHAT=$(aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --runtime ollama --role chat --enabled-only --sort-by role --limit 1 | python -c 'import json,sys; print(json.load(sys.stdin)[0]["name"])')
 printf 'reviewed discovered chat candidate=%s\n' "$DISCOVERED_CHAT"
-PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles models add --profile demo local_chat --alias "$DISCOVERED_CHAT" --role chat --runtime ollama
-PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles models clone --profile demo local_chat local_fast_draft --role completion --notes "Fast draft model for local coding tasks." --dry-run
-PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles hardware recommend --profile demo
+aiplane --profiles-dir /tmp/aiplane-demo-profiles models add --profile demo local_chat --alias "$DISCOVERED_CHAT" --role chat --runtime ollama
+aiplane --profiles-dir /tmp/aiplane-demo-profiles models clone --profile demo local_chat local_fast_draft --role completion --notes "Fast draft model for local coding tasks." --dry-run
+aiplane --profiles-dir /tmp/aiplane-demo-profiles hardware recommend --profile demo
 ```
 
 Capture selected aliases for later sections. `local_chat` is profile-owned; autocomplete and embedding can be added the same way or used as reviewed discovered candidates for the demo:
 
 ```bash
 CHAT_ALIAS=local_chat
-AUTOCOMPLETE_ALIAS=$(PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --runtime ollama --role autocomplete --enabled-only --sort-by role --limit 1 | python -c 'import json,sys; print(json.load(sys.stdin)[0]["name"])')
-EMBEDDING_ALIAS=$(PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --runtime ollama --role embedding --enabled-only --sort-by role --limit 1 | python -c 'import json,sys; print(json.load(sys.stdin)[0]["name"])')
+AUTOCOMPLETE_ALIAS=$(aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --runtime ollama --role autocomplete --enabled-only --sort-by role --limit 1 | python -c 'import json,sys; print(json.load(sys.stdin)[0]["name"])')
+EMBEDDING_ALIAS=$(aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --runtime ollama --role embedding --enabled-only --sort-by role --limit 1 | python -c 'import json,sys; print(json.load(sys.stdin)[0]["name"])')
 printf 'chat=%s autocomplete=%s embedding=%s\n' "$CHAT_ALIAS" "$AUTOCOMPLETE_ALIAS" "$EMBEDDING_ALIAS"
 ```
 
@@ -166,8 +187,8 @@ Then show the chosen path for the recording. Use native if it is already working
 aiplane runtimes start ollama --dry-run
 aiplane runtimes pull ollama --model "$CHAT_ALIAS" --dry-run
 aiplane runtimes status ollama
-PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles chat --profile demo --model "$CHAT_ALIAS" --dry-run
-PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles chat --profile demo --model "$CHAT_ALIAS"
+aiplane --profiles-dir /tmp/aiplane-demo-profiles chat --profile demo --model "$CHAT_ALIAS" --dry-run
+aiplane --profiles-dir /tmp/aiplane-demo-profiles chat --profile demo --model "$CHAT_ALIAS"
 ```
 
 If using Docker for the runtime, use:
@@ -189,9 +210,9 @@ Recording note: `aiplane chat` resolves the model entry and delegates to provide
 Plan and export Continue config from the selected model entries:
 
 ```bash
-PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles integrations plan continue --profile demo --chat "$CHAT_ALIAS" --autocomplete "$AUTOCOMPLETE_ALIAS" --embedding "$EMBEDDING_ALIAS"
-PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles integrations export continue --profile demo --chat "$CHAT_ALIAS" --autocomplete "$AUTOCOMPLETE_ALIAS" --embedding "$EMBEDDING_ALIAS"
-PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles integrations export openai-compatible --profile demo --model "$CHAT_ALIAS" --endpoint http://localhost:11434/v1
+aiplane --profiles-dir /tmp/aiplane-demo-profiles integrations plan continue --profile demo --chat "$CHAT_ALIAS" --autocomplete "$AUTOCOMPLETE_ALIAS" --embedding "$EMBEDDING_ALIAS"
+aiplane --profiles-dir /tmp/aiplane-demo-profiles integrations export continue --profile demo --chat "$CHAT_ALIAS" --autocomplete "$AUTOCOMPLETE_ALIAS" --embedding "$EMBEDDING_ALIAS"
+aiplane --profiles-dir /tmp/aiplane-demo-profiles integrations export openai-compatible --profile demo --model "$CHAT_ALIAS" --endpoint http://localhost:11434/v1
 ```
 
 Voiceover:
@@ -203,14 +224,14 @@ Voiceover:
 Show MCP manifest and VS Code config export:
 
 ```bash
-PYTHONPATH=src python -m aiplane mcp manifest
-PYTHONPATH=src python -m aiplane integrations export vscode-mcp
+aiplane mcp manifest
+aiplane integrations export vscode-mcp
 ```
 
 Optional live server shot:
 
 ```bash
-PYTHONPATH=src python -m aiplane mcp serve
+aiplane mcp serve
 ```
 
 Voiceover:
@@ -230,10 +251,10 @@ Voiceover:
 On screen:
 
 ```bash
-PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles hardware export-machine --profile demo --name demo-local-cpu > /tmp/demo-local-cpu.machine.yaml
-PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles machines import --profile demo /tmp/demo-local-cpu.machine.yaml --name demo-local-cpu
-PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles machines list --profile demo
-PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles stacks setup --profile demo cpu_chat --runtime ollama --model "$CHAT_ALIAS" --machine demo-local-cpu --access same_host --dry-run
+aiplane --profiles-dir /tmp/aiplane-demo-profiles hardware export-machine --profile demo --name demo-local-cpu > /tmp/demo-local-cpu.machine.yaml
+aiplane --profiles-dir /tmp/aiplane-demo-profiles machines import --profile demo /tmp/demo-local-cpu.machine.yaml --name demo-local-cpu
+aiplane --profiles-dir /tmp/aiplane-demo-profiles machines list --profile demo
+aiplane --profiles-dir /tmp/aiplane-demo-profiles stacks setup --profile demo cpu_chat --runtime ollama --model "$CHAT_ALIAS" --machine demo-local-cpu --access same_host --dry-run
 ```
 
 Voiceover:
@@ -245,11 +266,11 @@ Voiceover:
 On screen:
 
 ```bash
-PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --group-by provider-kind --limit 20
-PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --group-by runtime --limit 20
-PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --role chat --runtime ollama --ram-gb 16 --vram-gb 0 --sort-by role --limit 5
-PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles hardware recommend --profile demo
-PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles models benchmark --profile demo --task generation "$CHAT_ALIAS" --dry-run
+aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --group-by provider-kind --limit 20
+aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --group-by runtime --limit 20
+aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --role chat --runtime ollama --ram-gb 16 --vram-gb 0 --sort-by role --limit 5
+aiplane --profiles-dir /tmp/aiplane-demo-profiles hardware recommend --profile demo
+aiplane --profiles-dir /tmp/aiplane-demo-profiles models benchmark --profile demo --task generation "$CHAT_ALIAS" --dry-run
 ```
 
 Voiceover:
@@ -261,13 +282,13 @@ Voiceover:
 Show that audio, image, and video generation are represented as AI model choices with runtime and platform requirements. The demo does not need to run these on CPU.
 
 ```bash
-PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider huggingface --query text-to-image --disable-new --limit 10
-PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --role image_generation --runtime diffusers --ram-gb 64 --vram-gb 16 --sort-by role --limit 5
-PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider huggingface --query text-to-video --disable-new --limit 10
-PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --role video_generation --runtime diffusers --ram-gb 128 --vram-gb 16 --sort-by role --limit 5
-PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles machines azure-status --profile demo --region uksouth
-PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles machines discover azure --profile demo --region uksouth --workload media_generation --runtime diffusers --limit 5
-PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles machines profile-remote-plan --profile demo --name gpu-box-01 --host gpu-box-01.example.internal --user azureuser
+aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider huggingface --query text-to-image --disable-new --limit 10
+aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --role image_generation --runtime diffusers --ram-gb 64 --vram-gb 16 --sort-by role --limit 5
+aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider huggingface --query text-to-video --disable-new --limit 10
+aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --role video_generation --runtime diffusers --ram-gb 128 --vram-gb 16 --sort-by role --limit 5
+aiplane --profiles-dir /tmp/aiplane-demo-profiles machines azure-status --profile demo --region uksouth
+aiplane --profiles-dir /tmp/aiplane-demo-profiles machines discover azure --profile demo --region uksouth --workload media_generation --runtime diffusers --limit 5
+aiplane --profiles-dir /tmp/aiplane-demo-profiles machines profile-remote-plan --profile demo --name gpu-box-01 --host gpu-box-01.example.internal --user azureuser
 ```
 
 Voiceover:
@@ -281,10 +302,10 @@ Recording note: inspect Azure output before publishing. Do not show subscription
 On screen:
 
 ```bash
-PYTHONPATH=src python -m aiplane orchestrators list --group-by runtime
-PYTHONPATH=src python -m aiplane orchestrators show langgraph
-PYTHONPATH=src python -m aiplane orchestrators setup langgraph --runtime ollama --model "$CHAT_ALIAS" --dry-run
-PYTHONPATH=src python -m aiplane agents templates
+aiplane orchestrators list --group-by runtime
+aiplane orchestrators show langgraph
+aiplane orchestrators setup langgraph --runtime ollama --model "$CHAT_ALIAS" --dry-run
+aiplane agents templates
 ```
 
 Voiceover:
@@ -296,10 +317,10 @@ Voiceover:
 On screen:
 
 ```bash
-PYTHONPATH=src python -m aiplane tools matrix
-PYTHONPATH=src python -m aiplane tools plan ansible
-PYTHONPATH=src python -m aiplane tools export ansible
-PYTHONPATH=src python -m aiplane deploy plan --profile demo --target azure_gpu_vm
+aiplane tools matrix
+aiplane tools plan ansible
+aiplane tools export ansible
+aiplane deploy plan --profile demo --target azure_gpu_vm
 ```
 
 Voiceover:
@@ -336,21 +357,21 @@ Use these phrases across both videos:
 ## Public Demo Commands To Dry-Run Before Recording
 
 ```bash
-PYTHONPATH=src python -m aiplane profiles validate local-dev
-PYTHONPATH=src python -m aiplane environment doctor --required-only
-PYTHONPATH=src python -m aiplane tools matrix
-PYTHONPATH=src python -m aiplane providers test openai --credential-ref openai.personal
-PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles profiles validate demo
-PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider ollama --query chat --dry-run --limit 5
-PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider ollama --query chat --limit 10
-PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider ollama --query code --limit 10
-PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider ollama --query embed --limit 10
-PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --runtime ollama --role chat --ram-gb 16 --vram-gb 0 --sort-by role --limit 5
-PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles integrations plan continue --profile demo --chat "$CHAT_ALIAS" --autocomplete "$AUTOCOMPLETE_ALIAS" --embedding "$EMBEDDING_ALIAS"
-PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles integrations export continue --profile demo --chat "$CHAT_ALIAS" --autocomplete "$AUTOCOMPLETE_ALIAS" --embedding "$EMBEDDING_ALIAS"
-PYTHONPATH=src python -m aiplane integrations export vscode-mcp
-PYTHONPATH=src python -m aiplane mcp manifest
-PYTHONPATH=src python -m aiplane --profiles-dir /tmp/aiplane-demo-profiles machines discover azure --profile demo --region uksouth --workload inference_small --runtime ollama --limit 5
+aiplane profiles validate local-dev
+aiplane environment doctor --required-only
+aiplane tools matrix
+aiplane providers test openai --credential-ref openai.personal
+aiplane --profiles-dir /tmp/aiplane-demo-profiles profiles validate demo
+aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider ollama --query chat --dry-run --limit 5
+aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider ollama --query chat --limit 10
+aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider ollama --query code --limit 10
+aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider ollama --query embed --limit 10
+aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --runtime ollama --role chat --ram-gb 16 --vram-gb 0 --sort-by role --limit 5
+aiplane --profiles-dir /tmp/aiplane-demo-profiles integrations plan continue --profile demo --chat "$CHAT_ALIAS" --autocomplete "$AUTOCOMPLETE_ALIAS" --embedding "$EMBEDDING_ALIAS"
+aiplane --profiles-dir /tmp/aiplane-demo-profiles integrations export continue --profile demo --chat "$CHAT_ALIAS" --autocomplete "$AUTOCOMPLETE_ALIAS" --embedding "$EMBEDDING_ALIAS"
+aiplane integrations export vscode-mcp
+aiplane mcp manifest
+aiplane --profiles-dir /tmp/aiplane-demo-profiles machines discover azure --profile demo --region uksouth --workload inference_small --runtime ollama --limit 5
 ```
 
 ## What We Are Not Claiming Yet

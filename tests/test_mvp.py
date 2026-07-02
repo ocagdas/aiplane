@@ -4032,6 +4032,69 @@ class MvpTests(unittest.TestCase):
         self.assertNotIn("+ curl", completed.stdout)
         self.assertNotIn('"models"', completed.stdout)
 
+    def test_setup_env_can_be_sourced_without_ending_shell(self) -> None:
+        root = Path.cwd()
+        completed = subprocess.run(
+            [
+                "bash",
+                "-lc",
+                (
+                    "set +e +u +o pipefail; "
+                    "source scripts/setup_env.sh --mode conda --conda-env aiplane --action install --editable --dry-run; "
+                    "status=$?; "
+                    "case $- in *e*) errexit=on ;; *) errexit=off ;; esac; "
+                    "case $- in *u*) nounset=on ;; *) nounset=off ;; esac; "
+                    "if set -o | grep -q '^pipefail[[:space:]]*on'; then pipefail=on; else pipefail=off; fi; "
+                    "printf 'after-source status=%s errexit=%s nounset=%s pipefail=%s\\n' "
+                    "\"$status\" \"$errexit\" \"$nounset\" \"$pipefail\"; "
+                    "exit $status"
+                ),
+            ],
+            cwd=root,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("after-source status=0", completed.stdout)
+        self.assertIn("errexit=off", completed.stdout)
+        self.assertIn("nounset=off", completed.stdout)
+        self.assertIn("pipefail=off", completed.stdout)
+
+    def test_setup_env_install_bootstraps_profile_before_doctor(self) -> None:
+        root = Path.cwd()
+        syntax = subprocess.run(
+            ["bash", "-n", "scripts/setup_env.sh"],
+            cwd=root,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(syntax.returncode, 0, syntax.stderr)
+        completed = subprocess.run(
+            [
+                "scripts/setup_env.sh",
+                "--mode",
+                "local",
+                "--action",
+                "install",
+                "--editable",
+                "--python",
+                "python",
+                "--dry-run",
+            ],
+            cwd=root,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        bootstrap = 'python -m aiplane profiles bootstrap-local --no-discovery'
+        doctor = 'python -m aiplane profiles list'
+        self.assertIn(bootstrap, completed.stdout)
+        self.assertIn(doctor, completed.stdout)
+        self.assertLess(completed.stdout.index(bootstrap), completed.stdout.index(doctor))
+
     def test_provider_helper_runtime_dry_runs(self) -> None:
         root = Path.cwd()
         syntax = subprocess.run(

@@ -39,16 +39,33 @@ Still in progress: remote mutation workflows, production service management, pro
 
 ## Install
 
-From the repository root:
+Fresh Conda install from a clone:
+
+```bash
+git clone https://github.com/ocagdas/aiplane.git
+cd aiplane
+source scripts/setup_env.sh --mode conda --conda-env aiplane --action install --editable
+aiplane profiles list
+aiplane environment doctor --required-only
+```
+
+`setup_env.sh` creates the Conda environment when needed, installs `aiplane`,
+bootstraps ignored `profiles/local-dev` from the shipped template, runs the
+profile-aware sanity check, and activates the environment when the script is
+sourced. Sourced runs return to the same shell with the Conda environment active.
+
+Manual pip install from the repository root:
 
 ```bash
 python -m pip install -e .
+aiplane profiles bootstrap-local --no-discovery
 aiplane profiles list
 ```
 
 Without installing the package:
 
 ```bash
+PYTHONPATH=src python -m aiplane profiles bootstrap-local --no-discovery
 PYTHONPATH=src python -m aiplane profiles list
 ```
 
