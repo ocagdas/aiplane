@@ -1659,7 +1659,9 @@ def _main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Print the prompt without calling the provider",
     )
-    code_analyze.add_argument("--timeout-seconds", type=int, help="Override provider request timeout for this code task")
+    code_analyze.add_argument(
+        "--timeout-seconds", type=int, help="Override provider request timeout for this code task"
+    )
     code_analyze.add_argument("target", help="File path inside the workspace")
     code_complete = code_sub.add_parser(
         "complete",
@@ -1675,7 +1677,9 @@ def _main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Print the prompt without calling the provider",
     )
-    code_complete.add_argument("--timeout-seconds", type=int, help="Override provider request timeout for this code task")
+    code_complete.add_argument(
+        "--timeout-seconds", type=int, help="Override provider request timeout for this code task"
+    )
     code_complete.add_argument("target", help="File path inside the workspace")
     code_write = code_sub.add_parser(
         "write",
@@ -3474,9 +3478,13 @@ def _main(argv: list[str] | None = None) -> int:
         profile = load_profile(effective_profile, workspace, profiles_dir=profiles_dir)
         runner = CodeTaskRunner(profile, AuditLogger(profile))
         if args.code_command == "analyze":
-            result = runner.analyze(args.model, Path(args.target), dry_run=args.dry_run, timeout_seconds=args.timeout_seconds)
+            result = runner.analyze(
+                args.model, Path(args.target), dry_run=args.dry_run, timeout_seconds=args.timeout_seconds
+            )
         elif args.code_command == "complete":
-            result = runner.complete(args.model, Path(args.target), args.line, dry_run=args.dry_run, timeout_seconds=args.timeout_seconds)
+            result = runner.complete(
+                args.model, Path(args.target), args.line, dry_run=args.dry_run, timeout_seconds=args.timeout_seconds
+            )
         else:
             result = runner.write(args.model, args.task, dry_run=args.dry_run, timeout_seconds=args.timeout_seconds)
         print(result.output)

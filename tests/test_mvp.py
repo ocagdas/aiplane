@@ -3512,7 +3512,10 @@ class MvpTests(unittest.TestCase):
                 return BackendResult("ollama", f"{model}: {prompt[:12]}")
 
         with (
-            patch("aiplane.runtime_catalog.RuntimeCatalog.runtime_available", return_value={"name": "ollama", "available": True, "reason": "ok"}),
+            patch(
+                "aiplane.runtime_catalog.RuntimeCatalog.runtime_available",
+                return_value={"name": "ollama", "available": True, "reason": "ok"},
+            ),
             patch("aiplane.model_catalog.ModelCatalog._ollama_backend", return_value=FakeOllama()),
         ):
             result = CodeTaskRunner(profile, AuditLogger(profile)).write(
@@ -3652,7 +3655,9 @@ class MvpTests(unittest.TestCase):
                 "scores": {"general_chat": 3, "reasoning": 3, "tool_use": 2},
             },
         }
-        completed = subprocess.CompletedProcess(["scripts/provider_helper.sh"], 0, "+ ollama pull hf.co/Example/Chat-GGUF\n", "")
+        completed = subprocess.CompletedProcess(
+            ["scripts/provider_helper.sh"], 0, "+ ollama pull hf.co/Example/Chat-GGUF\n", ""
+        )
         with (
             patch(
                 "aiplane.integrations.RuntimeCatalog.runtime_available",

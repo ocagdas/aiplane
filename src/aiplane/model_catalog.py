@@ -1213,9 +1213,13 @@ class ModelCatalog:
         model = self.get(name)
         provider_name = self._runtime_for_model(name, model)
         if provider_name in {"ollama", "ollama_cloud"}:
-            return self._ollama_backend(provider_name, timeout_seconds=timeout_seconds).chat(self._execution_model_id(provider_name, model), prompt)
+            return self._ollama_backend(provider_name, timeout_seconds=timeout_seconds).chat(
+                self._execution_model_id(provider_name, model), prompt
+            )
         if self._is_openai_compatible(provider_name):
-            return self._openai_compatible_backend(provider_name, timeout_seconds=timeout_seconds).chat(str(model.get("model")), prompt)
+            return self._openai_compatible_backend(provider_name, timeout_seconds=timeout_seconds).chat(
+                str(model.get("model")), prompt
+            )
         raise ValueError(f"execution is not wired for runtime/provider: {provider_name}")
 
     def _execution_model_id(self, runtime_name: str, model: dict[str, Any]) -> str:
@@ -1279,7 +1283,9 @@ class ModelCatalog:
             headers["Authorization"] = "Bearer " + api_key
         return OllamaBackend(endpoint, timeout, headers)
 
-    def _openai_compatible_backend(self, provider_name: str, timeout_seconds: int | None = None) -> OpenAICompatibleBackend:
+    def _openai_compatible_backend(
+        self, provider_name: str, timeout_seconds: int | None = None
+    ) -> OpenAICompatibleBackend:
         provider = self.providers().get(provider_name, {})
         endpoint = self._openai_compatible_endpoint(provider_name, provider)
         timeout = int(timeout_seconds or provider.get("timeout_seconds", 60))

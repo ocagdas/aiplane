@@ -26,13 +26,19 @@ class CodeTaskRunner:
         self.policy = PolicyEngine(profile)
         self.catalog = ModelCatalog(profile)
 
-    def analyze(self, model_name: str, target: Path, dry_run: bool = False, timeout_seconds: int | None = None) -> CodeTaskResult:
+    def analyze(
+        self, model_name: str, target: Path, dry_run: bool = False, timeout_seconds: int | None = None
+    ) -> CodeTaskResult:
         target = self._workspace_file(target)
         source = target.read_text(encoding="utf-8")
         prompt = build_analysis_prompt(target, source)
-        return self._run("analysis", model_name, prompt, dry_run, {"target": str(target)}, timeout_seconds=timeout_seconds)
+        return self._run(
+            "analysis", model_name, prompt, dry_run, {"target": str(target)}, timeout_seconds=timeout_seconds
+        )
 
-    def complete(self, model_name: str, target: Path, line: int, dry_run: bool = False, timeout_seconds: int | None = None) -> CodeTaskResult:
+    def complete(
+        self, model_name: str, target: Path, line: int, dry_run: bool = False, timeout_seconds: int | None = None
+    ) -> CodeTaskResult:
         target = self._workspace_file(target)
         if line < 1:
             raise ValueError("line must be 1 or greater")
@@ -51,7 +57,9 @@ class CodeTaskRunner:
             timeout_seconds=timeout_seconds,
         )
 
-    def write(self, model_name: str, task: str, dry_run: bool = False, timeout_seconds: int | None = None) -> CodeTaskResult:
+    def write(
+        self, model_name: str, task: str, dry_run: bool = False, timeout_seconds: int | None = None
+    ) -> CodeTaskResult:
         prompt = build_write_prompt(task)
         return self._run("write", model_name, prompt, dry_run, {"request": task}, timeout_seconds=timeout_seconds)
 
@@ -73,7 +81,11 @@ class CodeTaskRunner:
                     self.profile.name,
                     action,
                     "dry_run",
-                    {"model": model_name, **details, **({"timeout_seconds": timeout_seconds} if timeout_seconds else {})},
+                    {
+                        "model": model_name,
+                        **details,
+                        **({"timeout_seconds": timeout_seconds} if timeout_seconds else {}),
+                    },
                 )
             )
             return CodeTaskResult(task, model_name, prompt, prompt, True)
@@ -84,7 +96,12 @@ class CodeTaskRunner:
                 self.profile.name,
                 action,
                 "allowed",
-                {"model": model_name, **details, **({"timeout_seconds": timeout_seconds} if timeout_seconds else {}), "output": result.text[-1000:]},
+                {
+                    "model": model_name,
+                    **details,
+                    **({"timeout_seconds": timeout_seconds} if timeout_seconds else {}),
+                    "output": result.text[-1000:],
+                },
             )
         )
         return CodeTaskResult(task, model_name, prompt, result.text, False)
