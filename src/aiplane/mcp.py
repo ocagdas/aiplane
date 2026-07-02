@@ -8,8 +8,9 @@ from .audit import AuditLogger
 from .config import list_profiles, load_profile, resolve_profile_name
 from .hardware import HardwareManager
 from .integrations import IntegrationManager
-from .model_catalog import ModelCatalog, expand_capability_filters
+from .model_catalog import ModelCatalog
 from .runtime_catalog import RuntimeCatalog
+from .model_filters import MODEL_FILTER_SCHEMA_PROPERTIES, MODEL_SORT_CHOICES, model_filter_args
 from .output import json_dumps
 from .providers import ProviderRegistry
 from .remote import RemoteManager
@@ -160,32 +161,8 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
         "type": "object",
         "properties": {
             "profile": {"type": "string"},
-            "capabilities": {
-                "type": "object",
-                "additionalProperties": {"type": "number"},
-                "description": "Capability thresholds, for example {code_generation: 4, debugging_refactor: 3}",
-            },
-            "capability": {
-                "type": "array",
-                "items": {"type": "string"},
-                "description": "Alternative string filters, for example code_generation>=4 or debugging>=3",
-            },
-            "provider": {"type": "string"},
-            "runtime": {"type": "string"},
-            "source": {"type": "string"},
-            "role": {"type": "array", "items": {"type": "string"}},
-            "ownership": {
-                "type": "string",
-                "enum": ["self_managed", "managed_service"],
-            },
-            "enabled_only": {"type": "boolean", "default": False},
-            "ram_gb": {"type": "number"},
-            "vram_gb": {"type": "number"},
-            "sort_by": {
-                "type": "string",
-                "enum": ["name", "avg", "role", "benchmark"],
-                "default": "name",
-            },
+            **MODEL_FILTER_SCHEMA_PROPERTIES,
+            "sort_by": {"type": "string", "enum": MODEL_SORT_CHOICES, "default": "name"},
             "limit": {"type": "integer"},
         },
         "additionalProperties": False,
@@ -413,7 +390,7 @@ class AiplaneMcpServer:
             return ModelCatalog(profile).default_summary()
         if name == "aiplane.models.list":
             catalog = ModelCatalog(profile)
-            filters = _model_filter_arguments(arguments)
+            filters = model_filter_args(arguments)
             rows = catalog.sort_rows(
                 catalog.filter(filters),
                 sort_by=str(arguments.get("sort_by") or "name"),
@@ -515,26 +492,6 @@ class AiplaneMcpServer:
             for tool in READ_ONLY_TOOLS + WRITE_TOOLS
         ]
 
-
-def _model_filter_arguments(arguments: dict[str, Any]) -> dict[str, Any]:
-    capability_values = [str(value) for value in arguments.get("capability", []) if value]
-    capabilities = expand_capability_filters(capability_values)
-    for name, threshold in _dict(arguments.get("capabilities")).items():
-        try:
-            capabilities[str(name)] = int(threshold)
-        except (TypeError, ValueError):
-            continue
-    return {
-        "provider": arguments.get("provider"),
-        "runtime": arguments.get("runtime"),
-        "source": arguments.get("source"),
-        "roles": arguments.get("role") or [],
-        "ownership": arguments.get("ownership"),
-        "enabled_only": bool(arguments.get("enabled_only", False)),
-        "capabilities": capabilities,
-        "max_min_ram_gb": arguments.get("ram_gb"),
-        "max_min_vram_gb": arguments.get("vram_gb"),
-    }
 
 
 def serve_stdio(workspace, default_profile: str | None = None, profiles_dir=None) -> int:

@@ -1380,17 +1380,17 @@ def _main(argv: list[str] | None = None) -> int:
     )
     models_list.add_argument(
         "--gpu-vendor",
-        choices=["generic", "none", "cpu", "nvidia", "amd", "apple", "intel", "mixed"],
+        choices=GPU_VENDOR_CHOICES,
         help="Available GPU vendor; filters out models with explicit incompatible vendor requirements",
     )
     models_list.add_argument(
         "--accelerator-api",
-        choices=["any", "generic", "cpu", "cuda", "rocm", "metal", "vulkan", "openvino"],
+        choices=ACCELERATOR_API_CHOICES,
         help="Available accelerator API; filters out models with explicit incompatible API requirements",
     )
     models_list.add_argument(
         "--sort-by",
-        choices=["name", "avg", "role", "benchmark", "likes", "downloads", "popularity", "parameters"],
+        choices=MODEL_SORT_CHOICES,
         default="name",
         help="Sort rows by entry name, capability score, role score, benchmark score, provider likes, provider downloads, combined provider popularity, or inferred parameter count",
     )
@@ -3298,7 +3298,7 @@ def _main(argv: list[str] | None = None) -> int:
             print(_json(catalog.set_enabled(args.name, False), indent=2))
             return 0
         if args.models_command == "list":
-            filters = _model_filter_args(args)
+            filters = model_filter_args(args)
             if args.fits_hardware:
                 filters.update(_active_hardware_model_filters(profile))
             rows = catalog.sort_rows(
@@ -4040,34 +4040,6 @@ def _active_hardware_model_filters(profile) -> dict[str, object]:
         filters["accelerator_api"] = str(accelerator_apis[0])
     return filters
 
-
-def _model_filter_args(args) -> dict[str, object]:
-    ownership = None
-    if getattr(args, "self_managed_only", False):
-        ownership = "self_managed"
-    if getattr(args, "managed_service_only", False):
-        ownership = "managed_service"
-    return {
-        "provider": getattr(args, "provider", None),
-        "runtime": getattr(args, "runtime", None),
-        "source": getattr(args, "source", None),
-        "roles": getattr(args, "role", []) or [],
-        "enabled_only": bool(getattr(args, "enabled_only", False)),
-        "ownership": ownership,
-        "capabilities": expand_capability_filters(getattr(args, "capability", []) or []),
-        "min_capability_avg_score": getattr(args, "min_capability_avg_score", None),
-        "score_source": getattr(args, "score_source", None),
-        "min_benchmark_score": getattr(args, "min_benchmark_score", None),
-        "require_benchmark": bool(getattr(args, "require_benchmark", False)),
-        "min_likes": getattr(args, "min_likes", None),
-        "min_downloads": getattr(args, "min_downloads", None),
-        "max_min_ram_gb": getattr(args, "ram_gb", None),
-        "max_min_vram_gb": getattr(args, "vram_gb", None),
-        "min_parameters_b": getattr(args, "min_parameters_b", None),
-        "max_parameters_b": getattr(args, "max_parameters_b", None),
-        "gpu_vendor": getattr(args, "gpu_vendor", None),
-        "accelerator_api": getattr(args, "accelerator_api", None),
-    }
 
 
 def _group_rows(rows: list[dict[str, object]], key: str) -> dict[str, list[dict[str, object]]]:
