@@ -171,6 +171,34 @@ aiplane providers update-defaults
 
 `update-defaults` rewrites `model-providers.yaml` from the current built-in provider definitions, preserving existing `enabled` values in that file and leaving `model-providers.user.yaml` untouched. This lets code updates add providers or update provider metadata without overwriting a provider you disabled manually or through `providers disable`. Prefer this command over hand-editing provider files.
 
+### Local File Models
+
+`local_file` is for model artifacts that already exist on this machine or on a known mounted path. It is disabled by default because local paths are machine-specific. Enable it when you want profile aliases for GGUF files, checkpoint directories, ONNX files, local Whisper models, Diffusers folders, or ComfyUI assets:
+
+```bash
+aiplane providers enable local_file
+aiplane models add local_gguf --provider local_file --model /models/mistral.Q4_K_M.gguf --runtime llamacpp --role chat --role analysis
+aiplane models add local_diffusion --provider local_file --model /models/diffusers/my-model --runtime diffusers --role image_generation
+```
+
+For normal providers, `models add` promotes a reviewed discovered entry from `models.discovered.yaml` into durable `models.yaml`. `local_file` is the exception: because there is no remote catalog to discover from, `--provider local_file --model PATH` writes a direct profile-owned entry. `--model` is the local path; repeat `--runtime` to declare compatible local runtimes, and use `--preferred-runtime` when more than one runtime is listed. `aiplane` records the path; it does not copy, validate, or delete the model file.
+
+Remove individual profile-owned aliases by name without deleting model files or discovery cache entries:
+
+```bash
+aiplane models remove local_gguf --dry-run
+aiplane models remove local_gguf
+```
+
+Discovered entries in `models.discovered.yaml` are provider/cache state. Leave them to `models refresh` or provider-scoped cache clearing instead of deleting them one alias at a time.
+
+Clear all local-file aliases/imports from the profile/cache with provider-scoped cache clearing:
+
+```bash
+aiplane models clear-cache --provider local_file --dry-run
+aiplane models clear-cache --provider local_file
+```
+
 Show one model provider and the profile catalog entries that come from it:
 
 ```bash

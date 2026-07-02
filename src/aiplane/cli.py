@@ -1079,13 +1079,14 @@ def _main(argv: list[str] | None = None) -> int:
     models_use.add_argument("name", help="Existing model alias to set as the default for ROLE")
     models_add = models_sub.add_parser(
         "add",
-        help="Add a discovered model as a profile-owned entry in models.yaml",
-        description="Create a profile-owned model entry from models.discovered.yaml. Resolve the source either by discovered alias with --alias or by provider/model id with --provider and --model. The discovered entry is kept and the profile-owned entry records discovered_entry for traceability.",
+        help="Add a model as a profile-owned entry in models.yaml",
+        description="Create a profile-owned model entry. Most providers require a reviewed entry from models.discovered.yaml, resolved by --alias or by --provider/--model. The local_file provider is the exception: --provider local_file --model PATH writes a direct local artifact entry because there is no online discovery catalog.",
         formatter_class=HelpFormatter,
         epilog=(
             "Examples:\n"
             "  aiplane models add local_chat --alias ollama-llama3-2-3b --role chat --role analysis\n"
             "  aiplane models add local_chat --provider ollama --model llama3.2:3b --role chat --runtime ollama\n"
+            "  aiplane models add local_gguf --provider local_file --model /models/mistral.Q4_K_M.gguf --runtime llamacpp --role chat\n"
             "  aiplane models add azure_chat --alias azure-openai-gpt-4o-prod --role chat --disable --dry-run"
         ),
     )
@@ -1160,6 +1161,16 @@ def _main(argv: list[str] | None = None) -> int:
         "--overwrite", action="store_true", help="Overwrite an existing profile-owned entry after review"
     )
     models_clone.add_argument("--dry-run", action="store_true", help="Preview the clone without writing models.yaml")
+    models_remove = models_sub.add_parser(
+        "remove",
+        help="Remove a profile-owned model alias by name",
+        description="Remove one profile-owned model alias from models.yaml. This does not remove discovered cache entries, provider caches, or model files from disk.",
+        formatter_class=HelpFormatter,
+        epilog="Examples:\n  aiplane models remove local_chat\n  aiplane models remove local_chat --dry-run\n  aiplane models clear-cache --provider local_file",
+    )
+    _profile_arg(models_remove)
+    models_remove.add_argument("name", help="Profile-owned model alias to remove")
+    models_remove.add_argument("--dry-run", action="store_true", help="Preview without writing files")
     models_enable = models_sub.add_parser(
         "enable",
         help="Enable one model alias",
@@ -3119,6 +3130,9 @@ def _main(argv: list[str] | None = None) -> int:
                     indent=2,
                 )
             )
+            return 0
+        if args.models_command == "remove":
+            print(_json(catalog.remove_model(args.name, write=not args.dry_run), indent=2))
             return 0
         if args.models_command == "enable":
             print(_json(catalog.set_enabled(args.name, True), indent=2))

@@ -41,7 +41,7 @@ Required outcomes:
 - Agent application templates with non-mutating `agents templates/plan/export` commands.
 - Stack artifact exports for Continue, OpenAI-compatible endpoint config, Dockerfile, Conda YAML, and starter Docker Compose.
 - SSH tunnel plan/start/status/stop for configured remote model endpoints.
-- Model list/show/defaults/use/add/clone/enable/disable/refresh/promote/clear-cache/pull/test/benchmark commands.
+- Model list/show/defaults/use/add/clone/remove/enable/disable/refresh/promote/clear-cache/pull/test/benchmark commands.
 - Benchmark framework list/doctor/install/plan helpers for smoke/custom checks, lm-evaluation-harness, vLLM serving benchmarks, and Locust-style load tests.
 - `aiplane run` for single-prompt routing through configured model defaults with dry-run and policy-gated non-local escalation.
 - Integration plan/setup/export for Continue, Cline, Zed, Aider, generic OpenAI-compatible clients, and MCP client snippets.

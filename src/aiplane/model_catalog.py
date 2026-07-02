@@ -112,30 +112,46 @@ class ModelCatalog:
         overwrite: bool = False,
     ) -> dict[str, Any]:
         _validate_model_entry_name(name, "model entry name")
-        discovered_key, discovered_entry = self._resolve_discovered_entry(
-            provider=provider,
-            model_id=model_id,
-            discovered_name=discovered_name,
-        )
+        direct_local_file = provider == "local_file" and model_id and not discovered_name
         curated_models = _dict_of_dicts(self.config.get("models", {}))
         generated_models = _dict_of_dicts(self.generated_config.get("models", {}))
         target_exists = name in curated_models
-        generated_name_collision = name in generated_models and name != discovered_key
-        if (target_exists or generated_name_collision) and not overwrite:
-            raise ValueError(f"model entry already exists: {name}; use --overwrite after reviewing the existing entry")
+        if direct_local_file:
+            discovered_key = None
+            generated_name_collision = name in generated_models
+            if (target_exists or generated_name_collision) and not overwrite:
+                raise ValueError(f"model entry already exists: {name}; use --overwrite after reviewing the existing entry")
+            entry = self._build_local_file_entry(
+                model_id=str(model_id),
+                roles=roles,
+                supported_runtimes=supported_runtimes,
+                preferred_runtime=preferred_runtime,
+                enabled=enabled,
+                notes=notes,
+                settings=settings,
+            )
+        else:
+            discovered_key, discovered_entry = self._resolve_discovered_entry(
+                provider=provider,
+                model_id=model_id,
+                discovered_name=discovered_name,
+            )
+            generated_name_collision = name in generated_models and name != discovered_key
+            if (target_exists or generated_name_collision) and not overwrite:
+                raise ValueError(f"model entry already exists: {name}; use --overwrite after reviewing the existing entry")
 
-        entry = self._build_model_entry(
-            provider=provider,
-            model_id=model_id,
-            discovered_name=discovered_key,
-            discovered_entry=discovered_entry,
-            roles=roles,
-            supported_runtimes=supported_runtimes,
-            preferred_runtime=preferred_runtime,
-            enabled=enabled,
-            notes=notes,
-            settings=settings,
-        )
+            entry = self._build_model_entry(
+                provider=provider,
+                model_id=model_id,
+                discovered_name=discovered_key,
+                discovered_entry=discovered_entry,
+                roles=roles,
+                supported_runtimes=supported_runtimes,
+                preferred_runtime=preferred_runtime,
+                enabled=enabled,
+                notes=notes,
+                settings=settings,
+            )
         if write:
             curated_models[name] = entry
             self.config["models"] = curated_models
@@ -154,6 +170,38 @@ class ModelCatalog:
             "model": entry,
             "next_steps": _model_entry_next_steps(name, write),
         }
+
+    def _build_local_file_entry(
+        self,
+        model_id: str,
+        roles: list[str] | None,
+        supported_runtimes: list[str] | None,
+        preferred_runtime: str | None,
+        enabled: bool,
+        notes: str | None,
+        settings: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        entry: dict[str, Any] = {
+            "provider": "local_file",
+            "source": "local_file",
+            "model": model_id,
+            "local": True,
+            "ownership": "self_managed",
+            "enabled": bool(enabled),
+            "curated": True,
+            "roles": _string_list(roles or []),
+        }
+        if supported_runtimes:
+            entry["supported_runtimes"] = _string_list(supported_runtimes)
+        if preferred_runtime:
+            entry["preferred_runtime"] = preferred_runtime
+        elif supported_runtimes and len(supported_runtimes) == 1:
+            entry["preferred_runtime"] = str(supported_runtimes[0])
+        if notes is not None:
+            entry["notes"] = notes
+        for key, value in (settings or {}).items():
+            entry[str(key)] = value
+        return entry
 
     def clone_model(
         self,
@@ -882,6 +930,38 @@ class ModelCatalog:
             "discovered_path": str(self._generated_path()),
             "model": promoted,
             "next_steps": _promote_next_steps(name, target, write, keep_discovered),
+        }
+
+    def remove_model(
+        self,
+        name: str,
+        write: bool = True,
+    ) -> dict[str, Any]:
+        _validate_model_entry_name(name, "model entry name")
+        curated_models = _dict_of_dicts(self.config.get("models", {}))
+        if name not in curated_models:
+            raise ValueError(f"profile-owned model entry not found: {name}")
+        defaults = self.config.get("defaults", {})
+        removed_defaults: list[str] = []
+        if isinstance(defaults, dict):
+            removed_defaults = sorted(role for role, value in defaults.items() if str(value) == name)
+        if write:
+            curated_models.pop(name, None)
+            if isinstance(defaults, dict):
+                for role in removed_defaults:
+                    defaults.pop(role, None)
+                self.config["defaults"] = defaults
+            self.config["models"] = curated_models
+            self._write_curated_config()
+        return {
+            "name": "model_catalog_remove",
+            "entry": name,
+            "write": write,
+            "removed_curated": bool(write),
+            "would_remove_curated": bool(not write),
+            "removed_defaults": removed_defaults if write else [],
+            "would_remove_defaults": removed_defaults if not write else [],
+            "path": str(self.profile.root / "models.yaml"),
         }
 
     def clear_imported(
