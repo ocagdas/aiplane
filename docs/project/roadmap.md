@@ -10,17 +10,18 @@ This document is the developer-facing status map. It separates what is implement
 - **Research**: worth investigating before committing to a design.
 - **Deferred**: intentionally not a near-term priority.
 
-## Current Milestone: Early Beta Release Hardening
+## Current Milestone: Post-Merge Architecture and Integration Hardening
 
-Goal: make the repository coherent and useful for early open-source users after the history cleanup.
+Goal: turn the merged MVP surface into a maintainable beta foundation before adding broad new execution scope.
 
 Required outcomes:
 
-1. Keep code, docs, command coverage, roadmap, handoff, implemented behavior, and tests aligned to a high open-source quality bar.
-2. Keep README and user docs focused on current commands and explicit caveats.
-3. Preserve the product boundary: `aiplane` is a control-plane CLI, not an agent, runtime, proxy, or hidden cloud deployment engine.
-4. Keep local/private direction notes in ignored local files only.
-5. Run full tests, profile validation, setup doctor, and representative smoke commands before calling the branch release-ready.
+1. Keep the public CLI, docs, command coverage, MCP surface, planned/implemented skills, and tests aligned after the PR merge.
+2. Reduce architectural pressure from the large CLI, model catalog, integration manager, runtime catalog, shell helpers, and monolithic MVP test file without changing user-visible behavior gratuitously.
+3. Solidify MCP as the structured inspection/planning/export surface, with narrow audited writes only where guardrails are clear.
+4. Add a versioned `aiplane` agent skill package for Codex-style and other skill-capable assistants, distinct from MCP and focused on safe workflow guidance.
+5. Move orchestrator support from catalog/setup scaffolding toward explicit multi-agent workflow metadata: roles, model aliases, endpoints, tool policies, approvals, audit labels, and exports for established frameworks.
+6. Keep provider/model discovery, runtime setup, stack planning, and local execution reliable enough for repeatable demos and early adopters.
 
 ## Implemented
 
@@ -60,23 +61,32 @@ Required outcomes:
 
 ## Planned Milestones
 
-### Demo / PR Merge Readiness
+### Post-Merge Foundation
 
-1. **Manual demo validation** - Current
-   - Rehearse the disposable-profile demo path from clean setup through provider discovery, filtered model selection, Continue export, MCP export, stack dry-runs, and Azure discovery.
-   - Keep all demo commands inspect-first: use doctors, dry-runs, discovered entries, and exports before mutation.
-   - Verify terminal output is concise enough for recording and does not show secrets, raw account identifiers, tenant IDs, subscription IDs, or private local notes.
-   - Confirm the prepared media clip/audio is generated outside the tracked repo and can be played at the end of the recording.
+1. **Architecture and codebase cleanup** - Current
+   - Split `src/aiplane/cli.py` into smaller command registration/handler modules by area while keeping one public `aiplane` entrypoint.
+   - Define clearer service boundaries for provider discovery, model catalog rows, runtime compatibility, integration planning, MCP tools, and output shaping so source/runtime/endpoint rules are not reimplemented in several places.
+   - Move hand-maintained tool schemas and CLI parser choices toward shared definitions where practical, especially for model filters and integration roles.
+   - Keep shell helpers as thin delegates to official tools; avoid growing provider-specific business logic in Bash when Python catalog/runtime code already owns the decision.
+   - Preserve inspect-first behavior and avoid compatibility shims unless a released interface requires them.
 
-2. **Release hygiene and CI gate** - Current
-   - Keep `scripts/format.sh check`, `python -m ruff check src tests`, and the pytest suite passing in separate CI jobs.
-   - Keep README, user docs, command coverage, roadmap, handoff notes, MCP coverage, planned/implemented agent skills, and tests aligned during pre-PR cleanup and recurring MCP/skills synchronization checkpoints.
-   - Keep ignored/generated state out of git, especially credentials, discovered model caches, local strategy notes, logs, PID files, and demo artifacts.
-   - Treat secret scans and GitHub history cleanup verification as merge blockers.
+2. **MCP and agent skill hardening** - Current
+   - Audit MCP against the current CLI/options and docs; close useful read/planning/export gaps such as newer model filters, integration role planning, stack/orchestrator inspection, machine recommendations, and command coverage where safe.
+   - Keep risky operations out of MCP until they have explicit approval, audit, dry-run, and rollback semantics. Runtime installs, model pulls, cloud apply, secret writes, and arbitrary shell execution remain blocked or CLI-only by default.
+   - Add a versioned `aiplane` skill target for Codex-style and other skill-capable assistants. The skill should explain the product boundary, profile/provider/model/runtime concepts, preferred commands, MCP usage, docs/test maintenance, and pre-PR/release checks.
+   - Add focused tests that compare MCP schemas and behavior with the CLI surfaces they intentionally mirror.
+   - Treat MCP/skills synchronization as a recurring checkpoint and pre-PR cleanup task, not a requirement after every small feature.
 
-### Next Hardening
+3. **Orchestrator and multi-agent workflow metadata** - Current
+   - Extend stack/orchestrator config beyond one primary model into explicit roles such as planner, coder, reviewer, researcher, tool-runner, and summarizer.
+   - Bind each role to a reviewed model alias, endpoint, runtime/provider ownership, tool policy, approval mode, and audit label.
+   - Export starter configs for LangGraph, CrewAI, AutoGen, Semantic Kernel, LlamaIndex Workflows, and OpenHands where those frameworks can consume the selected endpoints directly.
+   - Keep `aiplane` as setup/config/policy/export, not the autonomous multi-agent runner.
+   - Add doctor/plan checks that explain missing packages, missing endpoints, model/runtime incompatibility, and unsafe tool-policy combinations before anything is run.
 
-3. **Provider discovery and model import** - In progress
+### Product Hardening
+
+4. **Provider discovery and model import** - In progress
    - Harden Azure OpenAI deployment discovery and provider-specific live credential tests.
    - Add Anthropic/OpenAI discovery fallbacks where APIs or maintained catalogs allow it.
    - Keep shipped `models.yaml` templates structural; profile-owned model entries and defaults should come from ignored discovery caches, direct local add/clone, or deliberate local promotion.
@@ -84,13 +94,7 @@ Required outcomes:
    - Make refresh/promote/add/clone output explain the safe next step from dry-run discovery to discovered entries to traceable profile-owned model entries.
    - Add first-class model filtering from named/imported machine profiles and external machine/hardware files, so `models list` can derive parameter-count, RAM, VRAM, GPU vendor, and accelerator API filters from the current PC, a copied machine profile, or an Azure/VM shape instead of requiring manual `--ram-gb`/`--vram-gb` values.
 
-4. **Tool/task matrix and setup doctor expansion** - In progress
-   - Keep `environment doctor` as the default human setup check with text output.
-   - Keep every external tool mapped to the workflows it enables, whether it is mandatory or optional, and whether `aiplane` can attempt installation.
-   - Grow doctor scope as new tool families are integrated without turning optional workflows into mandatory prerequisites.
-   - Keep workflow-level readiness summaries in `tools matrix` useful for release review and demos.
-
-5. **Stack lifecycle and endpoint hardening** - Planned
+5. **Runtime, stack lifecycle, and endpoint hardening** - In progress
    - Improve same-host lifecycle result reporting and status verification after prepare/start.
    - Add Docker-aware stack lifecycle paths after same-host helper execution is stable.
    - Let stacks bind managed-service model endpoints where the runtime field represents a hosted protocol or endpoint contract, while keeping those entries out of self-managed runtime fit checks.
@@ -103,29 +107,32 @@ Required outcomes:
    - Keep local install, local VM provisioning, remote VM provisioning, remote PC setup, and cloud provisioning distinct.
    - Keep public demo paths focused on repeatable local, endpoint, MCP, stack, and Azure discovery workflows without unsafe mutation.
 
+7. **Tool/task matrix and setup doctor expansion** - In progress
+   - Keep `environment doctor` as the default human setup check with text output.
+   - Keep every external tool mapped to the workflows it enables, whether it is mandatory or optional, and whether `aiplane` can attempt installation.
+   - Grow doctor scope as new tool families are integrated without turning optional workflows into mandatory prerequisites.
+   - Keep workflow-level readiness summaries in `tools matrix` useful for release review and demos.
+
 ### Later Expansion
 
-7. **Runtime packaging and deployment reproducibility** - Planned
+8. **Runtime packaging and deployment reproducibility** - Planned
    - Broaden tests for stack export content across runtime/orchestrator combinations.
    - Add cache mounts, richer GPU flags, environment variables, and auth notes.
    - Keep image builds, registry pushes, VM creation, and cloud apply explicit and previewable.
 
-8. **IDE, MCP, and agent-tool integrations** - Planned
+9. **IDE, launch, and session integrations** - Planned
    - Maintain Continue, Cline, Zed, Aider, generic OpenAI-compatible, and MCP config exports as config-level integrations.
    - Keep model endpoint export separate from MCP tool export.
-   - Add recurring MCP coverage checkpoints, including pre-PR cleanup: compare current CLI/options with MCP tools, expose read/planning/export features when useful to agents, and keep risky mutation CLI-only or deferred until guardrails and audit semantics are clear. These checkpoints are periodic, not required after every feature or at every milestone.
-   - Add a versioned `aiplane` agent skill target for Codex-style and other skill-capable assistants. The skill should document safe workflows, command selection, MCP usage, provider/model/runtime concepts, docs/test maintenance, and release-boundary checks.
-   - Keep skills distinct from MCP: skills are assistant instructions and workflow guidance; MCP is the live callable tool surface.
-   - Add planned agent-to-agent coordination support as profile/stack/orchestrator metadata: roles, model entries, endpoints, tool policies, approvals, and audit labels for frameworks such as LangGraph, CrewAI, AutoGen, Semantic Kernel, and OpenHands.
-   - Keep agent-to-agent work focused on setup, policy, export, and repeatability; do not turn `aiplane` into the autonomous agent runner.
-   - Research deeper IDE/tool integrations before adding brittle custom paths.
+   - Research deeper Cursor, JetBrains, Windsurf, Copilot, Codex, and Claude Code integration before adding brittle custom paths.
+   - Add launch wrappers only where a stable tool-native CLI exists and `aiplane` can export/check the needed environment first.
+   - Keep any future `aiplane session` layer thin: selected model, endpoint, transcript path, and audit metadata, not a full custom chat product.
 
-9. **Benchmark and recommendation quality** - Planned
+10. **Benchmark and recommendation quality** - Planned
    - Add repeated benchmark runs, timing/token metrics, and local result summaries.
    - Add benchmark comparison across models, runtimes, and machines.
    - Defer automated code execution grading until sandboxing and language runners are designed.
 
-10. **Test-suite performance and isolation** - Planned
+11. **Test-suite performance and isolation** - Planned
    - Keep the full automated suite useful as a PR gate without letting local discovery caches or external-machine state dominate runtime.
    - Split the large MVP test module into focused files by area so slow tests and ownership are easier to see.
    - Continue replacing repeated full-catalog enrichment with cached or single-pass helpers where behavior is unchanged.

@@ -79,6 +79,18 @@ AI coding setups are fragmented:
 
 Remote deployment should start as planning, validation, and starter artifact generation around official tools: OpenSSH, Docker/Compose, Azure CLI, OpenTofu/Terraform, Pulumi, Vagrant, Packer, Dev Container CLI, Ansible, kubectl, and Helm. Direct mutation stays guarded, previewable, and auditable.
 
+## Post-Merge Architecture Priorities
+
+The merged MVP has enough surface area that maintainability now matters as much as feature growth. Near-term architecture work should focus on consolidation and clear contracts:
+
+- Keep source/provider, runtime, endpoint, profile model alias, machine, stack, MCP tool, and agent skill concepts separate in code as well as docs.
+- Reduce duplication between CLI parser options, MCP schemas, output filters, and manager method signatures. Model-list filters, integration roles, and provider/runtime compatibility are the first places to centralize.
+- Move runtime/source compatibility decisions toward Python catalog services and keep shell helpers focused on invoking official tools.
+- Treat MCP as a structured adapter over existing managers, not a parallel implementation of CLI behavior.
+- Treat skills as versioned assistant workflow guidance, not live tools. A skill can explain when to call MCP, but it should not duplicate MCP schemas.
+- Treat orchestrators as external frameworks. `aiplane` should generate role/endpoint/policy config and readiness checks, not run autonomous agent conversations itself.
+- Keep tests close to behavior boundaries. As the code is split, tests should move from one large MVP file into focused modules for profiles/config, provider/model catalog, runtimes, integrations, MCP, orchestrators, stacks, and CLI smoke coverage.
+
 ## Execution Fabric Tracks
 
 The current product direction is organized around three execution-fabric tracks.

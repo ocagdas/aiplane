@@ -40,9 +40,9 @@ chat UI before the provider/session contracts are stable.
    - The MCP stdio server is implemented and should remain the first structured tool surface.
    - A local HTTP service should only be added if multiple clients need it.
 
-6. **Agent-to-agent setup and export - Planned**
-   - Not implemented yet as a dedicated workflow.
-   - Target shape: describe agent roles, model aliases, managed or self-managed endpoints, tool policies, approval modes, and audit labels in profile/stack/orchestrator metadata.
+6. **Agent-to-agent setup and export - Partial / next hardening focus**
+   - Implemented today: orchestrator catalog/readiness, package/setup scaffolding, stack binding to an optional orchestrator, and starter agent exports.
+   - Next target shape: describe agent roles, model aliases, managed or self-managed endpoints, tool policies, approval modes, limits, and audit labels in profile/stack/orchestrator metadata.
    - Export starter configuration for established orchestrator frameworks instead of running autonomous agent conversations inside `aiplane`.
    - Managed-service models are valid endpoint choices for this layer when the orchestrator can call them directly; they should not be treated as local runtime candidates.
 
@@ -147,7 +147,7 @@ Start with:
 3. `aiplane launch` wrapper for `ollama launch` where supported. - **Planned, not implemented**
 4. Cline/Zed/Aider exporter or wrapper research against their documented endpoint/MCP/config surfaces. - **Exporters implemented; wrappers still planned/research**
 5. Minimal session metadata/audit around those launches. - **Planned, not implemented**
-6. Agent-to-agent role metadata and orchestrator config export for established frameworks. - **Planned, not implemented**
+6. Agent-to-agent role metadata and orchestrator config export for established frameworks. - **Partial scaffolding implemented; multi-role schema/export planned next**
 7. Cursor research/config-export path after the generic endpoint/MCP exporters are stable. - **Research/planned**
 
 Do **not** start by building a heavy custom chat UI. Use existing CLI/IDE tools
