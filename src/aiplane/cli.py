@@ -39,7 +39,9 @@ from .hardware import HardwareManager
 from .integrations import IntegrationManager
 from .machines import MachineManager
 from .mcp import mcp_manifest, serve_stdio
-from .model_catalog import ModelCatalog, expand_capability_filters
+from .model_catalog import ModelCatalog
+from .model_filters import ACCELERATOR_API_CHOICES, GPU_VENDOR_CHOICES, MODEL_SORT_CHOICES, model_filter_args
+from .model_output import group_model_rows, group_rows
 from .orchestrators import OrchestratorCatalog
 from .output import json_dumps as _json
 from .policy import PolicyEngine
@@ -3240,7 +3242,7 @@ def _main(argv: list[str] | None = None) -> int:
             if args.group_by != "none":
                 summary = {
                     "group_by": args.group_by,
-                    "defaults": _group_rows(summary["defaults"], args.group_by),
+                    "defaults": group_rows(summary["defaults"], args.group_by),
                 }
             print(_json(summary, indent=2))
             return 0
@@ -3315,7 +3317,7 @@ def _main(argv: list[str] | None = None) -> int:
             elif args.group_by == "none":
                 print(_json(rows, indent=2))
             else:
-                print(_json(_group_model_rows(profile, rows, args.group_by), indent=2))
+                print(_json(group_model_rows(profile, rows, args.group_by), indent=2))
             return 0
         if args.models_command == "show":
             print(_json(catalog.show(args.name), indent=2, sort_keys=True))
@@ -4039,61 +4041,6 @@ def _active_hardware_model_filters(profile) -> dict[str, object]:
     if isinstance(accelerator_apis, list) and accelerator_apis:
         filters["accelerator_api"] = str(accelerator_apis[0])
     return filters
-
-
-
-def _group_rows(rows: list[dict[str, object]], key: str) -> dict[str, list[dict[str, object]]]:
-    grouped: dict[str, list[dict[str, object]]] = {}
-    for row in rows:
-        value = row.get(key) or "unknown"
-        grouped.setdefault(str(value), []).append(row)
-    return {
-        name: sorted(items, key=lambda item: str(item.get("name") or item.get("role") or ""))
-        for name, items in sorted(grouped.items())
-    }
-
-
-def _group_model_rows(profile, rows: list[dict[str, object]], group_by: str) -> dict[str, object]:
-    runtime_catalog = RuntimeCatalog(profile)
-    models = runtime_catalog._models()
-    grouped: dict[str, object] = {}
-    for row in rows:
-        name = str(row.get("name"))
-        model = models.get(name, {})
-        if group_by == "source":
-            keys = [runtime_catalog.source_for_model(model)]
-        elif group_by == "runtime":
-            keys = runtime_catalog.supported_runtimes(name) or ["no_runtime"]
-        elif group_by == "model":
-            keys = [str(row.get("model") or "unknown")]
-        elif group_by == "provider-kind":
-            ownership = str(row.get("ownership") or "unknown")
-            provider = str(row.get("provider") or "unknown")
-            ownership_group = grouped.setdefault(ownership, {})
-            if isinstance(ownership_group, dict):
-                ownership_group.setdefault(provider, []).append(row)
-            continue
-        else:
-            keys = [str(row.get(group_by) or "unknown")]
-        for key in keys:
-            grouped.setdefault(key, []).append(row)
-    if group_by == "provider-kind":
-        return {
-            "group_by": group_by,
-            "groups": {
-                ownership: {
-                    provider: sorted(items, key=lambda item: str(item.get("name") or ""))
-                    for provider, items in sorted(providers.items())
-                    if isinstance(items, list)
-                }
-                for ownership, providers in sorted(grouped.items())
-                if isinstance(providers, dict)
-            },
-        }
-    return {
-        "group_by": group_by,
-        "groups": {key: value for key, value in sorted(grouped.items())},
-    }
 
 
 def _validate_profile(profile) -> dict[str, object]:

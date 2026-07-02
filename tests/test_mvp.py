@@ -44,6 +44,13 @@ from aiplane.integrations import IntegrationManager
 from aiplane.machines import MachineManager
 from aiplane.mcp import AiplaneMcpServer, _read_message, _write_message, mcp_manifest
 from aiplane.model_catalog import ModelCatalog, _discovered_model_entry
+from aiplane.model_filters import (
+    ACCELERATOR_API_CHOICES,
+    GPU_VENDOR_CHOICES,
+    MODEL_FILTER_SCHEMA_PROPERTIES,
+    MODEL_SORT_CHOICES,
+)
+from aiplane.model_output import group_model_rows
 from aiplane.orchestrators import OrchestratorCatalog
 from aiplane.models import Profile
 from aiplane.policy import PolicyEngine
@@ -118,10 +125,12 @@ def _ensure_repo_test_profile(name: str, profiles_dir: Path | str | None = None)
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copytree(source, destination)
         return
-    provider_source = source / "model-providers.yaml"
-    provider_destination = destination / "model-providers.yaml"
-    if provider_source.exists():
-        shutil.copy2(provider_source, provider_destination)
+    for source_file in source.iterdir():
+        if not source_file.is_file():
+            continue
+        destination_file = destination / source_file.name
+        if source_file.name == "model-providers.yaml" or not destination_file.exists():
+            shutil.copy2(source_file, destination_file)
 
 
 def _load_profile_with_test_models(
@@ -1004,6 +1013,41 @@ class MvpTests(unittest.TestCase):
         result = response["result"]["structuredContent"]
         self.assertLessEqual(len(result["models"]), 3)
         self.assertTrue(all(row["ownership"] == "self_managed" for row in result["models"]))
+
+    def test_mcp_model_list_schema_uses_shared_model_filter_contract(self) -> None:
+        schema = mcp_module.TOOL_SCHEMAS["aiplane.models.list"]
+        properties = schema["properties"]
+        for name in MODEL_FILTER_SCHEMA_PROPERTIES:
+            self.assertIn(name, properties)
+        self.assertEqual(properties["sort_by"]["enum"], MODEL_SORT_CHOICES)
+        self.assertEqual(properties["gpu_vendor"]["enum"], GPU_VENDOR_CHOICES)
+        self.assertEqual(properties["accelerator_api"]["enum"], ACCELERATOR_API_CHOICES)
+
+    def test_mcp_model_list_supports_parameter_filters_and_sorting(self) -> None:
+        server = AiplaneMcpServer(Path.cwd())
+        response = server.handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 26,
+                "method": "tools/call",
+                "params": {
+                    "name": "aiplane.models.list",
+                    "arguments": {
+                        "role": ["chat"],
+                        "min_parameters_b": 7,
+                        "max_parameters_b": 14,
+                        "sort_by": "parameters",
+                        "limit": 3,
+                    },
+                },
+            }
+        )
+        self.assertIsNotNone(response)
+        rows = response["result"]["structuredContent"]["models"]
+        self.assertGreater(len(rows), 0)
+        parameter_counts = [float(row["parameter_count_b"] or 0) for row in rows]
+        self.assertTrue(all(7 <= count <= 14 for count in parameter_counts))
+        self.assertEqual(parameter_counts, sorted(parameter_counts, reverse=True))
 
     def test_mcp_server_can_show_model_and_provider_models(self) -> None:
         server = AiplaneMcpServer(Path.cwd())
@@ -3139,6 +3183,23 @@ class MvpTests(unittest.TestCase):
                 "self_managed_model: local-code-small",
                 (root / "models.yaml").read_text(encoding="utf-8"),
             )
+
+    def test_model_output_groups_runtime_and_provider_kind_without_cli(self) -> None:
+        profile = load_profile("local-dev", Path.cwd())
+        catalog = ModelCatalog(profile)
+        rows = catalog.list()
+
+        by_runtime = group_model_rows(profile, rows, "runtime")
+        self.assertEqual(by_runtime["group_by"], "runtime")
+        self.assertIn("vllm", by_runtime["groups"])
+        self.assertIn("no_runtime", by_runtime["groups"])
+
+        by_provider_kind = group_model_rows(profile, rows, "provider-kind")
+        self.assertEqual(by_provider_kind["group_by"], "provider-kind")
+        self.assertIn("self_managed", by_provider_kind["groups"])
+        self.assertIn("managed_service", by_provider_kind["groups"])
+        self.assertIn("ollama", by_provider_kind["groups"]["self_managed"])
+        self.assertIn("openai", by_provider_kind["groups"]["managed_service"])
 
     def test_models_list_and_defaults_support_grouping(self) -> None:
         stdout = StringIO()

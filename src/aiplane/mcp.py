@@ -493,7 +493,6 @@ class AiplaneMcpServer:
         ]
 
 
-
 def serve_stdio(workspace, default_profile: str | None = None, profiles_dir=None) -> int:
     server = AiplaneMcpServer(workspace, default_profile=default_profile, profiles_dir=profiles_dir)
     while True:
