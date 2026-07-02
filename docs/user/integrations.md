@@ -22,6 +22,7 @@ The integration flow has three separate steps. With the shipped profile template
 
 ```bash
 aiplane integrations roles continue
+aiplane integrations roles continue --groups
 aiplane models refresh --provider ollama --query chat --dry-run --limit 10
 aiplane integrations plan continue --chat CHAT_ALIAS --autocomplete AUTOCOMPLETE_ALIAS --embedding EMBEDDING_ALIAS
 aiplane integrations setup continue --chat CHAT_ALIAS --autocomplete AUTOCOMPLETE_ALIAS --embedding EMBEDDING_ALIAS --dry-run
@@ -67,6 +68,7 @@ aiplane integrations roles continue
 aiplane integrations roles cline
 aiplane models refresh --provider ollama --query chat --dry-run --limit 10
 ```
+You can use `--groups` to get a compact grouped output such as `required: ["chat"]` and `optional: ["autocomplete", "embedding"]`.
 
 Continue can use separate `chat`, `autocomplete`, and `embedding` selections.
 Most other targets currently use one primary chat/code model. MCP targets do not

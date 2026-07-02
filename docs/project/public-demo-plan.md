@@ -135,29 +135,20 @@ Voiceover:
 On screen:
 
 ```bash
-aiplane providers list --group-by ownership
-aiplane providers list --group-by runtime
-aiplane --profiles-dir /tmp/aiplane-demo-profiles imodels refresh
+# Requires: profiles/create+validate for demo must have run to create profile
+aiplane integrations roles continue  # shows required roles for integrations.
+aiplane integrations roles continue --groups
 aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider ollama --query chat --dry-run --limit 5
 aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider ollama --query chat --limit 10
 aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider ollama --query code --limit 10
 aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider ollama --query embed --limit 10
 aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --group-by runtime --limit 10
-aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --runtime ollama --role chat --ram-gb 16 --vram-gb 0 --sort-by role --limit 5
-DISCOVERED_CHAT=$(aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --runtime ollama --role chat --enabled-only --sort-by role --limit 1 | python -c 'import json,sys; print(json.load(sys.stdin)[0]["name"])')
-printf 'reviewed discovered chat candidate=%s\n' "$DISCOVERED_CHAT"
-aiplane --profiles-dir /tmp/aiplane-demo-profiles models add --profile demo local_chat --alias "$DISCOVERED_CHAT" --role chat --runtime ollama
+CHAT_ALIAS="$(aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --runtime ollama --role chat --enabled-only --sort-by role --limit 1 --name-only)"
+AUTOCOMPLETE_ALIAS="$(aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --runtime ollama --role autocomplete --enabled-only --sort-by role --limit 1 --name-only)"
+EMBEDDING_ALIAS="$(aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --runtime ollama --role embedding --enabled-only --sort-by role --limit 1 --name-only)"
+aiplane --profiles-dir /tmp/aiplane-demo-profiles models add --profile demo local_chat --alias "$CHAT_ALIAS" --role chat --runtime ollama
 aiplane --profiles-dir /tmp/aiplane-demo-profiles models clone --profile demo local_chat local_fast_draft --role completion --notes "Fast draft model for local coding tasks." --dry-run
 aiplane --profiles-dir /tmp/aiplane-demo-profiles hardware recommend --profile demo
-```
-
-Capture selected aliases for later sections. `local_chat` is profile-owned; autocomplete and embedding can be added the same way or used as reviewed discovered candidates for the demo:
-
-```bash
-CHAT_ALIAS=local_chat
-AUTOCOMPLETE_ALIAS=$(aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --runtime ollama --role autocomplete --enabled-only --sort-by role --limit 1 | python -c 'import json,sys; print(json.load(sys.stdin)[0]["name"])')
-EMBEDDING_ALIAS=$(aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --runtime ollama --role embedding --enabled-only --sort-by role --limit 1 | python -c 'import json,sys; print(json.load(sys.stdin)[0]["name"])')
-printf 'chat=%s autocomplete=%s embedding=%s\n' "$CHAT_ALIAS" "$AUTOCOMPLETE_ALIAS" "$EMBEDDING_ALIAS"
 ```
 
 Voiceover:
@@ -168,6 +159,8 @@ What to highlight:
 
 - `providers list --group-by ownership` separates `self_managed` sources from `managed_service` providers.
 - `models refresh --dry-run` shows next steps without writing.
+- `integrations roles continue` shows required role names for `plan continue`.
+- Discovery imports are written as enabled by default; use `models disable` for entries you want to keep off the default selection.
 - `models.discovered.yaml` is ignored review state with a generated-file banner.
 - `models add --alias` shows the reviewed path from discovered candidate to stable profile-owned model entry.
 - `models clone` shows why a second local entry can point at the same real model for a different purpose.

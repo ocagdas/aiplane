@@ -3078,6 +3078,47 @@ class MvpTests(unittest.TestCase):
         payload = json.loads(stdout.getvalue())
         self.assertLessEqual(len(payload), 3)
 
+    def test_models_list_name_only_supports_cli_alias_selection(self) -> None:
+        stdout = StringIO()
+        with redirect_stdout(stdout):
+            code = cli_main(
+                [
+                    "models",
+                    "list",
+                    "--profile",
+                    "local-dev",
+                    "--runtime",
+                    "ollama",
+                    "--role",
+                    "chat",
+                    "--name-only",
+                    "--limit",
+                    "2",
+                ]
+            )
+        self.assertEqual(code, 0)
+        names = [line.strip() for line in stdout.getvalue().splitlines() if line.strip()]
+        self.assertGreaterEqual(len(names), 1)
+        self.assertTrue(all(line and "{" not in line and "}" not in line for line in names))
+
+    def test_models_list_name_only_cannot_use_group_by(self) -> None:
+        stdout = StringIO()
+        with redirect_stdout(stdout):
+            code = cli_main(
+                [
+                    "models",
+                    "list",
+                    "--profile",
+                    "local-dev",
+                    "--name-only",
+                    "--group-by",
+                    "runtime",
+                    "--limit",
+                    "2",
+                ]
+            )
+        self.assertEqual(code, 1)
+
     def test_models_list_filters_and_sorts_by_provider_popularity(self) -> None:
         source = load_profile("local-dev", Path.cwd())
         with tempfile.TemporaryDirectory() as tmp:
@@ -3816,6 +3857,28 @@ class MvpTests(unittest.TestCase):
             [role["name"] for role in payload["roles"]],
             ["chat", "autocomplete", "embedding"],
         )
+
+    def test_integrations_roles_cli_groups_output(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            profiles_dir = Path(tmp) / "profiles"
+            shutil.copytree(Path("profile-templates") / "local-dev", profiles_dir / "local-dev")
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = cli_main(
+                    [
+                        "--profiles-dir",
+                        str(profiles_dir),
+                        "integrations",
+                        "roles",
+                        "continue",
+                        "--groups",
+                    ]
+                )
+            self.assertEqual(code, 0)
+            lines = [line.strip() for line in stdout.getvalue().splitlines() if line.strip()]
+            self.assertEqual(len(lines), 2)
+            self.assertEqual(lines[0], 'required: ["chat"]')
+            self.assertEqual(lines[1], 'optional: ["autocomplete", "embedding"]')
 
     def test_integrations_plan_supports_single_model_targets(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

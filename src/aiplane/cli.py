@@ -1195,6 +1195,11 @@ def _main(argv: list[str] | None = None) -> int:
     )
     _profile_arg(models_list)
     models_list.add_argument(
+        "--name-only",
+        action="store_true",
+        help="Print only model aliases (one per line) instead of full JSON",
+    )
+    models_list.add_argument(
         "--group-by",
         choices=[
             "none",
@@ -1638,6 +1643,11 @@ def _main(argv: list[str] | None = None) -> int:
             "generic-mcp",
         ],
         help="Integration target to inspect",
+    )
+    integrations_roles.add_argument(
+        "--groups",
+        action="store_true",
+        help="Print compact required/optional role groups instead of JSON",
     )
     integrations_plan = integrations_sub.add_parser(
         "plan",
@@ -3166,7 +3176,11 @@ def _main(argv: list[str] | None = None) -> int:
             )
             if args.limit is not None:
                 rows = rows[: args.limit]
-            if args.group_by == "none":
+            if args.name_only:
+                if args.group_by != "none":
+                    raise ValueError("--name-only cannot be combined with --group-by")
+                print("\n".join([str(row.get("name") or "") for row in rows]))
+            elif args.group_by == "none":
                 print(_json(rows, indent=2))
             else:
                 print(_json(_group_model_rows(profile, rows, args.group_by), indent=2))
@@ -3400,7 +3414,17 @@ def _main(argv: list[str] | None = None) -> int:
             print(_json(manager.list(), indent=2, sort_keys=True))
             return 0
         if args.integrations_command == "roles":
-            print(_json(manager.roles(args.tool), indent=2))
+            payload = manager.roles(args.tool)
+            if args.groups:
+                required = []
+                optional = []
+                for role in payload.get("roles", []):
+                    target = required if bool(role.get("required")) else optional
+                    target.append(str(role.get("name") or ""))
+                print(f"required: {json.dumps(required)}")
+                print(f"optional: {json.dumps(optional)}")
+            else:
+                print(_json(payload, indent=2))
             return 0
         if args.integrations_command == "plan":
             print(
@@ -4088,7 +4112,6 @@ def _environment_doctor_text(payload: dict[str, object]) -> str:
         lines.append("next steps:")
         lines.extend(f"- {note}" for note in notes[:3])
     return "\n".join(lines)
-
 
 def _profile_bootstrap_next_steps(profile: str, discovery_requested: bool, dry_run: bool) -> list[str]:
     if dry_run:
