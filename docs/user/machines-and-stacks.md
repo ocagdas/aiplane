@@ -51,6 +51,43 @@ aiplane machines import gpu_box_01.machine.yaml \
   --set gpu_count=1
 ```
 
+## First Local Stack Prerequisite
+
+For a first same-host stack, register the current machine before running `stacks setup`. Hardware templates such as `local_auto` describe capacity patterns, but stack setup expects a named machine entry from `aiplane machines list`.
+
+```bash
+aiplane hardware export-machine --name local_box > local_box.machine.yaml
+aiplane machines import local_box.machine.yaml
+aiplane machines list
+aiplane machines validate local_box
+```
+
+Preview the stack binding first:
+
+```bash
+aiplane stacks setup local_ollama_stack \
+  --runtime ollama \
+  --model MODEL_ALIAS \
+  --machine local_box \
+  --access same_host \
+  --endpoint http://localhost:11434/v1 \
+  --dry-run
+```
+
+Persist the stack only after the preview names the intended runtime, model, machine, access mode, and endpoint:
+
+```bash
+aiplane stacks setup local_ollama_stack \
+  --runtime ollama \
+  --model MODEL_ALIAS \
+  --machine local_box \
+  --access same_host \
+  --endpoint http://localhost:11434/v1
+
+aiplane stacks plan local_ollama_stack
+aiplane stacks doctor local_ollama_stack
+```
+
 ## Remote Profiling Plan
 
 You can plan remote profiling over SSH. This does not run SSH yet; it renders the commands to execute:
@@ -69,7 +106,7 @@ The same pattern applies to a self-managed Azure VM or any Linux machine where `
 Rank imported machines for a model/runtime/workload:
 
 ```bash
-aiplane machines recommend --model qwen-coder-32b --runtime vllm
+aiplane machines recommend --model MODEL_ALIAS --runtime vllm
 aiplane machines recommend --workload inference_large
 ```
 
@@ -86,12 +123,12 @@ aiplane machines azure-status
 aiplane machines azure-status --region uksouth --sku-query
 ```
 
-`azure-status` reports three separate facts: whether `az` is installed, whether `az account show` works, and whether the VM SKU query works for the requested region. A valid account session does not always mean the compute SKU query is usable; subscription/tenant context, permissions, or login scope can still block the live query.
+`azure-status` reports three separate facts: whether `az` is installed, whether `az account show` works, and whether the VM SKU query works for the requested region. Account-identifying fields such as subscription id, tenant id, and user name are redacted in command output by default. A valid account session does not always mean the compute SKU query is usable; subscription/tenant context, permissions, or login scope can still block the live query.
 
 
 ```bash
 aiplane machines discover azure --region uksouth --workload inference_large
-aiplane machines discover azure --region uksouth --model qwen-coder-32b --runtime vllm
+aiplane machines discover azure --region uksouth --model MODEL_ALIAS --runtime vllm
 ```
 
 Import a selected SKU into the same self-managed machine inventory:
@@ -187,7 +224,7 @@ aiplane machines profile-remote-plan \
 aiplane stacks setup qwen32b_on_h100 \
   --orchestrator langgraph \
   --runtime vllm \
-  --model qwen-coder-32b \
+  --model MODEL_ALIAS \
   --machine azure_h100_live \
   --access ssh_tunnel \
   --endpoint http://localhost:8000/v1
@@ -200,9 +237,9 @@ Stack plans include preflight checks for runtime prerequisites, likely port conf
 
 ## Stacks
 
-A stack is the operational unit for running or exposing a self-managed AI setup. It binds one optional orchestrator, one runtime, one primary model, one machine, and one access policy.
+A stack is the operational unit for running or exposing an AI setup. It binds one optional orchestrator, one runtime or hosted endpoint contract, one primary model, one machine or endpoint target, and one access policy. Self-managed stacks use the runtime and machine fields for fit checks and lifecycle planning. Managed-service stacks keep provider/runtime endpoint metadata so exports and orchestrators can call the hosted service, but they are not treated as local runtime candidates.
 
-That one-to-one shape is intentional for now. If you need separate planner/coder/reviewer models, create separate stacks or wait for the planned multi-role stack schema. Keeping the first stack model simple makes fit checks, lifecycle commands, and exports easier to reason about.
+That one-to-one shape is intentional for now. If you need separate planner/coder/reviewer models, create separate stacks or wait for the planned multi-role stack schema. Keeping the first stack model simple makes fit checks, lifecycle commands, and exports easier to reason about. Multi-role and agent-to-agent setups are planned as orchestrator metadata over reviewed model aliases, endpoints, tool policies, and approval modes rather than as a hidden agent runner inside `aiplane`.
 
 Before creating a stack, the machine must exist in `aiplane machines list`. Hardware templates such as `local_auto` are not automatically stack machines. Export/import a real machine profile first, or import an Azure SKU candidate.
 
@@ -212,7 +249,7 @@ Create or update a stack:
 aiplane stacks setup coding_agents \
   --orchestrator langgraph \
   --runtime vllm \
-  --model qwen-coder-32b \
+  --model MODEL_ALIAS \
   --machine azure_h100_live \
   --access ssh_tunnel \
   --endpoint http://localhost:8000/v1 \
@@ -242,7 +279,7 @@ Preview without writing:
 aiplane stacks setup coding_agents \
   --orchestrator langgraph \
   --runtime vllm \
-  --model qwen-coder-32b \
+  --model MODEL_ALIAS \
   --machine azure_h100_live \
   --dry-run
 ```
@@ -273,6 +310,8 @@ aiplane stacks restart coding_agents
 
 `start` does not implicitly install or pull models. Use `prepare` first when you want the higher-level install/pull/config path.
 
+For same-host/local stacks, lifecycle commands return structured execution reporting: `status`, `outcome`, `steps_total`, `steps_executed`, `failed_step`, per-step stdout/stderr tails, and a best-effort `runtime_status_after` snapshot. Remote, SSH, Azure, and AKS stacks still return planned commands instead of executing.
+
 Export IDE or packaging artifacts:
 
 ```bash
@@ -287,7 +326,7 @@ The Dockerfile, Conda YAML, and Compose exports are starter artifacts for review
 
 ## Orchestrators
 
-Orchestrators are frameworks that can run agent or workflow logic on top of a configured model endpoint. `aiplane` does not initiate autonomous workloads here. It catalogs orchestrator options and lets stacks bind an orchestrator to a runtime/model/machine target.
+Orchestrators are frameworks that can run agent or workflow logic on top of configured model endpoints. `aiplane` does not initiate autonomous workloads here. It catalogs orchestrator options and lets stacks bind an orchestrator to a self-managed runtime/model/machine target or, where the framework supports it, to a managed-service endpoint. Planned agent-to-agent support belongs in this layer as role, endpoint, tool-policy, approval, and audit metadata for established frameworks.
 
 Initial orchestrator catalog:
 
@@ -300,8 +339,8 @@ aiplane orchestrators list --runtime ollama --runtime vllm
 aiplane orchestrators list --provider ollama --group-by provider
 aiplane orchestrators list --runtime ollama --runtime vllm --group-by runtime
 aiplane orchestrators show langgraph
-aiplane orchestrators setup langgraph --runtime ollama --model qwen-tiny --dry-run
-aiplane orchestrators setup langgraph --runtime ollama --model qwen-tiny --approval-mode ask
+aiplane orchestrators setup langgraph --runtime ollama --model MODEL_ALIAS --dry-run
+aiplane orchestrators setup langgraph --runtime ollama --model MODEL_ALIAS --approval-mode ask
 aiplane orchestrators doctor langgraph
 ```
 
@@ -332,13 +371,13 @@ to bind an orchestrator to a runtime, model, machine, and access method:
 aiplane stacks setup coding_agents \
   --orchestrator langgraph \
   --runtime ollama \
-  --model qwen-tiny \
+  --model MODEL_ALIAS \
   --machine local_box \
   --limit timeout=30m \
   --tool shell=guarded
 ```
 
-Limits, approval labels, and tool policies for orchestrated workloads are structured pass-through stack fields. `aiplane` stores and exports them, but the orchestrator/runtime decides whether and how to enforce them.
+Limits, approval labels, and tool policies for orchestrated workloads are structured pass-through stack fields. `aiplane` stores and exports them, but the orchestrator/runtime or managed provider decides whether and how to enforce them. For managed-service models, keep endpoint credentials in ignored local credential references or environment variables; do not place raw provider secrets in stack or profile YAML.
 
 ## Current Limits
 

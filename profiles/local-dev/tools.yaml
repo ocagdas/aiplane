@@ -1,2 +1,0 @@
-mode: full_automation
-allowed: [read_file, write_file, grep, git_status, git_diff, run_tests, build, lint, docker_exec, git_commit]

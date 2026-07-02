@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from .audit import AuditLogger
 from .backends import BackendResult
+from .hardware import HardwareManager
 from .model_catalog import ModelCatalog
 from .models import AuditEvent, Profile
 from .policy import PolicyEngine
@@ -15,30 +16,97 @@ class Router:
         self.audit = audit
         self.catalog = ModelCatalog(profile)
 
-    def route(self, task: str, prefer_escalation: bool = False, model_name: str | None = None, dry_run: bool = False) -> BackendResult:
+    def route(
+        self,
+        task: str,
+        prefer_escalation: bool = False,
+        model_name: str | None = None,
+        dry_run: bool = False,
+        ignore_hardware_fit: bool = False,
+    ) -> BackendResult:
         if prefer_escalation and contains_secret(task):
-            self.audit.record(AuditEvent("route", self.profile.name, "backend:managed_service", "blocked", {"reason": "secret detected"}))
+            self.audit.record(
+                AuditEvent(
+                    "route",
+                    self.profile.name,
+                    "backend:managed_service",
+                    "blocked",
+                    {"reason": "secret detected"},
+                )
+            )
             raise PermissionError("secret detected; managed-service escalation blocked")
         selected = self._select_model(prefer_escalation, model_name)
         provider = str(selected["model"].get("provider", ""))
         local = bool(selected["model"].get("local", False))
         action = f"model:{selected['name']}"
 
+        if local and not ignore_hardware_fit:
+            fit = HardwareManager(self.profile).check_model_fit(selected["model"])
+            if not fit.usable:
+                self.audit.record(
+                    AuditEvent(
+                        "route",
+                        self.profile.name,
+                        action,
+                        "blocked",
+                        {"provider": provider, "reason": fit.reason, "hardware_fit": False},
+                    )
+                )
+                raise RuntimeError(
+                    f"model does not satisfy active hardware requirements: {fit.reason}; "
+                    "rerun with --ignore-hardware-fit to override"
+                )
         if not local:
             self._check_cloud_allowed(task)
 
         if dry_run:
-            result = BackendResult("dry_run", self._dry_run_text(task, selected["name"], selected["model"]), escalated=not local)
-            self.audit.record(AuditEvent("route", self.profile.name, action, "allowed", {"provider": provider, "dry_run": True, "escalated": result.escalated}))
+            result = BackendResult(
+                "dry_run",
+                self._dry_run_text(task, selected["name"], selected["model"]),
+                escalated=not local,
+            )
+            self.audit.record(
+                AuditEvent(
+                    "route",
+                    self.profile.name,
+                    action,
+                    "allowed",
+                    {
+                        "provider": provider,
+                        "dry_run": True,
+                        "escalated": result.escalated,
+                    },
+                )
+            )
             return result
 
         try:
             result = self.catalog.complete(selected["name"], task)
         except Exception as exc:
-            self.audit.record(AuditEvent("route", self.profile.name, action, "blocked", {"provider": provider, "reason": str(exc)}))
+            self.audit.record(
+                AuditEvent(
+                    "route",
+                    self.profile.name,
+                    action,
+                    "blocked",
+                    {"provider": provider, "reason": str(exc)},
+                )
+            )
             raise
         result = BackendResult(result.backend, result.text, escalated=not local)
-        self.audit.record(AuditEvent("route", self.profile.name, action, "allowed", {"provider": provider, "backend": result.backend, "escalated": result.escalated}))
+        self.audit.record(
+            AuditEvent(
+                "route",
+                self.profile.name,
+                action,
+                "allowed",
+                {
+                    "provider": provider,
+                    "backend": result.backend,
+                    "escalated": result.escalated,
+                },
+            )
+        )
         return result
 
     def _select_model(self, prefer_escalation: bool, model_name: str | None) -> dict[str, object]:
@@ -71,11 +139,27 @@ class Router:
 
     def _check_cloud_allowed(self, task: str) -> None:
         if contains_secret(task):
-            self.audit.record(AuditEvent("route", self.profile.name, "backend:managed_service", "blocked", {"reason": "secret detected"}))
+            self.audit.record(
+                AuditEvent(
+                    "route",
+                    self.profile.name,
+                    "backend:managed_service",
+                    "blocked",
+                    {"reason": "secret detected"},
+                )
+            )
             raise PermissionError("secret detected; managed-service escalation blocked")
         cloud_decision = self.policy.cloud_decision()
         if not cloud_decision.allowed:
-            self.audit.record(AuditEvent("route", self.profile.name, "backend:managed_service", "blocked", {"reason": cloud_decision.reason}))
+            self.audit.record(
+                AuditEvent(
+                    "route",
+                    self.profile.name,
+                    "backend:managed_service",
+                    "blocked",
+                    {"reason": cloud_decision.reason},
+                )
+            )
             raise PermissionError(cloud_decision.reason)
 
     def _dry_run_text(self, task: str, model_name: str, model: dict[str, object]) -> str:

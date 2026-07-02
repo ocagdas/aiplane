@@ -5,8 +5,9 @@ PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROVIDER="ollama"
 ACTION="doctor"
 PROFILE="local-dev"
-MODEL="qwen-tiny"
+MODEL=""
 DRY_RUN=0
+SUBSTRATE="native"
 AIPLANE_STATE_DIR="$PROJECT_ROOT/.aiplane/runtimes"
 
 usage() {
@@ -39,23 +40,29 @@ Actions:
   --action status         Show provider status
   --action pull           Pull provider models when supported
   --action repull         Re-pull models already present in a runtime when discoverable; Ollama supports this directly
+  --action remove         Remove one pulled runtime model where supported; Ollama supports this directly
+  --action clear          Remove all pulled runtime models where supported; Ollama supports this directly
   --action list           List provider models when supported
 
 Options:
   --profile NAME          aiplane profile (default: local-dev)
-  --model NAME            configured model name, raw model id, or all (default: qwen-tiny)
+  --model NAME            configured model name, raw model id, or all (default: none; pass an alias, runtime-native id, or all)
+  --substrate native|docker Runtime substrate where supported; Ollama supports native and docker (default: native)
   --dry-run               Print commands without executing them
   -h, --help              Show this help
 
 Examples:
   scripts/provider_helper.sh --provider ollama --action install --dry-run
+  scripts/provider_helper.sh --provider ollama --action install --substrate docker --dry-run
   scripts/provider_helper.sh --provider ollama --action start
-  scripts/provider_helper.sh --provider ollama --action pull --model qwen-tiny
+  scripts/provider_helper.sh --provider ollama --action pull --model MODEL_ALIAS
+  scripts/provider_helper.sh --provider ollama --action remove --model MODEL_ALIAS --dry-run
+  scripts/provider_helper.sh --provider ollama --action clear --dry-run
   scripts/provider_helper.sh --provider ollama --action repull
   scripts/provider_helper.sh --provider all --action update-installed --dry-run
   scripts/provider_helper.sh --provider openai --action configure
   scripts/provider_helper.sh --provider vllm --action install --dry-run
-  scripts/provider_helper.sh --provider vllm --action pull --model qwen-coder-32b-vllm --dry-run
+  scripts/provider_helper.sh --provider vllm --action pull --model MODEL_ALIAS --dry-run
   scripts/provider_helper.sh --provider vllm --action start --dry-run
   scripts/provider_helper.sh --provider tgi --action start --dry-run
   scripts/provider_helper.sh --provider llamacpp --action start --dry-run
@@ -161,6 +168,7 @@ while [[ $# -gt 0 ]]; do
     --action) ACTION="${2:?missing value for --action}"; shift 2 ;;
     --profile) PROFILE="${2:?missing value for --profile}"; shift 2 ;;
     --model) MODEL="${2:?missing value for --model}"; shift 2 ;;
+    --substrate) SUBSTRATE="${2:?missing value for --substrate}"; shift 2 ;;
     --dry-run) DRY_RUN=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; usage >&2; exit 2 ;;
@@ -172,8 +180,13 @@ case "$PROVIDER" in
   *) echo "Unsupported provider: $PROVIDER" >&2; exit 2 ;;
 esac
 
+case "$SUBSTRATE" in
+  native|docker) ;;
+  *) echo "Unsupported substrate: $SUBSTRATE" >&2; exit 2 ;;
+esac
+
 case "$ACTION" in
-  doctor|configure|install|update|update-installed|start|stop|restart|status|pull|repull|list) ;;
+  doctor|configure|install|update|update-installed|start|stop|restart|status|pull|repull|remove|clear|list) ;;
   *) echo "Unsupported action: $ACTION" >&2; exit 2 ;;
 esac
 
@@ -194,12 +207,16 @@ aiplane_cmd() {
 }
 
 ollama_action() {
+  model_args=()
+  if [[ -n "$MODEL" ]]; then
+    model_args=(--model "$MODEL")
+  fi
   if [[ "$DRY_RUN" -eq 1 ]]; then
-    scripts/ollama_helper.sh --action "$ACTION" --profile "$PROFILE" --model "$MODEL" --dry-run
+    scripts/ollama_helper.sh --action "$ACTION" --profile "$PROFILE" --substrate "$SUBSTRATE" "${model_args[@]}" --dry-run
   elif [[ "$ACTION" == "status" || "$ACTION" == "list" || "$ACTION" == "doctor" ]]; then
-    scripts/ollama_helper.sh --action "$ACTION" --profile "$PROFILE" --model "$MODEL"
+    scripts/ollama_helper.sh --action "$ACTION" --profile "$PROFILE" --substrate "$SUBSTRATE" "${model_args[@]}"
   else
-    run scripts/ollama_helper.sh --action "$ACTION" --profile "$PROFILE" --model "$MODEL"
+    run scripts/ollama_helper.sh --action "$ACTION" --profile "$PROFILE" --substrate "$SUBSTRATE" "${model_args[@]}"
   fi
 }
 
@@ -232,12 +249,16 @@ AZURE_OPENAI_API_KEY=
 AZURE_OPENAI_ENDPOINT=
 AZURE_OPENAI_DEPLOYMENT=
 
+# ElevenLabs
+ELEVENLABS_API_KEY=
+ELEVENLABS_ENDPOINT=https://api.elevenlabs.io/v1
+
 # OpenAI-compatible local runtimes
-VLLM_MODEL=Qwen/Qwen2.5-Coder-32B-Instruct
+VLLM_MODEL=PROVIDER/MODEL_ID
 VLLM_ENDPOINT=http://localhost:8000/v1
-TGI_MODEL=Qwen/Qwen2.5-Coder-32B-Instruct
+TGI_MODEL=PROVIDER/MODEL_ID
 TGI_ENDPOINT=http://localhost:8081/v1
-TRANSFORMERS_MODEL=Qwen/Qwen2.5-Coder-7B-Instruct
+TRANSFORMERS_MODEL=PROVIDER/MODEL_ID
 LLAMACPP_MODEL_PATH=
 LLAMACPP_ENDPOINT=http://localhost:8080/v1
 LOCALAI_ENDPOINT=http://localhost:8082/v1
@@ -270,22 +291,26 @@ cloud_doctor() {
 
 openai_compatible_action() {
   provider="$1"
-  model_id="$(resolve_configured_model_id "$provider")"
+  model_id=""
+  case "$ACTION" in
+    start|restart|pull|repull) model_id="$(resolve_configured_model_id "$provider")" ;;
+  esac
+
   case "$provider" in
     vllm)
       endpoint="${VLLM_ENDPOINT:-http://localhost:8000/v1}"
-      start_command=(python -m vllm.entrypoints.openai.api_server --model "${model_id:-${VLLM_MODEL:-Qwen/Qwen2.5-Coder-32B-Instruct}}" --host 127.0.0.1 --port 8000)
+      start_command=(python -m vllm.entrypoints.openai.api_server --model "${model_id:-${VLLM_MODEL:-MODEL_ID_REQUIRED}}" --host 127.0.0.1 --port 8000)
       install_command=(python -m pip install vllm huggingface_hub)
       update_command=(python -m pip install --upgrade vllm huggingface_hub)
-      pull_command=(python -c "from huggingface_hub import snapshot_download; snapshot_download('${model_id:-${VLLM_MODEL:-Qwen/Qwen2.5-Coder-32B-Instruct}}')")
+      pull_command=(python -c "from huggingface_hub import snapshot_download; snapshot_download('${model_id:-${VLLM_MODEL:-MODEL_ID_REQUIRED}}')")
       install_hint="python -m pip install vllm huggingface_hub"
       ;;
     tgi)
       endpoint="${TGI_ENDPOINT:-http://localhost:8081/v1}"
-      start_command=(docker run --rm --gpus all -p 8081:80 -e MODEL_ID="${model_id:-${TGI_MODEL:-Qwen/Qwen2.5-Coder-32B-Instruct}}" ghcr.io/huggingface/text-generation-inference:latest)
+      start_command=(docker run --rm --gpus all -p 8081:80 -e MODEL_ID="${model_id:-${TGI_MODEL:-MODEL_ID_REQUIRED}}" ghcr.io/huggingface/text-generation-inference:latest)
       install_command=(docker pull ghcr.io/huggingface/text-generation-inference:latest)
       update_command=(docker pull ghcr.io/huggingface/text-generation-inference:latest)
-      pull_command=(python -c "from huggingface_hub import snapshot_download; snapshot_download('${model_id:-${TGI_MODEL:-Qwen/Qwen2.5-Coder-32B-Instruct}}')")
+      pull_command=(python -c "from huggingface_hub import snapshot_download; snapshot_download('${model_id:-${TGI_MODEL:-MODEL_ID_REQUIRED}}')")
       install_hint="Install Docker with GPU support, then docker pull ghcr.io/huggingface/text-generation-inference:latest."
       ;;
     transformers)
@@ -293,7 +318,7 @@ openai_compatible_action() {
       start_command=()
       install_command=(python -m pip install transformers accelerate torch huggingface_hub)
       update_command=(python -m pip install --upgrade transformers accelerate torch huggingface_hub)
-      pull_command=(python -c "from huggingface_hub import snapshot_download; snapshot_download('${model_id:-${TRANSFORMERS_MODEL:-Qwen/Qwen2.5-Coder-7B-Instruct}}')")
+      pull_command=(python -c "from huggingface_hub import snapshot_download; snapshot_download('${model_id:-${TRANSFORMERS_MODEL:-MODEL_ID_REQUIRED}}')")
       install_hint="python -m pip install transformers accelerate torch huggingface_hub"
       ;;
     localai)
@@ -401,7 +426,11 @@ PYEOF
         start_managed "$provider" "${start_command[@]}"
       fi
       ;;
-    pull|repull)
+    pull|repull|remove|clear)
+      if [[ "$ACTION" == "remove" || "$ACTION" == "clear" ]]; then
+        echo "$provider runtime cache deletion is not automated. Remove files through the runtime/provider cache tooling."
+        return 0
+      fi
       if [[ "$ACTION" == "repull" ]]; then
         echo "$provider cannot discover already downloaded model cache entries reliably. Re-pulling the selected/configured model instead."
       fi
@@ -428,7 +457,7 @@ cloud_action() {
       cloud_doctor "$provider"
       run bash -lc "$(aiplane_cmd) models doctor --profile '$PROFILE'"
       ;;
-    install|update|update-installed|start|stop|restart|pull|repull|list)
+    install|update|update-installed|start|stop|restart|pull|repull|remove|clear|list)
       echo "$provider does not have a local runtime for action '$ACTION'. Use --action configure or --action doctor."
       ;;
   esac
@@ -467,7 +496,7 @@ all_action() {
       scripts/provider_helper.sh --provider ollama --action repull --profile "$PROFILE" --model "$MODEL" $(dry_run_args) || true
       echo "For vLLM/TGI/Transformers, use --provider <runtime> --action pull --model <alias> to refresh a selected Hugging Face snapshot."
       ;;
-    install|start|stop|restart|pull|list)
+    install|start|stop|restart|pull|remove|clear|list)
       echo "Action '$ACTION' with --provider all currently applies only to Ollama. Use a specific runtime for broader control."
       PROVIDER="ollama"
       ollama_action

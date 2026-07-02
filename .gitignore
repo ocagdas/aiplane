@@ -17,10 +17,7 @@ venv/
 
 
 # User-created editable profiles. Shipped defaults live in profile-templates/.
-profiles/*
-!profiles/local-dev/
-!profiles/local-dev/*.yaml
-profiles/local-dev/models.generated.yaml
+profiles/
 
 # Runtime state
 .agentctl/
@@ -30,7 +27,15 @@ profiles/local-dev/models.generated.yaml
 # Local aiplane machine/user state
 .aiplane/
 
+# Local project direction notes
+docs/project/.strategy/
+
 # Provider/local secrets
+credentials.yaml
+credentials.local.yaml
+*.credentials.yaml
+.env.credentials
+.env.credentials.local
 .env.providers
 .env.providers.local
 .env.providers.example

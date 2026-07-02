@@ -124,7 +124,22 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
     },
     "aiplane.providers.list": {
         "type": "object",
-        "properties": {"profile": {"type": "string"}},
+        "properties": {
+            "profile": {"type": "string"},
+            "status": {
+                "type": "string",
+                "enum": ["enabled", "disabled", "all"],
+                "default": "all",
+            },
+            "group_by": {
+                "type": "string",
+                "enum": ["runtime", "ownership"],
+            },
+            "runtime": {
+                "type": "array",
+                "items": {"type": "string"},
+            },
+        },
         "additionalProperties": False,
     },
     "aiplane.providers.models": {
@@ -159,11 +174,18 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
             "runtime": {"type": "string"},
             "source": {"type": "string"},
             "role": {"type": "array", "items": {"type": "string"}},
-            "ownership": {"type": "string", "enum": ["self_managed", "managed_service"]},
+            "ownership": {
+                "type": "string",
+                "enum": ["self_managed", "managed_service"],
+            },
             "enabled_only": {"type": "boolean", "default": False},
             "ram_gb": {"type": "number"},
             "vram_gb": {"type": "number"},
-            "sort_by": {"type": "string", "enum": ["name", "avg", "role", "benchmark"], "default": "name"},
+            "sort_by": {
+                "type": "string",
+                "enum": ["name", "avg", "role", "benchmark"],
+                "default": "name",
+            },
             "limit": {"type": "integer"},
         },
         "additionalProperties": False,
@@ -194,8 +216,21 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
         "type": "object",
         "properties": {
             "profile": {"type": "string"},
-            "tool": {"type": "string", "enum": ["continue", "cline", "zed", "aider", "openai-compatible", "vscode-mcp", "continue-mcp", "cline-mcp", "generic-mcp"]},
-            "model": {"type": "string", "default": "qwen-tiny"},
+            "tool": {
+                "type": "string",
+                "enum": [
+                    "continue",
+                    "cline",
+                    "zed",
+                    "aider",
+                    "openai-compatible",
+                    "vscode-mcp",
+                    "continue-mcp",
+                    "cline-mcp",
+                    "generic-mcp",
+                ],
+            },
+            "model": {"type": "string"},
             "endpoint": {"type": "string"},
             "api_key_env": {"type": "string"},
         },
@@ -227,7 +262,7 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
             "disable_new": {"type": "boolean", "default": False},
             "include_empty_providers": {"type": "boolean", "default": False},
             "dry_run": {"type": "boolean", "default": False},
-            "verbose": {"type": "boolean", "default": False}
+            "verbose": {"type": "boolean", "default": False},
         },
         "additionalProperties": False,
     },
@@ -347,7 +382,10 @@ class AiplaneMcpServer:
         if name == "aiplane.profiles.list":
             return {"profiles": list_profiles(self.profiles_dir)}
 
-        profile_name = resolve_profile_name(str(arguments.get("profile") or self.default_profile or "") or None, profiles_dir=self.profiles_dir)
+        profile_name = resolve_profile_name(
+            str(arguments.get("profile") or self.default_profile or "") or None,
+            profiles_dir=self.profiles_dir,
+        )
         profile = load_profile(profile_name, self.workspace, profiles_dir=self.profiles_dir)
 
         mutates = name in MUTATING_TOOL_NAMES
@@ -363,7 +401,11 @@ class AiplaneMcpServer:
 
     def _call_profile_tool(self, name: str, arguments: dict[str, Any], profile: Profile) -> Any:
         if name == "aiplane.providers.list":
-            return ProviderRegistry(profile).list()
+            return ProviderRegistry(profile).list(
+                runtimes=_string_list(arguments.get("runtime")),
+                group_by=str(arguments.get("group_by") or "") or None,
+                status=str(arguments.get("status") or "all"),
+            )
         if name == "aiplane.providers.models":
             result = ProviderRegistry(profile).models(str(arguments.get("provider") or ""))
             return result.__dict__
@@ -372,16 +414,22 @@ class AiplaneMcpServer:
         if name == "aiplane.models.list":
             catalog = ModelCatalog(profile)
             filters = _model_filter_arguments(arguments)
-            rows = catalog.sort_rows(catalog.filter(filters), sort_by=str(arguments.get("sort_by") or "name"), roles=filters.get("roles", []))
+            rows = catalog.sort_rows(
+                catalog.filter(filters),
+                sort_by=str(arguments.get("sort_by") or "name"),
+                roles=filters.get("roles", []),
+            )
             if arguments.get("limit") is not None:
-                rows = rows[:int(arguments.get("limit") or 0)]
+                rows = rows[: int(arguments.get("limit") or 0)]
             return {"models": rows}
         if name == "aiplane.models.show":
             return ModelCatalog(profile).show(str(arguments.get("model") or ""))
         if name == "aiplane.hardware.discover":
             return HardwareManager(profile).discover()
         if name == "aiplane.hardware.recommend":
-            return HardwareManager(profile).recommend(include_not_recommended=bool(arguments.get("include_not_recommended", False)))
+            return HardwareManager(profile).recommend(
+                include_not_recommended=bool(arguments.get("include_not_recommended", False))
+            )
         if name == "aiplane.integrations.export":
             tool = str(arguments.get("tool") or "")
             model = str(arguments.get("model") or "") or None
@@ -415,15 +463,29 @@ class AiplaneMcpServer:
             write = not bool(arguments.get("dry_run", False))
             enable_new = not bool(arguments.get("disable_new", False))
             if provider == "all":
-                return catalog.refresh_all(write=write, enable=enable_new, include_empty_providers=bool(arguments.get("include_empty_providers", False)), verbose=bool(arguments.get("verbose", False)))
-            return catalog.refresh(provider, write=write, enable=enable_new, verbose=bool(arguments.get("verbose", False)))
+                return catalog.refresh_all(
+                    write=write,
+                    enable=enable_new,
+                    include_empty_providers=bool(arguments.get("include_empty_providers", False)),
+                    verbose=bool(arguments.get("verbose", False)),
+                )
+            return catalog.refresh(
+                provider,
+                write=write,
+                enable=enable_new,
+                verbose=bool(arguments.get("verbose", False)),
+            )
         if name == "aiplane.models.use":
-            return ModelCatalog(profile).set_default(str(arguments.get("role") or ""), str(arguments.get("model") or ""))
+            return ModelCatalog(profile).set_default(
+                str(arguments.get("role") or ""), str(arguments.get("model") or "")
+            )
         if name == "aiplane.hardware.use":
             overrides = _dict(arguments.get("set"))
             return HardwareManager(profile).use_template(str(arguments.get("template") or ""), overrides)
         if name == "aiplane.runtimes.use":
-            return RuntimeCatalog(profile).set_preferred_runtime(str(arguments.get("model") or ""), str(arguments.get("runtime") or ""))
+            return RuntimeCatalog(profile).set_preferred_runtime(
+                str(arguments.get("model") or ""), str(arguments.get("runtime") or "")
+            )
         if name == "aiplane.remote.tunnel.status":
             return RemoteManager(profile).tunnel_status(str(arguments.get("target") or ""))
         if name == "aiplane.remote.tunnel.start":
@@ -452,8 +514,6 @@ class AiplaneMcpServer:
             }
             for tool in READ_ONLY_TOOLS + WRITE_TOOLS
         ]
-
-
 
 
 def _model_filter_arguments(arguments: dict[str, Any]) -> dict[str, Any]:
@@ -520,7 +580,11 @@ def _result(request_id: Any, result: dict[str, Any]) -> dict[str, Any]:
 
 
 def _error(request_id: Any, code: int, message: str) -> dict[str, Any]:
-    return {"jsonrpc": "2.0", "id": request_id, "error": {"code": code, "message": message}}
+    return {
+        "jsonrpc": "2.0",
+        "id": request_id,
+        "error": {"code": code, "message": message},
+    }
 
 
 def _tool_content(value: Any) -> dict[str, Any]:
@@ -537,3 +601,11 @@ def _tool_content(value: Any) -> dict[str, Any]:
 
 def _dict(value: object) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
+
+
+def _string_list(value: object) -> list[str]:
+    if isinstance(value, list):
+        return [str(item) for item in value if item]
+    if isinstance(value, str) and value:
+        return [value]
+    return []

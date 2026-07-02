@@ -31,7 +31,12 @@ class MockCloudBackend:
 class OllamaBackend:
     name = "ollama"
 
-    def __init__(self, endpoint: str = "http://localhost:11434", timeout_seconds: int = 60, headers: Mapping[str, str] | None = None):
+    def __init__(
+        self,
+        endpoint: str = "http://localhost:11434",
+        timeout_seconds: int = 60,
+        headers: Mapping[str, str] | None = None,
+    ):
         self.endpoint = endpoint.rstrip("/")
         self.timeout_seconds = timeout_seconds
         self.headers = dict(headers or {})
@@ -65,9 +70,19 @@ class OllamaBackend:
             with urlopen(request, timeout=self.timeout_seconds) as response:
                 body = json.loads(response.read().decode("utf-8"))
         except (URLError, TimeoutError, OSError, ConnectionError) as exc:
+            detail = str(exc)
+            if isinstance(exc, TimeoutError) or "timed out" in detail.lower():
+                raise RuntimeError(
+                    f"Ollama request timed out at {self.endpoint} after {self.timeout_seconds}s while running {model!r}. "
+                    "The server may still be starting, the model may still be loading, or the model may be too large "
+                    "for the current machine/timeout. Run `aiplane runtimes status ollama`, "
+                    f"`aiplane runtimes pull ollama --model {model}`, or use `--dry-run` to preview prompts. "
+                    f"Details: {exc}"
+                ) from exc
             raise RuntimeError(
-                f"Ollama is not reachable at {self.endpoint}. Run `ollama serve`, "
-                f"then `ollama pull {model}`, or use `--dry-run` to preview prompts. Details: {exc}"
+                f"Ollama endpoint is not reachable at {self.endpoint}. Run `aiplane runtimes start ollama`, "
+                f"then `aiplane runtimes pull ollama --model {model}`, or use `--dry-run` to preview prompts. "
+                f"Details: {exc}"
             ) from exc
         message = body.get("message", {})
         return BackendResult(self.name, str(message.get("content", "")), False)
@@ -76,7 +91,12 @@ class OllamaBackend:
 class OpenAICompatibleBackend:
     name = "openai_compatible"
 
-    def __init__(self, endpoint: str, timeout_seconds: int = 60, headers: Mapping[str, str] | None = None):
+    def __init__(
+        self,
+        endpoint: str,
+        timeout_seconds: int = 60,
+        headers: Mapping[str, str] | None = None,
+    ):
         self.endpoint = endpoint.rstrip("/")
         self.timeout_seconds = timeout_seconds
         self.headers = dict(headers or {})

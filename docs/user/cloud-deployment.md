@@ -93,8 +93,10 @@ Order of work:
 2. AKS bootstrap through `az`, `kubectl`, and later `helm`.
 3. Azure GPU VM target over `az` and SSH. - Plan/doctor implemented.
 4. Model-serving manifests for Ollama/vLLM.
-5. Export local IDE/CLI configuration pointing at the deployed endpoint.
-6. AWS CLI and generic SSH targets after Azure is stable.
+5. Endpoint authentication planning before any public/shared endpoint is considered ready: reverse proxy or gateway, TLS, bearer/API keys or OIDC, quota/rate-limit checks, and audit hooks.
+6. Export local IDE/CLI configuration pointing at the deployed authenticated endpoint.
+7. Azure API Management/APIM patterns for Azure-hosted shared endpoints.
+8. AWS CLI and generic SSH targets after Azure is stable.
 
 ## Remote Endpoint Access and Authentication
 

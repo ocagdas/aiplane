@@ -19,6 +19,8 @@
 - `helm`: Kubernetes packaging for runtime deployments.
 - `openssh-client`: SSH tunnels and remote workstation/VM access.
 - `ansible`: optional later-stage host configuration over SSH.
+- `ruff`: project Python formatter/linter used by `scripts/format.sh check`, `scripts/format.sh fix`, and CI.
+- `black`: tracked optional formatter for teams/editors that expect Black; Ruff is the configured project formatter.
 - `lm-evaluation-harness`: optional model-quality benchmark framework.
 - `vllm-benchmark-scripts`: optional vLLM serving benchmark commands.
 - `locust`: optional endpoint/gateway load-testing framework.
@@ -30,16 +32,18 @@
 | Minimal container runtime path | Docker | Mandatory for container workflows | Runs local or VM-hosted runtime containers such as TGI, LocalAI, and exported stack images. | Doctor, health check, install hint, stack/runtime export integration. |
 | Remote access and tunnels | OpenSSH client | Mandatory for remote workflows | Connects to remote PCs/VMs and exposes remote model endpoints locally. | Doctor, install helper where safe, tunnel plan/start/status/stop. |
 | Azure account/resource operations | Azure CLI | Optional | Checks account state, quotas, VM/SKU data, and Azure resources. | Doctor, install hint, Azure machine/deploy planning, narrow VM apply. |
-| Provider-agnostic cloud provisioning | OpenTofu | Optional | Default IaC target for repeatable cloud resources across providers. | Doctor and install hint; export/apply workflows planned. |
-| Terraform-standardized teams | Terraform | Optional | Terraform-compatible IaC for teams already committed to HashiCorp Terraform. | Doctor and install hint; export/apply workflows planned. |
-| Language-native cloud provisioning | Pulumi | Optional | IaC using Python, TypeScript, Go, and other supported languages. | Doctor and install hint; project export workflows planned. |
-| Local VM development | Vagrant | Optional | Creates repeatable local VM dev/test environments using a provider such as VirtualBox, libvirt, Hyper-V, or VMware. | Doctor and install hint; Vagrantfile export planned. |
-| Reusable VM/cloud images | Packer | Optional | Builds golden machine images before provisioning local or cloud VMs. | Doctor and install hint; template export planned. |
-| Containerized dev shell | Dev Container CLI | Optional | Opens reproducible development shells backed by Docker-compatible containers. | Doctor and install hint; devcontainer export planned. |
+| Provider-agnostic cloud provisioning | OpenTofu | Optional | Default IaC target for repeatable cloud resources across providers. | Doctor, install hint, and starter module export; apply workflows remain planned. |
+| Terraform-standardized teams | Terraform | Optional | Terraform-compatible IaC for teams already committed to HashiCorp Terraform. | Doctor, install hint, and starter module export; apply workflows remain planned. |
+| Language-native cloud provisioning | Pulumi | Optional | IaC using Python, TypeScript, Go, and other supported languages. | Doctor, install hint, and starter project export; richer apply workflows remain planned. |
+| Local VM development | Vagrant | Optional | Creates repeatable local VM dev/test environments using a provider such as VirtualBox, libvirt, Hyper-V, or VMware. | Doctor, install hint, and starter Vagrantfile export; provider-specific VM workflows remain planned. |
+| Reusable VM/cloud images | Packer | Optional | Builds golden machine images before provisioning local or cloud VMs. | Doctor, install hint, and starter template export; image pipelines remain planned. |
+| Containerized dev shell | Dev Container CLI | Optional | Opens reproducible development shells backed by Docker-compatible containers. | Doctor, install hint, and starter devcontainer export; richer feature/mount tuning remains planned. |
 | Multi-container local stack | Docker Compose | Optional | Starts multiple local services/runtimes together. | Doctor, service health check, compose stack export. |
-| Kubernetes/AKS operations | kubectl | Optional | Inspects and operates Kubernetes resources. | Doctor and install hint; guarded AKS workflows planned. |
-| Kubernetes packaging | Helm | Optional | Installs packaged Kubernetes runtime charts. | Doctor and install hint; chart-driven runtime deployment planned. |
-| Remote host configuration | Ansible | Optional | Applies repeatable package/service configuration to local VMs, remote VMs, and remote PCs over SSH. | Doctor and install hint; inventory/playbook workflows planned. |
+| Kubernetes/AKS operations | kubectl | Optional | Inspects and operates Kubernetes resources. | Doctor and install hint; guarded AKS workflows remain planned. |
+| Kubernetes packaging | Helm | Optional | Installs packaged Kubernetes runtime charts. | Doctor and install hint; chart-driven runtime deployment remains planned. |
+| Remote host configuration | Ansible | Optional | Applies repeatable package/service configuration to local VMs, remote VMs, and remote PCs over SSH. | Doctor, install hint, and starter inventory/playbook export; richer host configuration remains planned. |
+| Python formatting/linting | Ruff | Optional | Runs the configured project formatter and lint checks. | Doctor/install hint; `scripts/format.sh check`, `scripts/format.sh fix`, and `scripts/check.sh` are the supported entrypoints. |
+| Black formatter compatibility | Black | Optional | Keeps Black visible for editor/team compatibility, while Ruff remains the configured formatter. | Doctor/install hint. |
 | Model quality benchmark suite | lm-evaluation-harness | Optional | Runs external evaluation harness tasks. | Benchmark doctor/install/plan. |
 | vLLM serving benchmark | vLLM benchmark scripts | Optional | Measures vLLM endpoint serving behavior. | Benchmark doctor/install/plan. |
 | Endpoint load testing | Locust | Optional | Load-tests model endpoints and gateways. | Benchmark doctor/install/plan. |
@@ -48,11 +52,14 @@ Mandatory means required for the minimal supported path in that workflow, not re
 
 ## Health Checks
 
-Check the full prerequisite set:
+Check the full prerequisite set and inspect the workflow matrix:
 
 ```bash
 aiplane tools doctor
+aiplane tools matrix
 ```
+
+`tools matrix` groups every known external tool by workflow category and shows what it enables, whether it is mandatory or optional, whether `aiplane` can attempt installation, and whether `tools plan`/`tools export` starter artifacts are available. It also includes workflow-level readiness summaries so release review and demos can quickly see which categories are complete, partially ready, or still need setup on the current machine.
 
 Check the active aiplane execution environment and group missing tools by whether
 `aiplane` can attempt an install or whether manual/platform-specific work is
@@ -71,10 +78,10 @@ aiplane environment doctor --format json
 - whether each checked tool is mandatory for the minimal setup path or optional for specific workflows;
 - what each CLI is needed for;
 - whether `aiplane tools install NAME` can attempt an install;
-- runtime prerequisite status for common local runtimes;
+- runtime prerequisite/status rows for common local runtimes and provider-selected managed services;
 - dry-run setup commands to try next, such as `aiplane runtimes install vllm --dry-run`.
 
-Text output is the default human-readable aligned table with tool/runtime name, type, status, mandatory/optional scope, and a short purpose. Use `--format json` for scripts and tests.
+Text output is the default human-readable aligned table with tool/runtime name, type, status, mandatory/optional scope, and a short purpose. Mandatory tool checks are listed before optional workflow checks, and installed tools appear before missing tools within each group. While probes run, progress is written to stderr on a single updating line so stdout remains usable for the final text or JSON report. Use `--format json` for scripts and tests. Use `tools matrix` when you need a broader workflow map across infrastructure, VM, container, remote, cloud, Kubernetes, and benchmark tools.
 
 Check one tool:
 
@@ -82,9 +89,32 @@ Check one tool:
 aiplane tools doctor azure-cli
 aiplane tools doctor docker
 aiplane tools doctor openssh-client
+aiplane tools doctor ruff
+aiplane tools doctor black
+```
+
+Plan or print starter artifacts for tool workflows without mutating hosts or cloud accounts:
+
+```bash
+aiplane tools plan vagrant
+aiplane tools export vagrant
+aiplane tools plan opentofu
+aiplane tools export opentofu
+aiplane tools export packer
+aiplane tools export ansible
 ```
 
 The output reports command path, detected version where available, install hints, purposes, and service checks where they make sense. For example, Docker checks whether the daemon is reachable; Azure CLI checks whether `az account show` works.
+
+For Python source formatting, use the project helper scripts directly rather than an `aiplane` command:
+
+```bash
+scripts/format.sh check
+scripts/format.sh fix
+scripts/check.sh
+```
+
+The versions used by those scripts are pinned in the `dev` optional dependency group in `pyproject.toml`. CI installs `.[dev]` and runs the same `scripts/check.sh` wrapper.
 
 ## Provisioning and Setup Layers
 

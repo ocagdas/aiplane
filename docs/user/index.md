@@ -31,11 +31,12 @@ This page mirrors [README.md](README.md) for tools that link to `index.md`.
 
 ```bash
 aiplane profiles list
-aiplane environment show
+aiplane profiles validate
+aiplane environment doctor
 aiplane providers list
-aiplane providers models ollama
-aiplane models list
-aiplane code write --task "add email validation" --dry-run
+aiplane models refresh --provider huggingface --query text-generation --limit 25 --dry-run
+aiplane tools doctor
+aiplane integrations roles continue
 ```
 
 Project strategy, contributor notes, and roadmap details live under `docs/project/`,
@@ -50,10 +51,12 @@ Most commands accept `--profile`, but it is optional. `aiplane` resolves the pro
 3. `default_profile` in the local `.aiplane/config.yaml`.
 4. The only available profile, when exactly one exists.
 
-If no profile exists, create one with:
+If no profile exists, bootstrap the default local profile with:
 
 ```bash
-aiplane profiles create local-dev --template local-dev
+aiplane profiles bootstrap-local
 ```
+
+This copies the shipped `local-dev` template into `profiles/local-dev`, validates it, and attempts a bounded provider discovery refresh into ignored `models.discovered.yaml`. Use `--no-discovery` when you only want the editable profile files, or `--dry-run` to preview the create/discovery steps.
 
 Use `--profile` only when you need to override the default for one command.

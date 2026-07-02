@@ -1,0 +1,5 @@
+---
+alwaysApply: true
+---
+
+Read `docs/project/agent-guidance.md` as the master project guidance before changing this repository. Keep roadmap, handoff, command coverage, docs, and tests aligned with behavior changes.

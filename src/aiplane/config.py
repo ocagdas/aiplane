@@ -25,13 +25,17 @@ def project_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
+def default_local_config_path() -> Path:
+    return project_root() / ".aiplane" / "config.yaml"
+
+
 def local_config_path(path: Path | str | None = None) -> Path:
     if path is not None:
         return Path(path).expanduser().resolve()
     env_path = os.environ.get("AIPLANE_CONFIG")
     if env_path:
         return Path(env_path).expanduser().resolve()
-    return project_root() / ".aiplane" / "config.yaml"
+    return default_local_config_path()
 
 
 def config_templates_root() -> Path:
@@ -66,12 +70,11 @@ def init_local_config(template: str = "local", path: Path | str | None = None, o
     return destination
 
 
-
-def default_profile() -> str:
+def default_profile(path: Path | str | None = None) -> str:
     env_value = os.environ.get("AIPLANE_PROFILE")
     if env_value:
         return env_value
-    configured = load_local_config().get("default_profile")
+    configured = load_local_config(path).get("default_profile")
     return str(configured or "local-dev")
 
 
@@ -99,18 +102,36 @@ def set_local_config_value(key: str, value: Any, path: Path | str | None = None)
     return config_path
 
 
-def profiles_root(path: Path | str | None = None) -> Path:
+def agent_artifacts_root(path: Path | str | None = None, config_path: Path | str | None = None) -> Path:
+    if path is not None:
+        return Path(path).expanduser().resolve()
+    env_path = os.environ.get("AIPLANE_AGENT_ARTIFACTS_DIR")
+    if env_path:
+        return Path(env_path).expanduser().resolve()
+    resolved_config_path = local_config_path(config_path)
+    if resolved_config_path.exists():
+        configured = load_local_config(resolved_config_path).get("agent_artifacts_dir")
+        if configured:
+            return Path(str(configured)).expanduser().resolve()
+    return project_root() / ".aiplane" / "agents"
+
+
+def default_profiles_root() -> Path:
+    return project_root() / "profiles"
+
+
+def profiles_root(path: Path | str | None = None, config_path: Path | str | None = None) -> Path:
     if path is not None:
         return Path(path).expanduser().resolve()
     env_path = os.environ.get("AIPLANE_PROFILES_DIR")
     if env_path:
         return Path(env_path).expanduser().resolve()
-    config_path = local_config_path()
-    if config_path.exists():
-        configured = load_local_config(config_path).get("profiles_dir")
+    resolved_config_path = local_config_path(config_path)
+    if resolved_config_path.exists():
+        configured = load_local_config(resolved_config_path).get("profiles_dir")
         if configured:
             return Path(str(configured)).expanduser().resolve()
-    return project_root() / "profiles"
+    return default_profiles_root()
 
 
 def profile_templates_root() -> Path:
@@ -124,12 +145,14 @@ def list_profile_templates() -> list[str]:
     return sorted(path.name for path in root.iterdir() if path.is_dir())
 
 
-def create_profile(name: str, template: str = "local-dev", overwrite: bool = False, profiles_dir: Path | str | None = None) -> Path:
-    if not name or name in {".", ".."} or "/" in name or "\\" in name:
-        raise ValueError("profile name must be a simple directory name")
-    source = profile_templates_root() / template
-    if not source.is_dir():
-        raise ValueError(f"unknown profile template: {template}")
+def create_profile(
+    name: str,
+    template: str = "local-dev",
+    overwrite: bool = False,
+    profiles_dir: Path | str | None = None,
+) -> Path:
+    _validate_profile_name(name)
+    source = _profile_template_path(template)
     missing = [filename for filename in CONFIG_FILES.values() if not (source / filename).exists()]
     if missing:
         raise ValueError(f"profile template {template!r} is missing: {', '.join(missing)}")
@@ -140,6 +163,92 @@ def create_profile(name: str, template: str = "local-dev", overwrite: bool = Fal
         shutil.rmtree(destination)
     shutil.copytree(source, destination)
     return destination
+
+
+def remove_profile(
+    name: str,
+    *,
+    yes: bool = False,
+    dry_run: bool = False,
+    profiles_dir: Path | str | None = None,
+) -> dict[str, Any]:
+    _validate_profile_name(name)
+    destination = profiles_root(profiles_dir) / name
+    if not destination.is_dir():
+        raise ValueError(f"unknown profile: {name}")
+    preview = dry_run or not yes
+    if not preview:
+        shutil.rmtree(destination)
+    return {
+        "profile": name,
+        "path": str(destination),
+        "removed": not preview,
+        "would_remove": preview,
+        "requires_yes": not yes,
+    }
+
+
+def repair_profile(
+    name: str,
+    template: str = "local-dev",
+    files: list[str] | None = None,
+    overwrite: bool = False,
+    dry_run: bool = False,
+    profiles_dir: Path | str | None = None,
+) -> dict[str, Any]:
+    _validate_profile_name(name)
+    source = _profile_template_path(template)
+    destination = profiles_root(profiles_dir) / name
+    if not destination.is_dir():
+        raise ValueError(f"unknown profile: {name}")
+    requested = files or list(CONFIG_FILES.values())
+    allowed = set(CONFIG_FILES.values())
+    invalid = [filename for filename in requested if filename not in allowed]
+    if invalid:
+        raise ValueError(f"unknown profile file: {', '.join(invalid)}")
+
+    copied: list[str] = []
+    would_copy: list[str] = []
+    skipped_existing: list[str] = []
+    for filename in requested:
+        source_file = source / filename
+        if not source_file.exists():
+            raise ValueError(f"profile template {template!r} is missing: {filename}")
+        destination_file = destination / filename
+        should_copy = overwrite or not destination_file.exists()
+        if not should_copy:
+            skipped_existing.append(filename)
+            continue
+        if dry_run:
+            would_copy.append(filename)
+            continue
+        destination_file.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source_file, destination_file)
+        copied.append(filename)
+    return {
+        "profile": name,
+        "template": template,
+        "path": str(destination),
+        "overwrite": overwrite,
+        "dry_run": dry_run,
+        "copied": copied,
+        "would_copy": would_copy,
+        "skipped_existing": skipped_existing,
+    }
+
+
+def _validate_profile_name(name: str) -> None:
+    if not name or name in {".", ".."} or "/" in name or "\\" in name:
+        raise ValueError("profile name must be a simple directory name")
+
+
+def _profile_template_path(template: str) -> Path:
+    if not template or template in {".", ".."} or "/" in template or "\\" in template:
+        raise ValueError("profile template name must be a simple directory name")
+    source = profile_templates_root() / template
+    if not source.is_dir():
+        raise ValueError(f"unknown profile template: {template}")
+    return source
 
 
 def list_profiles(profiles_dir: Path | str | None = None) -> list[str]:
@@ -285,6 +394,12 @@ def _format_scalar(value: Any) -> str:
     if isinstance(value, (int, float)):
         return str(value)
     text = str(value)
-    if text == "" or text.strip() != text or text in {"null", "true", "false", "None", "True", "False"} or ":" in text or "#" in text:
+    if (
+        text == ""
+        or text.strip() != text
+        or text in {"null", "true", "false", "None", "True", "False"}
+        or ":" in text
+        or "#" in text
+    ):
         return repr(text)
     return text

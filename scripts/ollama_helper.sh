@@ -4,9 +4,14 @@ set -euo pipefail
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ACTION="doctor"
 PROFILE="local-dev"
-MODEL="qwen-tiny"
+MODEL=""
 ENDPOINT="http://localhost:11434"
 DRY_RUN=0
+SUBSTRATE="native"
+OLLAMA_DOCKER_IMAGE="${OLLAMA_DOCKER_IMAGE:-ollama/ollama:latest}"
+OLLAMA_DOCKER_CONTAINER="${OLLAMA_DOCKER_CONTAINER:-aiplane-ollama}"
+OLLAMA_DOCKER_VOLUME="${OLLAMA_DOCKER_VOLUME:-aiplane-ollama}"
+OLLAMA_DOCKER_GPUS="${OLLAMA_DOCKER_GPUS:-}"
 PID_FILE="$PROJECT_ROOT/.aiplane/ollama.pid"
 LOG_FILE="$PROJECT_ROOT/.aiplane/ollama.log"
 
@@ -15,30 +20,36 @@ usage() {
 Usage: scripts/ollama_helper.sh [options]
 
 Actions:
-  --action install     Install Ollama using the official Linux install script
+  --action install     Install Ollama using the official Linux install script, or pull ollama/ollama with --substrate docker
   --action update      Re-run the official Ollama install script to update
-  --action start       Start `ollama serve` in the background
+  --action start       Start `ollama serve` in the background, or start the ollama/ollama container with --substrate docker
   --action stop        Stop the background service started by this helper
   --action restart     Stop then start Ollama
   --action status      Show version and endpoint status
   --action doctor      Run endpoint status and aiplane model diagnostics
   --action pull        Pull one configured model, a raw Ollama model id, or all configured Ollama models
   --action repull      Re-pull models already present in the local Ollama store, or configured models with --model all
+  --action remove      Remove one pulled model from the local Ollama store
+  --action clear       Remove all pulled models from the local Ollama store
   --action list        List local models known to Ollama
 
 Options:
   --profile NAME       aiplane profile to inspect (default: local-dev)
-  --model NAME         configured model name, raw model id, or `all` for pull (default: qwen-tiny)
+  --model NAME         configured model name, raw model id, or `all` for pull (default: none)
   --endpoint URL       Ollama endpoint (default: http://localhost:11434)
+  --substrate native|docker Runtime substrate to use (default: native)
   --dry-run            Print commands without executing them
   -h, --help           Show this help
 
 Examples:
   scripts/ollama_helper.sh --action install --dry-run
+  scripts/ollama_helper.sh --action install --substrate docker --dry-run
   scripts/ollama_helper.sh --action start
-  scripts/ollama_helper.sh --action pull --model qwen-tiny
+  scripts/ollama_helper.sh --action pull --model MODEL_ALIAS
   scripts/ollama_helper.sh --action pull --model all
   scripts/ollama_helper.sh --action repull
+  scripts/ollama_helper.sh --action remove --model MODEL_ALIAS
+  scripts/ollama_helper.sh --action clear --dry-run
   scripts/ollama_helper.sh --action doctor
 USAGE
 }
@@ -67,6 +78,7 @@ while [[ $# -gt 0 ]]; do
     --profile) PROFILE="${2:?missing value for --profile}"; shift 2 ;;
     --model) MODEL="${2:?missing value for --model}"; shift 2 ;;
     --endpoint) ENDPOINT="${2:?missing value for --endpoint}"; shift 2 ;;
+    --substrate) SUBSTRATE="${2:?missing value for --substrate}"; shift 2 ;;
     --dry-run) DRY_RUN=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; usage >&2; exit 2 ;;
@@ -82,7 +94,7 @@ pulled_model_ids() {
 }
 
 repull_models() {
-  if [[ "$MODEL" == "all" ]]; then
+  if [[ -n "$MODEL" && "$MODEL" != "all" ]]; then
     pull_models
     return 0
   fi
@@ -95,8 +107,36 @@ repull_models() {
   done
 }
 
+remove_model() {
+  if [[ -z "$MODEL" || "$MODEL" == "all" ]]; then
+    echo "remove requires --model with one configured alias or runtime model id; use --action clear for all pulled models" >&2
+    exit 2
+  fi
+  model_id="$(resolve_model_id)"
+  if [[ -z "$model_id" ]]; then
+    echo "Unknown configured model '$MODEL'. Use an Ollama alias, a Hugging Face GGUF alias compatible with Ollama, or a raw id like provider-text-small:0.5b or hf.co/provider/model." >&2
+    exit 1
+  fi
+  run ollama rm "$model_id"
+}
+
+clear_models() {
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    echo "+ ollama list | awk 'NR > 1 && NF {print \$1}' | xargs -r -n1 ollama rm"
+    return 0
+  fi
+  pulled_model_ids | while read -r model_id; do
+    [[ -n "$model_id" ]] && run ollama rm "$model_id"
+  done
+}
+
+case "$SUBSTRATE" in
+  native|docker) ;;
+  *) echo "Unsupported substrate: $SUBSTRATE" >&2; exit 2 ;;
+esac
+
 case "$ACTION" in
-  install|update|start|stop|restart|status|doctor|pull|repull|list) ;;
+  install|update|start|stop|restart|status|doctor|pull|repull|remove|clear|list) ;;
   *) echo "Unsupported action: $ACTION" >&2; exit 2 ;;
 esac
 
@@ -112,6 +152,64 @@ aiplane_cmd() {
 
 install_or_update() {
   run_shell "curl -fsSL https://ollama.com/install.sh | sh"
+}
+
+docker_args() {
+  args=(--rm -d --name "$OLLAMA_DOCKER_CONTAINER" -p 11434:11434 -v "$OLLAMA_DOCKER_VOLUME:/root/.ollama")
+  if [[ -n "$OLLAMA_DOCKER_GPUS" ]]; then
+    args+=(--gpus "$OLLAMA_DOCKER_GPUS")
+  fi
+  printf '%s\n' "${args[@]}"
+}
+
+docker_install_or_update() {
+  run docker pull "$OLLAMA_DOCKER_IMAGE"
+}
+
+docker_start_ollama() {
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    args=(--rm -d --name "$OLLAMA_DOCKER_CONTAINER" -p 11434:11434 -v "$OLLAMA_DOCKER_VOLUME:/root/.ollama")
+    if [[ -n "$OLLAMA_DOCKER_GPUS" ]]; then
+      args+=(--gpus "$OLLAMA_DOCKER_GPUS")
+    fi
+    args+=("$OLLAMA_DOCKER_IMAGE")
+    run docker run "${args[@]}"
+    return 0
+  fi
+  if docker ps --format '{{.Names}}' | grep -Fxq "$OLLAMA_DOCKER_CONTAINER"; then
+    echo "Ollama Docker container already running: $OLLAMA_DOCKER_CONTAINER"
+    return 0
+  fi
+  if docker ps -a --format '{{.Names}}' | grep -Fxq "$OLLAMA_DOCKER_CONTAINER"; then
+    run docker rm "$OLLAMA_DOCKER_CONTAINER"
+  fi
+  args=(--rm -d --name "$OLLAMA_DOCKER_CONTAINER" -p 11434:11434 -v "$OLLAMA_DOCKER_VOLUME:/root/.ollama")
+  if [[ -n "$OLLAMA_DOCKER_GPUS" ]]; then
+    args+=(--gpus "$OLLAMA_DOCKER_GPUS")
+  fi
+  args+=("$OLLAMA_DOCKER_IMAGE")
+  run docker run "${args[@]}"
+}
+
+docker_stop_ollama() {
+  run docker rm -f "$OLLAMA_DOCKER_CONTAINER"
+}
+
+docker_exec_ollama() {
+  run docker exec "$OLLAMA_DOCKER_CONTAINER" ollama "$@"
+}
+
+docker_status_ollama() {
+  echo "Ollama Docker status"
+  echo "  image: $OLLAMA_DOCKER_IMAGE"
+  echo "  container: $OLLAMA_DOCKER_CONTAINER"
+  echo "  endpoint: $ENDPOINT"
+  if command -v docker >/dev/null 2>&1; then
+    docker ps --filter "name=^/${OLLAMA_DOCKER_CONTAINER}$" --format '  container_status: {{.Status}}' || true
+  else
+    echo "  container_status: unavailable (docker is not on PATH)"
+  fi
+  status_ollama
 }
 
 start_ollama() {
@@ -234,16 +332,40 @@ configured_model_ids() {
 from pathlib import Path
 import sys
 from aiplane.config import load_profile
-from aiplane.model_catalog import ModelCatalog
+from aiplane.model_catalog import ModelCatalog, model_source
+from aiplane.runtime_catalog import RuntimeCatalog
+
+
+def ollama_pull_id(model, runtime_catalog):
+    provider = str(model.get("provider") or "")
+    source = model_source(model)
+    model_id = str(model.get("model") or "")
+    supported = runtime_catalog.compatible_runtimes_for_entry(model, include_gui=True)
+    if provider == "ollama":
+        return model_id
+    if source == "huggingface_gguf" and "ollama" in supported:
+        if model_id.startswith("hf.co/"):
+            return model_id
+        if model_id.startswith(("http://", "https://")):
+            return ""
+        if "/" in model_id:
+            return f"hf.co/{model_id}"
+    return ""
+
+
 profile = load_profile(sys.argv[1], Path.cwd())
+runtime_catalog = RuntimeCatalog(profile)
 for name, model in ModelCatalog(profile).models().items():
-    if model.get("provider") == "ollama" and model.get("enabled", True):
-        print(f"{name}	{model.get('model')}")
+    if not model.get("enabled", True):
+        continue
+    model_id = ollama_pull_id(model, runtime_catalog)
+    if model_id:
+        print(f"{name}	{model_id}")
 PYMODEL
 }
 
 resolve_model_id() {
-  if [[ "$MODEL" == *":"* ]]; then
+  if [[ "$MODEL" == hf.co/* || "$MODEL" == *":"* ]]; then
     printf '%s
 ' "$MODEL"
     return 0
@@ -260,7 +382,7 @@ pull_models() {
   fi
   model_id="$(resolve_model_id)"
   if [[ -z "$model_id" ]]; then
-    echo "Unknown configured model '$MODEL'. Use --model all or a raw Ollama id like qwen2.5-coder:0.5b." >&2
+    echo "Unknown configured model '$MODEL'. Use --model all, an Ollama alias, a Hugging Face GGUF alias compatible with Ollama, or a raw id like provider-text-small:0.5b or hf.co/provider/model." >&2
     exit 1
   fi
   run ollama pull "$model_id"
@@ -275,7 +397,7 @@ pulled_model_ids() {
 }
 
 repull_models() {
-  if [[ "$MODEL" == "all" ]]; then
+  if [[ -n "$MODEL" && "$MODEL" != "all" ]]; then
     pull_models
     return 0
   fi
@@ -288,34 +410,116 @@ repull_models() {
   done
 }
 
-case "$ACTION" in
-  install|update)
-    install_or_update
-    ;;
-  start)
-    start_ollama
-    ;;
-  stop)
-    stop_ollama
-    ;;
-  restart)
-    stop_ollama
-    start_ollama
-    ;;
-  status)
-    status_ollama
-    ;;
-  doctor)
-    status_ollama || true
-    run_shell "$(aiplane_cmd) models doctor --profile '$PROFILE'"
-    ;;
-  pull)
-    pull_models
-    ;;
-  repull)
-    repull_models
-    ;;
-  list)
-    list_ollama
-    ;;
-esac
+if [[ "$SUBSTRATE" == "docker" ]]; then
+  case "$ACTION" in
+    install|update)
+      docker_install_or_update
+      ;;
+    start)
+      docker_start_ollama
+      ;;
+    stop)
+      docker_stop_ollama
+      ;;
+    restart)
+      docker_stop_ollama
+      docker_start_ollama
+      ;;
+    status)
+      docker_status_ollama
+      ;;
+    doctor)
+      docker_status_ollama || true
+      run_shell "$(aiplane_cmd) models doctor --profile '$PROFILE'"
+      ;;
+    pull)
+      if [[ "$MODEL" == "all" ]]; then
+        configured_model_ids | while IFS=$'	' read -r _name model_id; do
+          [[ -n "$model_id" ]] && docker_exec_ollama pull "$model_id"
+        done
+      else
+        model_id="$(resolve_model_id)"
+        if [[ -z "$model_id" ]]; then
+          echo "Unknown configured model '$MODEL'. Use --model all, an Ollama alias, a Hugging Face GGUF alias compatible with Ollama, or a raw id like provider-text-small:0.5b or hf.co/provider/model." >&2
+          exit 1
+        fi
+        docker_exec_ollama pull "$model_id"
+      fi
+      ;;
+    repull)
+      echo "Docker Ollama repull uses the running container store. Use --model all to repull configured aliases, or pass one alias/id."
+      if [[ "$MODEL" == "all" ]]; then
+        configured_model_ids | while IFS=$'	' read -r _name model_id; do
+          [[ -n "$model_id" ]] && docker_exec_ollama pull "$model_id"
+        done
+      elif [[ -n "$MODEL" ]]; then
+        model_id="$(resolve_model_id)"
+        [[ -n "$model_id" ]] && docker_exec_ollama pull "$model_id"
+      else
+        docker_exec_ollama list
+      fi
+      ;;
+    remove)
+      if [[ -z "$MODEL" || "$MODEL" == "all" ]]; then
+        echo "remove requires --model with one configured alias or runtime model id; use --action clear for all pulled models" >&2
+        exit 2
+      fi
+      model_id="$(resolve_model_id)"
+      if [[ -z "$model_id" ]]; then
+        echo "Unknown configured model '$MODEL'. Use an Ollama alias, a Hugging Face GGUF alias compatible with Ollama, or a raw id like provider-text-small:0.5b or hf.co/provider/model." >&2
+        exit 1
+      fi
+      docker_exec_ollama rm "$model_id"
+      ;;
+    clear)
+      if [[ "$DRY_RUN" -eq 1 ]]; then
+        echo "+ docker exec $OLLAMA_DOCKER_CONTAINER ollama list | xargs -r -n1 docker exec $OLLAMA_DOCKER_CONTAINER ollama rm"
+      else
+        docker exec "$OLLAMA_DOCKER_CONTAINER" ollama list | awk 'NR > 1 && NF {print $1}' | while read -r model_id; do
+          [[ -n "$model_id" ]] && docker_exec_ollama rm "$model_id"
+        done
+      fi
+      ;;
+    list)
+      docker_exec_ollama list
+      ;;
+  esac
+else
+  case "$ACTION" in
+    install|update)
+      install_or_update
+      ;;
+    start)
+      start_ollama
+      ;;
+    stop)
+      stop_ollama
+      ;;
+    restart)
+      stop_ollama
+      start_ollama
+      ;;
+    status)
+      status_ollama
+      ;;
+    doctor)
+      status_ollama || true
+      run_shell "$(aiplane_cmd) models doctor --profile '$PROFILE'"
+      ;;
+    pull)
+      pull_models
+      ;;
+    repull)
+      repull_models
+      ;;
+    remove)
+      remove_model
+      ;;
+    clear)
+      clear_models
+      ;;
+    list)
+      list_ollama
+      ;;
+  esac
+fi
