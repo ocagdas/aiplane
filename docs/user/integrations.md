@@ -31,7 +31,7 @@ aiplane integrations export continue --chat CHAT_ALIAS --autocomplete AUTOCOMPLE
 
 - `plan` prints the decision: selected model aliases, provider, runtime, endpoint, supported runtimes, capability scores, role score, and the reason each model was selected. It does not start services, pull models, edit IDE files, or print the final target config.
 - `setup --dry-run` uses the plan and prints the runtime/model preparation actions that would be needed, such as installing a missing helper-managed runtime, starting Ollama/vLLM, or pulling a selected model.
-- `setup` executes supported helper actions by default; `setup --dry-run` previews them. It is the task-level setup command for IDE/tool integrations, so you do not have to run runtime install/start/pull commands by hand after selecting aliases.
+- `setup` executes supported helper actions by default; `setup --dry-run` previews them. During live helper actions, `aiplane` streams helper output to stderr, so Ollama pull progress such as downloaded bytes, total size, speed, and ETA remains visible when Ollama reports it. It is the task-level setup command for IDE/tool integrations, so you do not have to run runtime install/start/pull commands by hand after selecting aliases.
 - `export` prints the target config snippet to paste into Continue, Cline, Zed, Aider, or a generic OpenAI-compatible client.
 
 ### What `integrations plan` Output Means

@@ -82,6 +82,7 @@ Required outcomes:
    - Keep shipped `models.yaml` templates structural; profile-owned model entries and defaults should come from ignored discovery caches, direct local add/clone, or deliberate local promotion.
    - Keep `models promote` as the reviewed flow from discovered provider entry to editable local profile model; use `models add` when the real provider model id is already known but still present in discovery, and `models clone` when one real model needs multiple local purposes.
    - Make refresh/promote/add/clone output explain the safe next step from dry-run discovery to discovered entries to traceable profile-owned model entries.
+   - Add first-class model filtering from named/imported machine profiles and external machine/hardware files, so `models list` can derive RAM, VRAM, GPU vendor, and accelerator API filters from the current PC, a copied machine profile, or an Azure/VM shape instead of requiring manual `--ram-gb`/`--vram-gb` values.
 
 4. **Tool/task matrix and setup doctor expansion** - In progress
    - Keep `environment doctor` as the default human setup check with text output.

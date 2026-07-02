@@ -165,6 +165,29 @@ def create_profile(
     return destination
 
 
+def remove_profile(
+    name: str,
+    *,
+    yes: bool = False,
+    dry_run: bool = False,
+    profiles_dir: Path | str | None = None,
+) -> dict[str, Any]:
+    _validate_profile_name(name)
+    destination = profiles_root(profiles_dir) / name
+    if not destination.is_dir():
+        raise ValueError(f"unknown profile: {name}")
+    preview = dry_run or not yes
+    if not preview:
+        shutil.rmtree(destination)
+    return {
+        "profile": name,
+        "path": str(destination),
+        "removed": not preview,
+        "would_remove": preview,
+        "requires_yes": not yes,
+    }
+
+
 def repair_profile(
     name: str,
     template: str = "local-dev",

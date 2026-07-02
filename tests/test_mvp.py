@@ -32,6 +32,7 @@ from aiplane.config import (
     parse_yaml,
     load_local_config,
     load_profile,
+    remove_profile,
     resolve_profile_name,
     set_default_profile,
 )
@@ -109,12 +110,17 @@ def _ensure_repo_test_profile(name: str, profiles_dir: Path | str | None = None)
     if profiles_dir is not None:
         return
     destination = Path.cwd() / "profiles" / name
-    if destination.exists():
-        return
     source = Path.cwd() / "profile-templates" / name
-    if source.is_dir():
+    if not source.is_dir():
+        return
+    if not destination.exists():
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copytree(source, destination)
+        return
+    provider_source = source / "model-providers.yaml"
+    provider_destination = destination / "model-providers.yaml"
+    if provider_source.exists():
+        shutil.copy2(provider_source, provider_destination)
 
 
 def _load_profile_with_test_models(
@@ -200,6 +206,50 @@ class MvpTests(unittest.TestCase):
             finally:
                 agent_config.project_root = original_project_root
             self.assertEqual(created, custom_profiles / "custom")
+
+    def test_remove_profile_previews_without_yes_and_deletes_with_yes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            profiles_dir = Path(tmp) / "profiles"
+            create_profile("local-dev", profiles_dir=profiles_dir)
+            profile_path = profiles_dir / "local-dev"
+
+            preview = remove_profile("local-dev", profiles_dir=profiles_dir)
+
+            self.assertTrue(preview["would_remove"])
+            self.assertTrue(preview["requires_yes"])
+            self.assertFalse(preview["removed"])
+            self.assertTrue(profile_path.exists())
+
+            removed = remove_profile("local-dev", profiles_dir=profiles_dir, yes=True)
+
+            self.assertTrue(removed["removed"])
+            self.assertFalse(profile_path.exists())
+
+    def test_profiles_remove_cli_previews_and_removes_profile_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            profiles_dir = Path(tmp) / "profiles"
+            create_profile("local-dev", profiles_dir=profiles_dir)
+            profile_path = profiles_dir / "local-dev"
+
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = cli_main(["--profiles-dir", str(profiles_dir), "profiles", "remove", "local-dev"])
+
+            self.assertEqual(code, 0)
+            preview = json.loads(stdout.getvalue())
+            self.assertTrue(preview["would_remove"])
+            self.assertTrue(profile_path.exists())
+
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = cli_main(
+                    ["--profiles-dir", str(profiles_dir), "profiles", "remove", "local-dev", "--yes"]
+                )
+
+            self.assertEqual(code, 0)
+            removed = json.loads(stdout.getvalue())
+            self.assertTrue(removed["removed"])
+            self.assertFalse(profile_path.exists())
 
     def test_repair_profile_restores_missing_models_yaml_from_template(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -517,6 +567,16 @@ class MvpTests(unittest.TestCase):
         self.assertIn("Common flows", output)
         self.assertIn("Configure, check, and connect", output)
         self.assertIn("hardware", output)
+
+    def test_profiles_help_points_to_hardware_discovery_commands(self) -> None:
+        stdout = StringIO()
+        with redirect_stdout(stdout), self.assertRaises(SystemExit) as raised:
+            cli_main(["profiles", "--help"])
+        self.assertEqual(raised.exception.code, 0)
+        output = stdout.getvalue()
+        self.assertIn("aiplane hardware discover", output)
+        self.assertIn("aiplane hardware export-machine", output)
+        self.assertIn("aiplane profiles remove old-local --dry-run", output)
 
     def test_command_help_mentions_argument_purpose(self) -> None:
         stdout = StringIO()
@@ -1124,6 +1184,20 @@ class MvpTests(unittest.TestCase):
         _write_message(stream, message)
         stream.seek(0)
         self.assertEqual(_read_message(stream), message)
+
+    def test_hardware_template_uses_normalized_machine_fields_only(self) -> None:
+        data = agent_config.parse_yaml(
+            (Path.cwd() / "profile-templates/local-dev/hardware.yaml").read_text(encoding="utf-8")
+        )
+        selected_values = data["selected"]["values"]
+        self.assertNotIn("type", selected_values)
+        self.assertNotIn("cpu", selected_values)
+        self.assertNotIn("gpu", selected_values)
+        for template in data["hardware_profiles"].values():
+            self.assertNotIn("configurable_options", template)
+            self.assertNotIn("type", template)
+            self.assertNotIn("vendor", template)
+            self.assertNotIn("gpu", template)
 
     def test_hardware_show_includes_named_profiles(self) -> None:
         profile = load_profile("local-dev", Path.cwd())

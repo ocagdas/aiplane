@@ -7,36 +7,50 @@ resource limits, and remote target capacity explicit in profiles.
 ## Commands
 
 ```bash
+aiplane hardware discover
+aiplane hardware active
 aiplane hardware show
 aiplane hardware templates
 aiplane hardware schema
-aiplane hardware active
 aiplane hardware use nvidia_consumer_gpu --set vram_gb=16
 aiplane hardware set memory_gb=64 gpu_index=0
-aiplane hardware discover
 aiplane hardware doctor
 aiplane hardware doctor --model MODEL_ALIAS
 aiplane hardware recommend
 aiplane hardware recommend --include-not-recommended
+aiplane hardware export-machine --name local_box > local_box.machine.yaml
 ```
 
-- `show`: prints the configured hardware profiles plus the active selected config.
-- `templates`: prints immutable hardware templates and their configurable option hints.
-- `schema`: prints the editable machine fields used for recommendation and fit checks.
+- `discover`: probes the current machine for CPU count, RAM, visible
+  NVIDIA/AMD GPUs where local tools are available, and closest matching
+  hardware templates. Use this when you want to dump what `aiplane` can see on
+  the current host without changing profile config.
 - `active`: prints only the selected hardware config, including template origin,
-  custom status, current values, and the normalized effective machine.
+  custom status, current values, and the normalized effective machine used for
+  recommendations.
+- `show`: prints the full hardware profile config plus `active_selection` and
+  `effective_machine`.
+- `templates`: prints immutable hardware templates.
+- `schema`: prints the editable machine fields used for recommendation and fit checks.
 - `use`: copies a template into the selected config and optionally applies
   `--set key=value` overrides without changing the template.
 - `set`: updates the selected config values and marks it customized.
-- `discover`: probes the current machine for CPU count, RAM, visible
-  NVIDIA/AMD GPUs where local tools are available, and closest matching
-  hardware templates.
 - `doctor`: compares discovered hardware against model fit metadata such as
   minimum RAM and VRAM.
 - `recommend`: groups configured models into `recommended`, `usable`, and
   `remote_or_cloud` for the current hardware. Models that do not meet local
   minimums are hidden by default; use `--include-not-recommended` for the full
   diagnostic list.
+- `export-machine`: writes the normalized active machine as a portable machine
+  profile that can be imported elsewhere with `aiplane machines import`.
+
+Quick ways to show the current host:
+
+```bash
+aiplane hardware discover
+aiplane hardware active
+aiplane hardware show
+```
 
 ## Supported Hardware Shapes
 
@@ -112,7 +126,10 @@ aiplane hardware use cloud_gpu_vm \
 `aiplane hardware recommend` uses this normalized active machine when it is
 configured. With `local_auto`, unresolved `auto` values are filled from local
 discovery. With a stock VM/workstation template, explicit overrides take
-precedence over the template range.
+precedence over the template range. The shipped templates intentionally avoid
+duplicate descriptive fields such as `type`, `vendor`, and `gpu`; use
+`placement`, `substrate`, `gpu_vendor`, `gpu_model`, and accelerator fields
+instead.
 
 ## Selecting a Hardware Template
 
@@ -177,14 +194,13 @@ resource_controls:
     memory: 32g
     gpus: all
     devices: []
-  model_server:
-    bind_host: 127.0.0.1
-    port: 11434
-    max_loaded_models: 1
 ```
 
-Docker-specific execution settings live in `environment.yaml`; hardware profiles
-describe what capacity is available or intended.
+Docker resource limits are included in stack export metadata. Runtime endpoints,
+ports, and provider credentials belong in runtime/provider configuration, not in
+the hardware template. Docker-specific execution settings live in
+`environment.yaml`; hardware profiles describe what capacity is available or
+intended.
 
 ## Local and Remote Access
 

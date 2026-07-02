@@ -292,6 +292,23 @@ aiplane profiles create my-local --template local-dev --overwrite
 aiplane profiles repair local-dev --file models.yaml --overwrite
 ```
 
+Use `profiles remove` to delete an editable profile directory. The command is a
+preview unless `--yes` is passed, and it does not delete runtime caches,
+credentials, or model weights:
+
+```bash
+aiplane profiles remove old-local --dry-run
+aiplane profiles remove old-local --yes
+```
+
+Hardware discovery is under the `hardware` command family, not `profiles`:
+
+```bash
+aiplane hardware discover
+aiplane hardware active
+aiplane hardware export-machine --name local_box > local_box.machine.yaml
+```
+
 ### Default Profile
 
 Most commands accept `--profile`, but you can set a default in local config:

@@ -27,6 +27,7 @@ from .config import (
     local_config_path,
     load_profile,
     profiles_root,
+    remove_profile,
     repair_profile,
     resolve_profile_name,
     set_default_profile,
@@ -216,8 +217,22 @@ def _main(argv: list[str] | None = None) -> int:
         subparsers,
         "profiles",
         "List and inspect profile configuration sets",
-        "Profiles are named YAML configuration sets under profiles/<name>.",
-        "Examples:\n  aiplane profiles list\n  aiplane profiles templates\n  aiplane profiles create my-local --template local-dev\n  aiplane profiles show\n  aiplane profiles show --selected\n  aiplane profiles show my-local",
+        (
+            "Profiles are named YAML configuration sets under profiles/<name>. "
+            "Hardware discovery lives under the hardware command family, and portable machine profiles live under machines."
+        ),
+        (
+            "Examples:\n"
+            "  aiplane profiles list\n"
+            "  aiplane profiles templates\n"
+            "  aiplane profiles create my-local --template local-dev\n"
+            "  aiplane profiles remove old-local --dry-run\n"
+            "  aiplane profiles show --selected\n"
+            "  aiplane hardware discover\n"
+            "  aiplane hardware active\n"
+            "  aiplane hardware export-machine --name local_box > local_box.machine.yaml\n"
+            "  aiplane machines import local_box.machine.yaml"
+        ),
     )
     profile_sub = profiles.add_subparsers(dest="profile_command", required=True, metavar="command")
     profile_sub.add_parser(
@@ -291,6 +306,31 @@ def _main(argv: list[str] | None = None) -> int:
         "--dry-run",
         action="store_true",
         help="Preview which files would be copied without writing them",
+    )
+    remove = profile_sub.add_parser(
+        "remove",
+        help="Remove an editable profile directory",
+        description=(
+            "Delete profiles/<name> from the editable profiles directory. Without --yes, this only previews "
+            "the profile directory that would be removed. Runtime caches, credentials, and model weights are not deleted."
+        ),
+        formatter_class=HelpFormatter,
+        epilog=(
+            "Examples:\n"
+            "  aiplane profiles remove old-local --dry-run\n"
+            "  aiplane profiles remove old-local --yes"
+        ),
+    )
+    remove.add_argument("name", help="Editable profile name to remove")
+    remove.add_argument(
+        "--yes",
+        action="store_true",
+        help="Actually delete the editable profile directory",
+    )
+    remove.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Preview the profile directory that would be deleted",
     )
     bootstrap = profile_sub.add_parser(
         "bootstrap-local",
@@ -2643,6 +2683,15 @@ def _main(argv: list[str] | None = None) -> int:
                 template=args.template,
                 files=args.file or None,
                 overwrite=args.overwrite,
+                dry_run=args.dry_run,
+                profiles_dir=profiles_dir,
+            )
+            print(_json(result, indent=2, sort_keys=True))
+            return 0
+        if args.profile_command == "remove":
+            result = remove_profile(
+                args.name,
+                yes=args.yes,
                 dry_run=args.dry_run,
                 profiles_dir=profiles_dir,
             )
