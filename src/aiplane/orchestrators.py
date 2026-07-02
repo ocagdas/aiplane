@@ -16,7 +16,12 @@ ORCHESTRATOR_DEFINITIONS: dict[str, dict[str, Any]] = {
         "description": "Stateful graph-based agent/workflow orchestration from the LangChain ecosystem.",
         "priority": 1,
         "packages": ["langgraph", "langchain-openai"],
-        "good_for": ["bounded agent trees", "state machines", "reviewable workflows", "human checkpoints"],
+        "good_for": [
+            "bounded agent trees",
+            "state machines",
+            "reviewable workflows",
+            "human checkpoints",
+        ],
         "config_style": "python_graph",
         "endpoint_protocols": ["openai_compatible"],
     },
@@ -24,7 +29,11 @@ ORCHESTRATOR_DEFINITIONS: dict[str, dict[str, Any]] = {
         "description": "Role/task oriented multi-agent framework with simple crew and flow abstractions.",
         "priority": 2,
         "packages": ["crewai"],
-        "good_for": ["role-based task teams", "business workflows", "simple declarative agent crews"],
+        "good_for": [
+            "role-based task teams",
+            "business workflows",
+            "simple declarative agent crews",
+        ],
         "config_style": "python_or_yaml",
         "endpoint_protocols": ["openai_compatible"],
     },
@@ -32,7 +41,11 @@ ORCHESTRATOR_DEFINITIONS: dict[str, dict[str, Any]] = {
         "description": "Microsoft-origin multi-agent conversation/workflow framework.",
         "priority": 3,
         "packages": ["autogen-agentchat", "autogen-ext[openai]"],
-        "good_for": ["multi-agent conversations", "human-in-the-loop workflows", "Microsoft/Azure-aligned experiments"],
+        "good_for": [
+            "multi-agent conversations",
+            "human-in-the-loop workflows",
+            "Microsoft/Azure-aligned experiments",
+        ],
         "config_style": "python_or_json",
         "endpoint_protocols": ["openai_compatible"],
     },
@@ -40,7 +53,11 @@ ORCHESTRATOR_DEFINITIONS: dict[str, dict[str, Any]] = {
         "description": "Software-engineering agent platform with sandboxed developer workflows; heavier than a library orchestrator.",
         "priority": 4,
         "packages": [],
-        "good_for": ["software engineering agents", "sandboxed coding workloads", "browser/terminal style agent environments"],
+        "good_for": [
+            "software engineering agents",
+            "sandboxed coding workloads",
+            "browser/terminal style agent environments",
+        ],
         "config_style": "container_or_service",
         "endpoint_protocols": ["openai_compatible"],
         "install_hint": "Prefer the project Docker/service install path rather than a small pip-only environment.",
@@ -49,7 +66,11 @@ ORCHESTRATOR_DEFINITIONS: dict[str, dict[str, Any]] = {
         "description": "Microsoft SDK for agent/application orchestration and planners, useful for Azure-heavy applications.",
         "priority": 5,
         "packages": ["semantic-kernel"],
-        "good_for": ["Azure-aligned apps", "planner-style orchestration", "application SDK integration"],
+        "good_for": [
+            "Azure-aligned apps",
+            "planner-style orchestration",
+            "application SDK integration",
+        ],
         "config_style": "python_sdk",
         "endpoint_protocols": ["openai_compatible"],
     },
@@ -57,7 +78,11 @@ ORCHESTRATOR_DEFINITIONS: dict[str, dict[str, Any]] = {
         "description": "Workflow layer in the LlamaIndex ecosystem, strongest for retrieval/data-heavy agent flows.",
         "priority": 6,
         "packages": ["llama-index"],
-        "good_for": ["retrieval workflows", "document/data agents", "RAG-heavy task flows"],
+        "good_for": [
+            "retrieval workflows",
+            "document/data agents",
+            "RAG-heavy task flows",
+        ],
         "config_style": "python_workflow",
         "endpoint_protocols": ["openai_compatible"],
     },
@@ -70,7 +95,12 @@ class OrchestratorCatalog:
         self.config = profile.orchestrators or {}
         self.environment = EnvironmentManager(profile)
 
-    def list(self, providers: list[str] | None = None, runtimes: list[str] | None = None, group_by: str | None = None) -> list[dict[str, Any]] | dict[str, Any]:
+    def list(
+        self,
+        providers: list[str] | None = None,
+        runtimes: list[str] | None = None,
+        group_by: str | None = None,
+    ) -> list[dict[str, Any]] | dict[str, Any]:
         configured = self._configured()
         provider_filter = {str(value) for value in providers or [] if value}
         runtime_filter = {str(value) for value in runtimes or [] if value}
@@ -171,39 +201,94 @@ class OrchestratorCatalog:
             ],
         }
         if install_plan:
-            payload["actions"].append({"name": "install orchestrator packages", "command": install_plan.command, "cwd": str(install_plan.cwd), "mutates": True})
-        payload["actions"].append({"name": "write orchestrator config", "path": str(self.profile.root / "orchestrators.yaml"), "mutates": True})
+            payload["actions"].append(
+                {
+                    "name": "install orchestrator packages",
+                    "command": install_plan.command,
+                    "cwd": str(install_plan.cwd),
+                    "mutates": True,
+                }
+            )
+        payload["actions"].append(
+            {
+                "name": "write orchestrator config",
+                "path": str(self.profile.root / "orchestrators.yaml"),
+                "mutates": True,
+            }
+        )
         if dry_run or not yes:
             return payload
         results = []
         if install and install_plan:
-            completed = subprocess.run(install_plan.command, cwd=install_plan.cwd, text=True, capture_output=True, check=False)
-            results.append({"name": "install orchestrator packages", "returncode": completed.returncode, "stdout": completed.stdout[-4000:], "stderr": completed.stderr[-4000:]})
+            completed = subprocess.run(
+                install_plan.command,
+                cwd=install_plan.cwd,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            results.append(
+                {
+                    "name": "install orchestrator packages",
+                    "returncode": completed.returncode,
+                    "stdout": completed.stdout[-4000:],
+                    "stderr": completed.stderr[-4000:],
+                }
+            )
             if completed.returncode != 0:
                 payload["results"] = results
                 return payload
         self.config.setdefault("orchestrators", {})[name] = config
         self._write_config()
-        results.append({"name": "write orchestrator config", "returncode": 0, "path": str(self.profile.root / "orchestrators.yaml")})
+        results.append(
+            {
+                "name": "write orchestrator config",
+                "returncode": 0,
+                "path": str(self.profile.root / "orchestrators.yaml"),
+            }
+        )
         payload["results"] = results
         return payload
 
     def doctor(self, name: str) -> dict[str, Any]:
         spec = self._definition(name)
         configured = self._configured().get(name, {})
-        env_mode = str(configured.get("environment") or self.environment.active_mode()) if isinstance(configured, dict) else self.environment.active_mode()
+        env_mode = (
+            str(configured.get("environment") or self.environment.active_mode())
+            if isinstance(configured, dict)
+            else self.environment.active_mode()
+        )
         package_checks = []
         for package in spec.get("packages", []):
             module = _module_name(str(package))
-            package_checks.append({"name": str(package), "module": module, "ok": _module_available(module), "detail": "importable" if _module_available(module) else "not importable"})
+            package_checks.append(
+                {
+                    "name": str(package),
+                    "module": module,
+                    "ok": _module_available(module),
+                    "detail": "importable" if _module_available(module) else "not importable",
+                }
+            )
         checks = [
             {"name": "known_orchestrator", "ok": True, "detail": name},
-            {"name": "configured", "ok": bool(configured), "detail": "configured in orchestrators.yaml" if configured else "not configured yet"},
-            {"name": "environment_known", "ok": env_mode in self.environment.modes(), "detail": env_mode},
+            {
+                "name": "configured",
+                "ok": bool(configured),
+                "detail": "configured in orchestrators.yaml" if configured else "not configured yet",
+            },
+            {
+                "name": "environment_known",
+                "ok": env_mode in self.environment.modes(),
+                "detail": env_mode,
+            },
             *package_checks,
         ]
-        return {"name": name, "checks": checks, "configured": configured, "definition": spec}
-
+        return {
+            "name": name,
+            "checks": checks,
+            "configured": configured,
+            "definition": spec,
+        }
 
     def _supported_providers(self, spec: dict[str, Any]) -> list[str]:
         protocols = set(str(value) for value in spec.get("endpoint_protocols", []))
@@ -234,11 +319,21 @@ class OrchestratorCatalog:
         if runtime.get("protocol"):
             protocols.add(str(runtime.get("protocol")))
         endpoint = str(provider.get("endpoint") or "")
-        if endpoint.endswith("/v1") or name in {"ollama", "openai", "azure_openai", "ollama_cloud"}:
+        if endpoint.endswith("/v1") or name in {
+            "ollama",
+            "openai",
+            "azure_openai",
+            "ollama_cloud",
+        }:
             protocols.add("openai_compatible")
         return protocols
 
-    def _group(self, rows: list[dict[str, Any]], group_by: str, key_filter: set[str] | None = None) -> dict[str, Any]:
+    def _group(
+        self,
+        rows: list[dict[str, Any]],
+        group_by: str,
+        key_filter: set[str] | None = None,
+    ) -> dict[str, Any]:
         if group_by not in {"provider", "runtime"}:
             raise ValueError("group_by must be provider or runtime")
         key_name = "supported_providers" if group_by == "provider" else "supported_runtimes"
@@ -249,7 +344,13 @@ class OrchestratorCatalog:
                 keys = [key for key in keys if key in key_filter]
             for key in keys:
                 groups.setdefault(str(key), []).append(row)
-        return {"name": "orchestrators", "group_by": group_by, "groups": {key: sorted(value, key=lambda item: int(item["priority"])) for key, value in sorted(groups.items())}}
+        return {
+            "name": "orchestrators",
+            "group_by": group_by,
+            "groups": {
+                key: sorted(value, key=lambda item: int(item["priority"])) for key, value in sorted(groups.items())
+            },
+        }
 
     def _definition(self, name: str) -> dict[str, Any]:
         if name not in ORCHESTRATOR_DEFINITIONS:
@@ -267,23 +368,47 @@ class OrchestratorCatalog:
 
 def _dockerfile(name: str, packages: list[str]) -> str:
     install = " ".join(packages) if packages else ""
-    lines = ["FROM python:3.13-slim", "WORKDIR /workspace", "RUN python -m pip install --upgrade pip"]
+    lines = [
+        "FROM python:3.13-slim",
+        "WORKDIR /workspace",
+        "RUN python -m pip install --upgrade pip",
+    ]
     if install:
         lines.append(f"RUN python -m pip install {install}")
     else:
         lines.append(f"# Install {name} using its project-specific container/service instructions")
-    lines.append('CMD ["python", "-c", "print(\"orchestrator environment ready\")"]')
+    lines.append('CMD ["python", "-c", "print("orchestrator environment ready")"]')
     return "\n".join(lines) + "\n"
 
 
 def _conda_yaml(name: str, packages: list[str]) -> str:
-    pip_lines = [f"      - {package}" for package in packages] or [f"      - # install {name} using project-specific instructions"]
-    return "\n".join(["name: aiplane-orchestrator", "channels:", "  - conda-forge", "dependencies:", "  - python=3.13", "  - pip", "  - pip:", *pip_lines]) + "\n"
+    pip_lines = [f"      - {package}" for package in packages] or [
+        f"      - # install {name} using project-specific instructions"
+    ]
+    return (
+        "\n".join(
+            [
+                "name: aiplane-orchestrator",
+                "channels:",
+                "  - conda-forge",
+                "dependencies:",
+                "  - python=3.13",
+                "  - pip",
+                "  - pip:",
+                *pip_lines,
+            ]
+        )
+        + "\n"
+    )
 
 
 def _module_name(package: str) -> str:
     base = package.split("[", 1)[0].replace("-", "_")
-    aliases = {"autogen_agentchat": "autogen_agentchat", "autogen_ext": "autogen_ext", "semantic_kernel": "semantic_kernel"}
+    aliases = {
+        "autogen_agentchat": "autogen_agentchat",
+        "autogen_ext": "autogen_ext",
+        "semantic_kernel": "semantic_kernel",
+    }
     return aliases.get(base, base)
 
 

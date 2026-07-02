@@ -3,7 +3,7 @@
 See also: [Strategy](strategy.md) and [Project Roadmap](roadmap.md).
 
 The platform is being built as an orchestration/governance/setup control plane first. Integrations should attach
-to the same profile, provider, model, policy, tool, approval, and audit layers
+to the same profile, provider, model, runtime, endpoint, policy, tool, approval, and audit layers
 instead of each integration inventing its own configuration.
 
 ## Target Direction
@@ -40,6 +40,12 @@ chat UI before the provider/session contracts are stable.
    - The MCP stdio server is implemented and should remain the first structured tool surface.
    - A local HTTP service should only be added if multiple clients need it.
 
+6. **Agent-to-agent setup and export - Planned**
+   - Not implemented yet as a dedicated workflow.
+   - Target shape: describe agent roles, model aliases, managed or self-managed endpoints, tool policies, approval modes, and audit labels in profile/stack/orchestrator metadata.
+   - Export starter configuration for established orchestrator frameworks instead of running autonomous agent conversations inside `aiplane`.
+   - Managed-service models are valid endpoint choices for this layer when the orchestrator can call them directly; they should not be treated as local runtime candidates.
+
 ## Integration Matrix
 
 `aiplane` should integrate with mature tools at the lowest useful level. It
@@ -58,7 +64,7 @@ provisioners, model runtimes, or configuration-management engines.
 | Codex CLI / Claude Code / Copilot-style tools | Existing agentic CLI or IDE tools. | Possible launch wrappers and environment/config handoff only. | Planned/research. |
 | Ollama | Local/self-managed runtime and native CLI chat. | Install/update/start/stop/status/pull helpers; `aiplane chat` delegates to `ollama run`. | Implemented for core flow. |
 | vLLM / llama.cpp / TGI / LocalAI / LM Studio | Self-managed model serving runtimes. | Runtime catalog, setup helpers where practical, endpoint export, stack lifecycle planning. | Partial/ongoing. |
-| LangGraph / CrewAI / AutoGen / OpenHands / Semantic Kernel / LlamaIndex Workflows | Agent/workflow orchestration frameworks on top of a model endpoint. | Catalog/readiness metadata now; stack binding and package/export support; no custom agent runner yet. | Partial/ongoing. |
+| LangGraph / CrewAI / AutoGen / OpenHands / Semantic Kernel / LlamaIndex Workflows | Agent/workflow orchestration frameworks on top of model endpoints, including future agent-to-agent role graphs. | Catalog/readiness metadata now; stack binding and package/export support; planned multi-agent role metadata; no custom agent runner yet. | Partial/ongoing. |
 | Docker / Compose | Reproducible local or VM-hosted runtime stacks. | Tool doctor/install hints, stack artifact export, future Docker-aware lifecycle execution. | Partial/ongoing. |
 | Azure CLI | Account, quota, SKU, VM/AKS discovery, and guarded Azure operations. | Tool doctor/install helper, CLI wrapper, profile-driven planning/apply for narrow VM flows. | Partial/ongoing. |
 | OpenTofu / Terraform | Repeatable VM/AKS infrastructure provisioning without reinventing IaC. | Generate variables/modules or starter plans, call official CLI, keep apply guarded. | Planned. |
@@ -105,11 +111,9 @@ better first implementation is a thin command layer. Current status:
 aiplane chat
 
 # Planned / not implemented yet:
-aiplane launch --tool continue --model qwen-tiny
-aiplane launch --tool codex --model qwen-tiny
-aiplane quota --provider ollama_cloud
-aiplane quota --provider openai
-aiplane session start --model qwen-tiny
+aiplane launch --tool continue --model MODEL_ALIAS
+aiplane launch --tool codex --model MODEL_ALIAS
+aiplane session start --model MODEL_ALIAS
 ```
 
 Future wrappers should:
@@ -120,16 +124,12 @@ Future wrappers should:
 - Start the provider-native CLI/tool when available.
 - Record audit/session metadata locally.
 
-Provider quota/cost commands should be provider-specific and best-effort. Local
-Ollama has no cloud quota; Ollama Cloud/OpenAI/Azure may expose account, usage,
-or quota APIs that we can wire later when credentials and policy permit it.
-
 ## Ollama CLI Chat and Launch
 
 Ollama provides a native CLI chat flow:
 
 ```bash
-ollama run qwen2.5-coder:0.5b
+ollama run text-generation:0.5b
 ```
 
 It also has `ollama launch`, which can configure and launch supported external
@@ -147,7 +147,8 @@ Start with:
 3. `aiplane launch` wrapper for `ollama launch` where supported. - **Planned, not implemented**
 4. Cline/Zed/Aider exporter or wrapper research against their documented endpoint/MCP/config surfaces. - **Exporters implemented; wrappers still planned/research**
 5. Minimal session metadata/audit around those launches. - **Planned, not implemented**
-6. Cursor research/config-export path after the generic endpoint/MCP exporters are stable. - **Research/planned**
+6. Agent-to-agent role metadata and orchestrator config export for established frameworks. - **Planned, not implemented**
+7. Cursor research/config-export path after the generic endpoint/MCP exporters are stable. - **Research/planned**
 
 Do **not** start by building a heavy custom chat UI. Use existing CLI/IDE tools
 where they are good, and let `aiplane` own configuration, provider selection,
@@ -158,5 +159,6 @@ policy, setup, readiness, and audit.
 - No direct file mutation by models without patch review.
 - No IDE-specific hidden policy bypass.
 - No separate provider/model configuration inside each IDE adapter.
+- No direct autonomous agent-to-agent execution inside `aiplane`; use established orchestrator frameworks and export/review their config.
 - No cloud escalation until policy, secret scanning, and audit behavior are
   explicit for that profile.

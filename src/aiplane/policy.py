@@ -26,10 +26,25 @@ class PolicyEngine:
         repo_class = self.profile.repository.get("classification", "private")
         cloud_allowed = bool(self.profile.repository.get("allow_cloud", False))
         if repo_class == "client_sensitive":
-            return Decision(False, False, "client-sensitive repositories cannot use cloud backends", "repository.classification")
+            return Decision(
+                False,
+                False,
+                "client-sensitive repositories cannot use cloud backends",
+                "repository.classification",
+            )
         if not cloud_allowed:
-            return Decision(False, False, "repository policy disables cloud backends", "repository.allow_cloud")
-        return Decision(True, False, "repository policy allows cloud backends", "repository.allow_cloud")
+            return Decision(
+                False,
+                False,
+                "repository policy disables cloud backends",
+                "repository.allow_cloud",
+            )
+        return Decision(
+            True,
+            False,
+            "repository policy allows cloud backends",
+            "repository.allow_cloud",
+        )
 
     def tool_decision(self, tool_name: str) -> Decision:
         allowed = set(self.profile.tools.get("allowed", []))
@@ -47,7 +62,12 @@ class PolicyEngine:
         if tool_name in set(self.profile.approvals.get("always_require", [])):
             approval_required = True
 
-        return Decision(True, approval_required, f"tool is allowed with {risk} risk", "tools.allowed")
+        return Decision(
+            True,
+            approval_required,
+            f"tool is allowed with {risk} risk",
+            "tools.allowed",
+        )
 
     def path_decision(self, path: Path) -> Decision:
         resolved = path.resolve()

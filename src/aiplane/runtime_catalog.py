@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 import platform
 import shutil
 from pathlib import Path
@@ -13,6 +14,7 @@ from .models import Profile
 
 RUNTIME_DEFINITIONS: dict[str, dict[str, Any]] = {
     "ollama": {
+        "ownership": "self_managed",
         "description": "Local/headless Ollama runtime with its own model library and Modelfile/GGUF import path",
         "managed_by_helper": True,
         "gui_required": False,
@@ -21,13 +23,31 @@ RUNTIME_DEFINITIONS: dict[str, dict[str, Any]] = {
         "good_for": ["simple local setup", "CPU laptop", "single-user workstation"],
         "install_hint": "scripts/provider_helper.sh --provider ollama --action install",
     },
+    "azure_speech": {
+        "ownership": "managed_service",
+        "description": "Azure AI Speech managed text-to-speech service",
+        "managed_by_helper": False,
+        "gui_required": False,
+        "protocol": "azure_speech",
+        "model_sources": ["azure_speech"],
+        "good_for": [
+            "managed text to speech",
+            "demo narration",
+            "cloud audio generation",
+        ],
+        "install_hint": "Configure AZURE_SPEECH_KEY and AZURE_SPEECH_REGION, or use a credential reference in the profile.",
+    },
     "vllm": {
         "description": "GPU-focused OpenAI-compatible server for Hugging Face Transformers-style models",
         "managed_by_helper": True,
         "gui_required": False,
         "protocol": "openai_compatible",
-        "model_sources": ["huggingface"],
-        "good_for": ["shared GPU workstation", "Azure/AWS GPU VM", "high-throughput inference"],
+        "model_sources": ["huggingface", "nvidia"],
+        "good_for": [
+            "shared GPU workstation",
+            "Azure/AWS GPU VM",
+            "high-throughput inference",
+        ],
         "install_hint": "python -m pip install vllm",
     },
     "llamacpp": {
@@ -44,7 +64,7 @@ RUNTIME_DEFINITIONS: dict[str, dict[str, Any]] = {
         "managed_by_helper": True,
         "gui_required": False,
         "protocol": "openai_compatible",
-        "model_sources": ["huggingface"],
+        "model_sources": ["huggingface", "nvidia"],
         "good_for": ["server inference", "containerized GPU endpoints"],
         "install_hint": "Run the ghcr.io/huggingface/text-generation-inference container or native TGI install",
     },
@@ -53,7 +73,7 @@ RUNTIME_DEFINITIONS: dict[str, dict[str, Any]] = {
         "managed_by_helper": "partial",
         "gui_required": False,
         "protocol": "python_library",
-        "model_sources": ["huggingface"],
+        "model_sources": ["huggingface", "nvidia"],
         "good_for": ["experiments", "training", "fine-tuning", "evaluation scripts"],
         "install_hint": "python -m pip install transformers accelerate torch",
     },
@@ -67,7 +87,7 @@ RUNTIME_DEFINITIONS: dict[str, dict[str, Any]] = {
         "install_hint": "Install/run LocalAI from its container or native release",
     },
     "faster_whisper": {
-        "description": "Speech-to-text runtime/library for Whisper-family models, optimized for local CPU/GPU transcription",
+        "description": "Speech-to-text runtime/library for speech-to-text models, optimized for local CPU/GPU transcription",
         "managed_by_helper": "planned",
         "gui_required": False,
         "protocol": "python_library",
@@ -75,22 +95,17 @@ RUNTIME_DEFINITIONS: dict[str, dict[str, Any]] = {
         "good_for": ["speech to text", "local transcription", "batch audio jobs"],
         "install_hint": "python -m pip install faster-whisper",
     },
-    "piper": {
-        "description": "Local text-to-speech runtime for Piper voice models",
-        "managed_by_helper": "planned",
-        "gui_required": False,
-        "protocol": "native_cli",
-        "model_sources": ["piper_voices", "local_file"],
-        "good_for": ["text to speech", "offline voice generation", "low-latency local audio"],
-        "install_hint": "Install piper and download a compatible .onnx voice model",
-    },
     "diffusers": {
         "description": "Hugging Face Diffusers Python library for image/video/audio generation pipelines",
         "managed_by_helper": "planned",
         "gui_required": False,
         "protocol": "python_library",
         "model_sources": ["huggingface", "local_file"],
-        "good_for": ["image generation", "video generation experiments", "pipeline prototyping"],
+        "good_for": [
+            "image generation",
+            "video generation experiments",
+            "pipeline prototyping",
+        ],
         "install_hint": "python -m pip install diffusers transformers accelerate torch",
     },
     "comfyui": {
@@ -99,7 +114,11 @@ RUNTIME_DEFINITIONS: dict[str, dict[str, Any]] = {
         "gui_required": True,
         "protocol": "local_api",
         "model_sources": ["huggingface", "local_file"],
-        "good_for": ["image workflows", "video workflows", "visual generation pipelines"],
+        "good_for": [
+            "image workflows",
+            "video workflows",
+            "visual generation pipelines",
+        ],
         "install_hint": "Install ComfyUI, place checkpoints under its models directory, and start its server",
     },
     "lmstudio": {
@@ -116,24 +135,287 @@ RUNTIME_DEFINITIONS: dict[str, dict[str, Any]] = {
 
 SOURCE_DEFINITIONS: dict[str, dict[str, Any]] = {
     "ollama": {
+        "ownership": "self_managed",
         "description": "Ollama model library and local pull store",
         "typical_runtimes": ["ollama"],
+        "catalog_adapter": "ollama",
     },
     "huggingface": {
+        "ownership": "self_managed",
         "description": "Hugging Face Hub model repos with tokenizer/config/weights",
         "typical_runtimes": ["vllm", "tgi", "transformers"],
+        "catalog_adapter": "huggingface",
+    },
+    "nvidia": {
+        "ownership": "self_managed",
+        "description": "NVIDIA open model repos on Hugging Face, including Nemotron language, reasoning, retrieval, speech, vision, and safety models",
+        "typical_runtimes": ["vllm", "tgi", "transformers"],
+        "catalog_adapter": "huggingface",
+        "huggingface_author": "nvidia",
     },
     "huggingface_gguf": {
+        "ownership": "self_managed",
         "description": "GGUF model files hosted on Hugging Face or another file store",
         "typical_runtimes": ["llamacpp", "localai", "ollama"],
+        "catalog_adapter": "huggingface_gguf",
     },
     "local_file": {
+        "ownership": "self_managed",
         "description": "Local model path, usually GGUF, ONNX, checkpoint, or runtime-specific files",
-        "typical_runtimes": ["llamacpp", "localai", "faster_whisper", "piper", "diffusers", "comfyui"],
+        "enabled": False,
+        "catalog_adapter": "profile_catalog",
+        "typical_runtimes": [
+            "llamacpp",
+            "localai",
+            "faster_whisper",
+            "diffusers",
+            "comfyui",
+        ],
     },
-    "piper_voices": {
-        "description": "Piper ONNX voice model files and metadata",
-        "typical_runtimes": ["piper"],
+    "azure_speech": {
+        "ownership": "managed_service",
+        "description": "Azure AI Speech voice deployments and voice names",
+        "enabled": False,
+        "endpoint_family": "azure_speech",
+        "api_key_env": "AZURE_SPEECH_KEY",
+        "auth": {"required": True, "method": "api_key"},
+        "typical_runtimes": [],
+        "catalog_adapter": "profile_catalog",
+    },
+    "elevenlabs": {
+        "ownership": "managed_service",
+        "description": "ElevenLabs hosted text-to-speech voices and voice models",
+        "endpoint_family": "elevenlabs",
+        "endpoint": "https://api.elevenlabs.io/v1",
+        "api_key_env": "ELEVENLABS_API_KEY",
+        "auth": {"required": True, "method": "api_key"},
+        "typical_runtimes": [],
+        "catalog_adapter": "elevenlabs",
+    },
+    "openai": {
+        "ownership": "managed_service",
+        "description": "OpenAI hosted model catalog and deployments",
+        "endpoint_family": "openai",
+        "endpoint": "https://api.openai.com/v1",
+        "api_key_env": "OPENAI_API_KEY",
+        "auth": {"required": True, "method": "bearer"},
+        "typical_runtimes": [],
+        "catalog_adapter": "profile_catalog",
+    },
+    "anthropic": {
+        "ownership": "managed_service",
+        "description": "Anthropic hosted model catalog",
+        "endpoint_family": "anthropic",
+        "endpoint": "https://api.anthropic.com",
+        "api_key_env": "ANTHROPIC_API_KEY",
+        "auth": {"required": True, "method": "api_key"},
+        "typical_runtimes": [],
+        "catalog_adapter": "profile_catalog",
+    },
+    "azure_openai": {
+        "ownership": "managed_service",
+        "description": "Azure OpenAI deployments in a configured Azure OpenAI resource",
+        "endpoint_family": "azure_openai",
+        "api_key_env": "AZURE_OPENAI_API_KEY",
+        "auth": {"required": True, "method": "api_key"},
+        "typical_runtimes": [],
+        "catalog_adapter": "azure_openai",
+    },
+    "ollama_cloud": {
+        "ownership": "managed_service",
+        "description": "Ollama Cloud hosted catalog and endpoints",
+        "endpoint_family": "ollama_cloud",
+        "endpoint": "https://ollama.com",
+        "api_key_env": "OLLAMA_API_KEY",
+        "auth": {"required": True, "method": "bearer"},
+        "typical_runtimes": [],
+        "catalog_adapter": "profile_catalog",
+    },
+}
+
+
+PROVIDER_ENDPOINT_DEFAULTS: dict[str, dict[str, Any]] = {
+    "ollama": {
+        "ownership": "self_managed",
+        "access": {"kind": "same_host"},
+        "substrate": "native",
+        "runtime": "ollama",
+        "protocol": "ollama_api",
+        "endpoint": "http://localhost:11434",
+        "enabled": True,
+        "timeout_seconds": 60,
+        "origin": "default_runtime_catalog",
+        "notes": "Conventional Ollama endpoint default. Doctor/test commands still verify whether Ollama is actually installed, running, and has the model pulled.",
+    },
+    "vllm": {
+        "ownership": "self_managed",
+        "access": {"kind": "same_host"},
+        "substrate": "docker",
+        "runtime": "vllm",
+        "protocol": "openai_compatible",
+        "endpoint": "http://localhost:8000/v1",
+        "enabled": False,
+        "origin": "default_runtime_catalog",
+        "notes": "Conventional vLLM OpenAI-compatible endpoint default. Enable or override only after deploying the runtime.",
+    },
+    "lmstudio": {
+        "ownership": "self_managed",
+        "access": {"kind": "same_host"},
+        "substrate": "native",
+        "runtime": "lmstudio",
+        "protocol": "openai_compatible",
+        "endpoint": "http://localhost:1234/v1",
+        "enabled": False,
+        "origin": "default_runtime_catalog",
+        "notes": "Conventional LM Studio local server endpoint default. Start/configure LM Studio before use.",
+    },
+    "llamacpp": {
+        "ownership": "self_managed",
+        "access": {"kind": "same_host"},
+        "substrate": "native",
+        "runtime": "llamacpp",
+        "protocol": "openai_compatible",
+        "endpoint": "http://localhost:8080/v1",
+        "enabled": False,
+        "origin": "default_runtime_catalog",
+        "notes": "Conventional llama.cpp server endpoint default. Start/configure llama-server before use.",
+    },
+    "tgi": {
+        "ownership": "self_managed",
+        "access": {"kind": "same_host"},
+        "substrate": "docker",
+        "runtime": "tgi",
+        "protocol": "openai_compatible",
+        "endpoint": "http://localhost:8081/v1",
+        "enabled": False,
+        "origin": "default_runtime_catalog",
+        "notes": "Conventional TGI endpoint default. Enable or override only after deploying the runtime.",
+    },
+    "transformers": {
+        "ownership": "self_managed",
+        "access": {"kind": "library"},
+        "substrate": "venv",
+        "runtime": "transformers",
+        "protocol": "python_library",
+        "enabled": False,
+        "origin": "default_runtime_catalog",
+        "notes": "Library runtime; no HTTP endpoint is implied.",
+    },
+    "localai": {
+        "ownership": "self_managed",
+        "access": {"kind": "same_host"},
+        "substrate": "docker",
+        "runtime": "localai",
+        "protocol": "openai_compatible",
+        "endpoint": "http://localhost:8082/v1",
+        "enabled": False,
+        "origin": "default_runtime_catalog",
+        "notes": "Conventional LocalAI endpoint default. Enable or override only after deploying the runtime.",
+    },
+    "comfyui": {
+        "ownership": "self_managed",
+        "access": {"kind": "same_host"},
+        "substrate": "native",
+        "runtime": "comfyui",
+        "protocol": "local_api",
+        "endpoint": "http://localhost:8188",
+        "enabled": False,
+        "origin": "default_runtime_catalog",
+        "notes": "Conventional ComfyUI endpoint default. Start/configure ComfyUI before use.",
+    },
+    "faster_whisper": {
+        "ownership": "self_managed",
+        "access": {"kind": "library"},
+        "substrate": "venv",
+        "runtime": "faster_whisper",
+        "protocol": "python_library",
+        "enabled": False,
+        "origin": "default_runtime_catalog",
+        "notes": "Library runtime; no HTTP endpoint is implied.",
+    },
+    "diffusers": {
+        "ownership": "self_managed",
+        "access": {"kind": "library"},
+        "substrate": "venv",
+        "runtime": "diffusers",
+        "protocol": "python_library",
+        "enabled": False,
+        "origin": "default_runtime_catalog",
+        "notes": "Library runtime; no HTTP endpoint is implied.",
+    },
+    "openai": {
+        "ownership": "managed_service",
+        "access": {"kind": "hosted_api"},
+        "substrate": "managed_service",
+        "runtime": "openai",
+        "protocol": "openai_compatible",
+        "endpoint": "https://api.openai.com/v1",
+        "api_key_env": "OPENAI_API_KEY",
+        "enabled": False,
+        "origin": "default_runtime_catalog",
+        "notes": "Hosted service endpoint default. Enable only after selecting profile-owned model entries and configuring credentials.",
+    },
+    "anthropic": {
+        "ownership": "managed_service",
+        "access": {"kind": "hosted_api"},
+        "substrate": "managed_service",
+        "runtime": "anthropic",
+        "protocol": "anthropic_api",
+        "endpoint": "https://api.anthropic.com",
+        "api_key_env": "ANTHROPIC_API_KEY",
+        "enabled": False,
+        "origin": "default_runtime_catalog",
+        "notes": "Hosted service endpoint default. Enable only after configuring credentials.",
+    },
+    "azure_openai": {
+        "ownership": "managed_service",
+        "access": {"kind": "hosted_api"},
+        "substrate": "azure",
+        "runtime": "azure_openai",
+        "protocol": "azure_openai",
+        "endpoint": "",
+        "api_version": "2024-02-01",
+        "api_key_env": "AZURE_OPENAI_API_KEY",
+        "enabled": False,
+        "origin": "default_runtime_catalog",
+        "notes": "Set endpoint to your Azure OpenAI resource URL and use deployment names as model ids.",
+    },
+    "ollama_cloud": {
+        "ownership": "managed_service",
+        "access": {"kind": "hosted_api"},
+        "substrate": "managed_service",
+        "runtime": "ollama_cloud",
+        "protocol": "ollama_api",
+        "endpoint": "https://ollama.com",
+        "api_key_env": "OLLAMA_API_KEY",
+        "enabled": False,
+        "origin": "default_runtime_catalog",
+        "notes": "Hosted Ollama-style endpoint default. Enable only when configured for your account.",
+    },
+    "azure_speech": {
+        "ownership": "managed_service",
+        "access": {"kind": "hosted_api"},
+        "substrate": "azure",
+        "runtime": "azure_speech",
+        "protocol": "azure_speech",
+        "endpoint": "",
+        "api_key_env": "AZURE_SPEECH_KEY",
+        "region_env": "AZURE_SPEECH_REGION",
+        "enabled": False,
+        "origin": "default_runtime_catalog",
+        "notes": "Azure AI Speech service defaults. Configure endpoint/region/credentials before use.",
+    },
+    "elevenlabs": {
+        "ownership": "managed_service",
+        "access": {"kind": "hosted_api"},
+        "substrate": "managed_service",
+        "runtime": "elevenlabs",
+        "protocol": "elevenlabs_tts",
+        "endpoint": "https://api.elevenlabs.io/v1",
+        "api_key_env": "ELEVENLABS_API_KEY",
+        "enabled": False,
+        "origin": "default_runtime_catalog",
+        "notes": "ElevenLabs hosted TTS endpoint default. Enable only after configuring credentials.",
     },
 }
 
@@ -151,24 +433,25 @@ class RuntimeCatalog:
             if runtime.get("gui_required") and not include_gui:
                 continue
             provider = providers.get(name, {})
-            rows.append({
-                "name": name,
-                "description": runtime["description"],
-                "gui_required": bool(runtime.get("gui_required", False)),
-                "managed_by_helper": runtime.get("managed_by_helper", False),
-                "configured": name in providers,
-                "enabled": bool(provider.get("enabled", True)) if provider else False,
-                "endpoint": provider.get("endpoint"),
-                "protocol": runtime.get("protocol"),
-                "model_sources": runtime.get("model_sources", []),
-                "good_for": runtime.get("good_for", []),
-                "install_hint": runtime.get("install_hint"),
-            })
+            rows.append(
+                {
+                    "name": name,
+                    "description": runtime["description"],
+                    "gui_required": bool(runtime.get("gui_required", False)),
+                    "managed_by_helper": runtime.get("managed_by_helper", False),
+                    "configured": name in self._profile_provider_overrides(),
+                    "enabled": bool(provider.get("enabled", True)) if provider else False,
+                    "endpoint": provider.get("endpoint"),
+                    "protocol": runtime.get("protocol"),
+                    "model_sources": runtime.get("model_sources", []),
+                    "good_for": runtime.get("good_for", []),
+                    "install_hint": runtime.get("install_hint"),
+                }
+            )
         return sorted(rows, key=lambda row: row["name"])
 
     def sources(self) -> list[dict[str, Any]]:
         return [{"name": name, **value} for name, value in sorted(SOURCE_DEFINITIONS.items())]
-
 
     def prerequisites(self, runtime: str) -> dict[str, Any]:
         if runtime == "all":
@@ -195,18 +478,37 @@ class RuntimeCatalog:
         missing_required = [_tool_row(name, packages.get(name)) for name in required if shutil.which(name) is None]
         missing_optional = [_tool_row(name, packages.get(name)) for name in optional if shutil.which(name) is None]
         managed = definition.get("managed_by_helper")
-        install_supported = runtime in {"ollama", "vllm", "tgi", "transformers", "localai"}
+        install_supported = runtime in {
+            "ollama",
+            "vllm",
+            "tgi",
+            "transformers",
+            "localai",
+        }
         return {
             "name": "runtime_prerequisites",
             "runtime": runtime,
             "known_runtime": True,
-            "supported_by_aiplane_helper": runtime in {"ollama", "vllm", "tgi", "transformers", "localai", "lmstudio", "llamacpp"},
+            "supported_by_aiplane_helper": runtime
+            in {
+                "ollama",
+                "vllm",
+                "tgi",
+                "transformers",
+                "localai",
+                "lmstudio",
+                "llamacpp",
+            },
             "helper_management": managed,
             "install_supported_by_helper": install_supported,
             "os": _os_summary(),
             "ok": not missing_required,
-            "required_tools": [_tool_row(name, packages.get(name), installed=shutil.which(name) is not None) for name in required],
-            "optional_tools": [_tool_row(name, packages.get(name), installed=shutil.which(name) is not None) for name in optional],
+            "required_tools": [
+                _tool_row(name, packages.get(name), installed=shutil.which(name) is not None) for name in required
+            ],
+            "optional_tools": [
+                _tool_row(name, packages.get(name), installed=shutil.which(name) is not None) for name in optional
+            ],
             "missing_required": missing_required,
             "missing_optional": missing_optional,
             "ubuntu_install_hint": _ubuntu_install_hint(missing_required + missing_optional),
@@ -235,26 +537,41 @@ class RuntimeCatalog:
                 rows.setdefault(runtime_name, []).append(self._model_row(model_name, model))
         if runtime and runtime not in rows:
             rows[runtime] = []
-        return {"runtime": runtime, "models": {key: sorted(value, key=lambda row: row["name"]) for key, value in sorted(rows.items())}}
+        return {
+            "runtime": runtime,
+            "models": {key: sorted(value, key=lambda row: row["name"]) for key, value in sorted(rows.items())},
+        }
 
     def runtimes_by_model(self, model_name: str, include_gui: bool = False) -> dict[str, Any]:
         model = self._model(model_name)
         preferred = str(model.get("preferred_runtime") or model.get("provider") or "")
         runtimes = []
         for runtime_name in self.supported_runtimes(model_name, include_gui=include_gui):
-            runtimes.append({
-                "name": runtime_name,
-                "preferred": runtime_name == preferred,
-                "available": self.runtime_available(runtime_name)["available"],
-                "status": self.runtime_available(runtime_name),
-                "runtime": RUNTIME_DEFINITIONS.get(runtime_name, {}),
-            })
-        return {"name": model_name, "model": model.get("model"), "source": self.source_for_model(model), "preferred_runtime": preferred or None, "runtimes": runtimes}
+            runtimes.append(
+                {
+                    "name": runtime_name,
+                    "preferred": runtime_name == preferred,
+                    "available": self.runtime_available(runtime_name)["available"],
+                    "status": self.runtime_available(runtime_name),
+                    "runtime": RUNTIME_DEFINITIONS.get(runtime_name, {}),
+                }
+            )
+        return {
+            "name": model_name,
+            "model": model.get("model"),
+            "source": self.source_for_model(model),
+            "preferred_runtime": preferred or None,
+            "runtimes": runtimes,
+        }
 
     def supported_runtimes(self, model_name: str, include_gui: bool = False) -> list[str]:
         return self.compatible_runtimes_for_entry(self._model(model_name), include_gui=include_gui)
 
     def compatible_runtimes_for_entry(self, model: dict[str, Any], include_gui: bool = False) -> list[str]:
+        provider = self._providers().get(str(model.get("provider") or ""), {})
+        ownership = str(model.get("ownership") or provider.get("ownership") or "")
+        if ownership == "managed_service":
+            return []
         configured = model.get("supported_runtimes")
         if isinstance(configured, list) and configured:
             runtimes = [str(value) for value in configured]
@@ -275,26 +592,50 @@ class RuntimeCatalog:
         statuses = [self.runtime_available(name) for name in ordered]
         for status in statuses:
             if status["available"]:
-                return {"selected": status["name"], "available": True, "statuses": statuses, "supported_runtimes": supported}
-        return {"selected": ordered[0] if ordered else None, "available": False, "statuses": statuses, "supported_runtimes": supported}
+                return {
+                    "selected": status["name"],
+                    "available": True,
+                    "statuses": statuses,
+                    "supported_runtimes": supported,
+                }
+        return {
+            "selected": ordered[0] if ordered else None,
+            "available": False,
+            "statuses": statuses,
+            "supported_runtimes": supported,
+        }
 
     def set_preferred_runtime(self, model_name: str, runtime: str) -> dict[str, Any]:
         model = self._model(model_name)
+        if self._model_ownership(model) == "managed_service":
+            raise ValueError(
+                f"managed-service model {model_name!r} cannot use a local runtime; configure provider endpoint credentials instead"
+            )
         supported = self.supported_runtimes(model_name, include_gui=True)
         if runtime not in supported:
-            raise ValueError(f"runtime {runtime!r} is not supported by model {model_name!r}; supported: {', '.join(supported) or 'none'}")
+            raise ValueError(
+                f"runtime {runtime!r} is not supported by model {model_name!r}; supported: {', '.join(supported) or 'none'}"
+            )
         model["preferred_runtime"] = runtime
         path = self.profile.root / "models.yaml"
         path.write_text(dump_yaml(self.models_config), encoding="utf-8")
         return {"name": model_name, "preferred_runtime": runtime, "path": str(path)}
 
-
-    def bundle_plan(self, runtime: str, model_name: str = "qwen-tiny", mode: str = "docker") -> dict[str, Any]:
+    def bundle_plan(self, runtime: str, model_name: str, mode: str = "docker") -> dict[str, Any]:
         if runtime not in RUNTIME_DEFINITIONS:
             raise ValueError(f"unknown runtime: {runtime}")
         if mode not in {"docker", "conda"}:
             raise ValueError("mode must be docker or conda")
         model = self._model(model_name)
+        if self._model_ownership(model) == "managed_service":
+            raise ValueError(
+                f"managed-service model {model_name!r} cannot be bundled with runtime {runtime!r}; use provider credentials/endpoints and integration export instead"
+            )
+        supported = self.compatible_runtimes_for_entry(model, include_gui=True)
+        if runtime not in supported:
+            raise ValueError(
+                f"runtime {runtime!r} is not supported by model {model_name!r}; supported: {', '.join(supported) or 'none'}"
+            )
         model_id = str(model.get("model") or model_name)
         files = {
             "Dockerfile": _dockerfile_for_runtime(runtime, model_id),
@@ -323,17 +664,77 @@ class RuntimeCatalog:
         if runtime == "ollama":
             endpoint = str(provider.get("endpoint", "http://localhost:11434"))
             reachable, reason = OllamaBackend(endpoint, int(provider.get("timeout_seconds", 5))).is_reachable()
-            payload = {"name": runtime, "available": reachable, "reason": reason, "endpoint": endpoint}
-            return payload if reachable else {**payload, "suggested_actions": _runtime_suggestions(runtime, "start")}
+            payload = {
+                "name": runtime,
+                "available": reachable,
+                "reason": reason,
+                "endpoint": endpoint,
+            }
+            return (
+                payload
+                if reachable
+                else {
+                    **payload,
+                    "suggested_actions": _runtime_suggestions(runtime, "start"),
+                }
+            )
         if definition.get("protocol") == "openai_compatible":
             endpoint = str(provider.get("endpoint", "")).rstrip("/")
             if not endpoint:
-                return {"name": runtime, "available": False, "reason": "endpoint is not configured", "endpoint": None, "suggested_actions": _runtime_suggestions(runtime, "configure")}
+                return {
+                    "name": runtime,
+                    "available": False,
+                    "reason": "endpoint is not configured",
+                    "endpoint": None,
+                    "suggested_actions": _runtime_suggestions(runtime, "configure"),
+                }
             if not bool(provider.get("enabled", True)):
-                return {"name": runtime, "available": False, "reason": "provider is disabled", "endpoint": endpoint, "suggested_actions": _runtime_suggestions(runtime, "configure")}
-            reachable, reason = OpenAICompatibleBackend(endpoint, int(provider.get("timeout_seconds", 5))).is_reachable()
-            payload = {"name": runtime, "available": reachable, "reason": reason, "endpoint": endpoint}
-            return payload if reachable else {**payload, "suggested_actions": _runtime_suggestions(runtime, "start")}
+                return {
+                    "name": runtime,
+                    "available": False,
+                    "reason": "provider is disabled",
+                    "endpoint": endpoint,
+                    "suggested_actions": _runtime_suggestions(runtime, "configure"),
+                }
+            reachable, reason = OpenAICompatibleBackend(
+                endpoint, int(provider.get("timeout_seconds", 5))
+            ).is_reachable()
+            payload = {
+                "name": runtime,
+                "available": reachable,
+                "reason": reason,
+                "endpoint": endpoint,
+            }
+            return (
+                payload
+                if reachable
+                else {
+                    **payload,
+                    "suggested_actions": _runtime_suggestions(runtime, "start"),
+                }
+            )
+        if definition.get("protocol") == "azure_speech":
+            provider = providers.get(runtime, {})
+            key_env = str(provider.get("api_key_env") or "AZURE_SPEECH_KEY")
+            region_env = str(provider.get("region_env") or "AZURE_SPEECH_REGION")
+            enabled = bool(provider.get("enabled", True))
+            key_present = bool(os.environ.get(key_env) or provider.get("credential_ref"))
+            region_present = bool(os.environ.get(region_env) or provider.get("region"))
+            available = enabled and key_present and region_present
+            missing = []
+            if not enabled:
+                missing.append("provider is disabled")
+            if not key_present:
+                missing.append(f"missing env var {key_env}")
+            if not region_present:
+                missing.append(f"missing env var {region_env}")
+            return {
+                "name": runtime,
+                "available": available,
+                "reason": "configured" if available else "; ".join(missing),
+                "endpoint": provider.get("endpoint"),
+                "suggested_actions": _runtime_suggestions(runtime, "configure"),
+            }
         if runtime in {"transformers", "faster_whisper", "diffusers"}:
             package = "faster_whisper" if runtime == "faster_whisper" else runtime
             installed = importlib.util.find_spec(package) is not None
@@ -341,11 +742,22 @@ class RuntimeCatalog:
                 "name": runtime,
                 "available": False,
                 "installed": installed,
-                "reason": f"{runtime} is installed, but it is a library path rather than a running inference endpoint" if installed else f"{runtime} is not installed; install it for script-based use",
+                "reason": f"{runtime} is installed, but it is a library path rather than a running inference endpoint"
+                if installed
+                else f"{runtime} is not installed; install it for script-based use",
                 "endpoint": None,
             }
-            return {**payload, "suggested_actions": _runtime_suggestions(runtime, "install" if not installed else "library")}
-        return {"name": runtime, "available": False, "reason": "runtime availability check is not wired", "endpoint": provider.get("endpoint"), "suggested_actions": _runtime_suggestions(runtime, "manual")}
+            return {
+                **payload,
+                "suggested_actions": _runtime_suggestions(runtime, "install" if not installed else "library"),
+            }
+        return {
+            "name": runtime,
+            "available": False,
+            "reason": "runtime availability check is not wired",
+            "endpoint": provider.get("endpoint"),
+            "suggested_actions": _runtime_suggestions(runtime, "manual"),
+        }
 
     def source_for_model(self, model: dict[str, Any]) -> str:
         if model.get("source"):
@@ -380,9 +792,16 @@ class RuntimeCatalog:
             "roles": model.get("roles", []),
         }
 
-    def _providers(self) -> dict[str, dict[str, Any]]:
+    def _profile_provider_overrides(self) -> dict[str, dict[str, Any]]:
         providers = self.models_config.get("providers", {})
         return providers if isinstance(providers, dict) else {}
+
+    def _providers(self) -> dict[str, dict[str, Any]]:
+        providers = {name: dict(value) for name, value in PROVIDER_ENDPOINT_DEFAULTS.items()}
+        for name, value in self._profile_provider_overrides().items():
+            if isinstance(value, dict):
+                providers[name] = {**providers.get(name, {}), **value, "origin": "profile"}
+        return providers
 
     def _models(self) -> dict[str, dict[str, Any]]:
         generated = self.generated_models_config.get("models", {})
@@ -392,7 +811,7 @@ class RuntimeCatalog:
         return {**generated_models, **curated_models}
 
     def _load_generated_models_config(self) -> dict[str, Any]:
-        path = self.profile.root / "models.generated.yaml"
+        path = self.profile.root / "models.discovered.yaml"
         if not path.exists():
             return {}
         data = parse_yaml(path.read_text(encoding="utf-8"))
@@ -404,6 +823,15 @@ class RuntimeCatalog:
         if not isinstance(model, dict):
             raise ValueError(f"unknown model: {name}")
         return model
+
+    def _model_ownership(self, model: dict[str, Any]) -> str:
+        if model.get("ownership"):
+            return str(model.get("ownership"))
+        provider = self._providers().get(str(model.get("provider") or ""), {})
+        if provider.get("ownership"):
+            return str(provider.get("ownership"))
+        provider_name = str(model.get("provider") or "")
+        return "managed_service" if provider_name in PROVIDER_ENDPOINT_DEFAULTS else "self_managed"
 
 
 def _dockerfile_for_runtime(runtime: str, model_id: str) -> str:
@@ -418,14 +846,10 @@ def _dockerfile_for_runtime(runtime: str, model_id: str) -> str:
             "FROM python:3.13-slim\n"
             "RUN python -m pip install --no-cache-dir --upgrade pip vllm\n"
             "EXPOSE 8000\n"
-            f"CMD [\"python\", \"-m\", \"vllm.entrypoints.openai.api_server\", \"--host\", \"0.0.0.0\", \"--model\", \"{model_id}\"]\n"
+            f'CMD ["python", "-m", "vllm.entrypoints.openai.api_server", "--host", "0.0.0.0", "--model", "{model_id}"]\n'
         )
     if runtime == "tgi":
-        return (
-            "FROM ghcr.io/huggingface/text-generation-inference:latest\n"
-            f"ENV MODEL_ID={model_id}\n"
-            "EXPOSE 80\n"
-        )
+        return f"FROM ghcr.io/huggingface/text-generation-inference:latest\nENV MODEL_ID={model_id}\nEXPOSE 80\n"
     if runtime == "localai":
         return (
             "FROM localai/localai:latest\n"
@@ -461,7 +885,9 @@ def _conda_yaml_for_runtime(runtime: str) -> str:
         lines.append("  - pip:")
         lines.extend(f"      - {package}" for package in packages)
     else:
-        lines.append("  # This runtime is usually installed as a native binary or container rather than Python packages.")
+        lines.append(
+            "  # This runtime is usually installed as a native binary or container rather than Python packages."
+        )
     return "\n".join(lines) + "\n"
 
 
@@ -475,7 +901,6 @@ def _pip_packages_for_runtime(runtime: str) -> list[str]:
         "llamacpp": [],
         "ollama": [],
         "tgi": [],
-        "piper": [],
         "comfyui": [],
         "lmstudio": [],
     }
@@ -497,30 +922,34 @@ def _bundle_commands(runtime: str, model_name: str, mode: str, selected_file: st
 
 def _diagram(include_gui: bool = False) -> str:
     lines = ["flowchart LR"]
-    lines.extend([
-        '  HF["Hugging Face Hub"] --> VLLM["vLLM"]',
-        '  HF --> TGI["TGI"]',
-        '  HF --> TR["Transformers"]',
-        '  HFGGUF["HF GGUF / local GGUF"] --> LLAMACPP["llama.cpp"]',
-        '  HFGGUF --> LOCALAI["LocalAI"]',
-        '  HFGGUF --> OLLAMA["Ollama import"]',
-        '  OLLAMACAT["Ollama library"] --> OLLAMA',
-        '  VLLM --> OPENAI["OpenAI-compatible /v1"]',
-        '  TGI --> OPENAI',
-        '  LLAMACPP --> OPENAI',
-        '  LOCALAI --> OPENAI',
-        '  OLLAMA --> OAI2["Ollama /v1 + native API"]',
-        '  OPENAI --> IDE["Continue / Cursor-style clients / aiplane"]',
-        '  OAI2 --> IDE',
-        '  HF --> FW["faster-whisper"]',
-        '  PIPERVOICES["Piper voices"] --> PIPER["Piper"]',
-        '  HF --> DIFF["Diffusers"]',
-    ])
+    lines.extend(
+        [
+            '  HF["Hugging Face Hub"] --> VLLM["vLLM"]',
+            '  HF --> TGI["TGI"]',
+            '  HF --> TR["Transformers"]',
+            '  HFGGUF["HF GGUF / local GGUF"] --> LLAMACPP["llama.cpp"]',
+            '  HFGGUF --> LOCALAI["LocalAI"]',
+            '  HFGGUF --> OLLAMA["Ollama import"]',
+            '  OLLAMACAT["Ollama library"] --> OLLAMA',
+            '  VLLM --> OPENAI["OpenAI-compatible /v1"]',
+            "  TGI --> OPENAI",
+            "  LLAMACPP --> OPENAI",
+            "  LOCALAI --> OPENAI",
+            '  OLLAMA --> OAI2["Ollama /v1 + native API"]',
+            '  OPENAI --> IDE["Continue / Cursor-style clients / aiplane"]',
+            "  OAI2 --> IDE",
+            '  HF --> FW["faster-whisper"]',
+            '  AZSPEECH["Azure AI Speech"] --> AZTTS["Managed TTS"]',
+            '  HF --> DIFF["Diffusers"]',
+        ]
+    )
     if include_gui:
-        lines.extend([
-            '  HFGGUF --> LMS["LM Studio GUI"]',
-            '  LMS --> OPENAI',
-        ])
+        lines.extend(
+            [
+                '  HFGGUF --> LMS["LM Studio GUI"]',
+                "  LMS --> OPENAI",
+            ]
+        )
     return "\n".join(lines)
 
 
@@ -562,7 +991,9 @@ def _ubuntu_install_hint(rows: list[dict[str, Any]]) -> str | None:
     return "sudo apt-get update && sudo apt-get install -y " + " ".join(packages)
 
 
-def _runtime_prerequisite_spec(runtime: str) -> tuple[list[str], list[str], dict[str, str], list[str]]:
+def _runtime_prerequisite_spec(
+    runtime: str,
+) -> tuple[list[str], list[str], dict[str, str], list[str]]:
     packages = {
         "curl": "curl",
         "sh": "dash",
@@ -573,25 +1004,77 @@ def _runtime_prerequisite_spec(runtime: str) -> tuple[list[str], list[str], dict
         "nvidia-smi": "nvidia-utils-535",
     }
     if runtime == "ollama":
-        return ["curl", "sh"], [], packages, ["The helper delegates install/update to Ollama's official Linux install script."]
+        return (
+            ["curl", "sh"],
+            [],
+            packages,
+            ["The helper delegates install/update to Ollama's official Linux install script."],
+        )
     if runtime == "vllm":
-        return ["python", "pip"], ["nvidia-smi"], packages, ["The helper installs vLLM with pip. GPU/CUDA compatibility is still a runtime-native concern."]
+        return (
+            ["python", "pip"],
+            ["nvidia-smi"],
+            packages,
+            ["The helper installs vLLM with pip. GPU/CUDA compatibility is still a runtime-native concern."],
+        )
     if runtime == "transformers":
-        return ["python", "pip"], ["nvidia-smi"], packages, ["Transformers is a Python library path, not a serving endpoint by default."]
+        return (
+            ["python", "pip"],
+            ["nvidia-smi"],
+            packages,
+            ["Transformers is a Python library path, not a serving endpoint by default."],
+        )
     if runtime in {"tgi", "localai"}:
-        return ["docker"], ["nvidia-smi"], packages, ["The helper uses Docker images. GPU serving also needs a working NVIDIA container runtime when GPUs are required."]
+        return (
+            ["docker"],
+            ["nvidia-smi"],
+            packages,
+            [
+                "The helper uses Docker images. GPU serving also needs a working NVIDIA container runtime when GPUs are required."
+            ],
+        )
     if runtime == "llamacpp":
-        return ["llama-server"], ["curl"], packages, ["Install/build llama.cpp for your CPU/GPU target and put llama-server on PATH."]
+        return (
+            ["llama-server"],
+            ["curl"],
+            packages,
+            ["Install/build llama.cpp for your CPU/GPU target and put llama-server on PATH."],
+        )
+    if runtime == "azure_speech":
+        return (
+            [],
+            [],
+            packages,
+            [
+                "Azure AI Speech is a managed service; configure AZURE_SPEECH_KEY and AZURE_SPEECH_REGION or a profile credential reference instead of installing a local runtime."
+            ],
+        )
     if runtime == "lmstudio":
-        return [], [], packages, ["LM Studio is GUI-managed. Install it manually and enable the local server from the app."]
-    return [], [], packages, ["No automated prerequisite policy is defined for this runtime yet."]
+        return (
+            [],
+            [],
+            packages,
+            ["LM Studio is GUI-managed. Install it manually and enable the local server from the app."],
+        )
+    return (
+        [],
+        [],
+        packages,
+        ["No automated prerequisite policy is defined for this runtime yet."],
+    )
 
 
 def _runtime_suggestions(runtime: str, situation: str) -> list[str]:
     suggestions = [f"aiplane runtimes prerequisites {runtime}"]
     if runtime in {"ollama", "vllm", "tgi", "transformers", "localai"}:
         suggestions.append(f"aiplane runtimes install {runtime} --dry-run")
-    if situation in {"start", "configure"} and runtime in {"ollama", "vllm", "tgi", "localai", "llamacpp"}:
+    if situation in {"start", "configure"} and runtime in {
+        "ollama",
+        "vllm",
+        "tgi",
+        "localai",
+        "llamacpp",
+    }:
         suggestions.append(f"aiplane runtimes start {runtime} --dry-run")
     if situation == "configure":
         suggestions.append(f"aiplane runtimes configure {runtime} --dry-run")

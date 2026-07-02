@@ -23,7 +23,7 @@ aiplane mcp serve
 The current read tools are:
 
 - `aiplane.profiles.list`
-- `aiplane.providers.list`
+- `aiplane.providers.list` with `status`, `runtime`, and `group_by` filters for ownership/runtime grouping
 - `aiplane.providers.models`
 - `aiplane.models.defaults`
 - `aiplane.models.list` with filters, sorting, and limits
@@ -45,6 +45,14 @@ Write tools execute through the same managers as the CLI. Where a tool supports 
 - `aiplane.remote.tunnel.stop`: stop a helper-started SSH tunnel.
 
 All tools return JSON as both text content and structured MCP content where supported by the client. Mutating tools call the same internal managers as the CLI; they do not bypass profile validation, policy boundaries, or filesystem scoping.
+
+New CLI features are not automatically MCP tools. MCP coverage is reviewed during pre-PR cleanup and recurring synchronization checkpoints, not continuously after every feature and not at every regular milestone. Useful inspection, planning, recommendation, and config export features can be mirrored into MCP, while host mutation, downloads, installs, cloud apply, secret writes, and broad shell execution stay CLI-only or deferred until they have explicit guardrails and audit behavior.
+
+## MCP And Agent Skills
+
+MCP and agent skills solve different problems. MCP is a live protocol surface: an IDE or agent calls `aiplane` tools over stdio and receives structured results. An agent skill is an instruction/playbook package for a coding assistant: it tells the assistant how to approach an `aiplane` task, which commands to prefer, which safety boundaries matter, and when to use MCP.
+
+A useful `aiplane` skill can reference the MCP server, but it should not duplicate MCP. The skill should teach workflow and judgment; MCP should expose current structured state and guarded operations.
 
 ## Generate Client Config
 

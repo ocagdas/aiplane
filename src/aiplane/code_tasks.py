@@ -42,26 +42,57 @@ class CodeTaskRunner:
         before = "\n".join(lines[: line - 1])
         after = "\n".join(lines[line - 1 :])
         prompt = build_completion_prompt(target, line, before, after)
-        return self._run("completion", model_name, prompt, dry_run, {"target": str(target), "line": line})
+        return self._run(
+            "completion",
+            model_name,
+            prompt,
+            dry_run,
+            {"target": str(target), "line": line},
+        )
 
     def write(self, model_name: str, task: str, dry_run: bool = False) -> CodeTaskResult:
         prompt = build_write_prompt(task)
         return self._run("write", model_name, prompt, dry_run, {"request": task})
 
-    def _run(self, task: str, model_name: str, prompt: str, dry_run: bool, details: dict[str, object]) -> CodeTaskResult:
+    def _run(
+        self,
+        task: str,
+        model_name: str,
+        prompt: str,
+        dry_run: bool,
+        details: dict[str, object],
+    ) -> CodeTaskResult:
         self.catalog.get(model_name)
         action = f"code:{task}"
         if dry_run:
-            self.audit.record(AuditEvent("code", self.profile.name, action, "dry_run", {"model": model_name, **details}))
+            self.audit.record(
+                AuditEvent(
+                    "code",
+                    self.profile.name,
+                    action,
+                    "dry_run",
+                    {"model": model_name, **details},
+                )
+            )
             return CodeTaskResult(task, model_name, prompt, prompt, True)
         result = self._call_model(model_name, prompt)
-        self.audit.record(AuditEvent("code", self.profile.name, action, "allowed", {"model": model_name, **details, "output": result.text[-1000:]}))
+        self.audit.record(
+            AuditEvent(
+                "code",
+                self.profile.name,
+                action,
+                "allowed",
+                {"model": model_name, **details, "output": result.text[-1000:]},
+            )
+        )
         return CodeTaskResult(task, model_name, prompt, result.text, False)
 
     def _call_model(self, model_name: str, prompt: str) -> BackendResult:
         model = self.catalog.get(model_name)
         if model.get("provider") not in {"ollama", "ollama_cloud"}:
-            raise ValueError("code commands currently execute only Ollama local/cloud models; use --dry-run for other providers")
+            raise ValueError(
+                "code commands currently execute only Ollama local/cloud models; use --dry-run for other providers"
+            )
         return self.catalog.complete(model_name, prompt)
 
     def _workspace_file(self, target: Path) -> Path:

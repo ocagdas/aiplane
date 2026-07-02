@@ -79,7 +79,9 @@ class RemoteManager:
 
     def tunnel_start(self, name: str, yes: bool = False) -> dict[str, Any]:
         if not yes:
-            raise PermissionError("remote tunnel start is mutating; run remote tunnel plan first or use the CLI start command when ready")
+            raise PermissionError(
+                "remote tunnel start is mutating; run remote tunnel plan first or use the CLI start command when ready"
+            )
         status = self.tunnel_status(name)
         if status["running"]:
             return {"target": name, "status": "already_running", **status}
@@ -90,9 +92,23 @@ class RemoteManager:
         log_file = self._log_file(name)
         pid_file.parent.mkdir(parents=True, exist_ok=True)
         with log_file.open("ab") as log:
-            process = subprocess.Popen(plan["command"], cwd=self.profile.workspace, stdout=log, stderr=log, start_new_session=True)
+            process = subprocess.Popen(
+                plan["command"],
+                cwd=self.profile.workspace,
+                stdout=log,
+                stderr=log,
+                start_new_session=True,
+            )
         pid_file.write_text(str(process.pid), encoding="utf-8")
-        return {"target": name, "status": "started", "pid": process.pid, "pid_file": str(pid_file), "log_file": str(log_file), "endpoint": plan["endpoint"], "command": plan["command"]}
+        return {
+            "target": name,
+            "status": "started",
+            "pid": process.pid,
+            "pid_file": str(pid_file),
+            "log_file": str(log_file),
+            "endpoint": plan["endpoint"],
+            "command": plan["command"],
+        }
 
     def tunnel_stop(self, name: str, yes: bool = False) -> dict[str, Any]:
         if not yes:

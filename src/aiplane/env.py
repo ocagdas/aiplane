@@ -36,11 +36,13 @@ class EnvironmentManager:
         active = self.active_mode()
         rows = []
         for name, config in self.modes().items():
-            rows.append({
-                "name": name,
-                "active": name == active,
-                "config": config,
-            })
+            rows.append(
+                {
+                    "name": name,
+                    "active": name == active,
+                    "config": config,
+                }
+            )
         return sorted(rows, key=lambda row: str(row["name"]))
 
     def active(self) -> dict[str, object]:
@@ -94,7 +96,12 @@ class EnvironmentManager:
         cfg = config if isinstance(config, dict) else {}
         executable = str(cfg.get("executable", "conda"))
         name = str(cfg.get("name", "aiplane"))
-        return ExecutionPlan("conda", [executable, "run", "-n", name, *command], self.profile.workspace, f"conda env {name}")
+        return ExecutionPlan(
+            "conda",
+            [executable, "run", "-n", name, *command],
+            self.profile.workspace,
+            f"conda env {name}",
+        )
 
     def _docker_plan(self, command: list[str], config: object) -> ExecutionPlan:
         cfg = config if isinstance(config, dict) else {}

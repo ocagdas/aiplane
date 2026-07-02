@@ -84,10 +84,20 @@ class HardwareManager:
 
         template = self.templates().get(active)
         if isinstance(template, dict):
-            active_config = {"name": active, "origin": active, "custom": False, "values": _template_values(template)}
+            active_config = {
+                "name": active,
+                "origin": active,
+                "custom": False,
+                "values": _template_values(template),
+            }
             active_config["machine"] = _machine_from_active(active_config, self.discover())
             return active_config
-        active_config = {"name": active, "origin": "custom", "custom": True, "values": {}}
+        active_config = {
+            "name": active,
+            "origin": "custom",
+            "custom": True,
+            "values": {},
+        }
         active_config["machine"] = _machine_from_active(active_config, self.discover())
         return active_config
 
@@ -149,7 +159,10 @@ class HardwareManager:
     def doctor(self, model_name: str | None = None) -> dict[str, Any]:
         catalog = ModelCatalog(self.profile)
         discovered = self.discover()
-        model_rows = [catalog.show(model_name)] if model_name else [catalog.show(row["name"]) for row in catalog.list()]
+        if model_name:
+            model_rows = [catalog.show(model_name)]
+        else:
+            model_rows = [{"name": name, **dict(model)} for name, model in catalog.models().items()]
         needs_fit: list[dict[str, Any]] = []
         no_fit_required: list[dict[str, Any]] = []
         for row in model_rows:
@@ -182,7 +195,14 @@ class HardwareManager:
             payload["name"] = name
             benchmark_summary = benchmark_summaries.get(name)
             if not bool(model.get("local", False)):
-                groups["remote_or_cloud"].append(_recommendation_payload(payload, "remote_or_cloud", "remote/cloud model does not consume local inference hardware", benchmark_summary))
+                groups["remote_or_cloud"].append(
+                    _recommendation_payload(
+                        payload,
+                        "remote_or_cloud",
+                        "remote/cloud model does not consume local inference hardware",
+                        benchmark_summary,
+                    )
+                )
                 continue
             level, reason = _recommend_model(payload, fit_basis)
             groups[level].append(_recommendation_payload(payload, level, reason, benchmark_summary))
@@ -194,7 +214,13 @@ class HardwareManager:
         if include_not_recommended:
             ordered_groups["not_recommended"] = groups["not_recommended"]
         for rows in ordered_groups.values():
-            rows.sort(key=lambda item: (-_average_capability_score(item), item.get("provider", ""), item.get("name", "")))
+            rows.sort(
+                key=lambda item: (
+                    -_average_capability_score(item),
+                    item.get("provider", ""),
+                    item.get("name", ""),
+                )
+            )
         criteria = {
             "recommended": "meets configured recommended RAM and VRAM targets for reasonable local use",
             "usable": "meets configured minimum RAM and VRAM targets, but may be slow or tight",
@@ -210,7 +236,9 @@ class HardwareManager:
             "hidden": {
                 "not_recommended_count": len(groups["not_recommended"]),
                 "hint": "pass --include-not-recommended to show models that do not fit this hardware",
-            } if not include_not_recommended else {},
+            }
+            if not include_not_recommended
+            else {},
         }
 
     def _closest_profiles(self, discovered: dict[str, Any]) -> list[dict[str, Any]]:
@@ -224,10 +252,15 @@ class HardwareManager:
             score, reasons = _score_template(template, discovered)
             if score <= 0:
                 continue
-            scored.append({"name": name, "score": score, "reasons": reasons, "notes": template.get("notes")})
+            scored.append(
+                {
+                    "name": name,
+                    "score": score,
+                    "reasons": reasons,
+                    "notes": template.get("notes"),
+                }
+            )
         return sorted(scored, key=lambda item: item["score"], reverse=True)[:3]
-
-
 
 
 def _machine_from_active(active: dict[str, Any], discovered: dict[str, Any]) -> dict[str, Any]:
@@ -244,7 +277,10 @@ def _machine_from_active(active: dict[str, Any], discovered: dict[str, Any]) -> 
     vram = _resolve_number(values.get("vram_gb"), max_vram)
     total_vram = _resolve_number(values.get("total_vram_gb"), max_vram)
     gpu_count = _resolve_number(values.get("gpu_count"), len(gpus))
-    gpu_vendor = _resolve_text(values.get("gpu_vendor", values.get("vendor")), first_gpu.get("vendor") if first_gpu else None)
+    gpu_vendor = _resolve_text(
+        values.get("gpu_vendor", values.get("vendor")),
+        first_gpu.get("vendor") if first_gpu else None,
+    )
     gpu_model = _resolve_text(values.get("gpu_model"), first_gpu.get("name") if first_gpu else None)
     return {
         "name": active.get("name") or values.get("machine_tag") or "custom",
@@ -296,7 +332,15 @@ def _discovered_from_machine(machine: dict[str, Any], discovered: dict[str, Any]
     if count <= 0 or vendor == "none":
         result["gpus"] = []
     elif vram:
-        result["gpus"] = [{"vendor": vendor, "name": model, "vram_mb": int(vram * 1024), "configured": True} for _ in range(count)]
+        result["gpus"] = [
+            {
+                "vendor": vendor,
+                "name": model,
+                "vram_mb": int(vram * 1024),
+                "configured": True,
+            }
+            for _ in range(count)
+        ]
     return result
 
 
@@ -375,7 +419,11 @@ def _nvidia_gpus() -> list[dict[str, Any]]:
     if not shutil.which("nvidia-smi"):
         return []
     result = subprocess.run(
-        ["nvidia-smi", "--query-gpu=name,memory.total,uuid", "--format=csv,noheader,nounits"],
+        [
+            "nvidia-smi",
+            "--query-gpu=name,memory.total,uuid",
+            "--format=csv,noheader,nounits",
+        ],
         text=True,
         capture_output=True,
         check=False,
@@ -386,7 +434,14 @@ def _nvidia_gpus() -> list[dict[str, Any]]:
     for line in result.stdout.splitlines():
         parts = [part.strip() for part in line.split(",")]
         if len(parts) >= 3:
-            gpus.append({"vendor": "nvidia", "name": parts[0], "vram_mb": int(parts[1]), "uuid": parts[2]})
+            gpus.append(
+                {
+                    "vendor": "nvidia",
+                    "name": parts[0],
+                    "vram_mb": int(parts[1]),
+                    "uuid": parts[2],
+                }
+            )
     return gpus
 
 
@@ -394,9 +449,20 @@ def _amd_gpus() -> list[dict[str, Any]]:
     # Prefer rocminfo/rocm-smi when available; fall back to lspci names only.
     gpus: list[dict[str, Any]] = []
     if shutil.which("rocm-smi"):
-        result = subprocess.run(["rocm-smi", "--showproductname", "--showmeminfo", "vram"], text=True, capture_output=True, check=False)
+        result = subprocess.run(
+            ["rocm-smi", "--showproductname", "--showmeminfo", "vram"],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
         if result.returncode == 0 and result.stdout.strip():
-            gpus.append({"vendor": "amd", "name": "AMD GPU detected by rocm-smi", "details": result.stdout.strip()[-1000:]})
+            gpus.append(
+                {
+                    "vendor": "amd",
+                    "name": "AMD GPU detected by rocm-smi",
+                    "details": result.stdout.strip()[-1000:],
+                }
+            )
             return gpus
     if shutil.which("lspci"):
         result = subprocess.run(["lspci"], text=True, capture_output=True, check=False)
@@ -406,7 +472,6 @@ def _amd_gpus() -> list[dict[str, Any]]:
                 if "amd" in lower and ("vga" in lower or "display" in lower or "3d" in lower):
                     gpus.append({"vendor": "amd", "name": line.strip()})
     return gpus
-
 
 
 def _score_template(template: dict[str, Any], discovered: dict[str, Any]) -> tuple[int, list[str]]:
@@ -471,7 +536,12 @@ def _parse_range(value: object) -> tuple[float, float] | None:
         return None
 
 
-def _recommendation_payload(model: dict[str, Any], level: str, reason: str, benchmark_summary: dict[str, Any] | None = None) -> dict[str, Any]:
+def _recommendation_payload(
+    model: dict[str, Any],
+    level: str,
+    reason: str,
+    benchmark_summary: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     capabilities = capability_profile(model)
     payload = {
         "name": model.get("name"),
@@ -561,11 +631,23 @@ def _fit_model(model: dict[str, Any], discovered: dict[str, Any]) -> HardwareFit
     gpu_vram_gb = _max_vram_gb(discovered)
 
     if min_ram is not None and memory_gb is not None and memory_gb < min_ram:
-        return HardwareFit(model_id, False, f"requires at least {min_ram:g}GB RAM; discovered {memory_gb:g}GB")
+        return HardwareFit(
+            model_id,
+            False,
+            f"requires at least {min_ram:g}GB RAM; discovered {memory_gb:g}GB",
+        )
     if min_vram is not None and gpu_vram_gb < min_vram:
-        return HardwareFit(model_id, False, f"requires at least {min_vram:g}GB VRAM; discovered {gpu_vram_gb:.1f}GB")
+        return HardwareFit(
+            model_id,
+            False,
+            f"requires at least {min_vram:g}GB VRAM; discovered {gpu_vram_gb:.1f}GB",
+        )
     if recommended_ram is not None and memory_gb is not None and memory_gb < recommended_ram:
-        return HardwareFit(model_id, True, f"usable but below recommended RAM ({memory_gb:g}GB < {recommended_ram:g}GB)")
+        return HardwareFit(
+            model_id,
+            True,
+            f"usable but below recommended RAM ({memory_gb:g}GB < {recommended_ram:g}GB)",
+        )
     return HardwareFit(model_id, True, "hardware appears sufficient for configured minimums")
 
 

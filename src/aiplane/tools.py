@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import shlex
 import shutil
+from collections.abc import Callable
 import subprocess
 from pathlib import Path
 
@@ -14,7 +15,12 @@ from .runtime_catalog import RuntimeCatalog
 
 
 class ToolExecutor:
-    def __init__(self, profile: Profile, audit: AuditLogger, approvals: ApprovalHandler | None = None):
+    def __init__(
+        self,
+        profile: Profile,
+        audit: AuditLogger,
+        approvals: ApprovalHandler | None = None,
+    ):
         self.profile = profile
         self.audit = audit
         self.policy = PolicyEngine(profile)
@@ -97,7 +103,12 @@ class ToolExecutor:
             raise PermissionError(decision.reason)
         return path.resolve()
 
-    def _command(self, command: list[str], allow_failure: bool = False, use_environment: bool = True) -> str:
+    def _command(
+        self,
+        command: list[str],
+        allow_failure: bool = False,
+        use_environment: bool = True,
+    ) -> str:
         plan = self.environment.plan(command) if use_environment else None
         actual_command = plan.command if plan else command
         cwd = plan.cwd if plan else self.profile.workspace
@@ -125,11 +136,18 @@ TOOLCHAIN: dict[str, dict[str, object]] = {
         "command": "az",
         "description": "Azure CLI for account checks, VM/SKU discovery, quota checks, and Azure resource operations.",
         "category": "cloud",
-        "needed_for": ["Azure account checks", "quota and capacity discovery", "VM/AKS/resource operations"],
+        "needed_for": [
+            "Azure account checks",
+            "quota and capacity discovery",
+            "VM/AKS/resource operations",
+        ],
         "install": {
             "ubuntu": ["curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash"],
             "debian": ["curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash"],
-            "fedora": ["sudo rpm --import https://packages.microsoft.com/keys/microsoft.asc", "sudo dnf install -y azure-cli"],
+            "fedora": [
+                "sudo rpm --import https://packages.microsoft.com/keys/microsoft.asc",
+                "sudo dnf install -y azure-cli",
+            ],
             "macos": ["brew update", "brew install azure-cli"],
         },
     },
@@ -137,11 +155,21 @@ TOOLCHAIN: dict[str, dict[str, object]] = {
         "command": "tofu",
         "description": "OpenTofu for Terraform-compatible repeatable infrastructure provisioning.",
         "category": "iac",
-        "needed_for": ["repeatable infrastructure plans", "self-managed cloud setup", "future VM/AKS provisioning"],
+        "needed_for": [
+            "repeatable infrastructure plans",
+            "self-managed cloud setup",
+            "reviewed VM/AKS provisioning plans",
+        ],
         "install": {
-            "ubuntu": ["follow https://opentofu.org/docs/intro/install/deb/ for the current signed apt repository setup"],
-            "debian": ["follow https://opentofu.org/docs/intro/install/deb/ for the current signed apt repository setup"],
-            "fedora": ["follow https://opentofu.org/docs/intro/install/rpm/ for the current signed rpm repository setup"],
+            "ubuntu": [
+                "follow https://opentofu.org/docs/intro/install/deb/ for the current signed apt repository setup"
+            ],
+            "debian": [
+                "follow https://opentofu.org/docs/intro/install/deb/ for the current signed apt repository setup"
+            ],
+            "fedora": [
+                "follow https://opentofu.org/docs/intro/install/rpm/ for the current signed rpm repository setup"
+            ],
             "macos": ["brew install opentofu"],
         },
     },
@@ -149,10 +177,18 @@ TOOLCHAIN: dict[str, dict[str, object]] = {
         "command": "terraform",
         "description": "Terraform for users who already standardize on HashiCorp Terraform instead of OpenTofu.",
         "category": "iac",
-        "needed_for": ["repeatable infrastructure plans", "teams standardized on Terraform", "future VM/AKS provisioning"],
+        "needed_for": [
+            "repeatable infrastructure plans",
+            "teams standardized on Terraform",
+            "reviewed VM/AKS provisioning plans",
+        ],
         "install": {
-            "ubuntu": ["follow https://developer.hashicorp.com/terraform/install for the current signed apt repository setup"],
-            "debian": ["follow https://developer.hashicorp.com/terraform/install for the current signed apt repository setup"],
+            "ubuntu": [
+                "follow https://developer.hashicorp.com/terraform/install for the current signed apt repository setup"
+            ],
+            "debian": [
+                "follow https://developer.hashicorp.com/terraform/install for the current signed apt repository setup"
+            ],
             "fedora": ["sudo dnf install -y terraform"],
             "macos": ["brew tap hashicorp/tap", "brew install hashicorp/tap/terraform"],
         },
@@ -161,7 +197,11 @@ TOOLCHAIN: dict[str, dict[str, object]] = {
         "command": "pulumi",
         "description": "Pulumi for provider-agnostic infrastructure as code using general-purpose languages.",
         "category": "iac",
-        "needed_for": ["multi-cloud infrastructure plans", "teams preferring Python/TypeScript/Go IaC", "future cloud resource workflows"],
+        "needed_for": [
+            "multi-cloud infrastructure plans",
+            "teams preferring Python/TypeScript/Go IaC",
+            "reviewed cloud resource workflows",
+        ],
         "install": {
             "ubuntu": ["curl -fsSL https://get.pulumi.com | sh"],
             "debian": ["curl -fsSL https://get.pulumi.com | sh"],
@@ -174,22 +214,41 @@ TOOLCHAIN: dict[str, dict[str, object]] = {
         "command": "vagrant",
         "description": "Vagrant for repeatable local VM development and test environments.",
         "category": "vm",
-        "needed_for": ["local VM workflows", "provider-backed dev boxes", "future Vagrantfile exports"],
+        "needed_for": [
+            "local VM workflows",
+            "provider-backed dev boxes",
+            "starter Vagrantfile exports",
+        ],
         "install": {
-            "ubuntu": ["follow https://developer.hashicorp.com/vagrant/install for the current signed apt repository setup"],
-            "debian": ["follow https://developer.hashicorp.com/vagrant/install for the current signed apt repository setup"],
+            "ubuntu": [
+                "follow https://developer.hashicorp.com/vagrant/install for the current signed apt repository setup"
+            ],
+            "debian": [
+                "follow https://developer.hashicorp.com/vagrant/install for the current signed apt repository setup"
+            ],
             "fedora": ["follow https://developer.hashicorp.com/vagrant/install for the current rpm repository setup"],
-            "macos": ["brew tap hashicorp/tap", "brew install hashicorp/tap/hashicorp-vagrant"],
+            "macos": [
+                "brew tap hashicorp/tap",
+                "brew install hashicorp/tap/hashicorp-vagrant",
+            ],
         },
     },
     "packer": {
         "command": "packer",
         "description": "Packer for building reusable VM or cloud machine images before provisioning.",
         "category": "image-build",
-        "needed_for": ["golden VM images", "cloud image pipelines", "future Packer template exports"],
+        "needed_for": [
+            "golden VM images",
+            "cloud image pipelines",
+            "starter Packer template exports",
+        ],
         "install": {
-            "ubuntu": ["follow https://developer.hashicorp.com/packer/install for the current signed apt repository setup"],
-            "debian": ["follow https://developer.hashicorp.com/packer/install for the current signed apt repository setup"],
+            "ubuntu": [
+                "follow https://developer.hashicorp.com/packer/install for the current signed apt repository setup"
+            ],
+            "debian": [
+                "follow https://developer.hashicorp.com/packer/install for the current signed apt repository setup"
+            ],
             "fedora": ["follow https://developer.hashicorp.com/packer/install for the current rpm repository setup"],
             "macos": ["brew tap hashicorp/tap", "brew install hashicorp/tap/packer"],
         },
@@ -198,7 +257,11 @@ TOOLCHAIN: dict[str, dict[str, object]] = {
         "command": "devcontainer",
         "description": "Dev Container CLI for reproducible containerized development environments.",
         "category": "container",
-        "needed_for": ["devcontainer exports", "containerized development shells", "local dependency setup in containers"],
+        "needed_for": [
+            "devcontainer exports",
+            "containerized development shells",
+            "local dependency setup in containers",
+        ],
         "install": {
             "ubuntu": ["npm install -g @devcontainers/cli"],
             "debian": ["npm install -g @devcontainers/cli"],
@@ -211,11 +274,21 @@ TOOLCHAIN: dict[str, dict[str, object]] = {
         "command": "docker",
         "description": "Docker Engine/CLI for local and VM-hosted runtime containers.",
         "category": "container",
-        "needed_for": ["containerized runtimes", "TGI/LocalAI serving", "runtime bundles and stacks"],
+        "needed_for": [
+            "containerized runtimes",
+            "TGI/LocalAI serving",
+            "runtime bundles and stacks",
+        ],
         "install": {
-            "ubuntu": ["follow https://docs.docker.com/engine/install/ubuntu/ for the current Docker apt repository setup"],
-            "debian": ["follow https://docs.docker.com/engine/install/debian/ for the current Docker apt repository setup"],
-            "fedora": ["follow https://docs.docker.com/engine/install/fedora/ for the current Docker dnf repository setup"],
+            "ubuntu": [
+                "follow https://docs.docker.com/engine/install/ubuntu/ for the current Docker apt repository setup"
+            ],
+            "debian": [
+                "follow https://docs.docker.com/engine/install/debian/ for the current Docker apt repository setup"
+            ],
+            "fedora": [
+                "follow https://docs.docker.com/engine/install/fedora/ for the current Docker dnf repository setup"
+            ],
             "macos": ["install Docker Desktop from https://docs.docker.com/desktop/setup/install/mac-install/"],
         },
     },
@@ -223,7 +296,11 @@ TOOLCHAIN: dict[str, dict[str, object]] = {
         "command": "docker",
         "description": "Docker Compose plugin for reusable multi-runtime stacks.",
         "category": "container",
-        "needed_for": ["multi-runtime local stacks", "compose exports", "repeatable single-host runtime setups"],
+        "needed_for": [
+            "multi-runtime local stacks",
+            "compose exports",
+            "repeatable single-host runtime setups",
+        ],
         "install": {
             "ubuntu": ["sudo apt-get install -y docker-compose-plugin"],
             "debian": ["sudo apt-get install -y docker-compose-plugin"],
@@ -235,7 +312,11 @@ TOOLCHAIN: dict[str, dict[str, object]] = {
         "command": "kubectl",
         "description": "Kubernetes CLI for AKS and existing Kubernetes clusters.",
         "category": "kubernetes",
-        "needed_for": ["AKS/Kubernetes runtime deployment", "cluster inspection", "runtime operations on existing clusters"],
+        "needed_for": [
+            "AKS/Kubernetes runtime deployment",
+            "cluster inspection",
+            "runtime operations on existing clusters",
+        ],
         "install": {
             "ubuntu": ["sudo snap install kubectl --classic"],
             "debian": ["follow https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/"],
@@ -247,7 +328,11 @@ TOOLCHAIN: dict[str, dict[str, object]] = {
         "command": "helm",
         "description": "Helm for packaging runtime deployments on Kubernetes/AKS.",
         "category": "kubernetes",
-        "needed_for": ["Kubernetes runtime packaging", "AKS add-ons", "chart-based deployment workflows"],
+        "needed_for": [
+            "Kubernetes runtime packaging",
+            "AKS add-ons",
+            "chart-based deployment workflows",
+        ],
         "install": {
             "ubuntu": ["curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash"],
             "debian": ["curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash"],
@@ -259,7 +344,11 @@ TOOLCHAIN: dict[str, dict[str, object]] = {
         "command": "ssh",
         "description": "OpenSSH client for tunnels and remote self-managed workstations/VMs.",
         "category": "remote",
-        "needed_for": ["SSH tunnels", "remote workstation/VM access", "machine export/import workflows"],
+        "needed_for": [
+            "SSH tunnels",
+            "remote workstation/VM access",
+            "machine export/import workflows",
+        ],
         "install": {
             "ubuntu": ["sudo apt-get install -y openssh-client"],
             "debian": ["sudo apt-get install -y openssh-client"],
@@ -271,7 +360,10 @@ TOOLCHAIN: dict[str, dict[str, object]] = {
         "command": "ansible",
         "description": "Optional agentless host configuration over SSH when shell/cloud-init setup becomes too large.",
         "category": "configuration",
-        "needed_for": ["optional SSH host configuration", "repeatable remote setup steps"],
+        "needed_for": [
+            "optional SSH host configuration",
+            "repeatable remote setup steps",
+        ],
         "install": {
             "ubuntu": ["python -m pip install --user ansible"],
             "debian": ["python -m pip install --user ansible"],
@@ -279,18 +371,55 @@ TOOLCHAIN: dict[str, dict[str, object]] = {
             "macos": ["brew install ansible"],
         },
     },
-
+    "ruff": {
+        "command": "ruff",
+        "description": "Ruff formatter/linter for fast, repeatable Python style checks.",
+        "category": "quality",
+        "needed_for": [
+            "Python formatting",
+            "Python lint checks",
+            "CI quality gates",
+        ],
+        "install": {
+            "ubuntu": ["python -m pip install -e '.[dev]'"],
+            "debian": ["python -m pip install -e '.[dev]'"],
+            "fedora": ["python -m pip install -e '.[dev]'"],
+            "linux": ["python -m pip install -e '.[dev]'"],
+            "macos": ["python -m pip install -e '.[dev]'"],
+        },
+    },
+    "black": {
+        "command": "black",
+        "description": "Black Python formatter. Ruff is the configured formatter, but Black is tracked for teams that prefer or compare against it.",
+        "category": "quality",
+        "needed_for": [
+            "Python formatting compatibility",
+            "local editor formatter setup",
+            "style consistency checks",
+        ],
+        "install": {
+            "ubuntu": ["python -m pip install -e '.[dev]'"],
+            "debian": ["python -m pip install -e '.[dev]'"],
+            "fedora": ["python -m pip install -e '.[dev]'"],
+            "linux": ["python -m pip install -e '.[dev]'"],
+            "macos": ["python -m pip install -e '.[dev]'"],
+        },
+    },
     "lm-evaluation-harness": {
         "command": "lm_eval",
         "description": "EleutherAI LM Evaluation Harness for standard and custom model-quality benchmarks.",
         "category": "benchmark",
-        "needed_for": ["quality benchmarks", "standard task evaluation", "model comparison"],
+        "needed_for": [
+            "quality benchmarks",
+            "standard task evaluation",
+            "model comparison",
+        ],
         "install": {
-            "ubuntu": ["python -m pip install \"lm_eval[api,vllm]\""],
-            "debian": ["python -m pip install \"lm_eval[api,vllm]\""],
-            "fedora": ["python -m pip install \"lm_eval[api,vllm]\""],
-            "linux": ["python -m pip install \"lm_eval[api,vllm]\""],
-            "macos": ["python -m pip install \"lm_eval[api]\""],
+            "ubuntu": ['python -m pip install "lm_eval[api,vllm]"'],
+            "debian": ['python -m pip install "lm_eval[api,vllm]"'],
+            "fedora": ['python -m pip install "lm_eval[api,vllm]"'],
+            "linux": ['python -m pip install "lm_eval[api,vllm]"'],
+            "macos": ['python -m pip install "lm_eval[api]"'],
         },
     },
     "vllm-benchmark-scripts": {
@@ -322,6 +451,111 @@ TOOLCHAIN: dict[str, dict[str, object]] = {
 }
 
 
+TOOL_WORKFLOWS: dict[str, dict[str, object]] = {
+    "vagrant": {
+        "task": "local VM lifecycle",
+        "summary": "Create and manage repeatable local development VMs from a base box.",
+        "prerequisites": [
+            "Vagrant",
+            "a VM provider such as VirtualBox, libvirt, Hyper-V, or VMware",
+            "optional Packer-built box",
+        ],
+        "commands": [
+            "vagrant init aiplane/ubuntu-dev",
+            "vagrant up",
+            "vagrant ssh",
+            "vagrant halt",
+        ],
+        "artifacts": ["Vagrantfile"],
+        "next_steps": [
+            "Use Packer first if you need a custom base image.",
+            "Run aiplane environment doctor inside the VM or against a configured remote endpoint.",
+        ],
+    },
+    "packer": {
+        "task": "machine image build",
+        "summary": "Build reusable VM or cloud images before Vagrant or cloud provisioning uses them.",
+        "prerequisites": [
+            "Packer",
+            "builder plugin/provider credentials",
+            "OS installer/base image access",
+        ],
+        "commands": [
+            "packer init .",
+            "packer validate aiplane.pkr.hcl",
+            "packer build aiplane.pkr.hcl",
+        ],
+        "artifacts": ["aiplane.pkr.hcl"],
+        "next_steps": ["Use the resulting box/image from Vagrant, OpenTofu/Terraform, Pulumi, or a cloud CLI."],
+    },
+    "opentofu": {
+        "task": "provider-agnostic infrastructure provisioning",
+        "summary": "Default Terraform-compatible IaC target for repeatable cloud resources.",
+        "prerequisites": [
+            "OpenTofu",
+            "provider credentials",
+            "selected provider module/resources",
+        ],
+        "commands": ["tofu init", "tofu plan", "tofu apply"],
+        "artifacts": ["main.tf", "variables.tf"],
+        "next_steps": [
+            "Fill in the provider block and resources for Azure, AWS, GCP, or another supported provider.",
+            "Keep apply behind explicit review.",
+        ],
+    },
+    "terraform": {
+        "task": "Terraform-standardized infrastructure provisioning",
+        "summary": "Terraform-compatible IaC for teams already standardized on HashiCorp Terraform.",
+        "prerequisites": [
+            "Terraform",
+            "provider credentials",
+            "selected provider module/resources",
+        ],
+        "commands": ["terraform init", "terraform plan", "terraform apply"],
+        "artifacts": ["main.tf", "variables.tf"],
+        "next_steps": [
+            "Use the same module shape as OpenTofu unless a team policy requires Terraform-specific behavior."
+        ],
+    },
+    "pulumi": {
+        "task": "language-native infrastructure provisioning",
+        "summary": "Provider-agnostic IaC using Python, TypeScript, Go, or other supported languages.",
+        "prerequisites": [
+            "Pulumi",
+            "language runtime",
+            "provider credentials",
+            "Pulumi stack configuration",
+        ],
+        "commands": ["pulumi stack init dev", "pulumi preview", "pulumi up"],
+        "artifacts": ["Pulumi.yaml", "__main__.py"],
+        "next_steps": ["Choose Pulumi when the team wants normal programming-language abstractions for IaC."],
+    },
+    "devcontainer-cli": {
+        "task": "containerized development shell",
+        "summary": "Open a reproducible development environment backed by Docker-compatible containers.",
+        "prerequisites": ["Docker", "Dev Container CLI"],
+        "commands": [
+            "devcontainer up --workspace-folder .",
+            "devcontainer exec --workspace-folder . bash",
+        ],
+        "artifacts": [".devcontainer/devcontainer.json"],
+        "next_steps": ["Use this for local dependency isolation; use Docker/Compose for runtime services."],
+    },
+    "ansible": {
+        "task": "remote host configuration",
+        "summary": "Configure local VMs, remote VMs, or remote PCs over SSH after they exist.",
+        "prerequisites": ["OpenSSH", "Ansible", "SSH credentials/inventory"],
+        "commands": [
+            "ansible-inventory -i inventory.ini --list",
+            "ansible-playbook -i inventory.ini playbook.yml --check",
+            "ansible-playbook -i inventory.ini playbook.yml",
+        ],
+        "artifacts": ["inventory.ini", "playbook.yml"],
+        "next_steps": ["Use Ansible after Vagrant/cloud provisioning when shell bootstrap steps become too large."],
+    },
+}
+
+
 class ToolchainManager:
     def __init__(self, profile: Profile):
         self.profile = profile
@@ -329,12 +563,89 @@ class ToolchainManager:
     def list(self) -> list[dict[str, object]]:
         return [self._tool_row(name) for name in sorted(TOOLCHAIN)]
 
+    def matrix(self) -> dict[str, object]:
+        rows = []
+        for row in self.list():
+            name = str(row["name"])
+            workflow = TOOL_WORKFLOWS.get(name, {})
+            rows.append(
+                {
+                    "name": name,
+                    "category": row.get("category"),
+                    "task": workflow.get("task") or row.get("category"),
+                    "needed_for": row.get("needed_for", []),
+                    "requirement": row.get("requirement"),
+                    "installed": row.get("installed"),
+                    "install_mode": row.get("install_mode"),
+                    "installable_by_aiplane": row.get("installable_by_aiplane"),
+                    "plan_available": name in TOOL_WORKFLOWS,
+                    "export_available": name in TOOL_WORKFLOWS,
+                }
+            )
+        categories = []
+        workflows = []
+        for category in sorted({str(row.get("category") or "uncategorized") for row in rows}):
+            tools = [row for row in rows if str(row.get("category") or "uncategorized") == category]
+            categories.append({"name": category, "tools": tools})
+            installed = [row for row in tools if row.get("installed")]
+            missing = [row for row in tools if not row.get("installed")]
+            missing_installable = [row for row in missing if row.get("installable_by_aiplane")]
+            missing_manual = [row for row in missing if not row.get("installable_by_aiplane")]
+            readiness = "complete" if not missing else "partial" if installed else "needs_setup"
+            workflows.append(
+                {
+                    "name": category,
+                    "readiness": readiness,
+                    "tools": len(tools),
+                    "installed": len(installed),
+                    "missing": len(missing),
+                    "mandatory": sum(1 for row in tools if row.get("requirement") == "mandatory"),
+                    "optional": sum(1 for row in tools if row.get("requirement") == "optional"),
+                    "missing_installable_by_aiplane": len(missing_installable),
+                    "missing_manual_or_platform_specific": len(missing_manual),
+                    "plans_available": sum(1 for row in tools if row.get("plan_available")),
+                    "exports_available": sum(1 for row in tools if row.get("export_available")),
+                    "primary_tasks": sorted({str(row.get("task")) for row in tools if row.get("task")}),
+                    "missing_tools": [str(row["name"]) for row in missing],
+                }
+            )
+        return {
+            "name": "tools_matrix",
+            "profile": self.profile.name,
+            "summary": {
+                "tools": len(rows),
+                "mandatory": sum(1 for row in rows if row.get("requirement") == "mandatory"),
+                "optional": sum(1 for row in rows if row.get("requirement") == "optional"),
+                "installable_by_aiplane": sum(1 for row in rows if row.get("installable_by_aiplane")),
+                "exports_available": sum(1 for row in rows if row.get("export_available")),
+                "workflows": len(workflows),
+                "workflows_complete": sum(1 for row in workflows if row.get("readiness") == "complete"),
+                "workflows_partial": sum(1 for row in workflows if row.get("readiness") == "partial"),
+                "workflows_needing_setup": sum(1 for row in workflows if row.get("readiness") == "needs_setup"),
+            },
+            "workflows": workflows,
+            "categories": categories,
+        }
+
     def tool_status(self, name: str) -> dict[str, object]:
         return self._tool_row(name)
 
-    def environment_doctor(self, include_optional: bool = True) -> dict[str, object]:
-        rows = self.list() if include_optional else [self._tool_row(name) for name in CORE_TOOLCHAIN]
-        runtime_rows = _runtime_prerequisite_rows(self.profile, include_optional=include_optional)
+    def environment_doctor(
+        self,
+        include_optional: bool = True,
+        progress: Callable[[str], None] | None = None,
+    ) -> dict[str, object]:
+        tool_names = sorted(TOOLCHAIN) if include_optional else CORE_TOOLCHAIN
+        rows = []
+        for name in tool_names:
+            if progress:
+                progress(f"checking tool {name}")
+            rows.append(self._tool_row(name))
+        runtime_rows = _runtime_prerequisite_rows(
+            self.profile,
+            include_optional=include_optional,
+            progress=progress,
+        )
         installable_missing = [row for row in rows if not row["installed"] and row.get("install_mode") == "automated"]
         manual_missing = [row for row in rows if not row["installed"] and row.get("install_mode") != "automated"]
         installed = [row for row in rows if row["installed"]]
@@ -398,7 +709,15 @@ class ToolchainManager:
         results = []
         for command in commands:
             if _non_executable_install_note(command):
-                results.append({"command": command, "executed": False, "returncode": None, "stdout": "", "stderr": "manual step required"})
+                results.append(
+                    {
+                        "command": command,
+                        "executed": False,
+                        "returncode": None,
+                        "stdout": "",
+                        "stderr": "manual step required",
+                    }
+                )
                 continue
             actual_command: str | list[str] = command
             cwd = self.profile.workspace
@@ -408,21 +727,69 @@ class ToolchainManager:
                 actual_command = plan.command
                 cwd = plan.cwd
                 use_shell = False
-            completed = subprocess.run(actual_command, cwd=cwd, shell=use_shell, text=True, capture_output=True, check=False)
-            results.append({
-                "command": command,
-                "executed_command": actual_command,
-                "cwd": str(cwd),
-                "executed": True,
-                "returncode": completed.returncode,
-                "stdout": completed.stdout[-4000:],
-                "stderr": completed.stderr[-4000:],
-            })
+            completed = subprocess.run(
+                actual_command,
+                cwd=cwd,
+                shell=use_shell,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            results.append(
+                {
+                    "command": command,
+                    "executed_command": actual_command,
+                    "cwd": str(cwd),
+                    "executed": True,
+                    "returncode": completed.returncode,
+                    "stdout": completed.stdout[-4000:],
+                    "stderr": completed.stderr[-4000:],
+                }
+            )
             if completed.returncode:
                 break
         payload["results"] = results
         payload["installed_after"] = self._tool_row(name)["installed"]
         return payload
+
+    def plan(self, name: str) -> dict[str, object]:
+        if name not in TOOLCHAIN:
+            raise ValueError(f"unknown tool: {name}")
+        row = self._tool_row(name)
+        workflow = dict(TOOL_WORKFLOWS.get(name, {}))
+        return {
+            "name": "tools_plan",
+            "tool": name,
+            "status": row,
+            "task": workflow.get("task", row.get("category")),
+            "summary": workflow.get("summary", row.get("description")),
+            "prerequisites": workflow.get("prerequisites", []),
+            "commands": [str(command) for command in workflow.get("commands", [])],
+            "artifacts": workflow.get("artifacts", []),
+            "next_steps": workflow.get("next_steps", []),
+            "notes": [
+                "Planning and export commands do not mutate hosts or cloud accounts.",
+                "Run tool-specific init/plan/preview commands before any apply/build/up step.",
+            ],
+        }
+
+    def export(self, name: str) -> dict[str, object]:
+        if name not in TOOLCHAIN:
+            raise ValueError(f"unknown tool: {name}")
+        if name not in TOOL_WORKFLOWS:
+            raise ValueError(f"tool export is not available for {name}")
+        filename, content = _tool_export_content(name)
+        workflow = TOOL_WORKFLOWS[name]
+        return {
+            "name": "tools_export",
+            "tool": name,
+            "filename": filename,
+            "content": content,
+            "notes": [
+                str(workflow.get("summary", "Starter artifact.")),
+                "Review and adapt this starter artifact before running mutating commands.",
+            ],
+        }
 
     def _tool_row(self, name: str) -> dict[str, object]:
         if name not in TOOLCHAIN:
@@ -464,44 +831,274 @@ class ToolchainManager:
             return {"ok": False, "reason": "command not found"}
         if name == "azure-cli":
             completed = _checked_command([command, "account", "show"], self.profile.workspace)
-            return {"ok": completed.get("returncode") == 0, "reason": "logged in" if completed.get("returncode") == 0 else "not logged in or account query failed"}
+            return {
+                "ok": completed.get("returncode") == 0,
+                "reason": "logged in" if completed.get("returncode") == 0 else "not logged in or account query failed",
+            }
         if name == "docker":
             completed = _checked_command([command, "info"], self.profile.workspace)
-            return {"ok": completed.get("returncode") == 0, "reason": "daemon reachable" if completed.get("returncode") == 0 else "docker CLI found but daemon is not reachable"}
+            return {
+                "ok": completed.get("returncode") == 0,
+                "reason": "daemon reachable"
+                if completed.get("returncode") == 0
+                else "docker CLI found but daemon is not reachable",
+            }
         if name == "docker-compose":
             completed = _checked_command([command, "compose", "version"], self.profile.workspace)
-            return {"ok": completed.get("returncode") == 0, "reason": "compose plugin available" if completed.get("returncode") == 0 else "docker compose plugin not available"}
+            return {
+                "ok": completed.get("returncode") == 0,
+                "reason": "compose plugin available"
+                if completed.get("returncode") == 0
+                else "docker compose plugin not available",
+            }
         return {"ok": True, "reason": "command found"}
 
 
-def _runtime_prerequisite_rows(profile: Profile, include_optional: bool) -> list[dict[str, object]]:
+def _tool_export_content(name: str) -> tuple[str, str]:
+    if name == "vagrant":
+        return (
+            "Vagrantfile",
+            """# Generated starter Vagrantfile from aiplane.
+# Use a Packer-built box here when you need a custom CUDA/runtime base image.
+Vagrant.configure("2") do |config|
+  config.vm.box = ENV.fetch("AIPLANE_VAGRANT_BOX", "ubuntu/jammy64")
+  config.vm.hostname = "aiplane-dev"
+  config.vm.synced_folder ".", "/workspace"
+  config.vm.network "forwarded_port", guest: 11434, host: 11434, auto_correct: true
+  config.vm.network "forwarded_port", guest: 8000, host: 8000, auto_correct: true
+
+  config.vm.provider "virtualbox" do |vb|
+    vb.cpus = Integer(ENV.fetch("AIPLANE_VM_CPUS", "4"))
+    vb.memory = Integer(ENV.fetch("AIPLANE_VM_MEMORY_MB", "8192"))
+  end
+
+  config.vm.provision "shell", inline: <<-SHELL
+    set -eu
+    sudo apt-get update
+    sudo apt-get install -y curl git python3 python3-venv openssh-client
+  SHELL
+end
+""",
+        )
+    if name == "packer":
+        return (
+            "aiplane.pkr.hcl",
+            """packer {
+  required_plugins {
+    virtualbox = {
+      version = ">= 1.0.0"
+      source  = "github.com/hashicorp/virtualbox"
+    }
+  }
+}
+
+variable "vm_name" {
+  type    = string
+  default = "aiplane-ubuntu-dev"
+}
+
+source "virtualbox-iso" "ubuntu" {
+  vm_name       = var.vm_name
+  guest_os_type = "Ubuntu_64"
+  # Fill in ISO URL/checksum or replace this builder with azure-arm, amazon-ebs, googlecompute, etc.
+  iso_url       = "file:///path/to/ubuntu.iso"
+  iso_checksum  = "sha256:replace-me"
+  ssh_username  = "ubuntu"
+  ssh_password  = "ubuntu"
+  shutdown_command = "echo 'ubuntu' | sudo -S shutdown -P now"
+}
+
+build {
+  sources = ["source.virtualbox-iso.ubuntu"]
+
+  provisioner "shell" {
+    inline = [
+      "sudo apt-get update",
+      "sudo apt-get install -y curl git python3 python3-venv openssh-client",
+    ]
+  }
+}
+""",
+        )
+    if name in {"opentofu", "terraform"}:
+        binary = "tofu" if name == "opentofu" else "terraform"
+        return (
+            "main.tf",
+            f"""# Generated starter {name} module from aiplane.
+# Fill in the provider and resources for your target cloud before running {binary} apply.
+
+terraform {{
+  required_version = ">= 1.6.0"
+  required_providers {{
+    # Example:
+    # azurerm = {{
+    #   source  = "hashicorp/azurerm"
+    #   version = "~> 4.0"
+    # }}
+  }}
+}}
+
+variable "name" {{
+  type    = string
+  default = "aiplane-runtime"
+}}
+
+variable "region" {{
+  type    = string
+  default = "uksouth"
+}}
+
+# Add provider blocks and VM/container/Kubernetes resources here.
+# Keep {binary} plan in review before any {binary} apply.
+""",
+        )
+    if name == "pulumi":
+        return (
+            "__main__.py",
+            '"""Generated starter Pulumi program from aiplane.\n\nInstall the provider package you need, configure credentials, then add resources.\nFor Azure, for example, use pulumi-azure-native and `pulumi config set azure-native:location uksouth`.\n"""\n\nimport pulumi\n\nname = pulumi.Config().get("name") or "aiplane-runtime"\nregion = pulumi.Config().get("region") or "uksouth"\n\npulumi.export("name", name)\npulumi.export("region", region)\n# Add cloud resources here using the provider package selected by your team.\n',
+        )
+    if name == "devcontainer-cli":
+        return (
+            ".devcontainer/devcontainer.json",
+            """{
+  "name": "aiplane-dev",
+  "image": "python:3.13-slim",
+  "workspaceFolder": "/workspace",
+  "features": {},
+  "postCreateCommand": "python -m pip install -e .",
+  "customizations": {
+    "vscode": {
+      "extensions": []
+    }
+  }
+}
+""",
+        )
+    if name == "ansible":
+        return (
+            "playbook.yml",
+            """---
+- name: Prepare aiplane runtime host
+  hosts: aiplane_hosts
+  become: true
+  tasks:
+    - name: Install baseline packages
+      ansible.builtin.apt:
+        name:
+          - curl
+          - git
+          - python3
+          - python3-venv
+          - openssh-client
+        update_cache: true
+      when: ansible_os_family == "Debian"
+
+    - name: Show next manual runtime step
+      ansible.builtin.debug:
+        msg: "Run aiplane environment doctor and aiplane runtimes prerequisites on this host before starting runtimes."
+""",
+        )
+    raise ValueError(f"tool export is not available for {name}")
+
+
+def _runtime_prerequisite_rows(
+    profile: Profile,
+    include_optional: bool,
+    progress: Callable[[str], None] | None = None,
+) -> list[dict[str, object]]:
     catalog = RuntimeCatalog(profile)
     runtimes = ["ollama", "vllm", "tgi", "transformers", "localai"] if include_optional else ["ollama", "vllm"]
+    runtimes = [
+        *runtimes,
+        *_default_model_runtimes(profile, include_gui=include_optional),
+    ]
     rows: list[dict[str, object]] = []
-    for runtime in runtimes:
+    for runtime in dict.fromkeys(runtimes):
+        if progress:
+            progress(f"checking runtime prerequisite {runtime}")
         payload = catalog.prerequisites(runtime)
-        rows.append({
-            "runtime": runtime,
-            "known_runtime": payload.get("known_runtime"),
-            "ok": payload.get("ok"),
-            "helper_management": payload.get("helper_management"),
-            "install_supported_by_helper": payload.get("install_supported_by_helper"),
-            "purpose": RUNTIME_PURPOSES.get(runtime, []),
-            "missing_required": payload.get("missing_required", []),
-            "missing_optional": payload.get("missing_optional", []),
-            "ubuntu_install_hint": payload.get("ubuntu_install_hint"),
-            "setup_commands": _runtime_setup_commands(runtime, payload),
-            "notes": payload.get("notes", []),
-        })
+        ok = bool(payload.get("ok"))
+        notes = list(payload.get("notes", [])) if isinstance(payload.get("notes"), list) else []
+        availability = None
+        if runtime == "azure_speech":
+            availability = catalog.runtime_available(runtime)
+            ok = bool(availability.get("available"))
+            reason = availability.get("reason")
+            if reason:
+                notes.append(f"Azure Speech status: {reason}")
+        rows.append(
+            {
+                "runtime": runtime,
+                "known_runtime": payload.get("known_runtime"),
+                "ok": ok,
+                "helper_management": payload.get("helper_management"),
+                "install_supported_by_helper": payload.get("install_supported_by_helper"),
+                "purpose": RUNTIME_PURPOSES.get(runtime, []),
+                "missing_required": payload.get("missing_required", []),
+                "missing_optional": payload.get("missing_optional", []),
+                "ubuntu_install_hint": payload.get("ubuntu_install_hint"),
+                "setup_commands": _runtime_setup_commands(runtime, payload),
+                "notes": notes,
+                "availability": availability,
+            }
+        )
     return rows
 
 
+def _default_model_runtimes(profile: Profile, include_gui: bool) -> list[str]:
+    catalog = RuntimeCatalog(profile)
+    defaults = profile.models.get("defaults", {}) if isinstance(profile.models, dict) else {}
+    models = profile.models.get("models", {}) if isinstance(profile.models, dict) else {}
+    runtimes: list[str] = []
+    if isinstance(defaults, dict) and isinstance(models, dict):
+        for name in defaults.values():
+            model = models.get(str(name))
+            if isinstance(model, dict):
+                runtimes.extend(catalog.compatible_runtimes_for_entry(model, include_gui=include_gui))
+    return runtimes
+
+
 RUNTIME_PURPOSES: dict[str, list[str]] = {
-    "ollama": ["simple local model serving", "Continue/local IDE endpoint", "CPU or single-user workstation workflows"],
-    "vllm": ["GPU OpenAI-compatible serving", "Hugging Face model repos", "throughput and latency benchmarking"],
-    "tgi": ["containerized Hugging Face serving", "GPU server inference", "OpenAI-compatible endpoint workflows"],
-    "transformers": ["Python library experiments", "training/fine-tuning scripts", "offline evaluation jobs"],
-    "localai": ["OpenAI-compatible local service", "GGUF/llama.cpp-style models", "mixed backend experiments"],
+    "ollama": [
+        "simple local model serving",
+        "Continue/local IDE endpoint",
+        "CPU or single-user workstation workflows",
+    ],
+    "vllm": [
+        "GPU OpenAI-compatible serving",
+        "Hugging Face model repos",
+        "throughput and latency benchmarking",
+    ],
+    "tgi": [
+        "containerized Hugging Face serving",
+        "GPU server inference",
+        "OpenAI-compatible endpoint workflows",
+    ],
+    "transformers": [
+        "Python library experiments",
+        "training/fine-tuning scripts",
+        "offline evaluation jobs",
+    ],
+    "localai": [
+        "OpenAI-compatible local service",
+        "GGUF/llama.cpp-style models",
+        "mixed backend experiments",
+    ],
+    "azure_speech": [
+        "managed text-to-speech",
+        "cloud audio generation",
+        "voice output workflows",
+    ],
+    "diffusers": [
+        "AI image/video generation",
+        "GPU or remote media jobs",
+        "pipeline experiments",
+    ],
+    "comfyui": [
+        "AI image/video workflows",
+        "visual generation pipelines",
+        "local or remote GPU runtime",
+    ],
 }
 
 
@@ -511,6 +1108,27 @@ def _runtime_setup_commands(runtime: str, payload: dict[str, object]) -> list[st
         commands.append(f"aiplane runtimes install {runtime} --dry-run")
     if runtime in {"ollama", "vllm", "tgi", "localai"}:
         commands.append(f"aiplane runtimes start {runtime} --dry-run")
+    if runtime == "azure_speech":
+        commands.extend(
+            [
+                "aiplane models list --role text_to_speech",
+                "aiplane providers list --status all --runtime azure_speech",
+            ]
+        )
+    if runtime == "diffusers":
+        commands.extend(
+            [
+                "aiplane models list --role image_generation --runtime diffusers",
+                "aiplane models list --role video_generation --runtime diffusers",
+            ]
+        )
+    if runtime == "comfyui":
+        commands.extend(
+            [
+                "aiplane models list --role image_generation --runtime comfyui",
+                "aiplane models list --role video_generation --runtime comfyui",
+            ]
+        )
     return commands
 
 
@@ -521,11 +1139,19 @@ def _checked_command(command: list[str], cwd: Path) -> dict[str, object]:
         return {"returncode": None, "stdout": "", "stderr": "timeout"}
     except OSError as exc:
         return {"returncode": None, "stdout": "", "stderr": str(exc)}
-    return {"returncode": completed.returncode, "stdout": completed.stdout, "stderr": completed.stderr}
+    return {
+        "returncode": completed.returncode,
+        "stdout": completed.stdout,
+        "stderr": completed.stderr,
+    }
 
 
 def _platform_info() -> dict[str, object]:
-    return {"name": _platform_id(), "os_release": _os_release_id(), "package_manager": _package_manager()}
+    return {
+        "name": _platform_id(),
+        "os_release": _os_release_id(),
+        "package_manager": _package_manager(),
+    }
 
 
 def _platform_id() -> str:
@@ -570,7 +1196,13 @@ def _command_version(command: str) -> str | None:
 
 
 def _non_executable_install_note(command: str) -> bool:
-    return command.startswith("follow ") or command.startswith("install ") or command.startswith("OpenSSH is included") or command.startswith("Docker Desktop includes") or "generally needs" in command
+    return (
+        command.startswith("follow ")
+        or command.startswith("install ")
+        or command.startswith("OpenSSH is included")
+        or command.startswith("Docker Desktop includes")
+        or "generally needs" in command
+    )
 
 
 def _install_mode(commands: list[str]) -> str:

@@ -23,6 +23,30 @@ scripts/setup_env.sh --mode docker --action install --editable --docker-image ai
 scripts/setup_env.sh --mode docker --action install --static --docker-image aiplane:snapshot --dry-run
 ```
 
+Fresh Conda install on a new machine:
+
+```bash
+# Prerequisites: git and Conda or Miniforge/Miniconda are installed, and conda is on PATH.
+git clone https://github.com/ocagdas/aiplane.git
+cd aiplane
+conda --version
+
+# Recommended: source the helper so the new environment remains active.
+source scripts/setup_env.sh --mode conda --conda-env aiplane --action install --editable
+
+# Verify the installed CLI and bootstrapped local profile.
+aiplane profiles list
+aiplane profiles show local-dev
+aiplane environment doctor --required-only
+aiplane tools matrix
+```
+
+For a snapshot install that is isolated from later source edits, use `--static`
+instead of `--editable`. When sourced, the helper returns to the same shell with
+the Conda environment active and restores the caller's shell options. If you
+execute the setup helper instead of sourcing it, activate afterward with
+`source .aiplane/activate-conda-aiplane.sh` or `conda activate aiplane`.
+
 Install into a project-local venv:
 
 ```bash
@@ -53,10 +77,16 @@ conda activate aiplane
 ```
 
 For Conda installs, `--activate` defaults to `1`. If the setup script is sourced,
-it activates the environment before returning. If the script is executed normally,
+it activates the environment before returning to the same shell. If the script is
+executed normally,
 it cannot activate the parent shell, so it writes `.aiplane/activate-conda-<env>.sh`
-and prints activation commands. The helper now verifies that the Conda environment
-is visible after creation and fails with a clear error if it is not.
+and prints activation commands. The helper verifies that the Conda environment
+is visible after creation and, during install, repairs an existing Conda
+environment that is missing Python by installing `python=3.13` into it. During
+install, it also runs
+`aiplane profiles bootstrap-local --no-discovery` before the profile-aware sanity
+check, so a fresh clone gets an ignored `profiles/local-dev` directory from the
+shipped template.
 
 Check Conda environments with:
 
@@ -135,8 +165,10 @@ source scripts/activate_env.sh venv
 source scripts/activate_env.sh conda aiplane
 ```
 
-`setup_env.sh --action install` runs a sanity check automatically and then prints
-the matching activation command.
+`setup_env.sh --action install` bootstraps `profiles/local-dev` from the shipped
+template when needed, runs a sanity check automatically, and then prints the
+matching activation command. `scripts/activate_env.sh` performs the same
+idempotent no-discovery bootstrap after activation.
 
 
 ## Local Config
@@ -156,6 +188,8 @@ Default path:
 .aiplane/config.yaml
 ```
 
+`aiplane config show` prints both the default and active config paths, the default and current profile paths, and the effective credentials and agent artifact paths.
+
 You can also choose a different config file with `AIPLANE_CONFIG` or
 `aiplane config init --path ...`. Precedence for profile location is:
 
@@ -163,6 +197,62 @@ You can also choose a different config file with `AIPLANE_CONFIG` or
 2. `AIPLANE_PROFILES_DIR`
 3. `profiles_dir` in local config
 4. repo-local `profiles/`
+
+Agent application artifacts use a separate local path because they are project outputs, not profile configuration. Precedence for agent artifact roots is:
+
+1. `--output-dir` on agent commands
+2. `AIPLANE_AGENT_ARTIFACTS_DIR`
+3. `agent_artifacts_dir` in local config
+4. `.aiplane/agents`
+
+## Local Credentials
+
+Credentials are local machine/user state, not profile state. Profiles and model aliases should reference credential names such as `openai.personal` or `azure_openai.business_a`; the actual keys live in an ignored credentials file.
+
+Precedence for the credentials file is:
+
+1. `--path` on `aiplane credentials` commands
+2. `AIPLANE_CREDENTIALS`
+3. `credentials_path` in local config
+4. `.aiplane/credentials.yaml`
+
+Example ignored credentials file:
+
+```yaml
+providers:
+  openai:
+    accounts:
+      personal:
+        api_key_env: OPENAI_PERSONAL_API_KEY
+        endpoint: https://api.openai.com/v1
+      business_a:
+        api_key_env: OPENAI_BUSINESS_A_API_KEY
+        endpoint: https://api.openai.com/v1
+  custom_openai_compatible:
+    accounts:
+      lab_gateway:
+        api_key_env: AIPLANE_LAB_LLM_KEY
+        endpoint: https://llm-gateway.example.com/v1
+```
+
+`api_key_env` is preferred because target tools such as Continue and Aider can read environment variables without `aiplane` printing raw secrets. For internal discovery/checks, `aiplane` can also read an `api_key` from the ignored credentials file, but `credentials show` redacts it.
+
+Inspect configured refs without exposing secrets. If no credentials file exists yet, `credentials list` returns an empty list without printing the missing path; `credentials show` still errors for a ref that is not configured:
+
+```bash
+aiplane credentials list
+aiplane credentials show openai.personal
+```
+
+Use provider connection tests to verify that a selected endpoint and credential can make a small provider-specific API call. The command reports whether the credential worked, the method used, and item counts, but it does not print the key or token:
+
+```bash
+aiplane providers test openai --credential-ref openai.personal
+aiplane providers test azure_openai --credential-ref azure_openai.business_a
+aiplane providers test elevenlabs
+```
+
+Provider overrides can then refer to credentials without embedding secret values. Keep account-specific endpoint and credential references in ignored local config, not in the shipped profile template.
 
 ## Profile Templates
 
@@ -185,14 +275,22 @@ Customize files under `profiles/my-local/`. Do not edit `profile-templates/` for
 local machine or team-specific settings unless you intentionally want to change
 the shipped defaults.
 
-Use `--overwrite` only when you want to replace an existing profile with a fresh
-copy of the template:
+Use `profiles repair` when an editable profile exists but one or more template
+files are missing. It copies only missing files by default and preserves existing
+local files unless `--overwrite` is passed:
+
+```bash
+aiplane profiles repair local-dev --file models.yaml
+aiplane profiles repair local-dev --dry-run
+```
+
+Use `--overwrite` only when you want to replace an existing profile or selected
+profile file with a fresh copy of the template:
 
 ```bash
 aiplane profiles create my-local --template local-dev --overwrite
+aiplane profiles repair local-dev --file models.yaml --overwrite
 ```
-
-
 
 ### Default Profile
 

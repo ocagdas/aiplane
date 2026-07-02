@@ -37,6 +37,9 @@ Multimodal categories:
 
 - `vision_image_understanding`
 - `image_generation`
+- `text_to_speech`
+- `speech_to_text`
+- `video_generation`
 - `audio`
 - `video`
 
@@ -83,17 +86,31 @@ licensing reasons, or simply not wanted in automatic planning.
 ## Recommendation Sorting
 
 `models list` filters and displays catalog rows. It also ranks them with
-`--sort-by name|avg|role|benchmark` and trims the output with `--limit`.
+`--sort-by name|avg|role|benchmark|likes|downloads|popularity` and trims the output with `--limit`.
 
 Without `--role`, `--sort-by avg` sorts by overall `capability_avg_score` from
 highest to lowest. With one or more `--role` flags, `--sort-by role` sorts by
 the role-relevant capability score first, then by overall average score.
 
+Rows include `min_ram_gb`, `recommended_ram_gb`, `min_vram_gb`, `recommended_vram_gb`,
+`resource_estimate_source`, `gpu_vendor_requirement`, and `accelerator_api_requirements`
+when that metadata exists or can be estimated. RAM/VRAM fields are profile/catalog
+metadata, not a live benchmark. For discovered entries, aiplane currently estimates
+requirements from parsed model size and role unless the profile entry has explicit
+values; `resource_estimate_source` shows whether the row is `configured` or a
+`catalog_heuristic:parameter_size_and_role` estimate.
+
 ```bash
 aiplane models list --runtime ollama --enabled-only --sort-by avg --limit 3
 aiplane models list --runtime ollama --role chat --enabled-only --sort-by role --limit 3
-aiplane models list --runtime ollama --role chat --role autocomplete --enabled-only --sort-by role --limit 3
+aiplane models list --runtime ollama --role chat --sort-by benchmark --limit 3 --ram-gb 64 --vram-gb 24
+aiplane models list --runtime vllm --gpu-vendor nvidia --accelerator-api cuda --ram-gb 64 --vram-gb 24
 ```
+
+GPU vendor/API filtering uses explicit model metadata such as `required_gpu_vendor`
+or `required_accelerator_apis`. Most text model catalogs do not publish portable
+vendor requirements, so unspecified entries are treated as `generic` rather than guessed
+from the model name.
 
 For `--role chat`, the role score is based on `general_chat`, `reasoning`, and
 `tool_use`. For multiple roles, aiplane averages each requested role's mapped
@@ -130,6 +147,6 @@ aiplane models list --runtime ollama --role chat --role autocomplete --enabled-o
 aiplane models list --capability code_completion>=3 --sort-by avg
 aiplane models disable some-model
 aiplane models enable some-model
-aiplane models show qwen-coder-32b
+aiplane models show MODEL_ALIAS
 aiplane hardware recommend
 ```

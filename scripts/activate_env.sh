@@ -33,4 +33,4 @@ case "$MODE" in
     ;;
 esac
 
-aiplane profiles list >/dev/null && echo "Activated $MODE environment; aiplane is available."
+aiplane profiles bootstrap-local --no-discovery >/dev/null && echo "Activated $MODE environment; aiplane is available."

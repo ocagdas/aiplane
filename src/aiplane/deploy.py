@@ -25,17 +25,19 @@ class DeployManager:
         rows = []
         for name, target in targets.items():
             if isinstance(target, dict):
-                rows.append({
-                    "name": name,
-                    "type": target.get("type"),
-                    "control_cli": target.get("control_cli"),
-                    "resource_group": target.get("resource_group"),
-                    "region": target.get("region"),
-                    "cluster": target.get("cluster"),
-                    "vm": target.get("name"),
-                    "size": target.get("size"),
-                    "namespace": target.get("namespace"),
-                })
+                rows.append(
+                    {
+                        "name": name,
+                        "type": target.get("type"),
+                        "control_cli": target.get("control_cli"),
+                        "resource_group": target.get("resource_group"),
+                        "region": target.get("region"),
+                        "cluster": target.get("cluster"),
+                        "vm": target.get("name"),
+                        "size": target.get("size"),
+                        "namespace": target.get("namespace"),
+                    }
+                )
         return rows
 
     def show(self, name: str | None = None) -> dict[str, Any]:
@@ -102,7 +104,13 @@ class DeployManager:
         checks: list[dict[str, Any]] = []
         for tool in plan["required_tools"]:
             path = shutil.which(tool)
-            checks.append({"name": f"tool:{tool}", "ok": path is not None, "detail": path or "not found on PATH"})
+            checks.append(
+                {
+                    "name": f"tool:{tool}",
+                    "ok": path is not None,
+                    "detail": path or "not found on PATH",
+                }
+            )
 
         if shutil.which("az"):
             checks.append(_run_check("az:account", ["az", "account", "show", "--output", "json"]))
@@ -112,15 +120,80 @@ class DeployManager:
             region = str(target.get("region") or "")
             size = str(target.get("size") or "")
             if resource_group:
-                checks.append(_run_check("az:group-show", ["az", "group", "show", "--name", resource_group, "--output", "json"]))
+                checks.append(
+                    _run_check(
+                        "az:group-show",
+                        [
+                            "az",
+                            "group",
+                            "show",
+                            "--name",
+                            resource_group,
+                            "--output",
+                            "json",
+                        ],
+                    )
+                )
             if resource_group and cluster:
-                checks.append(_run_check("az:aks-show", ["az", "aks", "show", "--resource-group", resource_group, "--name", cluster, "--output", "json"]))
+                checks.append(
+                    _run_check(
+                        "az:aks-show",
+                        [
+                            "az",
+                            "aks",
+                            "show",
+                            "--resource-group",
+                            resource_group,
+                            "--name",
+                            cluster,
+                            "--output",
+                            "json",
+                        ],
+                    )
+                )
             if region and size:
-                checks.append(_run_check("az:vm-sku", ["az", "vm", "list-skus", "--location", region, "--size", size, "--all", "--output", "json"]))
+                checks.append(
+                    _run_check(
+                        "az:vm-sku",
+                        [
+                            "az",
+                            "vm",
+                            "list-skus",
+                            "--location",
+                            region,
+                            "--size",
+                            size,
+                            "--all",
+                            "--output",
+                            "json",
+                        ],
+                    )
+                )
             if resource_group and vm_name:
-                checks.append(_run_check("az:vm-show", ["az", "vm", "show", "--resource-group", resource_group, "--name", vm_name, "--output", "json"]))
+                checks.append(
+                    _run_check(
+                        "az:vm-show",
+                        [
+                            "az",
+                            "vm",
+                            "show",
+                            "--resource-group",
+                            resource_group,
+                            "--name",
+                            vm_name,
+                            "--output",
+                            "json",
+                        ],
+                    )
+                )
         else:
-            checks.append({"name": "az:account", "ok": False, "detail": "az CLI is required for the first Azure target"})
+            checks.append(
+                {
+                    "name": "az:account",
+                    "ok": False,
+                    "detail": "az CLI is required for the first Azure target",
+                }
+            )
         return {"target": target_name, "checks": checks}
 
     def apply(self, name: str | None = None, yes: bool = False) -> dict[str, Any]:
@@ -136,13 +209,15 @@ class DeployManager:
         results = []
         for step in apply_steps:
             completed = subprocess.run(step.command, text=True, capture_output=True, check=False)
-            results.append({
-                "name": step.name,
-                "command": step.command,
-                "returncode": completed.returncode,
-                "stdout": completed.stdout[-2000:],
-                "stderr": completed.stderr[-2000:],
-            })
+            results.append(
+                {
+                    "name": step.name,
+                    "command": step.command,
+                    "returncode": completed.returncode,
+                    "stdout": completed.stdout[-2000:],
+                    "stderr": completed.stderr[-2000:],
+                }
+            )
             if completed.returncode != 0:
                 break
         return {"target": target_name, "results": results}
@@ -170,28 +245,88 @@ def _azure_vm_steps(target: dict[str, Any]) -> list[CommandStep]:
     size = str(target.get("size") or "")
     admin_user = str(target.get("admin_user") or "azureuser")
     ssh_key = str(target.get("ssh_key") or "~/.ssh/id_rsa.pub")
-    public_ip = bool((target.get("network") or {}).get("public_ip", False)) if isinstance(target.get("network"), dict) else False
+    public_ip = (
+        bool((target.get("network") or {}).get("public_ip", False))
+        if isinstance(target.get("network"), dict)
+        else False
+    )
     create = [
-        "az", "vm", "create",
-        "--resource-group", resource_group,
-        "--name", name,
-        "--image", image,
-        "--size", size,
-        "--admin-username", admin_user,
-        "--ssh-key-values", ssh_key,
+        "az",
+        "vm",
+        "create",
+        "--resource-group",
+        resource_group,
+        "--name",
+        name,
+        "--image",
+        image,
+        "--size",
+        size,
+        "--admin-username",
+        admin_user,
+        "--ssh-key-values",
+        ssh_key,
     ]
     if not public_ip:
         create.extend(["--public-ip-address", ""])
     steps = [
         CommandStep("check Azure login", ["az", "account", "show", "--output", "json"]),
-        CommandStep("create or confirm resource group", ["az", "group", "create", "--name", resource_group, "--location", region], mutates=True),
-        CommandStep("check VM SKU availability", ["az", "vm", "list-skus", "--location", region, "--size", size, "--all", "--output", "table"]),
+        CommandStep(
+            "create or confirm resource group",
+            ["az", "group", "create", "--name", resource_group, "--location", region],
+            mutates=True,
+        ),
+        CommandStep(
+            "check VM SKU availability",
+            [
+                "az",
+                "vm",
+                "list-skus",
+                "--location",
+                region,
+                "--size",
+                size,
+                "--all",
+                "--output",
+                "table",
+            ],
+        ),
         CommandStep("create VM", create, mutates=True),
-        CommandStep("show VM addresses", ["az", "vm", "list-ip-addresses", "--resource-group", resource_group, "--name", name, "--output", "table"]),
+        CommandStep(
+            "show VM addresses",
+            [
+                "az",
+                "vm",
+                "list-ip-addresses",
+                "--resource-group",
+                resource_group,
+                "--name",
+                name,
+                "--output",
+                "table",
+            ],
+        ),
         CommandStep("ssh to VM", ["ssh", f"{admin_user}@<vm-ip>"]),
     ]
     if public_ip:
-        steps.insert(4, CommandStep("open SSH port", ["az", "vm", "open-port", "--resource-group", resource_group, "--name", name, "--port", "22"], mutates=True))
+        steps.insert(
+            4,
+            CommandStep(
+                "open SSH port",
+                [
+                    "az",
+                    "vm",
+                    "open-port",
+                    "--resource-group",
+                    resource_group,
+                    "--name",
+                    name,
+                    "--port",
+                    "22",
+                ],
+                mutates=True,
+            ),
+        )
     return steps
 
 
@@ -201,10 +336,40 @@ def _azure_aks_steps(target: dict[str, Any]) -> list[CommandStep]:
     namespace = str(target.get("namespace") or "default")
     steps = [
         CommandStep("check Azure login", ["az", "account", "show", "--output", "json"]),
-        CommandStep("check AKS cluster", ["az", "aks", "show", "--resource-group", resource_group, "--name", cluster, "--output", "json"]),
-        CommandStep("load AKS credentials", ["az", "aks", "get-credentials", "--resource-group", resource_group, "--name", cluster, "--overwrite-existing"], mutates=True),
+        CommandStep(
+            "check AKS cluster",
+            [
+                "az",
+                "aks",
+                "show",
+                "--resource-group",
+                resource_group,
+                "--name",
+                cluster,
+                "--output",
+                "json",
+            ],
+        ),
+        CommandStep(
+            "load AKS credentials",
+            [
+                "az",
+                "aks",
+                "get-credentials",
+                "--resource-group",
+                resource_group,
+                "--name",
+                cluster,
+                "--overwrite-existing",
+            ],
+            mutates=True,
+        ),
         CommandStep("check Kubernetes nodes", ["kubectl", "get", "nodes", "-o", "wide"]),
-        CommandStep("create namespace", ["kubectl", "create", "namespace", namespace], mutates=True),
+        CommandStep(
+            "create namespace",
+            ["kubectl", "create", "namespace", namespace],
+            mutates=True,
+        ),
     ]
     return steps
 
