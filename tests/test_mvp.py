@@ -1788,8 +1788,10 @@ class MvpTests(unittest.TestCase):
         self.assertEqual(code, 0)
         payload = json.loads(stdout.getvalue())
         self.assertEqual(payload["changes"]["would_import"], 1)
-        self.assertGreaterEqual(payload["results"]["ollama"]["model_changes_count"], 1)
-        self.assertNotIn("model_changes", payload["results"]["ollama"])
+        self.assertNotIn("results", payload)
+        self.assertEqual(payload["provider_summary"][0]["provider"], "ollama")
+        self.assertGreaterEqual(payload["provider_summary"][0]["model_changes_count"], 1)
+        self.assertEqual(payload["provider_summary"][0]["changes"]["would_import"], 1)
 
     def test_models_refresh_cli_previews_with_mocked_provider(self) -> None:
         discovered = ProviderModelsResult("ollama", "provider_api", ["new-model:1b"], "test discovery")
@@ -3371,6 +3373,34 @@ class MvpTests(unittest.TestCase):
         self.assertEqual(result["plan"]["tool"], "continue")
         self.assertTrue(result["actions"])
         self.assertTrue(all(action["status"] in {"planned", "ok"} for action in result["actions"]))
+
+    def test_integrations_setup_dry_run_installs_missing_ollama_before_start_and_pull(self) -> None:
+        profile = load_profile("local-dev", Path.cwd())
+        with (
+            patch("aiplane.integrations.shutil.which", return_value=None),
+            patch(
+                "aiplane.integrations.RuntimeCatalog.runtime_available",
+                return_value={"available": False, "reason": "endpoint down"},
+            ),
+            patch.object(
+                IntegrationManager,
+                "_model_presence",
+                return_value={"available": False, "reason": "model is not pulled", "provider": "ollama"},
+            ),
+        ):
+            result = IntegrationManager(profile).setup(
+                "continue",
+                chat="local-chat-small",
+                autocomplete="local-chat-small",
+                embedding="local-chat-small",
+                dry_run=True,
+            )
+        actions = [action["action"] for action in result["actions"]]
+        self.assertEqual(actions.count("install"), 1)
+        self.assertEqual(actions.count("start"), 1)
+        self.assertEqual(actions.count("pull"), 1)
+        self.assertLess(actions.index("install"), actions.index("start"))
+        self.assertLess(actions.index("start"), actions.index("pull"))
 
     def test_integrations_setup_requires_yes_when_not_dry_run(self) -> None:
         profile = load_profile("local-dev", Path.cwd())

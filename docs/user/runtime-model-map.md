@@ -130,16 +130,15 @@ aiplane models clear-cache --provider huggingface --keep-curated --dry-run
 aiplane models refresh --provider huggingface --limit 10 --dry-run --verbose
 ```
 
-The refresh result includes `results` grouped by model provider. Provider
-results show `source_models_returned`, `profile_models_before_refresh`,
-`profile_curated_models_before_refresh`,
-`profile_refresh_imported_models_before_refresh`,
-`source_models_already_profiled`, `source_models_to_import`,
-`source_models_to_update`, `source_contacted`, `source_discovery_method`,
-`source_discovery_reason`, and `model_changes_count`. Per-model `model_changes`
-rows are hidden by default and shown with `--verbose`; those rows use
-`model.id`/`model.source` for the model source and `runtime_endpoint` for the
-configured runtime endpoint.
+The default CLI refresh result omits the full provider `results` map and prints
+compact provider-level counts under `provider_summary`. Add `--verbose` when you
+need the full `results` map, including `source_models_returned`,
+`profile_models_before_refresh`, `profile_curated_models_before_refresh`,
+`profile_refresh_imported_models_before_refresh`, `source_models_already_profiled`,
+`source_models_to_import`, `source_models_to_update`, `source_contacted`,
+`source_discovery_method`, `source_discovery_reason`, `model_changes_count`, and
+per-model `model_changes` rows. Verbose rows use `model.id`/`model.source` for
+the model source and `runtime_endpoint` for the configured runtime endpoint.
 `prune_enabled: true` means a successful authoritative online source response is being used
 as the source of truth for stale discovered ids. Profile-owned model entries in `models.yaml` are preserved by refresh. `models clear-cache` includes profile-owned review entries by default unless `--keep-curated` is used, so discovery state can be cleared and repopulated from providers. Profile-catalog fallback never updates
 or prunes.
@@ -358,4 +357,8 @@ aiplane integrations setup continue --select-best --runtime ollama --dry-run
 aiplane integrations export continue --select-best --runtime ollama
 ```
 
-`plan` explains the selected provider/source, runtime, endpoint, native model id, and role-capability scores. `setup --dry-run` previews runtime helper actions. `setup` can start supported runtimes and pull selected models through the existing provider helper scripts. `export` prints the Continue/Cline/Zed/Aider config payload.
+`plan` explains the selected provider/source, runtime, endpoint, native model id, and role-capability scores. `setup --dry-run` previews runtime helper actions, including helper install where supported, runtime start, and model pull. `setup` can run those supported helper actions through the existing provider helper scripts. `export` prints the Continue/Cline/Zed/Aider config payload.
+
+`runtimes bundle` is different: it renders Dockerfile/Conda/JSON packaging plans and does not install runtimes, start services, or download weights. For a runnable local task, use `integrations setup ... --dry-run` then `integrations setup ...`; for a reusable named model/runtime/machine binding, use `stacks setup`, `stacks prepare --dry-run`, `stacks prepare`, and `stacks start`.
+
+Model aliases live in the selected profile catalog (`models.yaml` for profile-owned entries and `models.discovered.yaml` for discovery cache entries). Each alias maps to a provider/source-native model id in its `model` field. For Ollama, helper commands resolve the alias to that native id and run `ollama pull <model-id>` or `ollama run <model-id>`. The downloaded files remain in Ollama's own store: native Ollama uses its normal local model store, while Docker substrate uses the configured Docker volume mounted at `/root/.ollama` inside the container. `aiplane` records the mapping and delegates storage to the runtime; it does not copy weights into the profile directory.

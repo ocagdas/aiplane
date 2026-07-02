@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import re
 import subprocess
+import shutil
+import sys
 from pathlib import Path
 from dataclasses import dataclass
 from typing import Any
@@ -315,6 +318,8 @@ class IntegrationManager:
         )
         actions = []
         seen_start: set[str] = set()
+        seen_install: set[str] = set()
+        seen_pull: set[str] = set()
         runtime_catalog = RuntimeCatalog(self.profile)
         for role, selected in plan["selection"].items():
             runtime_name = str(selected.get("runtime") or "")
@@ -325,6 +330,18 @@ class IntegrationManager:
                 else {"available": False, "reason": "no runtime selected"}
             )
             if runtime_name and runtime_name not in seen_start and not bool(status.get("available")):
+                if runtime_name not in seen_install and self._runtime_install_needed(runtime_name):
+                    actions.append(
+                        self._setup_action(
+                            runtime_name,
+                            "install",
+                            model_name,
+                            dry_run=dry_run,
+                            execute=not dry_run and yes,
+                            reason="runtime helper install is supported and runtime is not installed",
+                        )
+                    )
+                    seen_install.add(runtime_name)
                 actions.append(
                     self._setup_action(
                         runtime_name,
@@ -338,16 +355,19 @@ class IntegrationManager:
                 seen_start.add(runtime_name)
             model_status = self._model_presence(model_name)
             if not model_status["available"] and runtime_name:
-                actions.append(
-                    self._setup_action(
-                        runtime_name,
-                        "pull",
-                        model_name,
-                        dry_run=dry_run,
-                        execute=not dry_run and yes,
-                        reason=model_status["reason"],
+                pull_key = f"{runtime_name}:{model_name}"
+                if pull_key not in seen_pull:
+                    actions.append(
+                        self._setup_action(
+                            runtime_name,
+                            "pull",
+                            model_name,
+                            dry_run=dry_run,
+                            execute=not dry_run and yes,
+                            reason=model_status["reason"],
+                        )
                     )
-                )
+                    seen_pull.add(pull_key)
             else:
                 actions.append(
                     {
@@ -508,6 +528,11 @@ class IntegrationManager:
             "provider": status.provider,
         }
 
+    def _runtime_install_needed(self, runtime: str) -> bool:
+        if runtime == "ollama":
+            return shutil.which("ollama") is None
+        return False
+
     def _setup_action(
         self,
         runtime: str,
@@ -552,29 +577,67 @@ class IntegrationManager:
             "status": "planned" if dry_run else "pending",
         }
         if execute:
-            completed = subprocess.run(
+            completed = self._run_with_progress(
                 exec_command,
                 cwd=self.profile.workspace,
-                text=True,
-                capture_output=True,
-                check=False,
+                label=f"setup: {action} {runtime} for {model_name}",
             )
             row.update(
                 {
                     "status": "succeeded" if completed.returncode == 0 else "failed",
                     "returncode": completed.returncode,
-                    "stdout": completed.stdout,
-                    "stderr": completed.stderr,
                 }
             )
+            if completed.returncode != 0:
+                row["stdout_tail"] = self._output_tail(completed.stdout)
+                row["stderr_tail"] = self._output_tail(completed.stderr)
         return row
+
+    @staticmethod
+    def _run_with_progress(command: list[str], cwd: Path, label: str) -> subprocess.CompletedProcess[str]:
+        sys.stderr.write(label)
+        sys.stderr.flush()
+        process = subprocess.Popen(
+            command,
+            cwd=cwd,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        while True:
+            try:
+                stdout, stderr = process.communicate(timeout=2)
+                break
+            except subprocess.TimeoutExpired:
+                sys.stderr.write(".")
+                sys.stderr.flush()
+        sys.stderr.write(" done\n" if process.returncode == 0 else " failed\n")
+        sys.stderr.flush()
+        return subprocess.CompletedProcess(command, int(process.returncode or 0), stdout, stderr)
+
+    @staticmethod
+    def _output_tail(value: str, limit: int = 12) -> list[str]:
+        ansi_pattern = re.compile(r"\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
+        cleaned = ansi_pattern.sub("", value or "")
+        cleaned = cleaned.replace("\r", "\n")
+        lines = []
+        for line in cleaned.splitlines():
+            line = "".join(ch for ch in line if ch == "\t" or ord(ch) >= 32).strip()
+            if line:
+                lines.append(line)
+        return lines[-limit:]
 
     def chat_command(self, model_name: str | None = None) -> list[str]:
         model_name = model_name or self._default_model_name("chat_model", "self_managed_model", "code_model")
         model = self.catalog.get(model_name)
         provider_name = str(model.get("provider"))
         if provider_name != "ollama":
-            raise ValueError("chat wrapper currently supports local Ollama models only")
+            runtime = str(model.get("preferred_runtime") or provider_name or "unknown")
+            raise ValueError(
+                f"chat wrapper currently supports local Ollama provider aliases only; "
+                f"model {model_name!r} uses provider {provider_name!r} and runtime {runtime!r}. "
+                "Select an alias with `aiplane models list --provider ollama --role chat --name-only`."
+            )
         return ["ollama", "run", str(model.get("model"))]
 
     def run_chat(self, model_name: str | None = None, dry_run: bool = False) -> str:

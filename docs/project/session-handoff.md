@@ -37,7 +37,7 @@ High-level implemented areas:
 - provider/model catalogs including NVIDIA Hugging Face-scoped open model discovery, structural shipped profile config, ignored discovery cache review, direct profile-owned model add/clone, runtime/source mapping, local model defaults, and benchmark smoke checks;
 - hardware discovery, machine inventory, Azure SKU discovery/import, and stack planning;
 - tool doctors/plans/exports for infrastructure, quality, and automation tools;
-- integration exports for Continue, Cline, Zed, Aider, OpenAI-compatible clients, and MCP client snippets;
+- integration role inspection, setup, and exports for Continue, Cline, Zed, Aider, OpenAI-compatible clients, and MCP client snippets, with setup planning supported helper install/start/pull actions;
 - starter agent app planning/export;
 - MCP stdio server with read tools, provider ownership/status grouping, and narrow audited writes;
 - policy, approvals, secret redaction, and audit foundations.

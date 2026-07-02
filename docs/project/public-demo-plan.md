@@ -38,6 +38,42 @@ Show that `aiplane` gives a structured path from intent to usable AI environment
 6. Export config for coding tools and MCP-capable clients.
 7. Reproduce the same setup locally, on a remote machine, or against a cloud target.
 
+## Quick Exec Demo Path
+
+Use this short command path when you want a compact local execution demo with the default `local-dev` profile. It uses an Ollama-provider alias for the native chat wrapper; `openai-compatible` is only for HTTP clients that speak OpenAI-style `/v1` APIs, not for the native `aiplane chat` path.
+
+```bash
+# Install and validate the CLI/profile.
+scripts/setup_env.sh --mode conda --conda-env aiplane --action install --editable
+conda activate aiplane
+aiplane profiles validate local-dev
+aiplane environment doctor --required-only
+
+# Discover Ollama source models and choose an Ollama-native chat alias.
+aiplane models refresh --provider ollama --query chat --dry-run --limit 5
+aiplane models refresh --provider ollama --query chat --limit 10
+aiplane models list --provider ollama --role chat --enabled-only --sort-by role --limit 5
+OLLAMA_CHAT_ALIAS="$(aiplane models list --provider ollama --role chat --enabled-only --sort-by role --limit 1 --name-only)"
+printf 'ollama_chat=%s\n' "$OLLAMA_CHAT_ALIAS"
+
+# Preview and run setup. Setup is the check/prepare step; export remains non-mutating.
+aiplane integrations setup openai-compatible --model "$OLLAMA_CHAT_ALIAS" --dry-run
+aiplane integrations setup openai-compatible --model "$OLLAMA_CHAT_ALIAS"
+
+# Native interactive chat through Ollama.
+aiplane chat --model "$OLLAMA_CHAT_ALIAS" --dry-run
+aiplane chat --model "$OLLAMA_CHAT_ALIAS"
+
+# One-shot model tasks from the CLI.
+aiplane code write --model "$OLLAMA_CHAT_ALIAS" --task "write a Python function that validates an email address" --dry-run
+aiplane code analyze --model "$OLLAMA_CHAT_ALIAS" src/aiplane/cli.py --dry-run
+
+# Continue config is a separate export step.
+aiplane integrations export continue --chat "$OLLAMA_CHAT_ALIAS"
+```
+
+If setup appears to be doing a real install/start/pull, it now reports per-step progress to stderr. The native chat wrapper requires an Ollama-provider alias because it delegates to `ollama run <model-id>`.
+
 Key points to say explicitly:
 
 - `aiplane` is a control plane, not another agent or runtime.
@@ -143,7 +179,7 @@ aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo 
 aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider ollama --query code --limit 10
 aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider ollama --query embed --limit 10
 aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --group-by runtime --limit 10
-CHAT_ALIAS="$(aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --runtime ollama --role chat --enabled-only --sort-by role --limit 1 --name-only)"
+CHAT_ALIAS="$(aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --provider ollama --role chat --enabled-only --sort-by role --limit 1 --name-only)"
 AUTOCOMPLETE_ALIAS="$(aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --runtime ollama --role autocomplete --enabled-only --sort-by role --limit 1 --name-only)"
 EMBEDDING_ALIAS="$(aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --runtime ollama --role embedding --enabled-only --sort-by role --limit 1 --name-only)"
 aiplane --profiles-dir /tmp/aiplane-demo-profiles models add --profile demo local_chat --alias "$CHAT_ALIAS" --role chat --runtime ollama
@@ -204,37 +240,41 @@ Recording note: show the redacted `credentials list/show` output, not the editor
 
 ### 1:30-2:00 - Runtime Setup, Pull, And Chat
 
-Show native and Docker runtime options first as dry-runs:
+Use the integration setup flow as the practical task-level bundle. It reuses the Continue plan, checks the selected runtime/model state, and previews supported install/start/pull helper actions before doing anything live:
+
+```bash
+aiplane --profiles-dir /tmp/aiplane-demo-profiles integrations setup continue --profile demo --chat "$CHAT_ALIAS" --autocomplete "$AUTOCOMPLETE_ALIAS" --embedding "$EMBEDDING_ALIAS" --dry-run
+# Run without --dry-run only on a prepared recording machine.
+aiplane --profiles-dir /tmp/aiplane-demo-profiles integrations setup continue --profile demo --chat "$CHAT_ALIAS" --autocomplete "$AUTOCOMPLETE_ALIAS" --embedding "$EMBEDDING_ALIAS"
+aiplane runtimes status ollama
+
+# Confirm the alias is suitable for interactive local chat, then launch it.
+aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --provider ollama --role chat --enabled-only --name-only --limit 3
+aiplane --profiles-dir /tmp/aiplane-demo-profiles models show --profile demo "$CHAT_ALIAS"
+aiplane --profiles-dir /tmp/aiplane-demo-profiles chat --profile demo --model "$CHAT_ALIAS" --dry-run
+aiplane --profiles-dir /tmp/aiplane-demo-profiles chat --profile demo --model "$CHAT_ALIAS"
+
+# Small one-shot CLI tasks against a model alias.
+aiplane --profiles-dir /tmp/aiplane-demo-profiles code write --profile demo --model "$CHAT_ALIAS" --task "write a Python function that validates an email address" --dry-run
+aiplane --profiles-dir /tmp/aiplane-demo-profiles code analyze --profile demo --model "$CHAT_ALIAS" src/aiplane/cli.py --dry-run
+```
+
+Keep the lower-level runtime commands available as diagnostics or when you want to show native versus Docker explicitly:
 
 ```bash
 aiplane runtimes install ollama --dry-run
-aiplane runtimes install ollama --substrate docker --dry-run
-aiplane runtimes start ollama --substrate docker --dry-run
-```
-
-Then show the chosen path for the recording. Use native if it is already working locally; use Docker if that is the demo focus:
-
-```bash
 aiplane runtimes start ollama --dry-run
 aiplane runtimes pull ollama --model "$CHAT_ALIAS" --dry-run
-aiplane runtimes status ollama
-aiplane --profiles-dir /tmp/aiplane-demo-profiles chat --profile demo --model "$CHAT_ALIAS" --dry-run
-aiplane --profiles-dir /tmp/aiplane-demo-profiles chat --profile demo --model "$CHAT_ALIAS"
-```
-
-If using Docker for the runtime, use:
-
-```bash
+aiplane runtimes install ollama --substrate docker --dry-run
 aiplane runtimes start ollama --substrate docker --dry-run
 aiplane runtimes pull ollama --substrate docker --model "$CHAT_ALIAS" --dry-run
-aiplane runtimes status ollama --substrate docker
 ```
 
 Voiceover:
 
-> Runtimes are separate from model catalogs. Ollama can run natively or inside Docker. In the containerized case, the model is pulled into the runtime container's mounted Ollama store, and clients talk to the exposed endpoint rather than copying model files around.
+> Runtimes are separate from model catalogs. The selected aiplane alias maps to a runtime-native model id, and setup delegates storage to the runtime. Native Ollama uses its normal local model store; Docker Ollama uses the mounted Docker volume at `/root/.ollama` inside the container. aiplane records the alias mapping and endpoint, not a copy of the model weights.
 
-Recording note: `aiplane chat` resolves the model entry and delegates to provider-native chat, currently local Ollama. Only run mutating `start` or `pull` live if the machine is prepared. Otherwise keep this as a dry-run and show `status` from an already-running runtime.
+Recording note: `aiplane chat` resolves the model entry and delegates to provider-native chat, currently local Ollama. Only run mutating setup live if the machine is prepared. Otherwise keep this as a dry-run and show `status` from an already-running runtime.
 
 ### 2:00-2:30 - Continue Config
 
@@ -288,9 +328,26 @@ aiplane --profiles-dir /tmp/aiplane-demo-profiles machines list --profile demo
 aiplane --profiles-dir /tmp/aiplane-demo-profiles stacks setup --profile demo cpu_chat --runtime ollama --model "$CHAT_ALIAS" --machine demo-local-cpu --access same_host --dry-run
 ```
 
+Show the first remote replication path as plain file transfer, not Ansible/Vagrant yet:
+
+```bash
+# On the source machine: copy the profile state, not runtime caches or raw secrets.
+tar -C /tmp/aiplane-demo-profiles -czf /tmp/aiplane-demo-profile.tgz demo
+scp /tmp/aiplane-demo-profile.tgz user@gpu-box-01:/tmp/
+
+# On the remote machine after installing aiplane:
+mkdir -p ~/aiplane-profiles
+tar -C ~/aiplane-profiles -xzf /tmp/aiplane-demo-profile.tgz
+aiplane --profiles-dir ~/aiplane-profiles profiles validate demo
+CHAT_ALIAS="$(aiplane --profiles-dir ~/aiplane-profiles models list --profile demo --provider ollama --role chat --enabled-only --sort-by role --limit 1 --name-only)"
+AUTOCOMPLETE_ALIAS="$(aiplane --profiles-dir ~/aiplane-profiles models list --profile demo --runtime ollama --role autocomplete --enabled-only --sort-by role --limit 1 --name-only)"
+EMBEDDING_ALIAS="$(aiplane --profiles-dir ~/aiplane-profiles models list --profile demo --runtime ollama --role embedding --enabled-only --sort-by role --limit 1 --name-only)"
+aiplane --profiles-dir ~/aiplane-profiles integrations setup continue --profile demo --chat "$CHAT_ALIAS" --autocomplete "$AUTOCOMPLETE_ALIAS" --embedding "$EMBEDDING_ALIAS" --dry-run
+```
+
 Voiceover:
 
-> Profiles and YAML make the setup repeatable. Machine profiles can be exported from one host and imported into another control-plane profile. A stack binds model, runtime, machine, and access policy so a setup can be repeated locally, over SSH, or against a cloud VM.
+> Profiles and YAML make the setup repeatable. Machine profiles can be exported from one host and imported into another control-plane profile. A stack binds model, runtime, machine, and access policy so a setup can be repeated locally, over SSH, or against a cloud VM. For the first remote replication demo, copy the profile directory and rerun validate/setup on the remote host. Do not copy `.aiplane` PID/log/runtime state or local model caches; the remote runtime should install/start/pull its own models from the alias mappings. Credentials stay local as environment variables or ignored credential refs, not raw secrets in the profile bundle.
 
 ### 0:30-1:10 - Grouping, Best Fit, And Custom Scoring Direction
 
@@ -397,13 +454,41 @@ aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo 
 aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider ollama --query chat --limit 10
 aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider ollama --query code --limit 10
 aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider ollama --query embed --limit 10
-aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --runtime ollama --role chat --ram-gb 16 --vram-gb 0 --sort-by role --limit 5
+aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --provider ollama --role chat --ram-gb 16 --vram-gb 0 --sort-by role --limit 5
 aiplane --profiles-dir /tmp/aiplane-demo-profiles integrations plan continue --profile demo --chat "$CHAT_ALIAS" --autocomplete "$AUTOCOMPLETE_ALIAS" --embedding "$EMBEDDING_ALIAS"
 aiplane --profiles-dir /tmp/aiplane-demo-profiles integrations export continue --profile demo --chat "$CHAT_ALIAS" --autocomplete "$AUTOCOMPLETE_ALIAS" --embedding "$EMBEDDING_ALIAS"
 aiplane integrations export vscode-mcp
 aiplane mcp manifest
 aiplane --profiles-dir /tmp/aiplane-demo-profiles machines discover azure --profile demo --region uksouth --workload inference_small --runtime ollama --limit 5
 ```
+
+## Quick Local-Dev Exec Checklist
+
+Use this checklist when rehearsing the live execution part of the demo on `local-dev` without the disposable profile flags:
+
+```bash
+# Pick only an Ollama-provider alias for native chat.
+OLLAMA_CHAT_ALIAS="$(aiplane models list --provider ollama --role chat --enabled-only --sort-by role --limit 1 --name-only)"
+printf 'ollama_chat=%s\n' "$OLLAMA_CHAT_ALIAS"
+aiplane models show "$OLLAMA_CHAT_ALIAS"
+
+# Setup checks/prepares runtime + selected model. Use dry-run first.
+aiplane integrations setup openai-compatible --model "$OLLAMA_CHAT_ALIAS" --dry-run
+aiplane integrations setup openai-compatible --model "$OLLAMA_CHAT_ALIAS"
+
+# Ollama-native interactive chat.
+aiplane chat --model "$OLLAMA_CHAT_ALIAS" --dry-run
+aiplane chat --model "$OLLAMA_CHAT_ALIAS"
+
+# CLI task prompts. Keep dry-run for recording unless the runtime is ready and output timing is rehearsed.
+aiplane code write --model "$OLLAMA_CHAT_ALIAS" --task "write a Python function that validates an email address" --dry-run
+aiplane code analyze --model "$OLLAMA_CHAT_ALIAS" src/aiplane/cli.py --dry-run
+
+# Continue export after setup.
+aiplane integrations export continue --chat "$OLLAMA_CHAT_ALIAS"
+```
+
+For this checklist, `openai-compatible` is the generic client protocol used by setup planning for a single model endpoint. The native interactive chat command is still `aiplane chat`, which uses Ollama's native CLI path.
 
 ## What We Are Not Claiming Yet
 

@@ -3293,7 +3293,7 @@ def _main(argv: list[str] | None = None) -> int:
                     progress("done", "", "")
             if reset_cache_result is not None:
                 result["reset_cache"] = reset_cache_result
-            print(_json(result, indent=2))
+            print(_json(_refresh_cli_payload(result, verbose=args.verbose), indent=2))
             return 0
         if args.models_command == "clear-cache":
             print(
@@ -3839,6 +3839,36 @@ def _profile_selected(profile, default_name: str | None = None) -> dict[str, obj
         },
         "repository": profile.repository,
     }
+
+
+def _refresh_cli_payload(result: dict[str, object], verbose: bool) -> dict[str, object]:
+    if verbose or not isinstance(result.get("results"), dict):
+        return result
+    payload = dict(result)
+    results = result.get("results", {})
+    provider_summary = []
+    if isinstance(results, dict):
+        for provider, row in sorted(results.items()):
+            if not isinstance(row, dict):
+                continue
+            provider_summary.append(
+                {
+                    "provider": str(provider),
+                    "status": row.get("status"),
+                    "ownership": row.get("ownership"),
+                    "source_contacted": row.get("source_contacted"),
+                    "source_models_returned": row.get("source_models_returned"),
+                    "source_models_already_profiled": row.get("source_models_already_profiled"),
+                    "source_models_to_import": row.get("source_models_to_import"),
+                    "source_models_to_update": row.get("source_models_to_update"),
+                    "model_changes_count": row.get("model_changes_count"),
+                    "changes": row.get("changes", {}),
+                    "error": row.get("error"),
+                }
+            )
+    payload.pop("results", None)
+    payload["provider_summary"] = provider_summary
+    return payload
 
 
 def _model_filter_args(args) -> dict[str, object]:

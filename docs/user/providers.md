@@ -296,7 +296,7 @@ aiplane models refresh --limit 100 --provider-limit huggingface=500 --provider-l
 aiplane models refresh --provider huggingface --limit 10 --dry-run --verbose
 ```
 
-`--limit` is the default per-provider maximum. Repeat `--provider-limit PROVIDER=COUNT` to override a particular model provider. For example, use a large Hugging Face limit and a smaller/larger provider-specific limit when refreshing all providers. By default refresh prints provider-level counts only; add `--verbose` to include per-model change rows. Refresh output also includes `next_steps` so dry runs and writes show the safe path from discovery, to discovered entries, to reviewed promotion.
+`--limit` is the default per-provider maximum. Repeat `--provider-limit PROVIDER=COUNT` to override a particular model provider. For example, use a large Hugging Face limit and a smaller/larger provider-specific limit when refreshing all providers. By default refresh omits the full provider `results` map and prints compact provider-level counts under `provider_summary`; add `--verbose` to include the full provider results and per-model change rows. Refresh output also includes `next_steps` so dry runs and writes show the safe path from discovery, to discovered entries, to reviewed promotion.
 
 When provider metadata includes popularity fields, `models list` can filter and rank by them after normal provider/source, role, runtime, capability, and hardware filters:
 
@@ -383,8 +383,9 @@ Important output fields:
 - `source_contacted`: whether an online/source API was contacted successfully. `false` means the result came from fallback/profile data; see `source_discovery_reason` for the error or missing-adapter reason.
 - `source_discovery_method`: where the result came from, for example `source_api` or `profile_catalog` fallback.
 - `prune_enabled`: whether missing source ids are allowed to remove discovered entries. Pruning is enabled only after a successful authoritative online/source response. Query results, limit-truncated source windows, and profile-catalog fallback do not prune.
+- `provider_summary`: compact default CLI list of provider status/counts. The full provider `results` map is omitted unless `--verbose` is used.
 - `model_changes_count`: number of per-model change rows hidden from the default summary.
-- `model_changes`: shown only with `--verbose`; contains entries that would be imported/imported, would be updated/updated, or would be removed/removed. In verbose rows, `model.id` is the provider-native model id, `model.source` is the model provider, and `runtime_endpoint` is the configured runtime endpoint such as `ollama`, `vllm`, `transformers`, or `llamacpp`.
+- `model_changes`: shown only inside verbose `results`; contains entries that would be imported/imported, would be updated/updated, or would be removed/removed. In verbose rows, `model.id` is the provider-native model id, `model.source` is the model provider, and `runtime_endpoint` is the configured runtime endpoint such as `ollama`, `vllm`, `transformers`, or `llamacpp`.
 - `next_steps`: command-specific guidance for the safe review flow, such as writing a dry-run refresh, promoting one discovered entry, validating the profile, or previewing cache cleanup.
 
 New entries are enabled by default. Use `--disable-new` to import them disabled.
