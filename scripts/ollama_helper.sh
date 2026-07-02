@@ -332,20 +332,15 @@ configured_model_ids() {
 from pathlib import Path
 import sys
 from aiplane.config import load_profile
-from aiplane.model_catalog import ModelCatalog
+from aiplane.model_catalog import ModelCatalog, model_source
+from aiplane.runtime_catalog import RuntimeCatalog
 
 
-def ollama_pull_id(model):
+def ollama_pull_id(model, runtime_catalog):
     provider = str(model.get("provider") or "")
-    source = str(model.get("source") or provider)
+    source = model_source(model)
     model_id = str(model.get("model") or "")
-    supported = [
-        str(value)
-        for value in model.get("supported_runtimes") or model.get("suitable_runtimes") or []
-    ]
-    preferred = str(model.get("preferred_runtime") or "")
-    if preferred and preferred not in supported:
-        supported.insert(0, preferred)
+    supported = runtime_catalog.compatible_runtimes_for_entry(model, include_gui=True)
     if provider == "ollama":
         return model_id
     if source == "huggingface_gguf" and "ollama" in supported:
@@ -359,10 +354,11 @@ def ollama_pull_id(model):
 
 
 profile = load_profile(sys.argv[1], Path.cwd())
+runtime_catalog = RuntimeCatalog(profile)
 for name, model in ModelCatalog(profile).models().items():
     if not model.get("enabled", True):
         continue
-    model_id = ollama_pull_id(model)
+    model_id = ollama_pull_id(model, runtime_catalog)
     if model_id:
         print(f"{name}	{model_id}")
 PYMODEL

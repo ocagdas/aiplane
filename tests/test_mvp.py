@@ -5225,7 +5225,14 @@ exit 0
     model: Example/Chat-GGUF
     enabled: true
     supported_runtimes: [llamacpp, ollama]
-    preferred_runtime: ollama
+    preferred_runtime: llamacpp
+    roles: [chat]
+  hf_gguf_discovered_without_runtime_copy:
+    provider: llamacpp
+    source: huggingface_gguf
+    model: Example/Discovered-GGUF
+    enabled: true
+    preferred_runtime: llamacpp
     roles: [chat]
 """,
                 encoding="utf-8",
@@ -5270,6 +5277,25 @@ exit 0
                 capture_output=True,
                 check=False,
             )
+            ollama_discovered = subprocess.run(
+                [
+                    "scripts/provider_helper.sh",
+                    "--provider",
+                    "ollama",
+                    "--action",
+                    "pull",
+                    "--profile",
+                    "local-dev",
+                    "--model",
+                    "hf_gguf_discovered_without_runtime_copy",
+                    "--dry-run",
+                ],
+                cwd=root,
+                env=env,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
             ollama_clear = subprocess.run(
                 [
                     "scripts/provider_helper.sh",
@@ -5291,6 +5317,8 @@ exit 0
         self.assertIn("ollama pull hf.co/Example/Chat-GGUF", ollama_hf.stdout)
         self.assertEqual(ollama_remove.returncode, 0, ollama_remove.stderr)
         self.assertIn("ollama rm hf.co/Example/Chat-GGUF", ollama_remove.stdout)
+        self.assertEqual(ollama_discovered.returncode, 0, ollama_discovered.stderr)
+        self.assertIn("ollama pull hf.co/Example/Discovered-GGUF", ollama_discovered.stdout)
         self.assertEqual(ollama_clear.returncode, 0, ollama_clear.stderr)
         self.assertIn("ollama list | awk", ollama_clear.stdout)
         self.assertIn("xargs -r -n1 ollama rm", ollama_clear.stdout)
