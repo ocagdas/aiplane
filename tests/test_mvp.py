@@ -233,7 +233,9 @@ class MvpTests(unittest.TestCase):
 
             stdout = StringIO()
             with redirect_stdout(stdout):
-                code = cli_main(["--profiles-dir", str(profiles_dir), "profiles", "remove", "local-dev"])
+                code = cli_main(
+                    ["--profiles-dir", str(profiles_dir), "profiles", "remove", "local-dev"]
+                )
 
             self.assertEqual(code, 0)
             preview = json.loads(stdout.getvalue())
