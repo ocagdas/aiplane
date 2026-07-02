@@ -120,7 +120,9 @@ class ModelCatalog:
             discovered_key = None
             generated_name_collision = name in generated_models
             if (target_exists or generated_name_collision) and not overwrite:
-                raise ValueError(f"model entry already exists: {name}; use --overwrite after reviewing the existing entry")
+                raise ValueError(
+                    f"model entry already exists: {name}; use --overwrite after reviewing the existing entry"
+                )
             entry = self._build_local_file_entry(
                 model_id=str(model_id),
                 roles=roles,
@@ -138,7 +140,9 @@ class ModelCatalog:
             )
             generated_name_collision = name in generated_models and name != discovered_key
             if (target_exists or generated_name_collision) and not overwrite:
-                raise ValueError(f"model entry already exists: {name}; use --overwrite after reviewing the existing entry")
+                raise ValueError(
+                    f"model entry already exists: {name}; use --overwrite after reviewing the existing entry"
+                )
 
             entry = self._build_model_entry(
                 provider=provider,
@@ -1609,6 +1613,7 @@ def _accelerator_api_requirements(model: dict[str, Any]) -> list[str]:
         if values:
             return [value.lower() for value in values]
     return []
+
 
 def _matches_gpu_vendor_requirement(model: dict[str, Any], available_vendor: str) -> bool:
     available = available_vendor.strip().lower()

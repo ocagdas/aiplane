@@ -226,7 +226,9 @@ class ProviderRegistry:
             raise ValueError("unsupported endpoint family; run providers endpoint-types to see supported API families")
         resolved_catalog_adapter = catalog_adapter or "profile_catalog"
         if resolved_catalog_adapter not in SUPPORTED_CATALOG_ADAPTERS:
-            raise ValueError("unsupported catalog adapter; use one of: " + ", ".join(sorted(SUPPORTED_CATALOG_ADAPTERS)))
+            raise ValueError(
+                "unsupported catalog adapter; use one of: " + ", ".join(sorted(SUPPORTED_CATALOG_ADAPTERS))
+            )
         if auth_method not in {"none", "api_key", "bearer", "oauth2", "custom"}:
             raise ValueError("provider auth method must be none, api_key, bearer, oauth2, or custom")
         if auth_method != "none":
@@ -278,9 +280,7 @@ class ProviderRegistry:
     def update_defaults(self) -> dict[str, Any]:
         path = self.profile.root / DEFAULT_MODEL_PROVIDERS_FILE
         existing = (
-            _provider_mapping(parse_yaml(path.read_text(encoding="utf-8")), origin="default")
-            if path.exists()
-            else {}
+            _provider_mapping(parse_yaml(path.read_text(encoding="utf-8")), origin="default") if path.exists() else {}
         )
         providers = self.default_model_providers()
         preserved_enabled = []
@@ -354,7 +354,10 @@ class ProviderRegistry:
     def default_model_providers(self) -> dict[str, dict[str, Any]]:
         from .runtime_catalog import SOURCE_DEFINITIONS
 
-        return {name: {**value, "enabled": bool(value.get("enabled", True)), "origin": "default"} for name, value in SOURCE_DEFINITIONS.items()}
+        return {
+            name: {**value, "enabled": bool(value.get("enabled", True)), "origin": "default"}
+            for name, value in SOURCE_DEFINITIONS.items()
+        }
 
     def _default_source_provider_config(self) -> dict[str, Any]:
         path = self.profile.root / DEFAULT_MODEL_PROVIDERS_FILE
@@ -517,7 +520,12 @@ class ProviderRegistry:
 
             endpoint_family = str(provider_config.get("endpoint_family") or "")
             protocol = str(provider_config.get("protocol") or providers.get(name, {}).get("protocol") or "")
-            if name == "openai" or endpoint_family in {"openai", "custom_openai_compatible"} or "openai_compatible" in protocol or endpoint.endswith("/v1"):
+            if (
+                name == "openai"
+                or endpoint_family in {"openai", "custom_openai_compatible"}
+                or "openai_compatible" in protocol
+                or endpoint.endswith("/v1")
+            ):
                 endpoint = endpoint or "https://api.openai.com/v1"
                 url = f"{endpoint}/models"
                 payload = _json_get(
@@ -894,7 +902,6 @@ def _text_get(
     request = Request(url, headers=request_headers)
     with urlopen(request, timeout=timeout) as response:
         return response.read().decode("utf-8", errors="replace")
-
 
 
 def _provider_ownership(provider: dict[str, Any]) -> str:

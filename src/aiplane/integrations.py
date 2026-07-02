@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import os
 import re
+import select
 import subprocess
 import shutil
 import sys
+import time
 from pathlib import Path
 from dataclasses import dataclass
 from typing import Any
@@ -577,10 +580,13 @@ class IntegrationManager:
             "status": "planned" if dry_run else "pending",
         }
         if execute:
+            env = os.environ.copy()
+            env["AIPLANE_PROFILES_DIR"] = str(self.profile.root.parent)
             completed = self._run_with_progress(
                 exec_command,
                 cwd=self.profile.workspace,
                 label=f"setup: {action} {runtime} for {model_name}",
+                env=env,
             )
             row.update(
                 {
@@ -594,26 +600,55 @@ class IntegrationManager:
         return row
 
     @staticmethod
-    def _run_with_progress(command: list[str], cwd: Path, label: str) -> subprocess.CompletedProcess[str]:
-        sys.stderr.write(label)
+    def _run_with_progress(
+        command: list[str], cwd: Path, label: str, env: dict[str, str] | None = None
+    ) -> subprocess.CompletedProcess[str]:
+        sys.stderr.write(f"{label}\n")
         sys.stderr.flush()
         process = subprocess.Popen(
             command,
             cwd=cwd,
-            text=True,
+            env=env,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
-        while True:
-            try:
-                stdout, stderr = process.communicate(timeout=2)
-                break
-            except subprocess.TimeoutExpired:
-                sys.stderr.write(".")
+        assert process.stdout is not None
+        assert process.stderr is not None
+        buffers: dict[str, bytearray] = {"stdout": bytearray(), "stderr": bytearray()}
+        streams = {
+            process.stdout.fileno(): ("stdout", process.stdout),
+            process.stderr.fileno(): ("stderr", process.stderr),
+        }
+        last_output = time.monotonic()
+        wrote_progress = False
+        while streams:
+            readable, _, _ = select.select(list(streams), [], [], 2)
+            if not readable:
+                if process.poll() is None and time.monotonic() - last_output >= 2:
+                    sys.stderr.write(".")
+                    sys.stderr.flush()
+                    wrote_progress = True
+                continue
+            for fd in readable:
+                name, stream = streams[fd]
+                chunk = os.read(fd, 4096)
+                if not chunk:
+                    stream.close()
+                    streams.pop(fd, None)
+                    continue
+                buffers[name].extend(chunk)
+                sys.stderr.write(chunk.decode(errors="replace"))
                 sys.stderr.flush()
-        sys.stderr.write(" done\n" if process.returncode == 0 else " failed\n")
+                last_output = time.monotonic()
+                wrote_progress = True
+        returncode = process.wait()
+        if wrote_progress:
+            sys.stderr.write("\n")
+        sys.stderr.write(f"{label} {'done' if returncode == 0 else 'failed'}\n")
         sys.stderr.flush()
-        return subprocess.CompletedProcess(command, int(process.returncode or 0), stdout, stderr)
+        stdout = buffers["stdout"].decode(errors="replace")
+        stderr = buffers["stderr"].decode(errors="replace")
+        return subprocess.CompletedProcess(command, int(returncode or 0), stdout, stderr)
 
     @staticmethod
     def _output_tail(value: str, limit: int = 12) -> list[str]:

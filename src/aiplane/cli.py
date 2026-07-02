@@ -3254,9 +3254,7 @@ def _main(argv: list[str] | None = None) -> int:
                         "write": write,
                         "provider": "local_file",
                         "include_curated": True,
-                        "skipped": [
-                            {"name": "local_file", "reason": "local_file has no remote catalog to repopulate"}
-                        ],
+                        "skipped": [{"name": "local_file", "reason": "local_file has no remote catalog to repopulate"}],
                     }
                 else:
                     reset_cache_result = catalog.clear_imported(
@@ -4142,6 +4140,7 @@ def _environment_doctor_text(payload: dict[str, object]) -> str:
         lines.append("next steps:")
         lines.extend(f"- {note}" for note in notes[:3])
     return "\n".join(lines)
+
 
 def _profile_bootstrap_next_steps(profile: str, discovery_requested: bool, dry_run: bool) -> list[str]:
     if dry_run:

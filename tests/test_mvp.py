@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 import shutil
+import sys
 import tempfile
 import threading
 from contextlib import redirect_stderr, redirect_stdout
@@ -2371,9 +2372,7 @@ class MvpTests(unittest.TestCase):
             root = Path(tmp)
             models_config = {
                 "defaults": {"chat_model": "curated_local"},
-                "models": {
-                    "curated_local": {"provider": "local_file", "model": "/models/a.gguf", "enabled": True}
-                },
+                "models": {"curated_local": {"provider": "local_file", "model": "/models/a.gguf", "enabled": True}},
             }
             generated_config = {
                 "models": {
@@ -2485,7 +2484,9 @@ class MvpTests(unittest.TestCase):
                 "orchestrators.yaml": source.orchestrators,
             }.items():
                 (profile_root / name).write_text(agent_config.dump_yaml(data), encoding="utf-8")
-            (profile_root / "models.yaml").write_text(agent_config.dump_yaml({"defaults": {}, "models": {}}), encoding="utf-8")
+            (profile_root / "models.yaml").write_text(
+                agent_config.dump_yaml({"defaults": {}, "models": {}}), encoding="utf-8"
+            )
             stdout = StringIO()
             with redirect_stdout(stdout):
                 code = cli_main(
@@ -3431,6 +3432,74 @@ class MvpTests(unittest.TestCase):
         self.assertNotIn("stdout_tail", action)
         self.assertNotIn("stderr_tail", action)
 
+    def test_integrations_setup_streams_helper_progress_output(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            script = Path(tmp) / "progress.py"
+            script.write_text(
+                "import sys, time\n"
+                "print('+ ollama pull command-r7b')\n"
+                "sys.stdout.flush()\n"
+                "sys.stderr.write('pulling manifest\\r')\n"
+                "sys.stderr.flush()\n"
+                "time.sleep(0.05)\n"
+                "sys.stderr.write('pulling b32d935e114c:   1% 67 MB/5.1 GB 3.3 MB/s 24m53s\\r')\n"
+                "sys.stderr.flush()\n",
+                encoding="utf-8",
+            )
+            stderr = StringIO()
+            with redirect_stderr(stderr):
+                completed = IntegrationManager._run_with_progress(
+                    [sys.executable, str(script)],
+                    cwd=Path.cwd(),
+                    label="setup: pull ollama for local_chat",
+                )
+
+        self.assertEqual(completed.returncode, 0)
+        self.assertIn("+ ollama pull command-r7b", completed.stdout)
+        self.assertIn("pulling b32d935e114c", completed.stderr)
+        progress_output = stderr.getvalue()
+        self.assertIn("setup: pull ollama for local_chat", progress_output)
+        self.assertIn("+ ollama pull command-r7b", progress_output)
+        self.assertIn("67 MB/5.1 GB", progress_output)
+
+    def test_integrations_setup_passes_profiles_dir_to_helper(self) -> None:
+        source = load_profile("local-dev", Path.cwd())
+        with tempfile.TemporaryDirectory() as tmp:
+            profile_root = Path(tmp) / "profiles" / "custom"
+            profile_root.mkdir(parents=True)
+            profile = Profile(
+                "custom",
+                profile_root,
+                Path.cwd(),
+                source.hardware,
+                source.backends,
+                source.repository,
+                source.tools,
+                source.approvals,
+                source.environment,
+                source.models,
+                source.targets,
+                source.orchestrators,
+            )
+            captured = {}
+
+            def fake_run(command, cwd, label, env=None):
+                captured["env"] = env
+                return subprocess.CompletedProcess(command, 0, "", "")
+
+            with patch.object(IntegrationManager, "_run_with_progress", side_effect=fake_run):
+                action = IntegrationManager(profile)._setup_action(
+                    "ollama",
+                    "pull",
+                    "local-chat-small",
+                    dry_run=False,
+                    execute=True,
+                    reason="test pull",
+                )
+
+        self.assertEqual(action["status"], "succeeded")
+        self.assertEqual(captured["env"]["AIPLANE_PROFILES_DIR"], str(profile_root.parent))
+
     def test_integrations_setup_failure_includes_sanitized_output_tail(self) -> None:
         profile = load_profile("local-dev", Path.cwd())
         completed = subprocess.CompletedProcess(
@@ -4111,7 +4180,7 @@ class MvpTests(unittest.TestCase):
     def test_provider_add_cli_rejects_unsupported_api_family(self) -> None:
         stderr = StringIO()
         with redirect_stderr(stderr), self.assertRaises(SystemExit):
-            cli_main(["providers", "add", "bad_gateway", "--endpoint-family", "not_real_api"] )
+            cli_main(["providers", "add", "bad_gateway", "--endpoint-family", "not_real_api"])
         self.assertIn("invalid choice", stderr.getvalue())
 
     def test_provider_enable_disable_cli_updates_user_provider_config(self) -> None:
@@ -4677,7 +4746,7 @@ class MvpTests(unittest.TestCase):
                     "case $- in *u*) nounset=on ;; *) nounset=off ;; esac; "
                     "if set -o | grep -q '^pipefail[[:space:]]*on'; then pipefail=on; else pipefail=off; fi; "
                     "printf 'after-source status=%s errexit=%s nounset=%s pipefail=%s\\n' "
-                    "\"$status\" \"$errexit\" \"$nounset\" \"$pipefail\"; "
+                    '"$status" "$errexit" "$nounset" "$pipefail"; '
                     "exit $status"
                 ),
             ],
@@ -4720,8 +4789,8 @@ class MvpTests(unittest.TestCase):
             check=False,
         )
         self.assertEqual(completed.returncode, 0, completed.stderr)
-        bootstrap = 'python -m aiplane profiles bootstrap-local --no-discovery'
-        doctor = 'python -m aiplane profiles list'
+        bootstrap = "python -m aiplane profiles bootstrap-local --no-discovery"
+        doctor = "python -m aiplane profiles list"
         self.assertIn(bootstrap, completed.stdout)
         self.assertIn(doctor, completed.stdout)
         self.assertLess(completed.stdout.index(bootstrap), completed.stdout.index(doctor))
