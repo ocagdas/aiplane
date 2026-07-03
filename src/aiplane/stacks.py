@@ -15,6 +15,16 @@ from .orchestrators import OrchestratorCatalog
 from .runtime_catalog import RuntimeCatalog
 
 
+FRAMEWORK_EXPORT_ARTIFACTS = {
+    "langgraph": "langgraph",
+    "crewai": "crewai",
+    "autogen": "autogen",
+    "semantic-kernel": "semantic_kernel",
+    "llamaindex-workflows": "llamaindex_workflows",
+    "openhands": "openhands",
+}
+
+
 class StackManager:
     def __init__(self, profile: Profile):
         self.profile = profile
@@ -35,6 +45,9 @@ class StackManager:
                         "endpoint_policy": stack.get("endpoint_policy"),
                         "limits": stack.get("limits", {}),
                         "tools": stack.get("tools", {}),
+                        "roles": stack.get("roles", {}),
+                        "approval_mode": stack.get("approval_mode"),
+                        "audit_label": stack.get("audit_label"),
                     }
                 )
         return sorted(rows, key=lambda row: str(row["name"]))
@@ -52,6 +65,7 @@ class StackManager:
         endpoint_policy: str = "private",
         endpoint: str | None = None,
         orchestrator: str | None = None,
+        roles: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         return self.setup(
             name,
@@ -62,6 +76,7 @@ class StackManager:
             access=access,
             endpoint_policy=endpoint_policy,
             endpoint=endpoint,
+            roles=roles,
             dry_run=False,
             yes=True,
         )
@@ -78,6 +93,9 @@ class StackManager:
         endpoint: str | None = None,
         limits: dict[str, object] | None = None,
         tools: dict[str, object] | None = None,
+        roles: dict[str, str] | None = None,
+        approval_mode: str | None = None,
+        audit_label: str | None = None,
         dry_run: bool = False,
         yes: bool | None = None,
     ) -> dict[str, Any]:
@@ -85,12 +103,23 @@ class StackManager:
             raise ValueError("stack name must be a simple name")
         if orchestrator:
             OrchestratorCatalog(self.profile).show(orchestrator)
-        ModelCatalog(self.profile).get(model)
+        catalog = ModelCatalog(self.profile)
+        catalog.get(model)
         machines = {row["name"] for row in MachineManager(self.profile).list()}
         if machine not in machines:
             raise ValueError(f"unknown machine: {machine}")
         if runtime not in {row["name"] for row in RuntimeCatalog(self.profile).list(include_gui=True)}:
             raise ValueError(f"unknown runtime: {runtime}")
+        normalized_roles = self._normalize_roles(
+            roles or {},
+            primary_model=model,
+            primary_runtime=runtime,
+            endpoint=endpoint,
+            limits=limits or {},
+            tools=tools or {},
+            approval_mode=approval_mode,
+            audit_label=audit_label or name,
+        )
         stack = {
             "orchestrator": orchestrator,
             "runtime": runtime,
@@ -101,6 +130,12 @@ class StackManager:
             "limits": limits or {},
             "tools": tools or {},
         }
+        if normalized_roles:
+            stack["roles"] = normalized_roles
+        if approval_mode:
+            stack["approval_mode"] = approval_mode
+        if audit_label:
+            stack["audit_label"] = audit_label
         if endpoint:
             stack["endpoint"] = endpoint
         payload = {
@@ -109,7 +144,7 @@ class StackManager:
             "path": str(self.profile.root / "hardware.yaml"),
             "stack": stack,
             "notes": [
-                "A stack currently represents one primary orchestrator/runtime/model/machine tuple. Add separate stacks for separate serving targets."
+                "A stack keeps one primary runtime/model/machine tuple and can include optional orchestrator role metadata for framework exports."
             ],
         }
         if dry_run:
@@ -229,6 +264,9 @@ class StackManager:
             "preflight": preflight,
             "limits": stack.get("limits", {}),
             "tools": stack.get("tools", {}),
+            "roles": self._role_plan(stack, endpoint),
+            "approval_mode": stack.get("approval_mode"),
+            "audit_label": stack.get("audit_label"),
             "steps": steps,
             "notes": [
                 "Stack lifecycle execution is same-host/local first; SSH/Azure/AKS stacks currently return plans until remote execution and audit controls are hardened."
@@ -263,6 +301,7 @@ class StackManager:
         for check in plan.get("preflight", {}).get("checks", []):
             if isinstance(check, dict):
                 checks.append(check)
+        checks.extend(self._role_checks(plan.get("roles", {})))
         if plan.get("orchestrator"):
             orch = plan.get("orchestrator_status") or {}
             checks.append(
@@ -340,6 +379,24 @@ class StackManager:
                     "Stack limits and tool policies are pass-through metadata; enforcement belongs to the runtime/orchestrator.",
                 ],
             }
+        if artifact in FRAMEWORK_EXPORT_ARTIFACTS:
+            metadata = self._export_metadata(name, stack, endpoint)
+            target = FRAMEWORK_EXPORT_ARTIFACTS[artifact]
+            return {
+                "name": name,
+                "artifact": artifact,
+                "framework": target,
+                "orchestrator": orchestrator or None,
+                "runtime": runtime,
+                "model": model,
+                "endpoint": endpoint,
+                "metadata": metadata,
+                "content": _framework_starter_config(target, metadata),
+                "notes": [
+                    "Framework export is starter metadata for review; it does not install packages or run agents.",
+                    "Role bindings, limits, tools, approvals, and audit labels are pass-through config for the chosen framework adapter.",
+                ],
+            }
         raise ValueError(f"unknown stack export artifact: {artifact}")
 
     def prepare(self, name: str, dry_run: bool = False) -> dict[str, Any]:
@@ -366,6 +423,9 @@ class StackManager:
             "machine": stack.get("machine"),
             "limits": stack.get("limits", {}),
             "tools": stack.get("tools", {}),
+            "roles": self._role_plan(stack, stack.get("endpoint") or _default_endpoint(runtime)),
+            "approval_mode": stack.get("approval_mode"),
+            "audit_label": stack.get("audit_label"),
             "runtime_status": RuntimeCatalog(self.profile).runtime_available(runtime),
             "orchestrator_status": OrchestratorCatalog(self.profile).doctor(orchestrator) if orchestrator else None,
         }
@@ -465,6 +525,9 @@ class StackManager:
             "endpoint_policy": stack.get("endpoint_policy"),
             "limits": stack.get("limits", {}),
             "tools": stack.get("tools", {}),
+            "roles": self._role_plan(stack, endpoint),
+            "approval_mode": stack.get("approval_mode"),
+            "audit_label": stack.get("audit_label"),
             "environment": {
                 "active": env.get("active"),
                 "config": env.get("modes", {}).get(str(env.get("active")), {}),
@@ -479,6 +542,108 @@ class StackManager:
             },
             "docker_resources": docker_resources,
         }
+
+    def _normalize_roles(
+        self,
+        roles: dict[str, str],
+        primary_model: str,
+        primary_runtime: str,
+        endpoint: str | None,
+        limits: dict[str, object],
+        tools: dict[str, object],
+        approval_mode: str | None,
+        audit_label: str,
+    ) -> dict[str, Any]:
+        if not roles:
+            return {}
+        catalog = ModelCatalog(self.profile)
+        normalized = {}
+        for role, model_alias in sorted(roles.items()):
+            role_name = str(role).strip()
+            if not role_name or "/" in role_name or "\\" in role_name:
+                raise ValueError("role names must be simple names")
+            alias = str(model_alias).strip()
+            if not alias:
+                raise ValueError(f"role {role_name!r} model alias is empty")
+            model_config = catalog.show(alias)
+            role_runtime = model_config.get("runtime") or primary_runtime
+            role_endpoint = endpoint or _default_endpoint(str(role_runtime or primary_runtime))
+            normalized[role_name] = {
+                "model": alias,
+                "provider": model_config.get("provider") or model_config.get("source"),
+                "ownership": model_config.get("ownership"),
+                "runtime": role_runtime,
+                "endpoint": role_endpoint,
+                "approval_mode": approval_mode or "ask",
+                "audit_label": f"{audit_label}.{role_name}",
+                "limits": limits,
+                "tools": tools,
+                "uses_primary_model": alias == primary_model,
+            }
+        return normalized
+
+    def _role_plan(self, stack: dict[str, Any], endpoint: object) -> dict[str, Any]:
+        roles = stack.get("roles", {})
+        if isinstance(roles, dict) and roles:
+            return roles
+        model = str(stack.get("model") or "")
+        runtime = str(stack.get("runtime") or "")
+        model_config = ModelCatalog(self.profile).show(model)
+        return {
+            "primary": {
+                "model": model,
+                "provider": model_config.get("provider") or model_config.get("source"),
+                "ownership": model_config.get("ownership"),
+                "runtime": runtime,
+                "endpoint": str(endpoint or _default_endpoint(runtime)),
+                "approval_mode": stack.get("approval_mode") or "ask",
+                "audit_label": stack.get("audit_label") or "primary",
+                "limits": stack.get("limits", {}),
+                "tools": stack.get("tools", {}),
+                "uses_primary_model": True,
+            }
+        }
+
+    def _role_checks(self, roles: object) -> list[dict[str, Any]]:
+        checks: list[dict[str, Any]] = []
+        role_map = roles if isinstance(roles, dict) else {}
+        catalog = ModelCatalog(self.profile)
+        known_runtimes = {row["name"] for row in RuntimeCatalog(self.profile).list(include_gui=True)}
+        for role, binding in sorted(role_map.items()):
+            if not isinstance(binding, dict):
+                checks.append(
+                    {
+                        "name": f"role_binding:{role}",
+                        "ok": False,
+                        "detail": "role binding must be a mapping",
+                    }
+                )
+                continue
+            model_alias = str(binding.get("model") or "")
+            try:
+                model_config = catalog.show(model_alias)
+                model_ok = True
+                model_detail = model_config.get("model")
+            except Exception as exc:  # noqa: BLE001 - report config health.
+                model_ok = False
+                model_detail = str(exc)
+            checks.append(
+                {
+                    "name": f"role_model:{role}",
+                    "ok": model_ok,
+                    "detail": model_detail,
+                }
+            )
+            runtime = binding.get("runtime")
+            if runtime:
+                checks.append(
+                    {
+                        "name": f"role_runtime:{role}",
+                        "ok": str(runtime) in known_runtimes,
+                        "detail": runtime,
+                    }
+                )
+        return checks
 
     def _lifecycle(self, name: str, action: str, dry_run: bool = False) -> dict[str, Any]:
         stack = self._stack(name)
@@ -647,6 +812,33 @@ class StackManager:
     def _write_config(self) -> None:
         path = self.profile.root / "hardware.yaml"
         path.write_text(dump_yaml(self.config), encoding="utf-8")
+
+
+def _framework_starter_config(framework: str, metadata: dict[str, Any]) -> str:
+    payload = {
+        "generated_by": "aiplane stacks export",
+        "kind": "orchestrator_framework_starter",
+        "framework": framework,
+        "stack": metadata.get("name"),
+        "profile": metadata.get("profile"),
+        "orchestrator": metadata.get("orchestrator") or framework,
+        "primary": {
+            "model": metadata.get("model"),
+            "runtime": metadata.get("runtime"),
+            "endpoint": metadata.get("endpoint"),
+            "machine": metadata.get("machine"),
+        },
+        "roles": metadata.get("roles", {}),
+        "limits": metadata.get("limits", {}),
+        "tools": metadata.get("tools", {}),
+        "approval_mode": metadata.get("approval_mode") or "ask",
+        "audit_label": metadata.get("audit_label") or metadata.get("name"),
+        "notes": [
+            "Review and adapt this starter config to the target framework API.",
+            "aiplane does not run autonomous agent workflows from this export.",
+        ],
+    }
+    return dump_yaml(payload)
 
 
 def _merge_bundle_content(

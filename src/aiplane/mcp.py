@@ -99,6 +99,11 @@ READ_ONLY_TOOLS: list[dict[str, Any]] = [
         "mutates": False,
     },
     {
+        "name": "aiplane.stacks.export",
+        "description": "Export stack IDE, packaging, or orchestrator framework starter artifacts without writing files.",
+        "mutates": False,
+    },
+    {
         "name": "aiplane.integrations.export",
         "description": "Generate IDE/CLI config snippets for a selected model endpoint.",
         "mutates": False,
@@ -304,6 +309,31 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
             "name": {"type": "string"},
         },
         "required": ["name"],
+        "additionalProperties": False,
+    },
+    "aiplane.stacks.export": {
+        "type": "object",
+        "properties": {
+            "profile": {"type": "string"},
+            "artifact": {
+                "type": "string",
+                "enum": [
+                    "continue",
+                    "openai-compatible",
+                    "dockerfile",
+                    "conda-yaml",
+                    "compose",
+                    "langgraph",
+                    "crewai",
+                    "autogen",
+                    "semantic-kernel",
+                    "llamaindex-workflows",
+                    "openhands",
+                ],
+            },
+            "name": {"type": "string"},
+        },
+        "required": ["artifact", "name"],
         "additionalProperties": False,
     },
     "aiplane.integrations.export": {
@@ -586,6 +616,11 @@ class AiplaneMcpServer:
             return StackManager(profile).plan(str(arguments.get("name") or ""))
         if name == "aiplane.stacks.doctor":
             return StackManager(profile).doctor(str(arguments.get("name") or ""))
+        if name == "aiplane.stacks.export":
+            return StackManager(profile).export(
+                str(arguments.get("artifact") or ""),
+                str(arguments.get("name") or ""),
+            )
         if name == "aiplane.integrations.export":
             tool = str(arguments.get("tool") or "")
             model = str(arguments.get("model") or "") or None

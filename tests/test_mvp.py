@@ -1332,6 +1332,20 @@ class MvpTests(unittest.TestCase):
             self.assertEqual(stack_plan["result"]["structuredContent"]["machine"], "azure_h100_test")
             self.assertEqual(stack_plan["result"]["structuredContent"]["orchestrator"], "langgraph")
 
+            stack_export = server.handle_message(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 45,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "aiplane.stacks.export",
+                        "arguments": {"artifact": "langgraph", "name": "code_on_gpu"},
+                    },
+                }
+            )
+            self.assertEqual(stack_export["result"]["structuredContent"]["framework"], "langgraph")
+            self.assertIn("framework: langgraph", stack_export["result"]["structuredContent"]["content"])
+
             stack_doctor = server.handle_message(
                 {
                     "jsonrpc": "2.0",
@@ -6425,12 +6439,22 @@ exit 0
                 machine="local_box",
                 limits={"timeout": "30m", "max_parallel_agents": 3},
                 tools={"shell": "guarded"},
+                roles={"planner": "local-analysis-small", "reviewer": "local-code-large"},
+                approval_mode="ask",
+                audit_label="coding_agents",
             )
             self.assertFalse(created["dry_run"])
             shown = stacks.show("coding_agents")["stack"]
             self.assertEqual(shown["orchestrator"], "langgraph")
             self.assertEqual(shown["limits"]["timeout"], "30m")
             self.assertEqual(shown["tools"]["shell"], "guarded")
+            self.assertEqual(shown["roles"]["planner"]["model"], "local-analysis-small")
+            self.assertEqual(shown["roles"]["planner"]["audit_label"], "coding_agents.planner")
+            self.assertFalse(shown["roles"]["reviewer"]["uses_primary_model"])
+            plan = stacks.plan("coding_agents")
+            self.assertEqual(plan["roles"]["reviewer"]["model"], "local-code-large")
+            doctor = stacks.doctor("coding_agents")
+            self.assertTrue(any(check["name"] == "role_model:planner" and check["ok"] for check in doctor["checks"]))
             prepared = stacks.prepare("coding_agents", dry_run=True)
             self.assertEqual(prepared["action"], "prepare")
             self.assertTrue(prepared["dry_run"])
@@ -6439,6 +6463,11 @@ exit 0
             self.assertIn("langgraph", dockerfile["content"])
             self.assertIn("AIPLANE_LIMITS_JSON", dockerfile["content"])
             self.assertEqual(dockerfile["metadata"]["limits"]["timeout"], "30m")
+            self.assertEqual(dockerfile["metadata"]["roles"]["planner"]["model"], "local-analysis-small")
+            framework = stacks.export("langgraph", "coding_agents")
+            self.assertEqual(framework["framework"], "langgraph")
+            self.assertIn("planner:", framework["content"])
+            self.assertIn("audit_label: coding_agents.planner", framework["content"])
             compose = stacks.export("compose", "coding_agents")
             self.assertIn("AIPLANE_TOOLS_JSON", compose["content"])
             self.assertIn("11434:11434", compose["content"])
@@ -6481,12 +6510,20 @@ exit 0
                         "timeout=30m",
                         "--tool",
                         "shell=guarded",
+                        "--role",
+                        "planner=local-analysis-small",
+                        "--approval-mode",
+                        "guarded",
+                        "--audit-label",
+                        "cli_stack",
                     ]
                 )
             self.assertEqual(code, 0)
             payload = json.loads(stdout.getvalue())
             self.assertEqual(payload["stack"]["limits"]["timeout"], "30m")
             self.assertEqual(payload["stack"]["tools"]["shell"], "guarded")
+            self.assertEqual(payload["stack"]["roles"]["planner"]["model"], "local-analysis-small")
+            self.assertEqual(payload["stack"]["roles"]["planner"]["approval_mode"], "guarded")
 
     def test_stack_lifecycle_uses_provider_helper_directly(self) -> None:
         source = load_profile("local-dev", Path.cwd())

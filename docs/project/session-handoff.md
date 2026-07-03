@@ -46,7 +46,7 @@ Known in-progress areas:
 
 - richer managed-provider discovery and provider-specific live credential tests;
 - managed-service endpoint binding for stacks/orchestrator exports without mixing those models into self-managed runtime-fit checks;
-- agent-to-agent role metadata and config export for established orchestrator frameworks; the first `aiplane` agent skill package now documents safe assistant workflows and MCP usage;
+- stack role metadata is implemented for planner/coder/reviewer-style model bindings; framework starter exports and MCP stack export read parity now exist, with deeper framework-specific templates still next; the first `aiplane` agent skill package documents safe assistant workflows and MCP usage;
 - remote execution and Docker-aware stack lifecycle;
 - provider-specific IaC/playbook/template hardening;
 - broader deployment apply paths;

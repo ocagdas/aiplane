@@ -926,6 +926,20 @@ def _main(argv: list[str] | None = None) -> int:
         help="Pass-through tool policy key=value, such as shell=guarded or filesystem=workspace_only; can be repeated",
     )
     stacks_setup.add_argument(
+        "--role",
+        action="append",
+        default=[],
+        help="Optional orchestrator role binding ROLE=MODEL_ALIAS, such as planner=local_chat; can be repeated",
+    )
+    stacks_setup.add_argument(
+        "--approval-mode",
+        help="Approval policy label for orchestrator role metadata, such as ask, guarded, or manual",
+    )
+    stacks_setup.add_argument(
+        "--audit-label",
+        help="Audit label prefix for orchestrator role metadata",
+    )
+    stacks_setup.add_argument(
         "--dry-run",
         action="store_true",
         help="Preview the stack without writing hardware.yaml",
@@ -961,6 +975,12 @@ def _main(argv: list[str] | None = None) -> int:
             "dockerfile",
             "conda-yaml",
             "compose",
+            "langgraph",
+            "crewai",
+            "autogen",
+            "semantic-kernel",
+            "llamaindex-workflows",
+            "openhands",
         ],
         help="Artifact format to export",
     )
@@ -2504,6 +2524,9 @@ def _main(argv: list[str] | None = None) -> int:
                         endpoint=args.endpoint,
                         limits=_parse_settings(args.limit),
                         tools=_parse_settings(args.tool),
+                        roles={key: str(value) for key, value in _parse_settings(args.role).items()},
+                        approval_mode=args.approval_mode,
+                        audit_label=args.audit_label,
                         dry_run=args.dry_run,
                     ),
                     indent=2,

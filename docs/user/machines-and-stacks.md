@@ -239,7 +239,7 @@ Stack plans include preflight checks for runtime prerequisites, likely port conf
 
 A stack is the operational unit for running or exposing an AI setup. It binds one optional orchestrator, one runtime or hosted endpoint contract, one primary model, one machine or endpoint target, and one access policy. Self-managed stacks use the runtime and machine fields for fit checks and lifecycle planning. Managed-service stacks keep provider/runtime endpoint metadata so exports and orchestrators can call the hosted service, but they are not treated as local runtime candidates.
 
-That one-to-one shape is intentional for now. If you need separate planner/coder/reviewer models, create separate stacks or wait for the planned multi-role stack schema. Keeping the first stack model simple makes fit checks, lifecycle commands, and exports easier to reason about. Multi-role and agent-to-agent setups are planned as orchestrator metadata over reviewed model aliases, endpoints, tool policies, and approval modes rather than as a hidden agent runner inside `aiplane`.
+The primary model remains the lifecycle model for install/pull/start actions. For orchestrated workflows, a stack can also carry role metadata over reviewed profile model aliases. These role bindings are configuration for established frameworks such as LangGraph, CrewAI, AutoGen, Semantic Kernel, LlamaIndex Workflows, or OpenHands. `aiplane` stores, validates, plans, and exports the metadata; it does not run autonomous agent-to-agent conversations itself.
 
 Before creating a stack, the machine must exist in `aiplane machines list`. Hardware templates such as `local_auto` are not automatically stack machines. Export/import a real machine profile first, or import an Azure SKU candidate.
 
@@ -260,7 +260,7 @@ aiplane stacks setup coding_agents \
 ```
 
 
-Stack `--limit` and `--tool` values are structured pass-through metadata. `aiplane` stores and exports them, but enforcement belongs to the runtime, orchestrator, wrapper script, or later workload runner.
+Stack `--limit`, `--tool`, and `--role` values are structured pass-through metadata. `aiplane` stores and exports them, but enforcement belongs to the runtime, orchestrator, wrapper script, or later workload runner. A `--role ROLE=MODEL_ALIAS` entry validates that the model alias exists in the profile, records provider/runtime/endpoint ownership, and adds role-level approval and audit labels.
 
 Common examples:
 
@@ -271,6 +271,11 @@ Common examples:
 --tool shell=guarded
 --tool filesystem=workspace_only
 --tool git=read_only
+--role planner=local_chat
+--role coder=local_code
+--role reviewer=managed_review
+--approval-mode ask
+--audit-label repo_agents
 ```
 
 Preview without writing:
@@ -320,9 +325,15 @@ aiplane stacks export openai-compatible coding_agents
 aiplane stacks export dockerfile coding_agents
 aiplane stacks export conda-yaml coding_agents
 aiplane stacks export compose coding_agents
+aiplane stacks export langgraph coding_agents
+aiplane stacks export crewai coding_agents
+aiplane stacks export autogen coding_agents
+aiplane stacks export semantic-kernel coding_agents
+aiplane stacks export llamaindex-workflows coding_agents
+aiplane stacks export openhands coding_agents
 ```
 
-The Dockerfile, Conda YAML, and Compose exports are starter artifacts for review, CI, or custom packaging. They include profile-aware comments or environment variables for stack name, profile, orchestrator, runtime, model, endpoint, machine, limits, tool policies, and selected Docker resource hints where available. The normal user flow is still `stacks setup`, `stacks prepare`, and `stacks start`.
+The Dockerfile, Conda YAML, Compose, and framework exports are starter artifacts for review, CI, or custom packaging. They include profile-aware comments or metadata for stack name, profile, orchestrator, runtime, model, endpoint, machine, role bindings, limits, tool policies, approval labels, audit labels, and selected Docker resource hints where available. Framework exports are metadata starters; they do not install packages, generate a full agent application, or run autonomous workflows. The normal user flow is still `stacks setup`, `stacks prepare`, and `stacks start`.
 
 ## Orchestrators
 
@@ -377,7 +388,7 @@ aiplane stacks setup coding_agents \
   --tool shell=guarded
 ```
 
-Limits, approval labels, and tool policies for orchestrated workloads are structured pass-through stack fields. `aiplane` stores and exports them, but the orchestrator/runtime or managed provider decides whether and how to enforce them. For managed-service models, keep endpoint credentials in ignored local credential references or environment variables; do not place raw provider secrets in stack or profile YAML.
+Limits, role bindings, approval labels, audit labels, and tool policies for orchestrated workloads are structured pass-through stack fields. `aiplane` stores and exports them, but the orchestrator/runtime or managed provider decides whether and how to enforce them. For managed-service models, keep endpoint credentials in ignored local credential references or environment variables; do not place raw provider secrets in stack or profile YAML.
 
 ## Current Limits
 

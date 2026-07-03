@@ -40,7 +40,7 @@ Required outcomes:
 - Azure target planning and doctor checks for AKS and VM targets, plus a narrow guarded Azure VM apply path.
 - Orchestrator catalog commands for LangGraph, CrewAI, AutoGen, OpenHands, Semantic Kernel, and LlamaIndex Workflows.
 - Agent application templates with non-mutating `agents templates/plan/export` commands, plus a versioned `skills/aiplane/SKILL.md` package for assistant workflow guidance.
-- Stack artifact exports for Continue, OpenAI-compatible endpoint config, Dockerfile, Conda YAML, and starter Docker Compose.
+- Stack artifact exports for Continue, OpenAI-compatible endpoint config, Dockerfile, Conda YAML, starter Docker Compose, and framework starter metadata for LangGraph, CrewAI, AutoGen, Semantic Kernel, LlamaIndex Workflows, and OpenHands.
 - SSH tunnel plan/start/status/stop for configured remote model endpoints.
 - Model list/show/defaults/use/add/clone/remove/enable/disable/refresh/promote/clear-cache/pull/test/benchmark commands.
 - Benchmark framework list/doctor/install/plan helpers for smoke/custom checks, lm-evaluation-harness, vLLM serving benchmarks, and Locust-style load tests.
@@ -78,11 +78,11 @@ Required outcomes:
    - Treat MCP/skills synchronization as a recurring checkpoint and pre-PR cleanup task, not a requirement after every small feature.
 
 3. **Orchestrator and multi-agent workflow metadata** - Current
-   - Extend stack/orchestrator config beyond one primary model into explicit roles such as planner, coder, reviewer, researcher, tool-runner, and summarizer.
-   - Bind each role to a reviewed model alias, endpoint, runtime/provider ownership, tool policy, approval mode, and audit label.
-   - Export starter configs for LangGraph, CrewAI, AutoGen, Semantic Kernel, LlamaIndex Workflows, and OpenHands where those frameworks can consume the selected endpoints directly.
+   - Stack setup can carry optional role metadata such as planner, coder, reviewer, researcher, tool-runner, and summarizer while preserving one primary lifecycle model for runtime install/pull/start actions.
+   - Role metadata binds reviewed model aliases to provider/runtime/endpoint ownership plus tool policy, approval mode, limits, and audit labels; stack plan/doctor/status/export surface the metadata.
+   - Framework starter exports now emit reviewed role/endpoint/tool/approval/audit metadata for LangGraph, CrewAI, AutoGen, Semantic Kernel, LlamaIndex Workflows, and OpenHands; next harden framework-specific templates where stable APIs justify it.
    - Keep `aiplane` as setup/config/policy/export, not the autonomous multi-agent runner.
-   - Add doctor/plan checks that explain missing packages, missing endpoints, model/runtime incompatibility, and unsafe tool-policy combinations before anything is run.
+   - Keep extending doctor/plan checks so they explain missing packages, missing endpoints, model/runtime incompatibility, and unsafe tool-policy combinations before anything is run.
 
 ### Product Hardening
 
@@ -125,6 +125,7 @@ Required outcomes:
    - Keep model endpoint export separate from MCP tool export.
    - Research deeper Cursor, JetBrains, Windsurf, Copilot, Codex, and Claude Code integration before adding brittle custom paths.
    - Add launch wrappers only where a stable tool-native CLI exists and `aiplane` can export/check the needed environment first.
+   - Research an optional Ollama `launch` adapter for Ollama-specific coding-tool setup so `aiplane` can plan/validate model, endpoint, hardware, and policy decisions while delegating tool-native launch/install behavior to Ollama instead of duplicating its menu.
    - Keep any future `aiplane session` layer thin: selected model, endpoint, transcript path, and audit metadata, not a full custom chat product.
 
 10. **Benchmark and recommendation quality** - Planned
@@ -141,7 +142,7 @@ Required outcomes:
 
 ## Planned But Not Implemented
 
-- `aiplane launch` wrappers for Continue, Codex, Claude Code, Cursor, or Ollama `launch`.
+- `aiplane launch` wrappers for Continue, Codex, Claude Code, Cursor, or an optional Ollama `launch` adapter.
 - `aiplane session` active chat/session management.
 - Provider-specific production-ready Vagrant/Packer/OpenTofu/Terraform/Pulumi/Ansible/Dev Container modules and apply workflows.
 - Custom VS Code extension or marketplace publishing.
