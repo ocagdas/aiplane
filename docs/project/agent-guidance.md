@@ -27,7 +27,7 @@ When changing behavior, update these together in the same change whenever releva
 - `docs/project/command-coverage.md` for public CLI coverage;
 - tests in `tests/test_mvp.py` or a focused new test file.
 
-Do not leave roadmap, handoff, or command coverage stale after adding commands, changing defaults, or moving a feature between planned/in-progress/implemented.
+Behavior changes should normally land with matching test updates in the same change. If a behavior change genuinely does not need a new or changed test, make that an explicit engineering decision and still run the relevant focused tests. Do not leave roadmap, handoff, command coverage, or tests stale after adding commands, changing defaults, or moving a feature between planned/in-progress/implemented.
 
 ## Compatibility Policy
 

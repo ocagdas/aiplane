@@ -121,7 +121,9 @@ class IntegrationManager:
             return self._openai_compatible_export(model_name, model, provider_name, endpoint_value, api_key_value)
         raise ValueError(f"unknown integration: {tool}")
 
-    def export_from_plan(self, plan: dict[str, Any]) -> IntegrationExport:
+    def export_from_plan(self, plan: Any) -> IntegrationExport:
+        if not isinstance(plan, dict):
+            raise ValueError("saved plan must be a JSON object produced by integrations plan")
         tool = str(plan.get("tool") or "")
         if tool == "continue":
             return self._continue_export_from_plan(plan)

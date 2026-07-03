@@ -39,14 +39,14 @@ Required outcomes:
 - Stack preflight checks for runtime prerequisites, local port availability, endpoint auth policy, and cache-path hints.
 - Azure target planning and doctor checks for AKS and VM targets, plus a narrow guarded Azure VM apply path.
 - Orchestrator catalog commands for LangGraph, CrewAI, AutoGen, OpenHands, Semantic Kernel, and LlamaIndex Workflows.
-- Agent application templates with non-mutating `agents templates/plan/export` commands.
+- Agent application templates with non-mutating `agents templates/plan/export` commands, plus a versioned `skills/aiplane/SKILL.md` package for assistant workflow guidance.
 - Stack artifact exports for Continue, OpenAI-compatible endpoint config, Dockerfile, Conda YAML, and starter Docker Compose.
 - SSH tunnel plan/start/status/stop for configured remote model endpoints.
 - Model list/show/defaults/use/add/clone/remove/enable/disable/refresh/promote/clear-cache/pull/test/benchmark commands.
 - Benchmark framework list/doctor/install/plan helpers for smoke/custom checks, lm-evaluation-harness, vLLM serving benchmarks, and Locust-style load tests.
 - `aiplane run` for single-prompt routing through configured model defaults with dry-run and policy-gated non-local escalation.
 - Integration role inspection plus plan/setup/export for Continue, Cline, Zed, Aider, generic OpenAI-compatible clients, and MCP client snippets; setup can dry-run or execute supported helper install/start/pull actions for selected runtime/model aliases and skips unsupported source/runtime pull combinations with an explicit reason.
-- MCP stdio server with read tools and narrow guarded writes for model defaults, hardware selection, runtime preference, model refresh, and SSH tunnel lifecycle.
+- MCP stdio server with read tools and narrow guarded writes for model defaults, hardware selection, runtime preference, model refresh, and SSH tunnel lifecycle. Read/planning tools cover models, providers, hardware, machine recommendations, stack inspection/planning/doctor checks, integrations, orchestrators, runtime status, and tunnel plans.
 - Policy checks, approval handling, secret redaction, JSONL audit foundations, and shared JSON output ordering.
 
 ## In Progress
@@ -70,7 +70,7 @@ Required outcomes:
    - Keep shell helpers as thin delegates to official tools; avoid growing provider-specific business logic in Bash when Python catalog/runtime code already owns the decision.
    - Preserve inspect-first behavior and avoid compatibility shims unless a released interface requires them.
 
-2. **MCP and agent skill hardening** - Current
+2. **MCP and agent skill hardening** - Implemented foundation
    - Audit MCP against the current CLI/options and docs; close useful read/planning/export gaps such as newer model filters, integration role planning, stack/orchestrator inspection, machine recommendations, and command coverage where safe.
    - Keep risky operations out of MCP until they have explicit approval, audit, dry-run, and rollback semantics. Runtime installs, model pulls, cloud apply, secret writes, and arbitrary shell execution remain blocked or CLI-only by default.
    - Add a versioned `aiplane` skill target for Codex-style and other skill-capable assistants. The skill should explain the product boundary, profile/provider/model/runtime concepts, preferred commands, MCP usage, docs/test maintenance, and pre-PR/release checks.

@@ -15,7 +15,7 @@ SelectionArgs = Callable[[argparse.ArgumentParser], None]
 
 
 def add_integrations_parser(
-    subparsers: argparse._SubParsersAction,
+    subparsers: Any,
     *,
     command_factory: Callable[..., argparse.ArgumentParser],
     profile_arg: ProfileArg,

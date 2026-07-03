@@ -9,8 +9,10 @@ from .config import list_profiles, load_profile, resolve_profile_name
 from .hardware import HardwareManager
 from .integration_contracts import ALL_INTEGRATION_TOOLS
 from .integrations import IntegrationManager
+from .machines import MachineManager
 from .model_catalog import ModelCatalog
 from .runtime_catalog import RuntimeCatalog
+from .stacks import StackManager
 from .model_filters import MODEL_FILTER_SCHEMA_PROPERTIES, MODEL_SORT_CHOICES, model_filter_args
 from .output import json_dumps
 from .orchestrators import OrchestratorCatalog
@@ -58,6 +60,41 @@ READ_ONLY_TOOLS: list[dict[str, Any]] = [
     {
         "name": "aiplane.hardware.recommend",
         "description": "Return hardware-aware model recommendations.",
+        "mutates": False,
+    },
+    {
+        "name": "aiplane.machines.list",
+        "description": "List configured machine profiles without contacting cloud APIs.",
+        "mutates": False,
+    },
+    {
+        "name": "aiplane.machines.show",
+        "description": "Show one configured machine profile.",
+        "mutates": False,
+    },
+    {
+        "name": "aiplane.machines.recommend",
+        "description": "Recommend configured machines for a model, runtime, or workload.",
+        "mutates": False,
+    },
+    {
+        "name": "aiplane.stacks.list",
+        "description": "List configured stacks and their model/runtime/machine bindings.",
+        "mutates": False,
+    },
+    {
+        "name": "aiplane.stacks.show",
+        "description": "Show one configured stack definition.",
+        "mutates": False,
+    },
+    {
+        "name": "aiplane.stacks.plan",
+        "description": "Plan stack preparation steps and preflight checks without executing them.",
+        "mutates": False,
+    },
+    {
+        "name": "aiplane.stacks.doctor",
+        "description": "Run stack readiness checks without executing lifecycle actions.",
         "mutates": False,
     },
     {
@@ -209,6 +246,63 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
             "profile": {"type": "string"},
             "include_not_recommended": {"type": "boolean", "default": False},
         },
+        "additionalProperties": False,
+    },
+    "aiplane.machines.list": {
+        "type": "object",
+        "properties": {"profile": {"type": "string"}},
+        "additionalProperties": False,
+    },
+    "aiplane.machines.show": {
+        "type": "object",
+        "properties": {
+            "profile": {"type": "string"},
+            "name": {"type": "string"},
+        },
+        "required": ["name"],
+        "additionalProperties": False,
+    },
+    "aiplane.machines.recommend": {
+        "type": "object",
+        "properties": {
+            "profile": {"type": "string"},
+            "model": {"type": "string"},
+            "runtime": {"type": "string"},
+            "workload": {"type": "string"},
+            "limit": {"type": "integer"},
+        },
+        "additionalProperties": False,
+    },
+    "aiplane.stacks.list": {
+        "type": "object",
+        "properties": {"profile": {"type": "string"}},
+        "additionalProperties": False,
+    },
+    "aiplane.stacks.show": {
+        "type": "object",
+        "properties": {
+            "profile": {"type": "string"},
+            "name": {"type": "string"},
+        },
+        "required": ["name"],
+        "additionalProperties": False,
+    },
+    "aiplane.stacks.plan": {
+        "type": "object",
+        "properties": {
+            "profile": {"type": "string"},
+            "name": {"type": "string"},
+        },
+        "required": ["name"],
+        "additionalProperties": False,
+    },
+    "aiplane.stacks.doctor": {
+        "type": "object",
+        "properties": {
+            "profile": {"type": "string"},
+            "name": {"type": "string"},
+        },
+        "required": ["name"],
         "additionalProperties": False,
     },
     "aiplane.integrations.export": {
@@ -466,6 +560,25 @@ class AiplaneMcpServer:
             return HardwareManager(profile).recommend(
                 include_not_recommended=bool(arguments.get("include_not_recommended", False))
             )
+        if name == "aiplane.machines.list":
+            return MachineManager(profile).list()
+        if name == "aiplane.machines.show":
+            return MachineManager(profile).show(str(arguments.get("name") or ""))
+        if name == "aiplane.machines.recommend":
+            return MachineManager(profile).recommend(
+                model=str(arguments.get("model") or "") or None,
+                runtime=str(arguments.get("runtime") or "") or None,
+                workload=str(arguments.get("workload") or "") or None,
+                limit=int(arguments["limit"]) if arguments.get("limit") is not None else None,
+            )
+        if name == "aiplane.stacks.list":
+            return StackManager(profile).list()
+        if name == "aiplane.stacks.show":
+            return StackManager(profile).show(str(arguments.get("name") or ""))
+        if name == "aiplane.stacks.plan":
+            return StackManager(profile).plan(str(arguments.get("name") or ""))
+        if name == "aiplane.stacks.doctor":
+            return StackManager(profile).doctor(str(arguments.get("name") or ""))
         if name == "aiplane.integrations.export":
             tool = str(arguments.get("tool") or "")
             model = str(arguments.get("model") or "") or None

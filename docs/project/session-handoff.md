@@ -38,15 +38,15 @@ High-level implemented areas:
 - hardware discovery, machine inventory, Azure SKU discovery/import, and stack planning;
 - tool doctors/plans/exports for infrastructure, quality, and automation tools;
 - integration role inspection, setup, and exports for Continue, Cline, Zed, Aider, OpenAI-compatible clients, and MCP client snippets, with setup planning supported helper install/start/pull actions and skipping unsupported source/runtime pull combinations;
-- starter agent app planning/export;
-- MCP stdio server with read tools, provider ownership/status grouping, integration role/plan inspection, orchestrator list/show inspection, and narrow audited writes;
+- starter agent app planning/export plus a versioned `skills/aiplane/SKILL.md` assistant workflow package;
+- MCP stdio server with read tools, provider ownership/status grouping, machine recommendation, stack list/show/plan/doctor, integration role/plan inspection, orchestrator list/show inspection, and narrow audited writes;
 - policy, approvals, secret redaction, and audit foundations.
 
 Known in-progress areas:
 
 - richer managed-provider discovery and provider-specific live credential tests;
 - managed-service endpoint binding for stacks/orchestrator exports without mixing those models into self-managed runtime-fit checks;
-- agent-to-agent role metadata, config export for established orchestrator frameworks, and a planned `aiplane` agent skill package that documents safe assistant workflows and MCP usage;
+- agent-to-agent role metadata and config export for established orchestrator frameworks; the first `aiplane` agent skill package now documents safe assistant workflows and MCP usage;
 - remote execution and Docker-aware stack lifecycle;
 - provider-specific IaC/playbook/template hardening;
 - broader deployment apply paths;
@@ -82,7 +82,7 @@ Results:
 - Profile validation passed with `ok: true`.
 - `environment doctor --required-only` passed with `2/2` mandatory tools installed; runtime prerequisite checks now come from provider/runtime config rather than shipped model defaults.
 - JSON environment doctor passed with mandatory tools installed and runtime prerequisite rows for Ollama and vLLM.
-- Full local architecture-hardening check passed: `conda run -n aiplane scripts/check.sh` completed with formatter check, Ruff lint, and `235 passed in 141.54s`.
+- Full local MCP/skill-hardening check passed: `conda run -n aiplane scripts/check.sh` completed with formatter check, Ruff lint, and `238 passed in 141.41s`.
 - `tools matrix` passed and reported `16` tools, `2` mandatory, `14` optional, `11` installable by `aiplane`, `7` exports available, and `9` workflow categories: `4` complete, `1` partial, and `4` needing setup on this machine.
 - `tools plan opentofu` passed and reported OpenTofu as optional/manual with non-mutating IaC plan guidance.
 - `models list` returned an empty list for the clean structural profile template until discovery or local model entries are added.
@@ -103,16 +103,15 @@ The roadmap milestones are now grouped into three bands:
 
 The first architecture cleanup slice now centralizes integration role contracts, model list grouping, model resource estimates, runtime pull compatibility, runtime/source/provider definitions, and part of the integration CLI command family. Continue splitting `src/aiplane/cli.py` by command family and keep moving shared definitions into small modules where they prevent real drift.
 
-MCP is implemented and tested, but it is still a hand-maintained adapter. It now includes model filters plus integration role/plan and orchestrator list/show read surfaces. The next MCP sync should add remaining safe gaps such as stack inspection and machine recommendations, while leaving model pulls, installs, cloud apply, secret writes, and arbitrary shell execution blocked or CLI-only.
+MCP is implemented and tested, but it is still a hand-maintained adapter. It now includes model filters, machine recommendations, stack list/show/plan/doctor checks, integration role/plan, and orchestrator list/show read surfaces. Future MCP sync should focus on safe gaps only, while leaving model pulls, installs, cloud apply, secret writes, and arbitrary shell execution blocked or CLI-only.
 
-Agent skills are still planned. The first `aiplane` skill should be versioned and document safe workflows for coding assistants: read the guidance docs, inspect profiles/providers/models/runtimes separately, prefer doctor/plan/dry-run/export, use MCP when a structured read/planning tool exists, keep docs/tests aligned, and run focused checks before proposing PRs.
+The first versioned `aiplane` skill package exists at `skills/aiplane/SKILL.md`. It documents safe workflows for coding assistants: read the guidance docs, inspect profiles/providers/models/runtimes separately, prefer doctor/plan/dry-run/export, use MCP when a structured read/planning tool exists, keep docs/tests aligned, and run focused checks before proposing PRs.
 
 Orchestrator support is catalog/setup oriented today. The next design step is a multi-role workflow schema over reviewed model aliases and endpoints: planner/coder/reviewer/researcher/tool-runner roles, tool policies, approval modes, limits, and audit labels, with exports for LangGraph, CrewAI, AutoGen, Semantic Kernel, LlamaIndex Workflows, and OpenHands. `aiplane` should configure and validate those workflows, not execute autonomous agent conversations directly.
 
 ## Next Useful Work
 
-1. Continue splitting the large CLI implementation by command family while preserving the current `aiplane` entrypoint and tests.
-2. Add the first versioned `aiplane` agent skill package and document how it differs from MCP.
-3. Design the multi-role orchestrator/stack schema before adding deeper exports or setup commands.
-4. Continue splitting `tests/test_mvp.py` into focused files and keep the full `scripts/check.sh` suite green during the split.
-5. Keep provider/model/runtime docs aligned as discovery, runtime pulls, hardware fit, and managed-service endpoint behavior continue to harden.
+1. Design the multi-role orchestrator/stack schema before adding deeper exports or setup commands.
+2. Continue splitting the large CLI implementation by command family while preserving the current `aiplane` entrypoint and tests.
+3. Continue splitting `tests/test_mvp.py` into focused files and keep the full `scripts/check.sh` suite green during the split.
+4. Keep provider/model/runtime docs aligned as discovery, runtime pulls, hardware fit, and managed-service endpoint behavior continue to harden.

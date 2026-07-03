@@ -1226,6 +1226,68 @@ class MvpTests(unittest.TestCase):
         )
         self.assertEqual(shown["result"]["structuredContent"]["name"], "langgraph")
 
+    def test_mcp_can_inspect_machines_and_plan_stacks(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            profiles_dir = Path(tmp) / "profiles"
+            create_profile("local-dev", profiles_dir=profiles_dir)
+            profile = load_profile("local-dev", Path.cwd(), profiles_dir=profiles_dir)
+            MachineManager(profile).import_azure_sku("Standard_NC40ads_H100_v5", "uksouth", name="azure_h100_test")
+            StackManager(profile).setup(
+                "code_on_gpu",
+                orchestrator="langgraph",
+                runtime="vllm",
+                model="local-code-large",
+                machine="azure_h100_test",
+                endpoint="http://localhost:8000/v1",
+            )
+
+            server = AiplaneMcpServer(Path.cwd(), profiles_dir=profiles_dir)
+            machines = server.handle_message(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 41,
+                    "method": "tools/call",
+                    "params": {"name": "aiplane.machines.list", "arguments": {}},
+                }
+            )
+            self.assertIn("azure_h100_test", {row["name"] for row in machines["result"]["structuredContent"]})
+
+            recommendation = server.handle_message(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 42,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "aiplane.machines.recommend",
+                        "arguments": {"model": "local-code-large", "runtime": "vllm", "limit": 1},
+                    },
+                }
+            )
+            self.assertEqual(recommendation["result"]["structuredContent"]["machines"][0]["name"], "azure_h100_test")
+
+            stack_plan = server.handle_message(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 43,
+                    "method": "tools/call",
+                    "params": {"name": "aiplane.stacks.plan", "arguments": {"name": "code_on_gpu"}},
+                }
+            )
+            self.assertEqual(stack_plan["result"]["structuredContent"]["machine"], "azure_h100_test")
+            self.assertEqual(stack_plan["result"]["structuredContent"]["orchestrator"], "langgraph")
+
+            stack_doctor = server.handle_message(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 44,
+                    "method": "tools/call",
+                    "params": {"name": "aiplane.stacks.doctor", "arguments": {"name": "code_on_gpu"}},
+                }
+            )
+            self.assertTrue(
+                any(check["name"] == "machine_fit" for check in stack_doctor["result"]["structuredContent"]["checks"])
+            )
+
     def test_mcp_can_export_non_continue_integrations(self) -> None:
         server = AiplaneMcpServer(Path.cwd())
         response = server.handle_message(
@@ -4130,6 +4192,15 @@ class MvpTests(unittest.TestCase):
                 )
             self.assertEqual(code, 0)
             self.assertIn("model: managed-chat-model", stdout.getvalue())
+
+        with tempfile.TemporaryDirectory() as tmp:
+            plan_path = Path(tmp) / "invalid-plan.json"
+            plan_path.write_text("[]", encoding="utf-8")
+            stderr = StringIO()
+            with redirect_stderr(stderr):
+                code = cli_main(["integrations", "export", "continue", "--from-plan", str(plan_path)])
+            self.assertEqual(code, 1)
+            self.assertIn("saved plan must be a JSON object", stderr.getvalue())
 
     def test_agents_plan_and_export_cli_print_scaffold(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

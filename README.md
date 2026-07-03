@@ -236,11 +236,14 @@ More detail: [setup](docs/user/setup.md), [providers and runtime helpers](docs/u
 - MCP write tools are narrow and audited;
 - arbitrary shell/cloud apply through MCP is out of scope.
 
-Project guidance for AI coding tools lives in [docs/project/agent-guidance.md](docs/project/agent-guidance.md). Tools working in this repo must not commit, push, tag, publish, or open PRs.
+Project guidance for AI coding tools lives in [docs/project/agent-guidance.md](docs/project/agent-guidance.md). Security reporting instructions live in [SECURITY.md](SECURITY.md). Tools working in this repo must not commit, push, tag, publish, or open PRs.
 
 ## Documentation
 
 - [User docs](docs/user/index.md)
+- [Security policy](SECURITY.md)
+- [Contributing](CONTRIBUTING.md)
+- [Code of conduct](CODE_OF_CONDUCT.md)
 - [Setup](docs/user/setup.md)
 - [Providers and credentials](docs/user/providers.md)
 - [Tools and provisioning](docs/user/tools.md)
@@ -248,6 +251,7 @@ Project guidance for AI coding tools lives in [docs/project/agent-guidance.md](d
 - [Machines and stacks](docs/user/machines-and-stacks.md)
 - [Benchmarks](docs/user/benchmarks.md)
 - [MCP](docs/user/mcp.md)
+- [aiplane skill](skills/aiplane/SKILL.md)
 - [Roadmap](docs/project/roadmap.md)
 - [Project handoff](docs/project/session-handoff.md)
 
@@ -261,12 +265,10 @@ This project is looking for practical contributions from people running local mo
 - expanding agent templates and benchmark workflows;
 - tightening docs when commands or terminology are unclear.
 
-Before opening changes, run:
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, testing, documentation, and PR expectations. Before opening changes, run the focused tests for your area and the full check:
 
 ```bash
-PYTHONPATH=src python -m pytest
-PYTHONPATH=src python -m aiplane profiles validate local-dev
-PYTHONPATH=src python -m aiplane environment doctor --required-only
+conda run -n aiplane scripts/check.sh
 ```
 
 ## License

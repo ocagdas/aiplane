@@ -26,6 +26,7 @@ This page mirrors [README.md](README.md) for tools that link to `index.md`.
 - [Cloud Deployment](cloud-deployment.md): plan and check Azure targets from the
   local CLI.
 - [MCP Adapter](mcp.md): run the MCP server for LLM/agent access to `aiplane`, including guarded write tools.
+- [aiplane skill](../../skills/aiplane/SKILL.md): assistant workflow guidance for Codex-style skill-capable agents.
 
 ## Main Commands
 
