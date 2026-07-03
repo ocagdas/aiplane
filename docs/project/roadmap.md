@@ -86,13 +86,12 @@ Required outcomes:
 
 ### Product Hardening
 
-4. **Provider discovery and model import** - In progress
-   - Harden Azure OpenAI deployment discovery and provider-specific live credential tests.
-   - Add Anthropic/OpenAI discovery fallbacks where APIs or maintained catalogs allow it.
-   - Keep shipped `models.yaml` templates structural; profile-owned model entries and defaults should come from ignored discovery caches, direct local add/clone, or deliberate local promotion.
-   - Keep `models promote` as the reviewed flow from discovered provider entry to editable local profile model; use `models add` when the real provider model id is already known but still present in discovery, and `models clone` when one real model needs multiple local purposes.
-   - Make refresh/promote/add/clone output explain the safe next step from dry-run discovery to discovered entries to traceable profile-owned model entries.
-   - Add first-class model filtering from named/imported machine profiles and external machine/hardware files, so `models list` can derive parameter-count, RAM, VRAM, GPU vendor, and accelerator API filters from the current PC, a copied machine profile, or an Azure/VM shape instead of requiring manual `--ram-gb`/`--vram-gb` values.
+4. **Provider discovery and model import** - Implemented foundation / ongoing provider hardening
+   - Shipped `models.yaml` templates stay structural; profile-owned model entries and defaults come from ignored discovery caches, direct local add/clone, or deliberate local promotion.
+   - `models promote` is the reviewed flow from discovered provider entry to editable local profile model; use `models add` when the real provider model id is already known but still present in discovery, and `models clone` when one real model needs multiple local purposes.
+   - Refresh/promote/add/clone output explains the safe next step from dry-run discovery to discovered entries to traceable profile-owned model entries.
+   - `models list` now filters from active hardware, named/imported machines, external machine files, the currently probed machine, and explicit RAM/VRAM/GPU/API/parameter constraints. Parameter count remains explicit because it is a model property rather than a machine-derived fact.
+   - Ongoing hardening remains for Azure OpenAI deployment discovery, provider-specific live credential tests, and Anthropic/OpenAI discovery fallbacks where APIs or maintained catalogs allow it.
 
 5. **Runtime, stack lifecycle, and endpoint hardening** - In progress
    - Improve same-host lifecycle result reporting and status verification after prepare/start.

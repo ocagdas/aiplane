@@ -27,6 +27,8 @@ MODEL_FILTER_SCHEMA_PROPERTIES: dict[str, dict[str, Any]] = {
     "role": {"type": "array", "items": {"type": "string"}},
     "ownership": {"type": "string", "enum": ["self_managed", "managed_service"]},
     "enabled_only": {"type": "boolean", "default": False},
+    "machine": {"type": "string", "description": "Named machine profile to derive model-fit filters from"},
+    "current_machine": {"type": "boolean", "default": False},
     "ram_gb": {"type": "number"},
     "vram_gb": {"type": "number"},
     "min_parameters_b": {"type": "number"},

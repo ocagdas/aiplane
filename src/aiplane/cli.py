@@ -38,6 +38,7 @@ from .hardware import HardwareManager
 from .cli_integrations import add_integrations_parser, handle_integrations_command
 from .integrations import IntegrationManager
 from .machines import MachineManager
+from .machine_model_filters import merge_machine_model_filters
 from .mcp import mcp_manifest, serve_stdio
 from .model_catalog import ModelCatalog
 from .model_filters import ACCELERATOR_API_CHOICES, GPU_VENDOR_CHOICES, MODEL_SORT_CHOICES, model_filter_args
@@ -1355,6 +1356,21 @@ def _main(argv: list[str] | None = None) -> int:
         "--fits-hardware",
         action="store_true",
         help="Filter to models whose minimum RAM/VRAM/vendor/API requirements fit the active hardware profile",
+    )
+    machine_filter_group = models_list.add_mutually_exclusive_group()
+    machine_filter_group.add_argument(
+        "--machine",
+        help="Named machine profile from `aiplane machines list`; derives RAM, VRAM, GPU vendor, and accelerator filters",
+    )
+    machine_filter_group.add_argument(
+        "--machine-file",
+        type=Path,
+        help="Portable machine JSON/YAML file from `aiplane hardware export-machine`; derives hardware fit filters without importing it",
+    )
+    machine_filter_group.add_argument(
+        "--current-machine",
+        action="store_true",
+        help="Discover this machine now and derive RAM, VRAM, GPU vendor, and accelerator filters",
     )
     models_list.add_argument(
         "--ram-gb",
@@ -3167,6 +3183,13 @@ def _main(argv: list[str] | None = None) -> int:
             filters = model_filter_args(args)
             if args.fits_hardware:
                 filters.update(_active_hardware_model_filters(profile))
+            filters = merge_machine_model_filters(
+                profile,
+                filters,
+                machine=args.machine,
+                machine_file=args.machine_file,
+                current_machine=args.current_machine,
+            )
             rows = catalog.sort_rows(
                 catalog.filter(filters),
                 sort_by=args.sort_by,

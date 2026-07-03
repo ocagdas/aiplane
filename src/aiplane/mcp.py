@@ -10,6 +10,7 @@ from .hardware import HardwareManager
 from .integration_contracts import ALL_INTEGRATION_TOOLS
 from .integrations import IntegrationManager
 from .machines import MachineManager
+from .machine_model_filters import merge_machine_model_filters
 from .model_catalog import ModelCatalog
 from .runtime_catalog import RuntimeCatalog
 from .stacks import StackManager
@@ -544,6 +545,12 @@ class AiplaneMcpServer:
         if name == "aiplane.models.list":
             catalog = ModelCatalog(profile)
             filters = model_filter_args(arguments)
+            filters = merge_machine_model_filters(
+                profile,
+                filters,
+                machine=str(arguments.get("machine") or "") or None,
+                current_machine=bool(arguments.get("current_machine", False)),
+            )
             rows = catalog.sort_rows(
                 catalog.filter(filters),
                 sort_by=str(arguments.get("sort_by") or "name"),

@@ -1050,6 +1050,62 @@ class MvpTests(unittest.TestCase):
         self.assertTrue(all(7 <= count <= 14 for count in parameter_counts))
         self.assertEqual(parameter_counts, sorted(parameter_counts, reverse=True))
 
+    def test_mcp_model_list_can_filter_by_named_machine(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            profiles_dir = root / "profiles"
+            create_profile("tmp", profiles_dir=profiles_dir)
+            profile_root = profiles_dir / "tmp"
+            models_config = {
+                "models": {
+                    "fits_t4": {
+                        "provider": "test_provider",
+                        "model": "example-7b",
+                        "enabled": True,
+                        "roles": ["chat"],
+                        "supported_runtimes": ["vllm"],
+                        "min_ram_gb": 16,
+                        "min_vram_gb": 12,
+                        "required_gpu_vendor": "nvidia",
+                        "required_accelerator_apis": ["cuda"],
+                    },
+                    "too_large_for_t4": {
+                        "provider": "test_provider",
+                        "model": "example-14b",
+                        "enabled": True,
+                        "roles": ["chat"],
+                        "supported_runtimes": ["vllm"],
+                        "min_ram_gb": 32,
+                        "min_vram_gb": 24,
+                        "required_gpu_vendor": "nvidia",
+                        "required_accelerator_apis": ["cuda"],
+                    },
+                }
+            }
+            (profile_root / "models.yaml").write_text(agent_config.dump_yaml(models_config), encoding="utf-8")
+            profile = load_profile("tmp", Path.cwd(), profiles_dir=profiles_dir)
+            MachineManager(profile).import_azure_sku("Standard_NC4as_T4_v3", "uksouth", name="azure_t4_test")
+            server = AiplaneMcpServer(Path.cwd(), default_profile="tmp", profiles_dir=profiles_dir)
+            response = server.handle_message(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 261,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "aiplane.models.list",
+                        "arguments": {
+                            "provider": "test_provider",
+                            "runtime": "vllm",
+                            "role": ["chat"],
+                            "machine": "azure_t4_test",
+                        },
+                    },
+                }
+            )
+        self.assertIsNotNone(response)
+        rows = response["result"]["structuredContent"]["models"]
+        self.assertEqual([row["name"] for row in rows], ["fits_t4"])
+
     def test_mcp_server_can_show_model_and_provider_models(self) -> None:
         server = AiplaneMcpServer(Path.cwd())
         model_response = server.handle_message(
@@ -3429,6 +3485,105 @@ class MvpTests(unittest.TestCase):
         machine = HardwareManager(load_profile("local-dev", Path.cwd())).machine()
         memory = machine["memory"]["ram_gb"] or machine["memory"].get("unified_memory_gb")
         self.assertTrue(all(float(row.get("min_ram_gb") or 0) <= float(memory) for row in rows))
+
+    def test_models_list_can_filter_by_named_machine_and_machine_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            profiles_dir = root / "profiles"
+            create_profile("tmp", profiles_dir=profiles_dir)
+            profile_root = profiles_dir / "tmp"
+            models_config = {
+                "models": {
+                    "fits_t4": {
+                        "provider": "test_provider",
+                        "model": "example-7b",
+                        "enabled": True,
+                        "roles": ["chat"],
+                        "supported_runtimes": ["vllm"],
+                        "min_ram_gb": 16,
+                        "min_vram_gb": 12,
+                        "required_gpu_vendor": "nvidia",
+                        "required_accelerator_apis": ["cuda"],
+                    },
+                    "too_large_for_t4": {
+                        "provider": "test_provider",
+                        "model": "example-14b",
+                        "enabled": True,
+                        "roles": ["chat"],
+                        "supported_runtimes": ["vllm"],
+                        "min_ram_gb": 32,
+                        "min_vram_gb": 24,
+                        "required_gpu_vendor": "nvidia",
+                        "required_accelerator_apis": ["cuda"],
+                    },
+                    "wrong_accelerator": {
+                        "provider": "test_provider",
+                        "model": "example-7b-rocm",
+                        "enabled": True,
+                        "roles": ["chat"],
+                        "supported_runtimes": ["vllm"],
+                        "min_ram_gb": 16,
+                        "min_vram_gb": 8,
+                        "required_gpu_vendor": "amd",
+                        "required_accelerator_apis": ["rocm"],
+                    },
+                }
+            }
+            (profile_root / "models.yaml").write_text(agent_config.dump_yaml(models_config), encoding="utf-8")
+            profile = load_profile("tmp", Path.cwd(), profiles_dir=profiles_dir)
+            imported = MachineManager(profile).import_azure_sku(
+                "Standard_NC4as_T4_v3",
+                "uksouth",
+                name="azure_t4_test",
+            )
+
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = cli_main(
+                    [
+                        "--profiles-dir",
+                        str(profiles_dir),
+                        "models",
+                        "list",
+                        "--profile",
+                        "tmp",
+                        "--provider",
+                        "test_provider",
+                        "--runtime",
+                        "vllm",
+                        "--role",
+                        "chat",
+                        "--machine",
+                        "azure_t4_test",
+                    ]
+                )
+            self.assertEqual(code, 0)
+            self.assertEqual([row["name"] for row in json.loads(stdout.getvalue())], ["fits_t4"])
+
+            machine_path = root / "azure_t4_test.machine.json"
+            machine_path.write_text(json.dumps(imported), encoding="utf-8")
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = cli_main(
+                    [
+                        "--profiles-dir",
+                        str(profiles_dir),
+                        "models",
+                        "list",
+                        "--profile",
+                        "tmp",
+                        "--provider",
+                        "test_provider",
+                        "--runtime",
+                        "vllm",
+                        "--role",
+                        "chat",
+                        "--machine-file",
+                        str(machine_path),
+                    ]
+                )
+            self.assertEqual(code, 0)
+            self.assertEqual([row["name"] for row in json.loads(stdout.getvalue())], ["fits_t4"])
 
     def test_models_list_name_only_supports_cli_alias_selection(self) -> None:
         stdout = StringIO()

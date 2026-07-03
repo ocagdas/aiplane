@@ -172,20 +172,10 @@ class MachineManager:
         name: str | None = None,
         overrides: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        payload = _read_payload(path)
-        machine = payload.get("machine") if isinstance(payload.get("machine"), dict) else payload
-        if not isinstance(machine, dict):
-            raise ValueError("machine import file must contain a mapping or a top-level machine mapping")
-        machine_name = name or str(payload.get("name") or machine.get("name") or machine.get("machine_tag") or "")
-        if not machine_name:
-            raise ValueError("machine import needs --name or a name in the file")
-        machine = _deepcopy_json(machine)
-        machine["name"] = machine_name
-        for key, value in (overrides or {}).items():
-            _set_machine_value(machine, key, value)
-        validation = validate_machine(machine)
-        if not validation["ok"]:
-            raise ValueError("invalid machine profile: " + "; ".join(validation["errors"]))
+        loaded = load_machine_profile(path, name=name, overrides=overrides)
+        machine_name = loaded["name"]
+        machine = loaded["machine"]
+        validation = loaded["validation"]
         self.config.setdefault("self_managed_machines", {})[machine_name] = machine
         self._write_config()
         return {
@@ -682,6 +672,28 @@ def validate_machine(machine: dict[str, Any]) -> dict[str, Any]:
     }:
         warnings.append("gpu.vendor is empty")
     return {"ok": not errors, "errors": errors, "warnings": warnings}
+
+
+def load_machine_profile(
+    path: Path,
+    name: str | None = None,
+    overrides: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    payload = _read_payload(path)
+    machine = payload.get("machine") if isinstance(payload.get("machine"), dict) else payload
+    if not isinstance(machine, dict):
+        raise ValueError("machine import file must contain a mapping or a top-level machine mapping")
+    machine_name = name or str(payload.get("name") or machine.get("name") or machine.get("machine_tag") or "")
+    if not machine_name:
+        raise ValueError("machine import needs --name or a name in the file")
+    machine = _deepcopy_json(machine)
+    machine["name"] = machine_name
+    for key, value in (overrides or {}).items():
+        _set_machine_value(machine, key, value)
+    validation = validate_machine(machine)
+    if not validation["ok"]:
+        raise ValueError("invalid machine profile: " + "; ".join(validation["errors"]))
+    return {"name": machine_name, "machine": machine, "validation": validation}
 
 
 def _az_account_status(completed: subprocess.CompletedProcess[str]) -> dict[str, Any]:

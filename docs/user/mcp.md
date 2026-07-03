@@ -26,7 +26,7 @@ The current read tools are:
 - `aiplane.providers.list` with `status`, `runtime`, and `group_by` filters for ownership/runtime grouping
 - `aiplane.providers.models`
 - `aiplane.models.defaults`
-- `aiplane.models.list` with filters, sorting, and limits
+- `aiplane.models.list` with filters, named-machine/current-machine fit filtering, sorting, and limits
 - `aiplane.models.show`
 - `aiplane.hardware.discover`
 - `aiplane.hardware.recommend`
