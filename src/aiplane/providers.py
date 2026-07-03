@@ -581,6 +581,13 @@ class ProviderRegistry:
         )
         reason = "using aiplane profile catalog entries for this model provider"
         if online and online_error:
+            if _provider_ownership(providers[name]) == "managed_service":
+                return ProviderModelsResult(
+                    name,
+                    "error",
+                    [],
+                    f"online catalog query failed: {online_error}",
+                )
             reason += f"; online catalog query failed: {online_error}"
         elif online:
             reason += "; no online catalog adapter is available for this model provider"

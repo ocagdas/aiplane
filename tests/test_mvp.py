@@ -2171,6 +2171,31 @@ class MvpTests(unittest.TestCase):
         self.assertGreaterEqual(payload["provider_summary"][0]["model_changes_count"], 1)
         self.assertEqual(payload["provider_summary"][0]["changes"]["would_import"], 1)
 
+    def test_models_refresh_cli_reports_configured_provider_failure_as_json(self) -> None:
+        with patch.dict(os.environ, {"AZURE_OPENAI_ENDPOINT": "", "AZURE_OPENAI_API_KEY": ""}):
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = cli_main(
+                    [
+                        "models",
+                        "refresh",
+                        "--profile",
+                        "local-dev",
+                        "--provider",
+                        "azure_openai",
+                        "--dry-run",
+                    ]
+                )
+        self.assertEqual(code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["changes"]["would_import"], 0)
+        summary = payload["provider_summary"][0]
+        self.assertEqual(summary["provider"], "azure_openai")
+        self.assertEqual(summary["status"], "failed")
+        self.assertEqual(summary["source_contacted"], False)
+        self.assertIn("Azure OpenAI discovery needs", summary["error"])
+        self.assertIn("providers show azure_openai", payload["next_steps"][0])
+
     def test_models_refresh_cli_previews_with_mocked_provider(self) -> None:
         discovered = ProviderModelsResult("ollama", "provider_api", ["new-model:1b"], "test discovery")
         with patch.object(ProviderRegistry, "models", return_value=discovered):
@@ -3733,6 +3758,16 @@ class MvpTests(unittest.TestCase):
                 {"analysis", "completion", "generation", "reasoning"},
             )
             self.assertNotIn("saved_to", result)
+
+    def test_models_benchmark_cli_uses_positional_model_alias(self) -> None:
+        stdout = StringIO()
+        with redirect_stdout(stdout):
+            code = cli_main(["models", "benchmark", "local-analysis-small", "--dry-run", "--no-save"])
+        self.assertEqual(code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertTrue(payload["dry_run"])
+        self.assertEqual(payload["model_name"], "local-analysis-small")
+        self.assertEqual(payload["summary"]["previewed"], 4)
 
     def test_model_catalog_cloud_doctor_checks_env_var(self) -> None:
         profile = load_profile("local-dev", Path.cwd())

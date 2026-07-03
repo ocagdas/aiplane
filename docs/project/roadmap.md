@@ -63,12 +63,12 @@ Required outcomes:
 
 ### Post-Merge Foundation
 
-1. **Architecture and codebase cleanup** - Current
-   - Split `src/aiplane/cli.py` into smaller command registration/handler modules by area while keeping one public `aiplane` entrypoint.
-   - Define clearer service boundaries for provider discovery, model catalog rows, runtime compatibility, integration planning, MCP tools, and output shaping so source/runtime/endpoint rules are not reimplemented in several places.
-   - Move hand-maintained tool schemas and CLI parser choices toward shared definitions where practical, especially for model filters and integration roles.
+1. **Architecture and codebase cleanup** - Implemented foundation / ongoing cleanup
+   - `src/aiplane/cli.py` now delegates integration and model command registration/handling to focused modules while keeping one public `aiplane` entrypoint. Continue splitting command families when it reduces real ownership pressure.
+   - Shared CLI parsing/progress helpers live outside the monolithic CLI so provider refresh, profile bootstrap, hardware/machine/stack settings, and future command modules do not duplicate low-level parsing behavior.
+   - Model filter parser choices and MCP schema choices are shared definitions; integration roles are shared contracts. Keep moving shared definitions only where they prevent drift.
    - Keep shell helpers as thin delegates to official tools; avoid growing provider-specific business logic in Bash when Python catalog/runtime code already owns the decision.
-   - Preserve inspect-first behavior and avoid compatibility shims unless a released interface requires them.
+   - Preserve inspect-first behavior and coherent early-beta interfaces; do not keep inconsistent flags or compatibility shims until a released interface requires them.
 
 2. **MCP and agent skill hardening** - Implemented foundation
    - Audit MCP against the current CLI/options and docs; close useful read/planning/export gaps such as newer model filters, integration role planning, stack/orchestrator inspection, machine recommendations, and command coverage where safe.
@@ -91,7 +91,8 @@ Required outcomes:
    - `models promote` is the reviewed flow from discovered provider entry to editable local profile model; use `models add` when the real provider model id is already known but still present in discovery, and `models clone` when one real model needs multiple local purposes.
    - Refresh/promote/add/clone output explains the safe next step from dry-run discovery to discovered entries to traceable profile-owned model entries.
    - `models list` now filters from active hardware, named/imported machines, external machine files, the currently probed machine, and explicit RAM/VRAM/GPU/API/parameter constraints. Parameter count remains explicit because it is a model property rather than a machine-derived fact.
-   - Ongoing hardening remains for Azure OpenAI deployment discovery, provider-specific live credential tests, and Anthropic/OpenAI discovery fallbacks where APIs or maintained catalogs allow it.
+   - Managed-provider online catalog failures, such as an unconfigured Azure OpenAI deployment endpoint/key, now return structured refresh failure JSON with provider-test/show next steps instead of silently looking successful through an empty profile-catalog fallback.
+   - Ongoing hardening remains for richer managed-provider discovery, provider-specific live credential tests, and Anthropic/OpenAI discovery fallbacks where APIs or maintained catalogs allow it.
 
 5. **Runtime, stack lifecycle, and endpoint hardening** - In progress
    - Improve same-host lifecycle result reporting and status verification after prepare/start.

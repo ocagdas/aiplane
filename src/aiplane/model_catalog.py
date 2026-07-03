@@ -618,14 +618,48 @@ class ModelCatalog:
         from .providers import ProviderRegistry
         from .runtime_catalog import RuntimeCatalog
 
+        registry = ProviderRegistry(self.profile)
+        configured_providers = registry.model_providers()
+        if provider_name not in configured_providers:
+            raise ValueError(f"unknown catalog provider: {provider_name}")
         if progress:
             progress("connecting", provider_name, "")
         try:
-            discovered = ProviderRegistry(self.profile).models(provider_name, query=query, limit=limit, online=online)
-        except Exception as exc:
+            discovered = registry.models(provider_name, query=query, limit=limit, online=online)
+        except Exception as exc:  # noqa: BLE001 - refresh should report configured provider failures as data.
             if progress:
                 progress("failed", provider_name, str(exc))
-            raise
+            return self._refresh_failure_result(
+                provider_name,
+                write=write,
+                enable=enable,
+                online=online,
+                query=query,
+                limit=limit,
+                verbose=verbose,
+                error=str(exc),
+                provider_config={
+                    **configured_providers.get(provider_name, {}),
+                    **self.providers().get(provider_name, {}),
+                },
+            )
+        if discovered.source == "error":
+            if progress:
+                progress("failed", provider_name, discovered.reason)
+            return self._refresh_failure_result(
+                provider_name,
+                write=write,
+                enable=enable,
+                online=online,
+                query=query,
+                limit=limit,
+                verbose=verbose,
+                error=discovered.reason,
+                provider_config={
+                    **configured_providers.get(provider_name, {}),
+                    **self.providers().get(provider_name, {}),
+                },
+            )
         if progress:
             progress("succeeded", provider_name, f"{len(discovered.models)} source model(s)")
         runtime_catalog = RuntimeCatalog(self.profile)
@@ -805,6 +839,73 @@ class ModelCatalog:
             "changes": changes,
             "results": {provider_name: provider_result},
             "next_steps": _refresh_next_steps(write, changes, provider_name=provider_name),
+        }
+
+    def _refresh_failure_result(
+        self,
+        provider_name: str,
+        *,
+        write: bool,
+        enable: bool,
+        online: bool,
+        query: str | None,
+        limit: int,
+        verbose: bool,
+        error: str,
+        provider_config: dict[str, Any],
+    ) -> dict[str, Any]:
+        all_models = self.models()
+        provider_models = [model for model in all_models.values() if model_source(model) == provider_name]
+        provider_imported_models = [model for model in provider_models if _is_refresh_imported_model(model)]
+        provider_curated_models = [model for model in provider_models if not _is_refresh_imported_model(model)]
+        changes = {
+            "imported": 0,
+            "would_import": 0,
+            "updated": 0,
+            "would_update": 0,
+            "removed": 0,
+            "would_remove": 0,
+        }
+        provider_result = {
+            "ownership": str(
+                provider_config.get("ownership")
+                or (
+                    "managed_service"
+                    if provider_name in {"openai", "anthropic", "azure_openai", "ollama_cloud"}
+                    else "self_managed"
+                )
+            ),
+            "status": "failed",
+            "source_contacted": False,
+            "prune_enabled": False,
+            "source_discovery_method": "error",
+            "source_discovery_reason": error,
+            "source_models_returned": 0,
+            "profile_models_before_refresh": len(provider_models),
+            "profile_curated_models_before_refresh": len(provider_curated_models),
+            "profile_refresh_imported_models_before_refresh": len(provider_imported_models),
+            "source_models_already_profiled": 0,
+            "source_models_to_import": 0,
+            "source_models_to_update": 0,
+            "model_changes_count": 0,
+            "changes": changes,
+            "error": error,
+        }
+        path = self.profile.root / "models.yaml"
+        discovered_path = self._generated_path()
+        return {
+            "name": "model_catalog_refresh",
+            "write": write,
+            "new_entries_enabled": enable,
+            "online": online,
+            "query": query,
+            "limit": limit,
+            "verbose": verbose,
+            "path": str(path),
+            "discovered_path": str(discovered_path),
+            "changes": changes,
+            "results": {provider_name: provider_result},
+            "next_steps": _refresh_failure_next_steps(provider_name),
         }
 
     def refresh_all(
@@ -1734,6 +1835,14 @@ def _capability_average(profile: dict[str, Any]) -> float:
     scores = profile.get("scores", {}) if isinstance(profile, dict) else {}
     values = [int(value) for value in scores.values() if isinstance(value, int)]
     return round(sum(values) / len(values), 2) if values else 0.0
+
+
+def _refresh_failure_next_steps(provider_name: str) -> list[str]:
+    return [
+        f"Run aiplane providers show {provider_name} to inspect endpoint, auth, and catalog adapter settings.",
+        f"Run aiplane providers test {provider_name} after configuring credentials or endpoint overrides.",
+        f"Rerun aiplane models refresh --provider {provider_name} --dry-run once provider discovery is configured.",
+    ]
 
 
 def _refresh_next_steps(write: bool, changes: dict[str, int], provider_name: str | None = None) -> list[str]:

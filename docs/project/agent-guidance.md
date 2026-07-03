@@ -31,7 +31,7 @@ Behavior changes should normally land with matching test updates in the same cha
 
 ## Compatibility Policy
 
-`aiplane` has not been deployed or released as a stable public interface yet. Until the human owner says otherwise, do not add backward-compatibility shims, deprecated aliases, or legacy behavior solely to preserve older local commands. Prefer the clean current interface, and keep README, user docs, command coverage, roadmap/handoff notes, and tests aligned with that interface.
+`aiplane` has not been deployed or released as a stable public interface yet. Until the human owner says otherwise, do not add backward-compatibility shims, deprecated aliases, or legacy behavior solely to preserve older local commands. Prefer the clean current interface, and keep README, user docs, command coverage, roadmap/handoff notes, and tests aligned with that interface. If an option, command shape, field name, or workflow is inconsistent or does not make sense, replace it with the coherent interface instead of preserving it. During this early-beta phase, consistency, clarity, and maintainability take precedence over backwards compatibility.
 
 ## Implementation Rules
 

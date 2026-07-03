@@ -82,7 +82,7 @@ Results:
 - Profile validation passed with `ok: true`.
 - `environment doctor --required-only` passed with `2/2` mandatory tools installed; runtime prerequisite checks now come from provider/runtime config rather than shipped model defaults.
 - JSON environment doctor passed with mandatory tools installed and runtime prerequisite rows for Ollama and vLLM.
-- Full local provider/model-import milestone check passed: `conda run -n aiplane scripts/check.sh` completed with formatter check, Ruff lint, and `240 passed in 136.70s`.
+- Full local architecture/provider-hardening milestone check passed: `conda run -n aiplane scripts/check.sh` completed with formatter check, Ruff lint, and `242 passed in 145.19s`.
 - `tools matrix` passed and reported `16` tools, `2` mandatory, `14` optional, `11` installable by `aiplane`, `7` exports available, and `9` workflow categories: `4` complete, `1` partial, and `4` needing setup on this machine.
 - `tools plan opentofu` passed and reported OpenTofu as optional/manual with non-mutating IaC plan guidance.
 - `models list` returned an empty list for the clean structural profile template until discovery or local model entries are added.
@@ -96,7 +96,7 @@ Results:
 
 ## Current Follow-Up Work
 
-Provider discovery and model import now has an implemented foundation: structural shipped model templates, discovery-backed add/promote/clone flows, refresh next-step guidance, and machine-derived `models list` filtering. Remaining work in that area is provider-specific hardening for live managed-provider discovery and credential tests.
+Provider discovery and model import now has an implemented foundation: structural shipped model templates, discovery-backed add/promote/clone flows, refresh next-step guidance, machine-derived `models list` filtering, and structured managed-provider refresh failures for missing live catalog configuration. Remaining work in that area is richer provider-specific live discovery and credential tests.
 
 The roadmap milestones are now grouped into three bands:
 
@@ -104,7 +104,7 @@ The roadmap milestones are now grouped into three bands:
 - **Product Hardening**: provider discovery/import, runtime/stack endpoint hardening, cloud/VM/workstation workflows, and tool doctor expansion.
 - **Later Expansion**: runtime packaging, IDE launch/session integrations, benchmark quality, and test-suite isolation.
 
-The first architecture cleanup slice now centralizes integration role contracts, model list grouping, model resource estimates, runtime pull compatibility, runtime/source/provider definitions, and part of the integration CLI command family. Continue splitting `src/aiplane/cli.py` by command family and keep moving shared definitions into small modules where they prevent real drift.
+The architecture cleanup slice now centralizes integration role contracts, model list grouping, model resource estimates, runtime pull compatibility, runtime/source/provider definitions, shared CLI parse/progress helpers, and the integration/model CLI command families. Continue splitting `src/aiplane/cli.py` by command family where it reduces real ownership pressure, not just to move code around.
 
 MCP is implemented and tested, but it is still a hand-maintained adapter. It now includes model filters with named-machine/current-machine fit selectors, machine recommendations, stack list/show/plan/doctor checks, integration role/plan, and orchestrator list/show read surfaces. Future MCP sync should focus on safe gaps only, while leaving model pulls, installs, cloud apply, secret writes, and arbitrary shell execution blocked or CLI-only.
 
