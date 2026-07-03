@@ -12,13 +12,17 @@ from dataclasses import dataclass
 from typing import Any
 
 from .model_catalog import ModelCatalog, ROLE_CAPABILITY_MAP, expand_capability_filters
+from .integration_contracts import (
+    MCP_EXPORT_TOOLS,
+    ONE_MODEL_TOOLS,
+    integration_list,
+    required_roles,
+)
 from .models import Profile
 from .output import json_dumps
 from .runtime_catalog import RuntimeCatalog
+from .runtime_pull import ollama_model_id, runtime_pull_support
 from .secrets import CredentialStore
-
-
-MCP_EXPORT_TOOLS = {"vscode-mcp", "continue-mcp", "cline-mcp", "generic-mcp"}
 
 
 @dataclass(frozen=True)
@@ -38,44 +42,7 @@ class IntegrationManager:
         self.credentials = CredentialStore()
 
     def list(self) -> list[dict[str, str]]:
-        return [
-            {
-                "name": "continue",
-                "description": "Print a Continue IDE/CLI config snippet for a configured model endpoint; does not install Continue",
-            },
-            {
-                "name": "cline",
-                "description": "Print a Cline-style OpenAI-compatible provider snippet for VS Code/CLI use",
-            },
-            {
-                "name": "zed",
-                "description": "Print a Zed assistant provider snippet using an OpenAI-compatible endpoint",
-            },
-            {
-                "name": "aider",
-                "description": "Print shell environment and command hints for Aider with an OpenAI-compatible endpoint",
-            },
-            {
-                "name": "openai-compatible",
-                "description": "Print a generic base_url/model/api_key_env payload for tools that accept OpenAI-compatible endpoints",
-            },
-            {
-                "name": "vscode-mcp",
-                "description": "Print a VS Code MCP server config that launches aiplane over stdio",
-            },
-            {
-                "name": "continue-mcp",
-                "description": "Print a Continue MCP server config that launches aiplane over stdio",
-            },
-            {
-                "name": "cline-mcp",
-                "description": "Print a Cline-style MCP server config that launches aiplane over stdio",
-            },
-            {
-                "name": "generic-mcp",
-                "description": "Print a generic MCP stdio server config for clients that accept mcpServers JSON",
-            },
-        ]
+        return integration_list()
 
     def roles(self, tool: str) -> dict[str, Any]:
         roles = self._required_roles(tool)
@@ -122,7 +89,8 @@ class IntegrationManager:
             )
             return self._continue_export_from_plan(plan)
         if (
-            tool not in {"continue", *MCP_EXPORT_TOOLS}
+            tool != "continue"
+            and tool not in MCP_EXPORT_TOOLS
             and not model_name
             and (provider or runtime or capabilities or select_best)
         ):
@@ -159,7 +127,7 @@ class IntegrationManager:
             return self._continue_export_from_plan(plan)
         if tool in MCP_EXPORT_TOOLS:
             return self._mcp_export(tool)
-        if tool not in {"cline", "zed", "aider", "openai-compatible"}:
+        if tool not in ONE_MODEL_TOOLS:
             raise ValueError(f"unknown integration in plan: {tool}")
         selection = plan.get("selection") if isinstance(plan.get("selection"), dict) else {}
         row = selection.get("primary") if isinstance(selection.get("primary"), dict) else None
@@ -245,7 +213,7 @@ class IntegrationManager:
                     )
                 selection[role] = row
         else:
-            if tool not in {"cline", "zed", "aider", "openai-compatible"}:
+            if tool not in ONE_MODEL_TOOLS:
                 raise ValueError(f"unknown integration: {tool}")
             if any(overrides.values()):
                 raise ValueError("--chat, --autocomplete, and --embedding are only meaningful for Continue planning")
@@ -414,23 +382,7 @@ class IntegrationManager:
         }
 
     def _required_roles(self, tool: str) -> list[dict[str, Any]]:
-        if tool == "continue":
-            role_names = ["chat", "autocomplete", "embedding"]
-        elif tool in {"cline", "zed", "aider", "openai-compatible"}:
-            role_names = ["chat"]
-        elif tool in MCP_EXPORT_TOOLS:
-            role_names = []
-        else:
-            raise ValueError(f"unknown integration: {tool}")
-        return [
-            {
-                "name": role,
-                "required": role in {"chat"},
-                "capabilities": ROLE_CAPABILITY_MAP.get(role, []),
-                "filter_example": f"aiplane models list --role {role} --sort-by role --limit 3",
-            }
-            for role in role_names
-        ]
+        return required_roles(tool)
 
     def _default_model_name(self, *roles: str) -> str:
         defaults = self.catalog.defaults()
@@ -555,40 +507,7 @@ class IntegrationManager:
         return False
 
     def _runtime_pull_support(self, runtime: str, selected: dict[str, Any]) -> dict[str, Any]:
-        provider = str(selected.get("provider") or "")
-        source = str(selected.get("source") or provider)
-        runtime_model = str(selected.get("model") or "")
-        supported_sources = {
-            "ollama": ["ollama", "huggingface_gguf"],
-            "vllm": ["huggingface", "nvidia"],
-            "tgi": ["huggingface", "nvidia"],
-            "transformers": ["huggingface", "nvidia"],
-        }
-        if runtime == "llamacpp":
-            if runtime_model.startswith(("http://", "https://")) and runtime_model.lower().endswith(".gguf"):
-                return {"supported": True, "supported_sources": ["direct_gguf_url"]}
-            return {
-                "supported": False,
-                "supported_sources": ["direct_gguf_url"],
-                "reason": (
-                    "llama.cpp setup can only pull direct GGUF URLs; use a direct .gguf URL, "
-                    "preconfigure LLAMACPP_MODEL_PATH, or download the file manually"
-                ),
-            }
-        allowed = supported_sources.get(runtime, [])
-        if source in allowed or provider in allowed:
-            return {"supported": True, "supported_sources": allowed}
-        if runtime in {"localai", "lmstudio"}:
-            return {
-                "supported": False,
-                "supported_sources": [],
-                "reason": f"{runtime} model downloads are manual or runtime-specific in this milestone",
-            }
-        return {
-            "supported": False,
-            "supported_sources": allowed,
-            "reason": f"aiplane does not currently know how to pull source {source!r} through runtime {runtime!r}",
-        }
+        return runtime_pull_support(runtime, selected)
 
     def _setup_action(
         self,
@@ -733,21 +652,7 @@ class IntegrationManager:
         return ["ollama", "run", ollama_model_id]
 
     def _ollama_model_id(self, model: dict[str, Any]) -> str:
-        runtime_catalog = RuntimeCatalog(self.profile)
-        provider = str(model.get("provider") or "")
-        source = runtime_catalog.source_for_model(model)
-        model_id = str(model.get("model") or "")
-        supported = runtime_catalog.compatible_runtimes_for_entry(model, include_gui=True)
-        if provider == "ollama":
-            return model_id
-        if source == "huggingface_gguf" and "ollama" in supported:
-            if model_id.startswith("hf.co/"):
-                return model_id
-            if model_id.startswith(("http://", "https://")):
-                return ""
-            if "/" in model_id:
-                return f"hf.co/{model_id}"
-        return ""
+        return ollama_model_id(self.profile, model)
 
     def run_chat(self, model_name: str | None = None, dry_run: bool = False) -> str:
         command = self.chat_command(model_name)

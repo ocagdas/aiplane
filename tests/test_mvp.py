@@ -58,6 +58,7 @@ from aiplane.providers import ProviderModelsResult, ProviderRegistry
 from aiplane.remote import RemoteManager
 from aiplane.router import Router
 from aiplane.runtime_catalog import RuntimeCatalog
+from aiplane.runtime_pull import ollama_model_id, runtime_pull_support
 from aiplane.stacks import StackManager
 from aiplane.secrets import contains_secret, redact
 from aiplane.tools import ToolExecutor
@@ -1172,6 +1173,58 @@ class MvpTests(unittest.TestCase):
             self.assertEqual(events[0]["event_type"], "mcp")
             self.assertEqual(events[0]["action"], "aiplane.models.use")
             self.assertEqual(events[0]["decision"], "failed")
+
+    def test_mcp_can_plan_integrations_and_inspect_orchestrators(self) -> None:
+        server = AiplaneMcpServer(Path.cwd())
+        roles = server.handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 31,
+                "method": "tools/call",
+                "params": {"name": "aiplane.integrations.roles", "arguments": {"tool": "continue"}},
+            }
+        )
+        self.assertEqual(
+            [role["name"] for role in roles["result"]["structuredContent"]["roles"]],
+            ["chat", "autocomplete", "embedding"],
+        )
+
+        plan = server.handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 32,
+                "method": "tools/call",
+                "params": {
+                    "name": "aiplane.integrations.plan",
+                    "arguments": {"tool": "openai-compatible", "model": "local-analysis-small"},
+                },
+            }
+        )
+        self.assertEqual(plan["result"]["structuredContent"]["selection"]["primary"]["name"], "local-analysis-small")
+
+        orchestrators = server.handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 33,
+                "method": "tools/call",
+                "params": {
+                    "name": "aiplane.orchestrators.list",
+                    "arguments": {"runtime": ["ollama"], "group_by": "runtime"},
+                },
+            }
+        )
+        self.assertEqual(orchestrators["result"]["structuredContent"]["group_by"], "runtime")
+        self.assertIn("ollama", orchestrators["result"]["structuredContent"]["groups"])
+
+        shown = server.handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 34,
+                "method": "tools/call",
+                "params": {"name": "aiplane.orchestrators.show", "arguments": {"name": "langgraph"}},
+            }
+        )
+        self.assertEqual(shown["result"]["structuredContent"]["name"], "langgraph")
 
     def test_mcp_can_export_non_continue_integrations(self) -> None:
         server = AiplaneMcpServer(Path.cwd())
@@ -3555,6 +3608,27 @@ class MvpTests(unittest.TestCase):
             "local-analysis-small", "add email validation", dry_run=True
         )
         self.assertIn("add email validation", result.output)
+
+    def test_runtime_pull_helpers_resolve_ollama_compatible_huggingface_gguf(self) -> None:
+        profile = load_profile("local-dev", Path.cwd())
+        model = {
+            "provider": "llamacpp",
+            "source": "huggingface_gguf",
+            "model": "Example/Chat-GGUF",
+            "supported_runtimes": ["llamacpp", "ollama"],
+        }
+        self.assertEqual(ollama_model_id(profile, model), "hf.co/Example/Chat-GGUF")
+        self.assertEqual(
+            runtime_pull_support(
+                "ollama", {"provider": "llamacpp", "source": "huggingface_gguf", "model": "Example/Chat-GGUF"}
+            )["supported"],
+            True,
+        )
+        unsupported = runtime_pull_support(
+            "llamacpp", {"provider": "llamacpp", "source": "huggingface_gguf", "model": "Example/Chat-GGUF"}
+        )
+        self.assertFalse(unsupported["supported"])
+        self.assertIn("direct GGUF URLs", unsupported["reason"])
 
     def test_code_write_executes_huggingface_gguf_alias_through_ollama(self) -> None:
         profile = load_profile("local-dev", Path.cwd())

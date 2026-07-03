@@ -8,6 +8,18 @@ from typing import Any, Callable
 
 from .backends import BackendResult, OllamaBackend, OpenAICompatibleBackend
 from .models import Profile
+from .model_resources import (
+    accelerator_api_requirements as _accelerator_api_requirements,
+    gpu_vendor_requirement as _gpu_vendor_requirement,
+    matches_accelerator_api_requirement as _matches_accelerator_api_requirement,
+    matches_gpu_vendor_requirement as _matches_gpu_vendor_requirement,
+    number_or_none as _number_or_none,
+    parameter_billions as _parameter_billions,
+    resource_estimate_source as _resource_estimate_source,
+    resource_guess as _resource_guess,
+    size_bonus as _size_bonus,
+)
+from .runtime_pull import runtime_model_id
 from .secrets import CredentialStore
 
 
@@ -1223,22 +1235,7 @@ class ModelCatalog:
         raise ValueError(f"execution is not wired for runtime/provider: {provider_name}")
 
     def _execution_model_id(self, runtime_name: str, model: dict[str, Any]) -> str:
-        model_id = str(model.get("model") or "")
-        if runtime_name != "ollama":
-            return model_id
-        from .runtime_catalog import RuntimeCatalog
-
-        runtime_catalog = RuntimeCatalog(self.profile)
-        source = runtime_catalog.source_for_model(model)
-        supported = runtime_catalog.compatible_runtimes_for_entry(model, include_gui=True)
-        if source == "huggingface_gguf" and "ollama" in supported:
-            if model_id.startswith("hf.co/"):
-                return model_id
-            if model_id.startswith(("http://", "https://")):
-                return model_id
-            if "/" in model_id:
-                return f"hf.co/{model_id}"
-        return model_id
+        return runtime_model_id(self.profile, runtime_name, model)
 
     def _runtime_for_model(self, name: str, model: dict[str, Any]) -> str:
         provider_name = str(model.get("provider") or "")
@@ -1561,30 +1558,6 @@ def _benchmark_refs(model: dict[str, Any]) -> list[str]:
     return list(dict.fromkeys(refs))
 
 
-def _parameter_billions(model_id: str) -> float:
-    import re
-
-    matches = re.findall(r"(\d+(?:\.\d+)?)\s*b", model_id)
-    if not matches:
-        return 0.0
-    try:
-        return float(matches[-1])
-    except ValueError:
-        return 0.0
-
-
-def _size_bonus(params: float) -> int:
-    if params >= 70:
-        return 3
-    if params >= 30:
-        return 3
-    if params >= 14:
-        return 2
-    if params >= 7:
-        return 1
-    return 0
-
-
 def _clamp(value: int) -> int:
     return max(0, min(5, int(value)))
 
@@ -1627,55 +1600,6 @@ def _metadata_number(metadata: dict[str, Any], key: str) -> float:
         value = value.replace(",", "").strip()
     number = _number_or_none(value)
     return float(number or 0)
-
-
-def _resource_estimate_source(model: dict[str, Any]) -> str | None:
-    source = model.get("resource_estimate_source")
-    if source:
-        return str(source)
-    if any(key in model for key in ["min_ram_gb", "recommended_ram_gb", "min_vram_gb", "recommended_vram_gb"]):
-        return "configured"
-    return None
-
-
-def _gpu_vendor_requirement(model: dict[str, Any]) -> str:
-    for key in ["required_gpu_vendor", "gpu_vendor_requirement", "gpu_vendor"]:
-        value = str(model.get(key) or "").strip().lower()
-        if value:
-            if value == "any":
-                return "generic"
-            return value
-    return "generic"
-
-
-def _accelerator_api_requirements(model: dict[str, Any]) -> list[str]:
-    for key in ["required_accelerator_apis", "accelerator_api_requirements", "accelerator_apis"]:
-        values = _string_list(model.get(key))
-        if values:
-            return [value.lower() for value in values]
-    return []
-
-
-def _matches_gpu_vendor_requirement(model: dict[str, Any], available_vendor: str) -> bool:
-    available = available_vendor.strip().lower()
-    requirement = _gpu_vendor_requirement(model)
-    if available in {"", "any", "generic"}:
-        return requirement in {"generic", "none", "cpu"}
-    if requirement in {"generic", "none", "cpu"}:
-        return True
-    if requirement == "mixed":
-        return available not in {"none", "cpu"}
-    return requirement == available
-
-
-def _matches_accelerator_api_requirement(model: dict[str, Any], available_api: str) -> bool:
-    available = available_api.strip().lower()
-    requirements = _accelerator_api_requirements(model)
-    if not requirements:
-        return True
-    if available in {"", "any", "generic"}:
-        return False
-    return available in requirements
 
 
 def _benchmark_score(row: dict[str, Any]) -> float:
@@ -2180,39 +2104,6 @@ def _roles_for_model_id(model_id: str) -> list[str]:
             return ["completion", "autocomplete"]
         return ["analysis", "completion", "autocomplete", "generation"]
     return ["chat", "analysis", "generation"]
-
-
-def _resource_guess(params: float, roles: list[str]) -> tuple[int, int, int, int | None]:
-    if "embedding" in roles:
-        return 4, 8, 0, None
-    if "text_to_speech" in roles:
-        return 8, 16, 0, None
-    if "speech_to_text" in roles:
-        return 16, 32, 0, 8
-    if "image_generation" in roles:
-        return 32, 64, 12, 16
-    if "video_generation" in roles:
-        return 64, 128, 8, 16
-    if params <= 0:
-        return 8, 16, 0, None
-    if params <= 2:
-        return 8, 16, 0, None
-    if params <= 4:
-        return 12, 24, 0, 4
-    if params <= 9:
-        return 16, 32, 6, 10
-    if params <= 16:
-        return 32, 64, 12, 16
-    if params <= 35:
-        return 64, 128, 24, 32
-    return 128, 256, 48, 80
-
-
-def _number_or_none(value: object) -> float | None:
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
 
 
 def build_smoke_prompt(task: str, target: Path | None = None) -> str:

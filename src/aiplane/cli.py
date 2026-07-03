@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import subprocess
 import sys
 from pathlib import Path
@@ -36,6 +35,7 @@ from .config import (
 from .deploy import DeployManager
 from .env import EnvironmentManager
 from .hardware import HardwareManager
+from .cli_integrations import add_integrations_parser, handle_integrations_command
 from .integrations import IntegrationManager
 from .machines import MachineManager
 from .mcp import mcp_manifest, serve_stdio
@@ -1699,148 +1699,12 @@ def _main(argv: list[str] | None = None) -> int:
     )
     code_write.add_argument("--timeout-seconds", type=int, help="Override provider request timeout for this code task")
 
-    integrations_cmd = _command(
+    add_integrations_parser(
         subparsers,
-        "integrations",
-        "Plan, prepare, and export IDE/CLI configuration snippets",
-        "Plan model selection, prepare runtimes/models, and generate config snippets for tools such as Continue, Cline, Zed, Aider, or generic OpenAI-compatible clients.",
-        "Examples:\n"
-        "  aiplane integrations list\n"
-        "  aiplane integrations plan continue --select-best --runtime ollama\n"
-        "  aiplane integrations setup continue --dry-run\n"
-        "  aiplane integrations export continue\n"
-        "  aiplane integrations export openai-compatible --model MODEL_ALIAS --endpoint http://localhost:8000/v1",
-    )
-    integrations_sub = integrations_cmd.add_subparsers(dest="integrations_command", required=True, metavar="command")
-    integrations_list = integrations_sub.add_parser(
-        "list",
-        help="List supported export targets",
-        description="List integration exporters currently supported by aiplane.",
+        command_factory=_command,
+        profile_arg=_profile_arg,
+        selection_args=_integration_selection_args,
         formatter_class=HelpFormatter,
-    )
-    _profile_arg(integrations_list)
-    integrations_roles = integrations_sub.add_parser(
-        "roles",
-        help="Show required model roles for a target",
-        description="Show the model roles an integration target can use, plus the capability signals aiplane uses for filtering and ranking.",
-        formatter_class=HelpFormatter,
-        epilog="Examples:\n  aiplane integrations roles continue\n  aiplane integrations roles cline",
-    )
-    _profile_arg(integrations_roles)
-    integrations_roles.add_argument(
-        "tool",
-        choices=[
-            "continue",
-            "cline",
-            "zed",
-            "aider",
-            "openai-compatible",
-            "vscode-mcp",
-            "continue-mcp",
-            "cline-mcp",
-            "generic-mcp",
-        ],
-        help="Integration target to inspect",
-    )
-    integrations_roles.add_argument(
-        "--groups",
-        action="store_true",
-        help="Print compact required/optional role groups instead of JSON",
-    )
-    integrations_plan = integrations_sub.add_parser(
-        "plan",
-        help="Plan integration model selection",
-        description="Explain which models/runtimes/endpoints would be used for an integration. This does not write config or start runtimes.",
-        formatter_class=HelpFormatter,
-        epilog="Examples:\n  aiplane integrations plan continue\n  aiplane integrations plan continue --select-best --runtime ollama\n  aiplane integrations plan continue --chat CHAT_ALIAS --autocomplete AUTOCOMPLETE_ALIAS --embedding EMBEDDING_ALIAS\n  aiplane integrations plan cline --model MODEL_ALIAS --endpoint http://localhost:8000/v1\n  aiplane integrations plan aider --select-best --runtime vllm --capability code_generation>=4",
-    )
-    _profile_arg(integrations_plan)
-    _integration_selection_args(integrations_plan)
-    integrations_plan.add_argument(
-        "--model",
-        help="Single model alias for one-model targets such as Cline, Zed, Aider, or openai-compatible",
-    )
-    integrations_plan.add_argument("--endpoint", help="Endpoint override passed through to the plan")
-    integrations_plan.add_argument("--api-key-env", help="API key env var override passed through to the plan")
-    integrations_plan.add_argument(
-        "tool",
-        choices=[
-            "continue",
-            "cline",
-            "zed",
-            "aider",
-            "openai-compatible",
-            "vscode-mcp",
-            "continue-mcp",
-            "cline-mcp",
-            "generic-mcp",
-        ],
-        help="Integration target to plan",
-    )
-    integrations_setup = integrations_sub.add_parser(
-        "setup",
-        help="Prepare models/runtimes for an integration",
-        description="Use the integration plan to check/start runtimes and pull selected models. Use --dry-run to preview without executing helper actions.",
-        formatter_class=HelpFormatter,
-        epilog="Examples:\n  aiplane integrations setup continue --dry-run\n  aiplane integrations setup continue\n  aiplane integrations setup continue --select-best --runtime ollama\n  aiplane integrations setup cline --model MODEL_ALIAS --runtime vllm --dry-run",
-    )
-    _profile_arg(integrations_setup)
-    _integration_selection_args(integrations_setup)
-    integrations_setup.add_argument(
-        "--model",
-        help="Single model alias for one-model targets such as Cline, Zed, Aider, or openai-compatible",
-    )
-    integrations_setup.add_argument("--endpoint", help="Endpoint override passed through to the plan")
-    integrations_setup.add_argument("--api-key-env", help="API key env var override passed through to the plan")
-    integrations_setup.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Preview runtime start/pull actions without executing them",
-    )
-    integrations_setup.add_argument(
-        "tool",
-        choices=["continue", "cline", "zed", "aider", "openai-compatible"],
-        help="Integration target to prepare",
-    )
-    integrations_export = integrations_sub.add_parser(
-        "export",
-        help="Print a config snippet",
-        description="Print configuration for an IDE/CLI target. This does not install extensions or edit settings files.",
-        formatter_class=HelpFormatter,
-        epilog="Endpoint examples:\n  http://localhost:11434/v1       local Ollama\n  http://localhost:8000/v1        local vLLM\n  https://llm.example.com/v1      remote gateway/shared endpoint",
-    )
-    _profile_arg(integrations_export)
-    _integration_selection_args(integrations_export)
-    integrations_export.add_argument(
-        "--model",
-        help="Single model alias to export. For Continue, omit this to export chat/autocomplete/embedding selections",
-    )
-    integrations_export.add_argument(
-        "--from-plan",
-        help="Path to a JSON file produced by integrations plan. Exports from that saved decision instead of recomputing selection",
-    )
-    integrations_export.add_argument(
-        "--endpoint",
-        help="Override provider endpoint/base URL, useful for SSH tunnels, gateways, or remote runtimes",
-    )
-    integrations_export.add_argument(
-        "--api-key-env",
-        help="Environment variable name the target tool should read for an API key",
-    )
-    integrations_export.add_argument(
-        "tool",
-        choices=[
-            "continue",
-            "cline",
-            "zed",
-            "aider",
-            "openai-compatible",
-            "vscode-mcp",
-            "continue-mcp",
-            "cline-mcp",
-            "generic-mcp",
-        ],
-        help="Export format to print",
     )
 
     agents_cmd = _command(
@@ -3545,88 +3409,7 @@ def _main(argv: list[str] | None = None) -> int:
 
     if args.command == "integrations":
         profile = load_profile(effective_profile, workspace, profiles_dir=profiles_dir)
-        manager = IntegrationManager(profile)
-        if args.integrations_command == "list":
-            print(_json(manager.list(), indent=2, sort_keys=True))
-            return 0
-        if args.integrations_command == "roles":
-            payload = manager.roles(args.tool)
-            if args.groups:
-                required = []
-                optional = []
-                for role in payload.get("roles", []):
-                    target = required if bool(role.get("required")) else optional
-                    target.append(str(role.get("name") or ""))
-                print(f"required: {json.dumps(required)}")
-                print(f"optional: {json.dumps(optional)}")
-            else:
-                print(_json(payload, indent=2))
-            return 0
-        if args.integrations_command == "plan":
-            print(
-                _json(
-                    manager.plan(
-                        args.tool,
-                        model_name=args.model,
-                        provider=args.provider,
-                        runtime=args.runtime,
-                        capabilities=args.capability,
-                        select_best=args.select_best,
-                        chat=args.chat,
-                        autocomplete=args.autocomplete,
-                        embedding=args.embedding,
-                        endpoint=args.endpoint,
-                        api_key_env=args.api_key_env,
-                    ),
-                    indent=2,
-                )
-            )
-            return 0
-        if args.integrations_command == "setup":
-            print(
-                _json(
-                    manager.setup(
-                        args.tool,
-                        model_name=args.model,
-                        provider=args.provider,
-                        runtime=args.runtime,
-                        capabilities=args.capability,
-                        select_best=args.select_best,
-                        chat=args.chat,
-                        autocomplete=args.autocomplete,
-                        embedding=args.embedding,
-                        endpoint=args.endpoint,
-                        api_key_env=args.api_key_env,
-                        dry_run=args.dry_run,
-                        yes=not args.dry_run,
-                    ),
-                    indent=2,
-                )
-            )
-            return 0
-        if args.from_plan:
-            plan = json.loads(Path(args.from_plan).read_text(encoding="utf-8"))
-            exported = manager.export_from_plan(plan)
-        else:
-            exported = manager.export(
-                args.tool,
-                args.model,
-                endpoint=args.endpoint,
-                api_key_env=args.api_key_env,
-                provider=args.provider,
-                runtime=args.runtime,
-                capabilities=args.capability,
-                select_best=args.select_best,
-                chat=args.chat,
-                autocomplete=args.autocomplete,
-                embedding=args.embedding,
-            )
-        print(exported.content)
-        if exported.notes:
-            print("\n# Notes")
-            for note in exported.notes:
-                print(f"# - {note}")
-        return 0
+        return handle_integrations_command(args, profile, _json)
 
     if args.command == "chat":
         profile = load_profile(effective_profile, workspace, profiles_dir=profiles_dir)

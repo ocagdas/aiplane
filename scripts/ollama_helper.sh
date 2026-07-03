@@ -332,33 +332,15 @@ configured_model_ids() {
 from pathlib import Path
 import sys
 from aiplane.config import load_profile
-from aiplane.model_catalog import ModelCatalog, model_source
-from aiplane.runtime_catalog import RuntimeCatalog
-
-
-def ollama_pull_id(model, runtime_catalog):
-    provider = str(model.get("provider") or "")
-    source = model_source(model)
-    model_id = str(model.get("model") or "")
-    supported = runtime_catalog.compatible_runtimes_for_entry(model, include_gui=True)
-    if provider == "ollama":
-        return model_id
-    if source == "huggingface_gguf" and "ollama" in supported:
-        if model_id.startswith("hf.co/"):
-            return model_id
-        if model_id.startswith(("http://", "https://")):
-            return ""
-        if "/" in model_id:
-            return f"hf.co/{model_id}"
-    return ""
+from aiplane.model_catalog import ModelCatalog
+from aiplane.runtime_pull import ollama_model_id
 
 
 profile = load_profile(sys.argv[1], Path.cwd())
-runtime_catalog = RuntimeCatalog(profile)
 for name, model in ModelCatalog(profile).models().items():
     if not model.get("enabled", True):
         continue
-    model_id = ollama_pull_id(model, runtime_catalog)
+    model_id = ollama_model_id(profile, model)
     if model_id:
         print(f"{name}	{model_id}")
 PYMODEL

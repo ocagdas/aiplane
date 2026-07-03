@@ -7,11 +7,13 @@ from typing import Any
 from .audit import AuditLogger
 from .config import list_profiles, load_profile, resolve_profile_name
 from .hardware import HardwareManager
+from .integration_contracts import ALL_INTEGRATION_TOOLS
 from .integrations import IntegrationManager
 from .model_catalog import ModelCatalog
 from .runtime_catalog import RuntimeCatalog
 from .model_filters import MODEL_FILTER_SCHEMA_PROPERTIES, MODEL_SORT_CHOICES, model_filter_args
 from .output import json_dumps
+from .orchestrators import OrchestratorCatalog
 from .providers import ProviderRegistry
 from .remote import RemoteManager
 from .models import AuditEvent, Profile
@@ -61,6 +63,26 @@ READ_ONLY_TOOLS: list[dict[str, Any]] = [
     {
         "name": "aiplane.integrations.export",
         "description": "Generate IDE/CLI config snippets for a selected model endpoint.",
+        "mutates": False,
+    },
+    {
+        "name": "aiplane.integrations.roles",
+        "description": "Show required and optional model roles for an integration target.",
+        "mutates": False,
+    },
+    {
+        "name": "aiplane.integrations.plan",
+        "description": "Plan model/runtime/endpoint selection for an integration target without writing config or starting runtimes.",
+        "mutates": False,
+    },
+    {
+        "name": "aiplane.orchestrators.list",
+        "description": "List supported orchestrator frameworks and their provider/runtime compatibility.",
+        "mutates": False,
+    },
+    {
+        "name": "aiplane.orchestrators.show",
+        "description": "Show one orchestrator framework definition and configured profile entry if present.",
         "mutates": False,
     },
     {
@@ -195,23 +217,60 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
             "profile": {"type": "string"},
             "tool": {
                 "type": "string",
-                "enum": [
-                    "continue",
-                    "cline",
-                    "zed",
-                    "aider",
-                    "openai-compatible",
-                    "vscode-mcp",
-                    "continue-mcp",
-                    "cline-mcp",
-                    "generic-mcp",
-                ],
+                "enum": ALL_INTEGRATION_TOOLS,
             },
             "model": {"type": "string"},
             "endpoint": {"type": "string"},
             "api_key_env": {"type": "string"},
         },
         "required": ["tool"],
+        "additionalProperties": False,
+    },
+    "aiplane.integrations.roles": {
+        "type": "object",
+        "properties": {
+            "profile": {"type": "string"},
+            "tool": {"type": "string", "enum": ALL_INTEGRATION_TOOLS},
+        },
+        "required": ["tool"],
+        "additionalProperties": False,
+    },
+    "aiplane.integrations.plan": {
+        "type": "object",
+        "properties": {
+            "profile": {"type": "string"},
+            "tool": {"type": "string", "enum": ALL_INTEGRATION_TOOLS},
+            "model": {"type": "string"},
+            "provider": {"type": "string"},
+            "runtime": {"type": "string"},
+            "capability": {"type": "array", "items": {"type": "string"}},
+            "select_best": {"type": "boolean", "default": False},
+            "chat": {"type": "string"},
+            "autocomplete": {"type": "string"},
+            "embedding": {"type": "string"},
+            "endpoint": {"type": "string"},
+            "api_key_env": {"type": "string"},
+        },
+        "required": ["tool"],
+        "additionalProperties": False,
+    },
+    "aiplane.orchestrators.list": {
+        "type": "object",
+        "properties": {
+            "profile": {"type": "string"},
+            "provider": {"type": "array", "items": {"type": "string"}},
+            "runtime": {"type": "array", "items": {"type": "string"}},
+            "group_by": {"type": "string", "enum": ["provider", "runtime", "pattern"]},
+        },
+        "additionalProperties": False,
+    },
+    "aiplane.orchestrators.show": {
+        "type": "object",
+        "properties": {
+            "profile": {"type": "string"},
+            "name": {"type": "string"},
+        },
+        "required": ["name"],
         "additionalProperties": False,
     },
     "aiplane.runtimes.status": {
@@ -426,6 +485,30 @@ class AiplaneMcpServer:
                 "content": exported.content,
                 "notes": exported.notes,
             }
+        if name == "aiplane.integrations.roles":
+            return IntegrationManager(profile).roles(str(arguments.get("tool") or ""))
+        if name == "aiplane.integrations.plan":
+            return IntegrationManager(profile).plan(
+                str(arguments.get("tool") or ""),
+                model_name=str(arguments.get("model") or "") or None,
+                provider=str(arguments.get("provider") or "") or None,
+                runtime=str(arguments.get("runtime") or "") or None,
+                capabilities=_string_list(arguments.get("capability")),
+                select_best=bool(arguments.get("select_best", False)),
+                chat=str(arguments.get("chat") or "") or None,
+                autocomplete=str(arguments.get("autocomplete") or "") or None,
+                embedding=str(arguments.get("embedding") or "") or None,
+                endpoint=str(arguments.get("endpoint") or "") or None,
+                api_key_env=str(arguments.get("api_key_env") or "") or None,
+            )
+        if name == "aiplane.orchestrators.list":
+            return OrchestratorCatalog(profile).list(
+                providers=_string_list(arguments.get("provider")),
+                runtimes=_string_list(arguments.get("runtime")),
+                group_by=str(arguments.get("group_by") or "") or None,
+            )
+        if name == "aiplane.orchestrators.show":
+            return OrchestratorCatalog(profile).show(str(arguments.get("name") or ""))
         if name == "aiplane.runtimes.status":
             catalog = RuntimeCatalog(profile)
             runtime = arguments.get("runtime")

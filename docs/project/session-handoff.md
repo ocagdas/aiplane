@@ -39,7 +39,7 @@ High-level implemented areas:
 - tool doctors/plans/exports for infrastructure, quality, and automation tools;
 - integration role inspection, setup, and exports for Continue, Cline, Zed, Aider, OpenAI-compatible clients, and MCP client snippets, with setup planning supported helper install/start/pull actions and skipping unsupported source/runtime pull combinations;
 - starter agent app planning/export;
-- MCP stdio server with read tools, provider ownership/status grouping, and narrow audited writes;
+- MCP stdio server with read tools, provider ownership/status grouping, integration role/plan inspection, orchestrator list/show inspection, and narrow audited writes;
 - policy, approvals, secret redaction, and audit foundations.
 
 Known in-progress areas:
@@ -52,7 +52,7 @@ Known in-progress areas:
 - broader deployment apply paths;
 - endpoint authentication/gateway planning;
 - benchmark metrics, comparisons, and repeated-run summaries;
-- test-suite performance/isolation hardening beyond the current hot-path fixes.
+- continued test-suite performance/isolation hardening after the first focused contract-test split.
 
 ## Validation Baseline
 
@@ -82,7 +82,7 @@ Results:
 - Profile validation passed with `ok: true`.
 - `environment doctor --required-only` passed with `2/2` mandatory tools installed; runtime prerequisite checks now come from provider/runtime config rather than shipped model defaults.
 - JSON environment doctor passed with mandatory tools installed and runtime prerequisite rows for Ollama and vLLM.
-- Full local check passed after the merge: `conda run -n aiplane scripts/check.sh` completed with formatter check, Ruff lint, and `226 passed in 146.15s`.
+- Full local architecture-hardening check passed: `conda run -n aiplane scripts/check.sh` completed with formatter check, Ruff lint, and `235 passed in 141.54s`.
 - `tools matrix` passed and reported `16` tools, `2` mandatory, `14` optional, `11` installable by `aiplane`, `7` exports available, and `9` workflow categories: `4` complete, `1` partial, and `4` needing setup on this machine.
 - `tools plan opentofu` passed and reported OpenTofu as optional/manual with non-mutating IaC plan guidance.
 - `models list` returned an empty list for the clean structural profile template until discovery or local model entries are added.
@@ -101,9 +101,9 @@ The roadmap milestones are now grouped into three bands:
 - **Product Hardening**: provider discovery/import, runtime/stack endpoint hardening, cloud/VM/workstation workflows, and tool doctor expansion.
 - **Later Expansion**: runtime packaging, IDE launch/session integrations, benchmark quality, and test-suite isolation.
 
-The highest-leverage code cleanup is to split `src/aiplane/cli.py` and then centralize shared definitions for model filters, integration role requirements, provider/runtime compatibility, and MCP schemas. The current system works, but too much behavior is hand-wired in multiple places: CLI parser choices, MCP schemas, output filters, Bash helper model resolution, and manager methods can drift unless they share a smaller set of contracts.
+The first architecture cleanup slice now centralizes integration role contracts, model list grouping, model resource estimates, runtime pull compatibility, runtime/source/provider definitions, and part of the integration CLI command family. Continue splitting `src/aiplane/cli.py` by command family and keep moving shared definitions into small modules where they prevent real drift.
 
-MCP is implemented and tested, but it is still a hand-maintained adapter. It should be solidified as a structured inspection/planning/export surface over existing managers, with narrow audited writes only where guardrails are clear. The next MCP sync should add useful safe gaps such as current model filters, integration role planning, stack/orchestrator inspection, and machine recommendations, while leaving model pulls, installs, cloud apply, secret writes, and arbitrary shell execution blocked or CLI-only.
+MCP is implemented and tested, but it is still a hand-maintained adapter. It now includes model filters plus integration role/plan and orchestrator list/show read surfaces. The next MCP sync should add remaining safe gaps such as stack inspection and machine recommendations, while leaving model pulls, installs, cloud apply, secret writes, and arbitrary shell execution blocked or CLI-only.
 
 Agent skills are still planned. The first `aiplane` skill should be versioned and document safe workflows for coding assistants: read the guidance docs, inspect profiles/providers/models/runtimes separately, prefer doctor/plan/dry-run/export, use MCP when a structured read/planning tool exists, keep docs/tests aligned, and run focused checks before proposing PRs.
 
@@ -111,10 +111,8 @@ Orchestrator support is catalog/setup oriented today. The next design step is a 
 
 ## Next Useful Work
 
-1. Split the large CLI implementation by command family while preserving the current `aiplane` entrypoint and tests.
-2. Add a shared model-filter/schema layer used by CLI, MCP, output grouping, and tests.
-3. Run an MCP parity audit against command coverage, then add the safe missing read/planning/export tools with tests.
-4. Create the first versioned `aiplane` agent skill package and document how it differs from MCP.
-5. Design the multi-role orchestrator/stack schema before adding deeper exports or setup commands.
-6. Split `tests/test_mvp.py` into focused files and keep the full `scripts/check.sh` suite green during the split.
-7. Keep provider/model/runtime docs aligned as discovery, runtime pulls, hardware fit, and managed-service endpoint behavior continue to harden.
+1. Continue splitting the large CLI implementation by command family while preserving the current `aiplane` entrypoint and tests.
+2. Add the first versioned `aiplane` agent skill package and document how it differs from MCP.
+3. Design the multi-role orchestrator/stack schema before adding deeper exports or setup commands.
+4. Continue splitting `tests/test_mvp.py` into focused files and keep the full `scripts/check.sh` suite green during the split.
+5. Keep provider/model/runtime docs aligned as discovery, runtime pulls, hardware fit, and managed-service endpoint behavior continue to harden.

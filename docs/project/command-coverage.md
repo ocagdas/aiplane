@@ -20,5 +20,5 @@ This table tracks the public CLI surface at a high level. Use it during pre-PR c
 | Agents | `agents templates/plan/export` | Initial scaffold | Prints non-mutating starter agent application files that use selected model endpoints; agent skill packaging is planned separately as assistant workflow guidance, not a runtime API. |
 | Remote | `remote doctor/tunnel-plan/tunnel-start/tunnel-status/tunnel-stop` | Implemented / guarded | SSH tunnel lifecycle is narrow and auditable. |
 | Deploy | `deploy list/show/plan/doctor/apply` | Partial / guarded | Azure VM narrow apply exists; broad AKS/cloud apply remains planned. |
-| MCP | `mcp manifest/serve` | Implemented / hardening | Read tools and narrow guarded writes exist; `aiplane.providers.list` supports status/runtime filters and ownership/runtime grouping; broad mutation remains out of scope. |
+| MCP | `mcp manifest/serve` | Implemented / hardening | Read tools and narrow guarded writes exist; providers list supports status/runtime filters and ownership/runtime grouping; integrations roles/plan and orchestrators list/show are exposed as safe read/planning tools; broad mutation remains out of scope. |
 | Audit/policy | `audit tail`, `policy explain` | Implemented | Used for local governance and debugging. |
