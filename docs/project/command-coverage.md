@@ -4,6 +4,7 @@ This table tracks the public CLI surface at a high level. Use it during pre-PR c
 
 | Area | Primary commands | Status | Notes |
 | --- | --- | --- | --- |
+| Local coding stack doctor | `doctor` | Implemented / first public wedge | Read-only aggregate check for the local/hybrid AI coding stack: profile files, required environment tools, runtime prerequisites, configured model defaults, provider state, Continue/Aider role readiness, MCP manifest availability, and next safe commands. Use `--format json` for scripts and `--include-optional` to include optional external workflow tools. |
 | Local config | `config templates/init/show/get/set/default-profile` | Implemented | Local `.aiplane/config.yaml` is ignored by git. |
 | Credentials | `credentials list/show` | Implemented / local-only | Reads ignored local credential refs; `list` returns an empty list quietly when no credentials file exists, `show` errors for missing refs, output is redacted, and raw secrets are not printed. |
 | Profiles | `profiles list/templates/create/repair/remove/bootstrap-local/show/validate` | Implemented | Profile templates are versioned; editable profiles are local or external; `repair` restores missing selected template files without overwriting by default; `remove` previews by default and deletes editable profile dirs only with `--yes`; profile help now points users to `hardware discover/active/export-machine`; `bootstrap-local` creates/validates `local-dev`, runs hardware discovery by default, can select closest hardware, and can populate ignored `models.discovered.yaml`. |

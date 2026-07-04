@@ -25,7 +25,7 @@ Implemented foundations include:
 
 - profile loading, validation, local config, ignored credentials, and selected/default summaries;
 - environment planning for system Python, `venv`, Conda, and Docker execution mode;
-- `environment doctor` and `tools doctor` readiness checks;
+- top-level `doctor`, `environment doctor`, and `tools doctor` readiness checks;
 - provider catalogs for local, open-weight, OpenAI-compatible, OpenAI, Anthropic, Azure OpenAI, Ollama Cloud placeholder, Hugging Face, GGUF, and runtime-backed discovery, with no checked-in model aliases;
 - ignored generated model caches that are repopulated from provider discovery and can be filtered by role, runtime, capability, RAM/VRAM, benchmark score, and target hardware;
 - runtime helper delegation for supported providers such as Ollama;
@@ -80,14 +80,18 @@ aiplane config show
 
 ## Quick Start
 
-Check the configured profile and environment:
+Check the configured local AI coding stack first:
 
 ```bash
+aiplane doctor
+aiplane doctor --format json
 aiplane profiles list
 aiplane profiles show --selected
 aiplane profiles validate
 aiplane environment doctor
 ```
+
+`aiplane doctor` is the local/hybrid coding-stack summary: profile files, required environment tools, configured model defaults, provider state, Continue/Aider role readiness, MCP manifest availability, and the next safe commands to run.
 
 Inspect provider state, then populate an ignored local model cache from discovery when needed:
 

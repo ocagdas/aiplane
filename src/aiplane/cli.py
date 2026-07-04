@@ -43,6 +43,7 @@ from .cli_support import (
     refresh_progress as _refresh_progress,
 )
 from .integrations import IntegrationManager
+from .local_doctor import local_coding_doctor, local_coding_doctor_text
 from .machines import MachineManager
 from .mcp import mcp_manifest, serve_stdio
 from .model_catalog import ModelCatalog
@@ -147,6 +148,26 @@ def _main(argv: list[str] | None = None) -> int:
         help="Directory containing editable profiles. Defaults to AIPLANE_PROFILES_DIR when set, otherwise the repo-local profiles/ directory",
     )
     subparsers = parser.add_subparsers(dest="command", required=True, metavar="command")
+
+    doctor_cmd = _command(
+        subparsers,
+        "doctor",
+        "Check the local AI coding stack",
+        "Aggregate the local/hybrid AI coding stack readiness checks: profile files, required environment tools, model defaults, provider state, integration roles, and MCP manifest.",
+        "Examples:\n  aiplane doctor\n  aiplane doctor --format json\n  aiplane doctor --include-optional",
+    )
+    _profile_arg(doctor_cmd)
+    doctor_cmd.add_argument(
+        "--format",
+        choices=["text", "json"],
+        default="text",
+        help="Output format. Text is human-readable; JSON is for scripts.",
+    )
+    doctor_cmd.add_argument(
+        "--include-optional",
+        action="store_true",
+        help="Include optional external workflow tools in the environment section",
+    )
 
     config_cmd = _command(
         subparsers,
@@ -2320,6 +2341,15 @@ def _main(argv: list[str] | None = None) -> int:
         return 0
 
     effective_profile = resolve_profile_name(requested_profile, profiles_dir=profiles_dir)
+
+    if args.command == "doctor":
+        profile = load_profile(effective_profile, workspace, profiles_dir=profiles_dir)
+        payload = local_coding_doctor(profile, include_optional=args.include_optional)
+        if args.format == "json":
+            print(_json(payload, indent=2, sort_keys=True))
+        else:
+            print(local_coding_doctor_text(payload))
+        return 0
 
     if args.command == "run":
         profile = load_profile(effective_profile, workspace, profiles_dir=profiles_dir)

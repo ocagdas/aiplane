@@ -4,9 +4,9 @@ This file is the short resume point for future `aiplane` development sessions. U
 
 ## Current Milestone
 
-**Test-suite structure and local coding wedge hardening** is now the active milestone. Cloud/VM/workstation workflow hardening and tool/task doctor expansion have implemented foundations, but the next work should improve maintainability and sharpen the public wedge before adding broad new scope.
+**Local AI coding stack doctor** is now the active milestone. The test split is structurally complete for now, so the next work should sharpen the public wedge before adding broad new scope: a reproducible, inspectable, policy-aware local/hybrid AI coding stack doctor for profiles, providers, model aliases, runtimes/endpoints, hardware fit, Continue/Aider exports, MCP inspection, and audit.
 
-The first mechanical split of `tests/test_mvp.py` has moved MVP coverage into focused modules with shared fixtures in `tests/support.py`; the next priority is to refine boundaries and reduce duplicated setup while preserving coverage and keeping the full suite green. Product work should continue to serve the narrow public story: a reproducible, inspectable, policy-aware local/hybrid AI coding stack doctor for profiles, providers, model aliases, runtimes/endpoints, hardware fit, Continue/Aider exports, MCP inspection, and audit.
+The test split milestone is now at a reasonable structural baseline: `tests/test_mvp.py` is a legacy pointer, MVP coverage lives in focused modules, imports are explicit, and shared setup is split between `tests/support.py`, `tests/profile_fixtures.py`, and `tests/http_fixtures.py`. Further test cleanup should be incremental and tied to real changes, not broad churn. Product work should continue to serve the narrow public story: a reproducible, inspectable, policy-aware local/hybrid AI coding stack doctor for profiles, providers, model aliases, runtimes/endpoints, hardware fit, Continue/Aider exports, MCP inspection, and audit.
 
 Scope anchor: `aiplane` remains the control plane, not the coding agent, full chat UI, model runtime, general proxy, cloud platform, IDE extension, or infrastructure-tool replacement. Changing that direction is allowed only if the strategy and roadmap explicitly say the project is changing course.
 
@@ -36,7 +36,7 @@ High-level implemented areas:
 
 - profiles, local config, ignored credential references, provider credential tests, and validation;
 - environment planning/doctor checks for system Python, `venv`, Conda, and Docker, with setup helpers that bootstrap ignored `profiles/local-dev` before profile-aware checks;
-- provider/model catalogs including NVIDIA Hugging Face-scoped open model discovery, OpenAI-compatible `/v1/models` discovery, structural shipped profile config, ignored discovery cache review, direct profile-owned model add/clone, runtime/source mapping, local model defaults, protocol-backed single-prompt execution for Ollama/OpenAI-compatible/Azure OpenAI/Anthropic, and benchmark smoke checks;
+- provider/model catalogs including NVIDIA Hugging Face-scoped open model discovery, OpenAI-compatible `/v1/models` discovery, structural shipped profile config, ignored discovery cache review, direct profile-owned model add/clone, runtime/source mapping, local model defaults, local coding stack doctor summaries, protocol-backed single-prompt execution for Ollama/OpenAI-compatible/Azure OpenAI/Anthropic, and benchmark smoke checks;
 - hardware discovery, machine inventory, Azure SKU discovery/import, and stack planning;
 - tool doctors/plans/exports for infrastructure, quality, and automation tools;
 - integration role inspection, setup, and exports for Continue, Cline, Zed, Aider, OpenAI-compatible clients, and MCP client snippets, with setup planning supported helper install/start/pull actions and skipping unsupported source/runtime pull combinations;
@@ -54,7 +54,7 @@ Known in-progress areas:
 - `deploy apply` now requires explicit `--yes`, and broad cloud apply remains intentionally out of scope until provider-specific guardrails are ready;
 - provider-specific IaC/playbook/template hardening;
 - broader deployment apply paths;
-- endpoint authentication/gateway planning now exists at stack level through endpoint auth/TLS/gateway metadata and `stacks endpoint-plan`; richer runtime-agnostic chat/task UX beyond single-prompt execution remains planned;
+- endpoint authentication/gateway planning now exists at stack level through endpoint auth/TLS/gateway metadata and `stacks endpoint-plan`; top-level `aiplane doctor` now gives a read-only local coding stack readiness summary; richer runtime-agnostic chat/task UX beyond single-prompt execution remains planned;
 - benchmark metrics, comparisons, and repeated-run summaries;
 - continued test-suite performance/isolation hardening. Default tests should use synthetic fixture profiles, temp roots, mocked subprocess/network boundaries, and controlled generated caches; real disk/cache/tool dependencies should be explicit and isolated in dev setup.
 
@@ -66,6 +66,8 @@ Latest checks from this session:
 PYTHONPATH=src python -m aiplane profiles validate local-dev
 PYTHONPATH=src python -m aiplane environment doctor --required-only
 PYTHONPATH=src python -m aiplane environment doctor --required-only --format json
+PYTHONPATH=src python -m aiplane doctor --profile local-dev
+PYTHONPATH=src python -m aiplane doctor --profile local-dev --format json
 PYTHONPATH=src python -m pytest -q
 PYTHONPATH=src python -m aiplane tools matrix
 PYTHONPATH=src python -m aiplane tools plan opentofu
@@ -88,7 +90,8 @@ Results:
 - Profile validation passed with `ok: true`.
 - `environment doctor --required-only` passed with `2/2` mandatory tools installed; runtime prerequisite checks now come from provider/runtime config rather than shipped model defaults.
 - JSON environment doctor passed with mandatory tools installed and runtime prerequisite rows for Ollama and vLLM.
-- Latest local gate passed after the test split: `scripts/check.sh` completed with formatter check, Ruff lint, and `257 passed in 20.87s`. The original `tests/test_mvp.py` monolith is now a legacy pointer; MVP coverage lives in focused domain modules with shared setup in `tests/support.py`. Earlier full-gate baselines reported `253 passed` before the chat/task behavior tests and split.
+- Top-level `aiplane doctor --profile local-dev` passed in text and JSON modes. It is read-only and summarizes profile status, required/optional environment checks, configured model defaults, provider readiness, Continue/Aider export readiness, MCP manifest availability, and next safe steps.
+- Latest local gate passed after explicit test imports, focused fixture split, and local doctor coverage: `scripts/check.sh` completed with formatter check, Ruff lint, and `261 passed in 22.32s`. The original `tests/test_mvp.py` monolith is now a legacy pointer; MVP coverage lives in focused domain modules with shared setup in `tests/support.py`, `tests/profile_fixtures.py`, and `tests/http_fixtures.py`. Earlier full-gate baselines reported `253 passed` before the chat/task behavior tests and split.
 - `tools matrix` passed and reported `16` tools, `2` mandatory, `14` optional, `11` installable by `aiplane`, `7` exports available, and `9` workflow categories: `4` complete, `1` partial, and `4` needing setup on this machine.
 - `tools plan opentofu` passed and reported OpenTofu as optional/manual with non-mutating IaC plan guidance.
 - `models list` returned an empty list for the clean structural profile template until discovery or local model entries are added.
@@ -124,8 +127,8 @@ Orchestrator support now has stack role metadata over reviewed model aliases and
 
 ## Next Useful Work
 
-1. Refine the new focused test modules without changing behavior: `test_profiles_config.py`, `test_models_providers.py`, `test_runtimes_execution.py`, `test_integrations_chat.py`, `test_mcp.py`, `test_hardware_machines.py`, `test_stacks_orchestrators.py`, `test_environment_tools_benchmarks.py`, and `test_deploy_remote.py`.
-2. Extract shared test support for isolated profiles, fixture model catalogs, mock HTTP endpoints, subprocess/runtime helper fakes, and CLI stdout/stderr capture so new files do not copy setup code.
-3. Keep focused test runs green after each move, then run the full `scripts/check.sh` gate before calling the split complete.
+1. Continue the local coding doctor wedge by tightening readiness details that directly help the first public flow: model role defaults, endpoint reachability, hardware fit, Continue/Aider export gaps, and MCP read-surface status.
+2. Treat the test split as structurally complete for now; only refine test modules or fixtures when new behavior work exposes duplication, unclear ownership, or slow/fragile setup.
+3. Keep shared helpers explicit: isolated profiles, fixture model catalogs, mock HTTP endpoints, subprocess/runtime helper fakes, and CLI stdout/stderr capture should stay reusable without reintroducing wildcard imports or duplicated setup.
 4. Preserve the local/hybrid AI coding stack doctor as the public wedge while doing cleanup; do not use test restructuring as a reason to broaden agent, chat UI, runtime, cloud apply, or IDE scope.
-5. After the test split, resume Docker-aware stack lifecycle and framework-specific starter template hardening only where stable official APIs justify it.
+5. After the doctor wedge is cohesive, resume Docker-aware stack lifecycle and framework-specific starter template hardening only where stable official APIs justify it.
