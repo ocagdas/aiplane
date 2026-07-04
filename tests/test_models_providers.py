@@ -36,11 +36,11 @@ class ModelProviderTests(unittest.TestCase):
         profile = load_profile("local-dev", Path.cwd())
         rows = ModelCatalog(profile).list()
         names = {row["name"] for row in rows}
-        self.assertIn("local-analysis-small", names)
+        self.assertIn("fixture-analysis-small", names)
         self.assertNotIn("openai-main", names)
         self.assertIn("local-reasoning-xl", names)
         self.assertIn("codelocal-chat-large", names)
-        analysis_model = next(row for row in rows if row["name"] == "local-analysis-small")
+        analysis_model = next(row for row in rows if row["name"] == "fixture-analysis-small")
         self.assertIn("capabilities", analysis_model)
         self.assertEqual(analysis_model["capabilities"]["score_scale"], "0-5")
         self.assertIn("code_generation", analysis_model["capabilities"]["scores"])
@@ -49,29 +49,29 @@ class ModelProviderTests(unittest.TestCase):
         with _isolated_test_profile() as profile:
             catalog = ModelCatalog(profile)
 
-            llama = catalog.show("local-chat-small")
+            llama = catalog.show("fixture-chat-small")
             self.assertEqual(llama["model"], "provider-chat-small:8b")
             self.assertIn("chat", llama["roles"])
 
-            code_base = catalog.show("local-code-base")
+            code_base = catalog.show("fixture-code-base")
             self.assertEqual(code_base["model"], "provider-code-base:1.5b")
             self.assertIn("autocomplete", code_base["roles"])
             self.assertGreaterEqual(code_base["capabilities"]["scores"]["code_completion"], 3)
 
-            embedding_row = catalog.show("local-embedding-small")
-            self.assertEqual(embedding_row["model"], "local-embedding-small:latest")
+            embedding_row = catalog.show("fixture-embedding-small")
+            self.assertEqual(embedding_row["model"], "fixture-embedding-small:latest")
             self.assertIn("embedding", embedding_row["roles"])
             self.assertEqual(embedding_row["capabilities"]["scores"]["embedding"], 5)
 
             autocomplete_rows = catalog.filter({"role": "autocomplete"})
-            self.assertIn("local-code-base", {row["name"] for row in autocomplete_rows})
+            self.assertIn("fixture-code-base", {row["name"] for row in autocomplete_rows})
             embedding_rows = catalog.filter({"role": "embedding"})
-            self.assertIn("local-embedding-small", {row["name"] for row in embedding_rows})
+            self.assertIn("fixture-embedding-small", {row["name"] for row in embedding_rows})
 
     def test_model_catalog_refresh_imports_provider_discovered_models(self) -> None:
         source = load_profile("local-dev", Path.cwd())
         models_config = json.loads(json.dumps(source.models))
-        models_config.setdefault("models", {})["local-chat-small"] = {
+        models_config.setdefault("models", {})["fixture-chat-small"] = {
             "provider": "ollama",
             "model": "provider-chat-small:8b",
             "enabled": True,
@@ -136,7 +136,7 @@ class ModelProviderTests(unittest.TestCase):
             self.assertTrue((root / "models.discovered.yaml").exists())
             if (root / "models.yaml").exists():
                 self.assertIn(
-                    "local-chat-small:",
+                    "fixture-chat-small:",
                     (root / "models.yaml").read_text(encoding="utf-8"),
                 )
             rows = written["results"]["ollama"]["model_changes"]
@@ -263,7 +263,7 @@ class ModelProviderTests(unittest.TestCase):
         models_config["models"] = {
             name: model
             for name, model in models_config["models"].items()
-            if name in {"local-analysis-small", "provider-code-large-vllm"}
+            if name in {"fixture-analysis-small", "provider-code-large-vllm"}
         }
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -1299,12 +1299,12 @@ class ModelProviderTests(unittest.TestCase):
     def test_model_catalog_refresh_prunes_live_discovery_but_not_fallback(self) -> None:
         source = load_profile("local-dev", Path.cwd())
         models_config = json.loads(json.dumps(source.models))
-        models_config.setdefault("models", {})["local-chat-small"] = {
+        models_config.setdefault("models", {})["fixture-chat-small"] = {
             "provider": "ollama",
             "model": "provider-chat-small:8b",
             "enabled": True,
         }
-        models_config.setdefault("models", {})["local-analysis-small"] = {
+        models_config.setdefault("models", {})["fixture-analysis-small"] = {
             "provider": "ollama",
             "model": "provider-text-small:0.5b",
             "enabled": True,
@@ -1337,7 +1337,7 @@ class ModelProviderTests(unittest.TestCase):
                 self.assertEqual(preview["changes"]["would_remove"], 0)
                 self.assertTrue(preview["results"]["ollama"]["prune_enabled"])
                 self.assertIn(
-                    "local-analysis-small:",
+                    "fixture-analysis-small:",
                     (root / "models.yaml").read_text(encoding="utf-8"),
                 )
 
@@ -1345,8 +1345,8 @@ class ModelProviderTests(unittest.TestCase):
 
             self.assertEqual(written["changes"]["removed"], 0)
             written_text = (root / "models.yaml").read_text(encoding="utf-8")
-            self.assertIn("local-analysis-small:", written_text)
-            self.assertIn("local-chat-small:", written_text)
+            self.assertIn("fixture-analysis-small:", written_text)
+            self.assertIn("fixture-chat-small:", written_text)
 
             fallback_profile = Profile(
                 name="tmp",
@@ -1394,12 +1394,12 @@ class ModelProviderTests(unittest.TestCase):
             catalog = ModelCatalog(profile)
             self.assertEqual(
                 catalog.default_model("self_managed_model")["name"],
-                "local-analysis-small",
+                "fixture-analysis-small",
             )
-            changed = catalog.set_default("self_managed_model", "local-code-small")
-            self.assertEqual(changed["name"], "local-code-small")
+            changed = catalog.set_default("self_managed_model", "fixture-code-small")
+            self.assertEqual(changed["name"], "fixture-code-small")
             self.assertIn(
-                "self_managed_model: local-code-small",
+                "self_managed_model: fixture-code-small",
                 (root / "models.yaml").read_text(encoding="utf-8"),
             )
 
@@ -1814,7 +1814,7 @@ class ModelProviderTests(unittest.TestCase):
             target = workspace / "sample.py"
             target.write_text("def add(a, b):\n    return a + b\n", encoding="utf-8")
             profile = load_profile("local-dev", workspace)
-            result = ModelCatalog(profile).test_prompt("local-analysis-small", "analysis", target, dry_run=True)
+            result = ModelCatalog(profile).test_prompt("fixture-analysis-small", "analysis", target, dry_run=True)
             self.assertEqual(result.backend, "dry_run")
             self.assertIn("Explain what this code does", result.text)
             self.assertIn("def add", result.text)
@@ -1822,7 +1822,7 @@ class ModelProviderTests(unittest.TestCase):
     def test_model_benchmark_dry_run_reports_tasks_without_saving(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             profile = load_profile("local-dev", Path(tmp))
-            result = BenchmarkRunner(profile).run("local-analysis-small", task="all", dry_run=True, save=False)
+            result = BenchmarkRunner(profile).run("fixture-analysis-small", task="all", dry_run=True, save=False)
             self.assertTrue(result["dry_run"])
             self.assertEqual(result["summary"]["previewed"], 4)
             self.assertEqual(result["summary"]["average_score"], 0)
@@ -1840,7 +1840,7 @@ class ModelProviderTests(unittest.TestCase):
                 [
                     "models",
                     "benchmark",
-                    "local-analysis-small",
+                    "fixture-analysis-small",
                     "--dry-run",
                     "--no-save",
                 ]
@@ -1848,7 +1848,7 @@ class ModelProviderTests(unittest.TestCase):
         self.assertEqual(code, 0)
         payload = json.loads(stdout.getvalue())
         self.assertTrue(payload["dry_run"])
-        self.assertEqual(payload["model_name"], "local-analysis-small")
+        self.assertEqual(payload["model_name"], "fixture-analysis-small")
         self.assertEqual(payload["summary"]["previewed"], 4)
 
     def test_model_catalog_cloud_doctor_checks_env_var(self) -> None:
@@ -1916,7 +1916,7 @@ class ModelProviderTests(unittest.TestCase):
 
     def test_model_show_includes_provider_config(self) -> None:
         profile = load_profile("local-dev", Path.cwd())
-        model = ModelCatalog(profile).show("local-analysis-small")
+        model = ModelCatalog(profile).show("fixture-analysis-small")
         self.assertEqual(model["provider"], "ollama")
         self.assertIn("endpoint", model["provider_config"])
         self.assertIn("capabilities", model)
@@ -2007,14 +2007,14 @@ class ModelProviderTests(unittest.TestCase):
                         str(profiles_dir),
                         "models",
                         "disable",
-                        "local-analysis-small",
+                        "fixture-analysis-small",
                     ]
                 )
             self.assertEqual(code, 0)
             payload = json.loads(stdout.getvalue())
             self.assertFalse(payload["enabled"])
             profile = load_profile("local-dev", Path.cwd(), profiles_dir=profiles_dir)
-            self.assertFalse(ModelCatalog(profile).show("local-analysis-small")["enabled"])
+            self.assertFalse(ModelCatalog(profile).show("fixture-analysis-small")["enabled"])
 
             stdout = StringIO()
             with redirect_stdout(stdout):
@@ -2024,16 +2024,16 @@ class ModelProviderTests(unittest.TestCase):
                         str(profiles_dir),
                         "models",
                         "enable",
-                        "local-analysis-small",
+                        "fixture-analysis-small",
                     ]
                 )
             self.assertEqual(code, 0)
             profile = load_profile("local-dev", Path.cwd(), profiles_dir=profiles_dir)
-            self.assertTrue(ModelCatalog(profile).show("local-analysis-small")["enabled"])
+            self.assertTrue(ModelCatalog(profile).show("fixture-analysis-small")["enabled"])
 
     def test_disabled_general_candidate_is_configured(self) -> None:
         profile = load_profile("local-dev", Path.cwd())
-        general_row = ModelCatalog(profile).show("local-general-small")
+        general_row = ModelCatalog(profile).show("fixture-general-small")
         self.assertEqual(general_row["model"], "provider-general-small:3b")
         self.assertFalse(general_row["enabled"])
 
@@ -2248,7 +2248,7 @@ class ModelProviderTests(unittest.TestCase):
         profile = load_profile("local-dev", Path.cwd())
         statuses = ProviderRegistry(profile).doctor("ollama")
         names = {status.name for status in statuses}
-        self.assertIn("local-analysis-small", names)
+        self.assertIn("fixture-analysis-small", names)
         self.assertNotIn("provider-code-large-vllm", names)
 
     def test_provider_doctor_cli_runs_without_provider_argument(self) -> None:
@@ -2319,7 +2319,7 @@ class ModelProviderTests(unittest.TestCase):
         profile = load_profile("local-dev", Path.cwd())
         provider = ProviderRegistry(profile).show("ollama")
         model_names = {row["name"] for row in provider["profile_models"]}
-        self.assertIn("local-analysis-small", model_names)
+        self.assertIn("fixture-analysis-small", model_names)
 
     def test_provider_models_lists_source_catalog_entries(self) -> None:
         profile = load_profile("local-dev", Path.cwd())
@@ -2743,11 +2743,11 @@ class ModelProviderTests(unittest.TestCase):
             workspace = Path(tmp)
             root = workspace / ".aiplane" / "benchmarks"
             root.mkdir(parents=True)
-            (root / "20260101T000000Z-local-analysis-small.json").write_text(
+            (root / "20260101T000000Z-fixture-analysis-small.json").write_text(
                 json.dumps({"summary": {"average_score": 91, "passed": 1, "failed": 0}}),
                 encoding="utf-8",
             )
             profile = load_profile("local-dev", workspace)
             rows = ModelCatalog(profile).filter({"min_benchmark_score": 90})
         names = {row["name"] for row in rows}
-        self.assertIn("local-analysis-small", names)
+        self.assertIn("fixture-analysis-small", names)

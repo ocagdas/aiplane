@@ -2,45 +2,57 @@
 
 This plan is for a short public demo of `aiplane` as it exists today. The project is under active development, so individual commands, flags, and output shapes may change. The stable message is the philosophy: make AI development environments explicit, inspectable, repeatable, and safe to rehearse before mutating a host or cloud account.
 
-`aiplane` is a control-plane CLI for self-managed and managed AI development environments. It does not try to replace coding agents, model runtimes, IDE extensions, orchestrator frameworks, or cloud platforms. It organizes the operational layer around them: profiles, providers, model entries, runtimes, machines, stacks, tool readiness, IDE exports, MCP access, orchestrator metadata, and deployment plans.
+`aiplane` is primarily a control-plane CLI for self-managed and managed AI development environments. It is also a thin runner where that helps validate the configured environment: endpoint-backed `chat`, single-prompt `run`, code-task commands, and runtime helper delegation. It does not try to become a model runtime, full chat product, IDE extension, autonomous coding agent, orchestrator platform, or cloud platform. It organizes the operational layer around those tools: profiles, providers, model entries, runtimes, machines, stacks, tool readiness, IDE exports, MCP access, orchestrator metadata, runner smoke checks, and deployment plans.
 
-## Recommended Split
+## Demo Target After `mvp_0.2`
 
-Use two videos rather than one overloaded three-minute recording.
+The `mvp_0.2` demo goals should remain the spine: install/validate `aiplane`, discover and filter models, set up a runtime, pull a model, run chat/tasks, export Continue config, expose MCP, and explain repeatability across local, remote, and cloud-adjacent targets.
 
-1. **Video 1: Local Control Plane To Coding Tool** - target 2:45-3:00.
-   - Tool philosophy and current status.
-   - Install `aiplane` itself.
-   - Discover/filter models for roles and hardware.
-   - Set up a runtime, pull a model, run a simple chat.
-   - Export Continue config.
-   - Export/start MCP config.
+The `mvp_0.3` enhancement is not a different product story. It makes that original story safer and easier to follow:
 
-2. **Video 2: Repeatability, Remote Targets, And Roadmap** - target 2:45-3:00.
-   - Explain profiles/stacks as a repeatable architecture.
-   - Copy/import YAML state and rerun the same commands elsewhere.
-   - Show machine/resource discovery for a purpose such as video generation.
-   - Touch on LangGraph/orchestrators and current state.
-   - Show where Ansible/IaC/runtime packaging fit next.
-   - Close with roadmap and active-development caveat.
+- `quickstart local-coding` creates or previews the first local profile flow.
+- Top-level `doctor` gives one local/hybrid coding-stack readiness summary.
+- Model/runtime/provider/hardware/integration/MCP checks are more explicit.
+- `chat`, `run`, and code-task operations are runtime-agnostic endpoint runners where possible, while Ollama still has an optional native CLI path.
+- `--pull-model` now means execute the runtime-helper pull; `--dry-run --pull-model` means preview it.
+- MCP has a documented read surface and narrow guarded writes, while broad installs, model pulls, cloud apply, secret writes, and arbitrary shell stay out of MCP.
 
-A single three-minute video can be cut from Video 1 only. Trying to include Azure/media/orchestrators in the same first video will likely make the story feel rushed.
+Use a three-part demo rather than two overloaded videos.
+
+1. **Section 1: Local Coding Stack Readiness** - target 2:45-3:00.
+   - Install or validate the CLI.
+   - Run `quickstart local-coding` in dry-run and real disposable-profile modes.
+   - Show `aiplane doctor` as the local/hybrid coding-stack summary: profile files, required tools, model defaults, endpoints, hardware fit, Continue/Aider readiness, and MCP read-surface readiness.
+   - Show that an empty structural template reports missing model defaults clearly rather than pretending it is ready.
+
+2. **Section 2: Model To Runtime To Runner** - target 2:45-3:00.
+   - Preserve the `mvp_0.2` live path: discover/filter a local Ollama-capable model, add/promote a reviewed alias, preview setup/pull, execute pull when prepared, then run `chat`, `run`, and code-task smoke checks.
+   - Explain the runner boundary precisely: `aiplane` can route single prompts and task prompts through configured endpoints or delegated runtime helpers; it is not a full chat UI, model server, or autonomous coding agent.
+   - Export Continue/Aider/OpenAI-compatible config only after aliases/defaults exist.
+
+3. **Section 3: Portability, MCP, And Roadmap** - target 2:45-3:00.
+   - Show profile/machine/stack repeatability, remote endpoint/tunnel planning, MCP manifest/config export, orchestrator metadata, and tool/deploy planning.
+   - Keep Azure/media/orchestrator items as planning/readiness demos unless a prepared sanitized environment exists.
+   - Close with the scope anchor: control plane plus thin runner smoke checks, not a runtime/platform replacement.
+
+A single three-minute cut should be Section 1 plus a short runner clip from Section 2. The full public walkthrough should use all three sections.
 
 ## Demo Thesis
 
-Show that `aiplane` gives a structured path from intent to usable AI environment:
+Show that `aiplane` gives a structured path from intent to usable AI coding environment:
 
 1. Describe the setup in profiles rather than ad hoc shell notes.
-2. Discover models from providers for different purposes.
-3. Filter by role, runtime, score, and hardware fit.
-4. Install/start the runtime deliberately, with dry-runs and doctors available.
-5. Pull and use the selected model.
-6. Export config for coding tools and MCP-capable clients.
-7. Reproduce the same setup locally, on a remote machine, or against a cloud target.
+2. Inspect readiness with doctors before mutating runtime or cloud state.
+3. Discover and review model candidates separately from stable profile-owned aliases.
+4. Filter by role, runtime/source, capability, RAM/VRAM, score, and target hardware.
+5. Pull and start runtime assets deliberately, with dry-runs and clear helper ownership.
+6. Run small chat/task smoke checks through configured endpoints or explicit runtime helper paths.
+7. Export config for coding tools and MCP-capable clients.
+8. Reproduce the same setup locally, on a remote machine, or against a cloud-adjacent target.
 
-## Quick Exec Demo Path
+## Quick Demo Path
 
-Use this short command path when you want a compact local execution demo with the default `local-dev` profile. `aiplane chat` uses the configured endpoint path by default; add `--native-ollama` only when you explicitly want Ollama's `ollama run` CLI path for an Ollama-runnable alias.
+Use this path for a compact rehearsal. It keeps the original `mvp_0.2` execution goals but places the `mvp_0.3` quickstart/doctor checks before live runtime work.
 
 ```bash
 # Install and validate the CLI/profile.
@@ -49,63 +61,61 @@ conda activate aiplane
 aiplane profiles validate local-dev
 aiplane environment doctor --required-only
 
-# Discover current hardware and choose an Ollama-runnable chat alias that fits it.
-aiplane hardware discover --select-closest --dry-run
-aiplane models refresh --provider ollama --query chat --dry-run --limit 5
-aiplane models refresh --provider ollama --query chat --limit 10
-aiplane models list --runtime ollama --role chat --capability 'general_chat>=2' --fits-hardware --enabled-only --max-parameters-b 14 --ram-gb 32 --vram-gb 3 --sort-by role --limit 5
-aiplane models list --runtime ollama --role chat --enabled-only --min-parameters-b 7 --max-parameters-b 14 --sort-by parameters --limit 5
-# The output includes role_score, role_capabilities, and parameter_count_b when it can be inferred.
-# `--sort-by benchmark` is separate and uses saved benchmark results when they exist.
-OLLAMA_CHAT_ALIAS="$(aiplane models list --runtime ollama --role chat --capability 'general_chat>=2' --fits-hardware --enabled-only --max-parameters-b 14 --ram-gb 32 --vram-gb 3 --sort-by role --limit 1 --name-only)"
-printf 'ollama_chat=%s\n' "$OLLAMA_CHAT_ALIAS"
+# Section 1: new local-coding readiness wedge.
+aiplane quickstart local-coding --dry-run --no-discovery
+aiplane quickstart local-coding --dry-run --no-discovery --format text
+aiplane --profiles-dir /tmp/aiplane-demo-profiles quickstart local-coding --name demo --no-discovery --no-hardware-discovery
+aiplane --profiles-dir /tmp/aiplane-demo-profiles doctor --profile demo
 
-# Show the local hardware guardrail before any real pull/start.
-aiplane models clone "$OLLAMA_CHAT_ALIAS" demo_too_large --role chat --set min_ram_gb=999999 --set min_vram_gb=999999 --overwrite --dry-run
-aiplane models clone "$OLLAMA_CHAT_ALIAS" demo_too_large --role chat --set min_ram_gb=999999 --set min_vram_gb=999999 --overwrite
-aiplane run --model demo_too_large --dry-run "Hello world" || true
-aiplane run --model demo_too_large --dry-run --ignore-hardware-fit "Hello world"
-aiplane models remove demo_too_large
+# Section 2: original MVP execution path, enhanced with clearer dry-run/pull semantics.
+aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider ollama --query chat --dry-run --limit 5
+aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider ollama --query chat --limit 10
+aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --runtime ollama --role chat --capability 'general_chat>=2' --fits-hardware --enabled-only --sort-by role --limit 5
+CHAT_ALIAS="$(aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --runtime ollama --role chat --capability 'general_chat>=2' --fits-hardware --enabled-only --sort-by role --limit 1 --name-only)"
+printf 'chat_alias=%s\n' "$CHAT_ALIAS"
 
-# Preview and run setup. Setup is the check/prepare step; export remains non-mutating.
-aiplane integrations setup openai-compatible --model "$OLLAMA_CHAT_ALIAS" --dry-run
-aiplane integrations setup openai-compatible --model "$OLLAMA_CHAT_ALIAS"
+# Review/add/promote the chosen alias before exporting or running.
+aiplane --profiles-dir /tmp/aiplane-demo-profiles models show --profile demo "$CHAT_ALIAS"
+aiplane --profiles-dir /tmp/aiplane-demo-profiles integrations roles continue --profile demo
 
-# Native interactive chat through Ollama.
-aiplane chat --model "$OLLAMA_CHAT_ALIAS" --prompt "Say hello from the configured endpoint" --dry-run
-aiplane chat --model "$OLLAMA_CHAT_ALIAS" --prompt "Say hello from the configured endpoint"
-aiplane chat --model "$OLLAMA_CHAT_ALIAS" --native-ollama --dry-run
+# Pull preview versus execution. Run the non-dry command only on a prepared recording machine.
+aiplane --profiles-dir /tmp/aiplane-demo-profiles quickstart local-coding --name demo --dry-run --no-discovery --pull-model "$CHAT_ALIAS"
+aiplane --profiles-dir /tmp/aiplane-demo-profiles quickstart local-coding --name demo --no-discovery --pull-model "$CHAT_ALIAS"
 
-# One-shot model tasks from the CLI. Check runtime readiness before the live call.
 aiplane runtimes status ollama
-aiplane runtimes list-runtime-models ollama
-# Endpoint chat uses the configured runtime/provider API. The optional --native-ollama path uses `ollama run` and may wait longer during first model load.
-aiplane code write --model "$OLLAMA_CHAT_ALIAS" --task "write a Python function that validates an email address" --dry-run
-aiplane code write --model "$OLLAMA_CHAT_ALIAS" --task "write a Python function that validates an email address" --timeout-seconds 180
-aiplane code analyze --model "$OLLAMA_CHAT_ALIAS" src/aiplane/cli.py --dry-run
+aiplane --profiles-dir /tmp/aiplane-demo-profiles chat --profile demo --model "$CHAT_ALIAS" --prompt "Say hello from the configured endpoint" --dry-run
+aiplane --profiles-dir /tmp/aiplane-demo-profiles chat --profile demo --model "$CHAT_ALIAS" --prompt "Say hello from the configured endpoint" --timeout-seconds 180
+aiplane --profiles-dir /tmp/aiplane-demo-profiles run --profile demo --model "$CHAT_ALIAS" --dry-run "Summarize what aiplane is in one sentence."
+aiplane --profiles-dir /tmp/aiplane-demo-profiles code write --profile demo --model "$CHAT_ALIAS" --task "write a Python function that validates an email address" --dry-run
 
-# Continue config is a separate export step.
-aiplane integrations export continue --chat "$OLLAMA_CHAT_ALIAS"
+# Export after aliases/defaults exist or pass explicit role selections.
+aiplane --profiles-dir /tmp/aiplane-demo-profiles integrations export continue --profile demo --chat "$CHAT_ALIAS"
+aiplane --profiles-dir /tmp/aiplane-demo-profiles integrations export aider --profile demo --chat "$CHAT_ALIAS"
+
+# Section 3: MCP and repeatability surfaces.
+aiplane --profiles-dir /tmp/aiplane-demo-profiles integrations export vscode-mcp --profile demo
+aiplane mcp manifest
+aiplane --profiles-dir /tmp/aiplane-demo-profiles hardware discover --profile demo --dry-run
+aiplane --profiles-dir /tmp/aiplane-demo-profiles hardware recommend --profile demo
+aiplane --profiles-dir /tmp/aiplane-demo-profiles stacks setup --profile demo cpu_chat --runtime ollama --model "$CHAT_ALIAS" --access same_host --dry-run
 ```
 
-If setup appears to be doing a real install/start/pull, it now reports per-step progress to stderr. Endpoint chat requires a chat-capable alias and a reachable configured endpoint. The optional `--native-ollama` path requires an Ollama-runnable alias because it delegates to `ollama run <model-id>`; Ollama-library aliases and resolvable Hugging Face GGUF aliases can both work.
-Large first-run models can time out while Ollama is loading them; use `aiplane runtimes status ollama`, `aiplane runtimes list-runtime-models ollama`, and a smaller `--runtime ollama` alias for the live recording path when needed.
+Use `aiplane chat --native-ollama --dry-run --model "$CHAT_ALIAS"` only when you explicitly want to show Ollama's `ollama run` path. The default chat path should demonstrate the endpoint-backed runner.
 
 Key points to say explicitly:
 
-- `aiplane` is a control plane, not another agent or runtime.
-- The tool is active-development software; commands may change, but the workflow philosophy is the product.
-- Providers, models, runtimes, machines, stacks, credentials, and integrations are separate concepts.
+- `aiplane` is a control plane with thin runner/smoke-test surfaces; it is not a model runtime, full chat UI, IDE extension, autonomous coding agent, or cloud platform.
+- The narrow public wedge is local/hybrid AI coding stack readiness from one profile.
+- Providers, models, runtimes, machines, stacks, credentials, integrations, and runner commands are separate concepts.
 - Generated discovery entries are review buffers; profile-owned model entries are deliberate configuration.
 - Doctors, dry-runs, plans, and exports come before mutation.
-- Model selection can be grouped and filtered by provider, runtime, role, capability/score, RAM/VRAM, and target hardware; `--fits-hardware` composes with capability filters, role-score sorting, and `--limit 1`.
-- Local model runs fail before pull/start when active hardware minimums are not met, unless `--ignore-hardware-fit` is passed.
-- The `demo_too_large` clone is a disposable guardrail example: it points at the same real model but carries impossible resource requirements so the rejection is deterministic.
-- The longer-term direction includes custom profiling/scoring, richer benchmark data, orchestrator exports, and remote/cloud resource planning.
+- Model pulls are opt-in: `--pull-model` executes, and `--dry-run --pull-model` previews.
+- MCP exposes structured inspection/planning/export plus narrow guarded writes; broad shell execution, runtime installs, model pulls, cloud apply, and secret writes remain outside MCP.
+- The longer-term direction includes remote GPU workstation profiles, team policy/governance, richer benchmark data, orchestrator exports, and guarded cloud/resource planning.
 
 ## Disposable Demo Profile
 
-Complete the Conda install step in Video 1 before running these prep commands, or
+Complete the Conda install step in Section 1 before running these prep commands, or
 run it once before recording. The command blocks below assume the `aiplane`
 console script is available from the active Conda environment.
 
@@ -119,7 +129,7 @@ aiplane --profiles-dir /tmp/aiplane-demo-profiles profiles validate demo
 
 Use `--profiles-dir /tmp/aiplane-demo-profiles --profile demo` on commands that intentionally write profile state, such as model refresh, machine import, or stack setup. Keep read-only commands on `local-dev` when you want to show the normal project profile.
 
-## Video 1: Local Control Plane To Coding Tool
+## Section 1: Local Coding Stack Readiness
 
 ### 0:00-0:25 - Tool, Philosophy, Status
 
@@ -132,7 +142,7 @@ aiplane profiles validate local-dev
 
 Voiceover:
 
-> This is aiplane. It is a control-plane CLI for AI development environments. It is not a model runtime, coding agent, IDE extension, or cloud platform. It helps organize the operational pieces around them: profiles, providers, models, runtimes, machines, stacks, tool readiness, integrations, MCP access, and deployment plans.
+> This is aiplane. It is primarily a control-plane CLI for AI development environments, with thin runner commands for validating configured models and endpoints. It is not a model runtime, full chat product, autonomous coding agent, IDE extension, or cloud platform. It helps organize the operational pieces around them: profiles, providers, models, runtimes, machines, stacks, tool readiness, integrations, MCP access, runner smoke checks, and deployment plans.
 
 > The project is under active development, so flags and exact output can change. The important idea is stable: inspect first, plan and dry-run where possible, then make repeatable changes deliberately.
 
@@ -257,7 +267,9 @@ aiplane providers test azure_openai --credential-ref azure_openai.business_a
 
 Recording note: show the redacted `credentials list/show` output, not the editor with real values. Use `api_key_env` and shell/secret-manager environment variables for actual secrets.
 
-### 1:30-2:00 - Runtime Setup, Pull, And Chat
+## Section 2: Model To Runtime To Runner
+
+### 0:00-0:35 - Runtime Setup, Pull, And Chat
 
 Use the integration setup flow as the practical task-level bundle. It reuses the Continue plan, checks the selected runtime/model state, and previews supported install/start/pull helper actions before doing anything live:
 
@@ -295,7 +307,7 @@ Voiceover:
 
 Recording note: `aiplane chat` resolves the model entry and uses the configured endpoint path by default. Only run mutating setup live if the machine is prepared. Otherwise keep this as a dry-run and show `status` from an already-running runtime. Use `--native-ollama` only to demonstrate Ollama's native CLI path.
 
-### 2:00-2:30 - Continue Config
+### 0:35-1:15 - Continue Config
 
 Plan and export Continue config from the selected model entries:
 
@@ -309,7 +321,7 @@ Voiceover:
 
 > aiplane does not edit Continue automatically. It resolves the model and endpoint choices, then prints config that can be reviewed and pasted into Continue or another compatible tool.
 
-### 2:30-2:55 - MCP
+### 1:15-1:45 - MCP
 
 Show MCP manifest and VS Code config export:
 
@@ -328,13 +340,13 @@ Voiceover:
 
 > MCP exposes structured aiplane inspection to compatible tools. Read tools cover profiles, providers, models, hardware, recommendations, integrations, and runtime status. Writes are narrow and guarded. Broad shell execution, secret writes, and cloud apply are intentionally not exposed.
 
-### 2:55-3:00 - Video 1 Close
+### 1:45-3:00 - Runner Boundary And Close
 
 Voiceover:
 
-> That is the local loop: inspect, discover, filter, set up the runtime, use the model, and export tool configuration. Next, we can take the same profile-shaped setup to remote machines and cloud targets.
+> That is the local loop: inspect, discover, filter, set up the runtime, pull deliberately, run small chat/task checks, and export tool configuration. Next, we can take the same profile-shaped setup to remote machines and cloud-adjacent targets.
 
-## Video 2: Repeatability, Remote Targets, And Roadmap
+## Section 3: Portability, MCP, And Roadmap
 
 ### 0:00-0:30 - Repeatable Architecture
 
@@ -484,12 +496,12 @@ aiplane mcp manifest
 aiplane --profiles-dir /tmp/aiplane-demo-profiles machines discover azure --profile demo --region uksouth --workload inference_small --runtime ollama --limit 5
 ```
 
-## Quick Local-Dev Exec Checklist
+## Quick Local-Dev Runner Checklist
 
 Use this checklist when rehearsing the live execution part of the demo on `local-dev` without the disposable profile flags:
 
 ```bash
-# Pick an Ollama-runnable alias for native chat.
+# Pick an Ollama-runnable alias for endpoint chat and optional native Ollama fallback.
 OLLAMA_CHAT_ALIAS="$(aiplane models list --runtime ollama --role chat --enabled-only --max-parameters-b 14 --ram-gb 32 --vram-gb 3 --sort-by role --limit 1 --name-only)"
 printf 'ollama_chat=%s\n' "$OLLAMA_CHAT_ALIAS"
 aiplane models show "$OLLAMA_CHAT_ALIAS"

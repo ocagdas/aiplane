@@ -17,6 +17,19 @@ LOCAL_CODING_DEFAULT_ROLES = {
     "code": "code_model",
 }
 
+LOCAL_CODING_MCP_TOOLS = {
+    "aiplane.profiles.list",
+    "aiplane.providers.list",
+    "aiplane.models.defaults",
+    "aiplane.models.list",
+    "aiplane.hardware.recommend",
+    "aiplane.integrations.roles",
+    "aiplane.integrations.plan",
+    "aiplane.integrations.export",
+    "aiplane.runtimes.status",
+    "aiplane.remote.tunnel.plan",
+}
+
 
 def local_coding_doctor(profile: Profile, include_optional: bool = False) -> dict[str, Any]:
     catalog = ModelCatalog(profile)
@@ -289,14 +302,43 @@ def _integration_section(defaults: dict[str, Any], models: dict[str, dict[str, A
 def _mcp_section() -> dict[str, Any]:
     manifest = mcp_manifest()
     tools = manifest.get("tools", []) if isinstance(manifest, dict) else []
+    tool_names = {str(tool.get("name")) for tool in tools if isinstance(tool, dict) and tool.get("name")}
+    missing_wedge_tools = sorted(LOCAL_CODING_MCP_TOOLS - tool_names)
+    guarded_writes = sorted(name for name in tool_names if name in _guarded_mcp_write_tools())
     checks = [
         {
             "name": "mcp_manifest",
             "ok": bool(tools),
             "detail": f"{len(tools) if isinstance(tools, list) else 0} tools advertised",
-        }
+        },
+        {
+            "name": "mcp_local_coding_read_surface",
+            "ok": not missing_wedge_tools,
+            "detail": "ready" if not missing_wedge_tools else "missing tools: " + ", ".join(missing_wedge_tools),
+            "required_tools": sorted(LOCAL_CODING_MCP_TOOLS),
+            "missing_tools": missing_wedge_tools,
+        },
+        {
+            "name": "mcp_guarded_write_surface",
+            "ok": True,
+            "detail": f"{len(guarded_writes)} narrow audited write/lifecycle tools advertised",
+            "tools": guarded_writes,
+            "note": "Broad runtime installs, model pulls, cloud apply, secret writes, and arbitrary shell execution remain outside this MCP readiness check.",
+        },
     ]
     return {"name": "mcp", "ok": all(check["ok"] for check in checks), "checks": checks}
+
+
+def _guarded_mcp_write_tools() -> set[str]:
+    return {
+        "aiplane.models.refresh",
+        "aiplane.models.use",
+        "aiplane.hardware.use",
+        "aiplane.runtimes.use",
+        "aiplane.remote.tunnel.start",
+        "aiplane.remote.tunnel.stop",
+        "aiplane.remote.tunnel.status",
+    }
 
 
 def _configured_default_aliases(

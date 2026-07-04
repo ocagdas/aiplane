@@ -1,13 +1,15 @@
+# Synthetic test-only model aliases injected by tests/profile_fixtures.py.
+# Shipped profile templates intentionally start with structural models.yaml only.
 defaults:
-  self_managed_model: local-analysis-small
-  chat_model: local-chat-small
-  autocomplete_model: local-code-base
-  embedding_model: local-embedding-small
-  code_model: local-code-small
-  completion_model: local-code-small
-  reasoning_model: local-reasoning-small
+  self_managed_model: fixture-analysis-small
+  chat_model: fixture-chat-small
+  autocomplete_model: fixture-code-base
+  embedding_model: fixture-embedding-small
+  code_model: fixture-code-small
+  completion_model: fixture-code-small
+  reasoning_model: fixture-reasoning-small
 models:
-  local-analysis-small:
+  fixture-analysis-small:
     provider: ollama
     model: 'provider-text-small:0.5b'
     roles: [analysis, completion, autocomplete, generation]
@@ -19,7 +21,7 @@ models:
     min_ram_gb: 4
     recommended_ram_gb: 8
     min_vram_gb: 0
-  local-code-small:
+  fixture-code-small:
     provider: ollama
     model: 'provider-code-small:1.5b'
     roles: [analysis, completion, autocomplete, generation]
@@ -31,7 +33,7 @@ models:
     min_ram_gb: 8
     recommended_ram_gb: 16
     min_vram_gb: 0
-  local-code-base:
+  fixture-code-base:
     provider: ollama
     model: 'provider-code-base:1.5b'
     roles: [completion, autocomplete]
@@ -57,7 +59,7 @@ models:
       audio: 0
       video: 0
     capability_score_source: catalog_entry
-  local-code-alt-small:
+  fixture-code-alt-small:
     provider: ollama
     model: 'provider-code-alt-small:3b'
     roles: [analysis, completion, autocomplete, generation]
@@ -69,7 +71,7 @@ models:
     min_ram_gb: 12
     recommended_ram_gb: 24
     min_vram_gb: 0
-  local-general-small:
+  fixture-general-small:
     provider: ollama
     model: 'provider-general-small:3b'
     roles: [analysis, generation]
@@ -80,7 +82,7 @@ models:
     min_ram_gb: 12
     recommended_ram_gb: 24
     min_vram_gb: 0
-  local-code-small-plus:
+  fixture-code-small-plus:
     provider: ollama
     model: 'provider-code-small-plus:3b'
     roles: [analysis, completion, generation]
@@ -128,7 +130,7 @@ models:
     recommended_ram_gb: 128
     min_vram_gb: 24
     recommended_vram_gb: 32
-  local-reasoning-small:
+  fixture-reasoning-small:
     provider: ollama
     model: 'provider-reasoning-small:1.5b'
     roles: [analysis, generation]
@@ -271,7 +273,7 @@ models:
     recommended_ram_gb: 256
     min_vram_gb: 48
     recommended_vram_gb: 80
-  local-chat-small:
+  fixture-chat-small:
     provider: ollama
     model: 'provider-chat-small:8b'
     roles: [chat, analysis, generation]
@@ -295,14 +297,14 @@ models:
     recommended_ram_gb: 32
     min_vram_gb: 6
     recommended_vram_gb: 10
-  local-embedding-small:
+  fixture-embedding-small:
     provider: ollama
-    model: 'local-embedding-small:latest'
+    model: 'fixture-embedding-small:latest'
     roles: [embedding]
     local: true
     enabled: true
     notes: Embedding model for retrieval/vector search; not suitable for chat or code completion
-    pull_command: 'ollama pull local-embedding-small:latest'
+    pull_command: 'ollama pull fixture-embedding-small:latest'
     min_ram_gb: 4
     recommended_ram_gb: 8
     min_vram_gb: 0

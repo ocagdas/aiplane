@@ -119,7 +119,7 @@ class HardwareMachineTests(unittest.TestCase):
 
     def test_hardware_doctor_checks_model_fit(self) -> None:
         profile = load_profile("local-dev", Path.cwd())
-        fits = HardwareManager(profile).doctor("local-analysis-small")
+        fits = HardwareManager(profile).doctor("fixture-analysis-small")
         self.assertEqual(len(fits["needs_fit_check"]), 1)
         self.assertIn("provider-text-small:0.5b", fits["needs_fit_check"][0]["model"])
 
@@ -193,14 +193,14 @@ class HardwareMachineTests(unittest.TestCase):
             root.mkdir(parents=True)
             benchmark = {
                 "created_at": "2026-06-19T00:00:00+00:00",
-                "model_name": "local-analysis-small",
+                "model_name": "fixture-analysis-small",
                 "summary": {"average_score": 88, "average_elapsed_ms": 1234},
             }
-            (root / "20260619T000000Z-local-analysis-small.json").write_text(json.dumps(benchmark), encoding="utf-8")
+            (root / "20260619T000000Z-fixture-analysis-small.json").write_text(json.dumps(benchmark), encoding="utf-8")
             profile = load_profile("local-dev", workspace)
             result = HardwareManager(profile).recommend()
             rows = [row for group in result["models"].values() for row in group]
-            model_row = next(row for row in rows if row["name"] == "local-analysis-small")
+            model_row = next(row for row in rows if row["name"] == "fixture-analysis-small")
             self.assertEqual(model_row["latest_benchmark"]["summary"]["average_score"], 88)
 
     def test_hardware_schema_and_active_machine_are_available(self) -> None:

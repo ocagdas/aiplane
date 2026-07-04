@@ -344,7 +344,7 @@ class EnvironmentToolBenchmarkTests(unittest.TestCase):
             )
             profile = load_profile("local-dev", Path.cwd())
             result = BenchmarkRunner(profile).run(
-                "local-analysis-small",
+                "fixture-analysis-small",
                 task="unit",
                 dry_run=True,
                 save=False,

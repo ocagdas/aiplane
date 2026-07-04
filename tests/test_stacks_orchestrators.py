@@ -46,7 +46,7 @@ class StackOrchestratorTests(unittest.TestCase):
             stacks = StackManager(profile)
             stacks.create(
                 "local_chat_stack",
-                "local-analysis-small",
+                "fixture-analysis-small",
                 "ollama",
                 "local_box",
                 access="same_host",
@@ -177,7 +177,7 @@ class StackOrchestratorTests(unittest.TestCase):
                         "--runtime",
                         "ollama",
                         "--model",
-                        "local-analysis-small",
+                        "fixture-analysis-small",
                         "--limit",
                         "timeout=30m",
                         "--tool",
@@ -213,7 +213,7 @@ class StackOrchestratorTests(unittest.TestCase):
             result = OrchestratorCatalog(profile).setup(
                 "langgraph",
                 runtime="ollama",
-                model="local-analysis-small",
+                model="fixture-analysis-small",
                 dry_run=False,
                 yes=True,
             )
@@ -250,12 +250,12 @@ class StackOrchestratorTests(unittest.TestCase):
                 "coding_agents",
                 orchestrator="langgraph",
                 runtime="ollama",
-                model="local-analysis-small",
+                model="fixture-analysis-small",
                 machine="local_box",
                 limits={"timeout": "30m", "max_parallel_agents": 3},
                 tools={"shell": "guarded"},
                 roles={
-                    "planner": "local-analysis-small",
+                    "planner": "fixture-analysis-small",
                     "reviewer": "local-code-large",
                 },
                 approval_mode="ask",
@@ -266,7 +266,7 @@ class StackOrchestratorTests(unittest.TestCase):
             self.assertEqual(shown["orchestrator"], "langgraph")
             self.assertEqual(shown["limits"]["timeout"], "30m")
             self.assertEqual(shown["tools"]["shell"], "guarded")
-            self.assertEqual(shown["roles"]["planner"]["model"], "local-analysis-small")
+            self.assertEqual(shown["roles"]["planner"]["model"], "fixture-analysis-small")
             self.assertEqual(shown["roles"]["planner"]["audit_label"], "coding_agents.planner")
             self.assertFalse(shown["roles"]["reviewer"]["uses_primary_model"])
             plan = stacks.plan("coding_agents")
@@ -283,7 +283,7 @@ class StackOrchestratorTests(unittest.TestCase):
             self.assertEqual(dockerfile["metadata"]["limits"]["timeout"], "30m")
             self.assertEqual(
                 dockerfile["metadata"]["roles"]["planner"]["model"],
-                "local-analysis-small",
+                "fixture-analysis-small",
             )
             framework = stacks.export("langgraph", "coding_agents")
             self.assertEqual(framework["framework"], "langgraph")
@@ -333,7 +333,7 @@ class StackOrchestratorTests(unittest.TestCase):
                 "mixed_agents",
                 orchestrator="langgraph",
                 runtime="ollama",
-                model="local-analysis-small",
+                model="fixture-analysis-small",
                 machine="local_box",
                 roles={"planner": "managed-chat"},
                 tools={"shell": "unrestricted"},
@@ -385,7 +385,7 @@ class StackOrchestratorTests(unittest.TestCase):
                         "--runtime",
                         "ollama",
                         "--model",
-                        "local-analysis-small",
+                        "fixture-analysis-small",
                         "--machine",
                         "local_box",
                         "--limit",
@@ -393,7 +393,7 @@ class StackOrchestratorTests(unittest.TestCase):
                         "--tool",
                         "shell=guarded",
                         "--role",
-                        "planner=local-analysis-small",
+                        "planner=fixture-analysis-small",
                         "--approval-mode",
                         "guarded",
                         "--audit-label",
@@ -404,7 +404,7 @@ class StackOrchestratorTests(unittest.TestCase):
             payload = json.loads(stdout.getvalue())
             self.assertEqual(payload["stack"]["limits"]["timeout"], "30m")
             self.assertEqual(payload["stack"]["tools"]["shell"], "guarded")
-            self.assertEqual(payload["stack"]["roles"]["planner"]["model"], "local-analysis-small")
+            self.assertEqual(payload["stack"]["roles"]["planner"]["model"], "fixture-analysis-small")
             self.assertEqual(payload["stack"]["roles"]["planner"]["approval_mode"], "guarded")
 
     def test_stack_endpoint_plan_checks_shared_gateway_controls(self) -> None:
@@ -434,7 +434,7 @@ class StackOrchestratorTests(unittest.TestCase):
                 "shared_stack",
                 orchestrator=None,
                 runtime="ollama",
-                model="local-analysis-small",
+                model="fixture-analysis-small",
                 machine="local_box",
                 access="gateway",
                 endpoint_policy="shared",
@@ -452,7 +452,7 @@ class StackOrchestratorTests(unittest.TestCase):
                 "unsafe_shared_stack",
                 orchestrator=None,
                 runtime="ollama",
-                model="local-analysis-small",
+                model="fixture-analysis-small",
                 machine="local_box",
                 access="gateway",
                 endpoint_policy="shared",
@@ -499,7 +499,7 @@ class StackOrchestratorTests(unittest.TestCase):
                         "--runtime",
                         "ollama",
                         "--model",
-                        "local-analysis-small",
+                        "fixture-analysis-small",
                         "--machine",
                         "local_box",
                         "--access",
@@ -565,7 +565,7 @@ class StackOrchestratorTests(unittest.TestCase):
                 "local_stack",
                 orchestrator=None,
                 runtime="ollama",
-                model="local-analysis-small",
+                model="fixture-analysis-small",
                 machine="local_box",
                 access="same_host",
             )
@@ -604,7 +604,7 @@ class StackOrchestratorTests(unittest.TestCase):
                 "local_stack",
                 orchestrator=None,
                 runtime="ollama",
-                model="local-analysis-small",
+                model="fixture-analysis-small",
                 machine="local_box",
                 access="same_host",
             )
@@ -657,7 +657,7 @@ class StackOrchestratorTests(unittest.TestCase):
                 "local_stack",
                 orchestrator=None,
                 runtime="ollama",
-                model="local-analysis-small",
+                model="fixture-analysis-small",
                 machine="local_box",
                 access="same_host",
             )

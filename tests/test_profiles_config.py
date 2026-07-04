@@ -20,6 +20,7 @@ from .support import (
     load_local_config,
     load_profile,
     os,
+    patch,
     redact,
     redirect_stdout,
     remove_profile,
@@ -270,6 +271,90 @@ class ProfileConfigTests(unittest.TestCase):
             self.assertIn("aiplane doctor --profile local-dev", output)
             self.assertIn("aiplane integrations export continue --profile local-dev", output)
             self.assertTrue((profiles_dir / "local-dev" / "models.yaml").exists())
+
+    def test_quickstart_local_coding_pull_model_executes_runtime_pull_by_default(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            profiles_dir = Path(tmp) / "profiles"
+            completed = cli_module.subprocess.CompletedProcess(
+                args=["provider_helper"], returncode=0, stdout="pulled\n", stderr=""
+            )
+            stdout = StringIO()
+            with (
+                patch("aiplane.cli._run_provider_helper", return_value=completed) as helper,
+                redirect_stdout(stdout),
+            ):
+                code = cli_main(
+                    [
+                        "--profiles-dir",
+                        str(profiles_dir),
+                        "quickstart",
+                        "local-coding",
+                        "--no-discovery",
+                        "--no-hardware-discovery",
+                        "--pull-model",
+                        "fixture-chat-small",
+                    ]
+                )
+            payload = json.loads(stdout.getvalue())
+
+            self.assertEqual(code, 0)
+            self.assertEqual(payload["pull"]["model"], "fixture-chat-small")
+            self.assertEqual(payload["pull"]["runtime"], "ollama")
+            self.assertTrue(payload["pull"]["executed"])
+            self.assertFalse(payload["pull"]["dry_run"])
+            helper.assert_called_once()
+            self.assertFalse(helper.call_args.kwargs["dry_run"])
+            self.assertIn("aiplane runtimes pull ollama --model fixture-chat-small", payload["commands"])
+            self.assertNotIn("aiplane runtimes pull ollama --model fixture-chat-small --dry-run", payload["commands"])
+
+    def test_quickstart_local_coding_pull_model_dry_run_previews_runtime_pull(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            profiles_dir = Path(tmp) / "profiles"
+            with redirect_stdout(StringIO()):
+                self.assertEqual(
+                    cli_main(
+                        [
+                            "--profiles-dir",
+                            str(profiles_dir),
+                            "quickstart",
+                            "local-coding",
+                            "--no-discovery",
+                            "--no-hardware-discovery",
+                        ]
+                    ),
+                    0,
+                )
+            completed = cli_module.subprocess.CompletedProcess(
+                args=["provider_helper"], returncode=0, stdout="dry-run pull\n", stderr=""
+            )
+            stdout = StringIO()
+            with (
+                patch("aiplane.cli._run_provider_helper", return_value=completed) as helper,
+                redirect_stdout(stdout),
+            ):
+                code = cli_main(
+                    [
+                        "--profiles-dir",
+                        str(profiles_dir),
+                        "quickstart",
+                        "local-coding",
+                        "--no-discovery",
+                        "--no-hardware-discovery",
+                        "--pull-model",
+                        "fixture-chat-small",
+                        "--dry-run",
+                    ]
+                )
+            payload = json.loads(stdout.getvalue())
+
+            self.assertEqual(code, 0)
+            self.assertEqual(payload["pull"]["model"], "fixture-chat-small")
+            self.assertEqual(payload["pull"]["runtime"], "ollama")
+            self.assertFalse(payload["pull"]["executed"])
+            self.assertTrue(payload["pull"]["dry_run"])
+            helper.assert_called_once()
+            self.assertTrue(helper.call_args.kwargs["dry_run"])
+            self.assertIn("aiplane runtimes pull ollama --model fixture-chat-small --dry-run", payload["commands"])
 
     def test_profiles_bootstrap_local_includes_hardware_discovery(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

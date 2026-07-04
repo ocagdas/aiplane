@@ -42,23 +42,23 @@ class RuntimeExecutionTests(unittest.TestCase):
             result = Router(profile, AuditLogger(profile)).route("explain setup", dry_run=True)
             self.assertEqual(result.backend, "dry_run")
             self.assertFalse(result.escalated)
-            self.assertIn("local-analysis-small", result.text)
+            self.assertIn("fixture-analysis-small", result.text)
             self.assertIn("provider-text-small:0.5b", result.text)
 
     def test_router_uses_profile_self_managed_model_default(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             profile = load_profile("local-dev", Path(tmp))
-            profile.models["defaults"]["self_managed_model"] = "local-code-small"
+            profile.models["defaults"]["self_managed_model"] = "fixture-code-small"
             result = Router(profile, AuditLogger(profile)).route("explain setup", dry_run=True)
-            self.assertIn("local-code-small", result.text)
+            self.assertIn("fixture-code-small", result.text)
 
     def test_router_run_dry_run_can_use_explicit_model(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             profile = load_profile("local-dev", Path(tmp))
             result = Router(profile, AuditLogger(profile)).route(
-                "explain setup", model_name="local-code-small", dry_run=True
+                "explain setup", model_name="fixture-code-small", dry_run=True
             )
-            self.assertIn("local-code-small", result.text)
+            self.assertIn("fixture-code-small", result.text)
             self.assertIn("provider-code-small:1.5b", result.text)
 
     def test_router_blocks_local_model_when_hardware_minimums_fail_unless_overridden(
@@ -113,7 +113,9 @@ class RuntimeExecutionTests(unittest.TestCase):
             target = workspace / "sample.py"
             target.write_text("def add(a, b):\n    return a + b\n", encoding="utf-8")
             profile = load_profile("local-dev", workspace)
-            result = CodeTaskRunner(profile, AuditLogger(profile)).analyze("local-analysis-small", target, dry_run=True)
+            result = CodeTaskRunner(profile, AuditLogger(profile)).analyze(
+                "fixture-analysis-small", target, dry_run=True
+            )
             self.assertTrue(result.dry_run)
             self.assertIn("Analyze this code file", result.output)
             self.assertIn("def add", result.output)
@@ -125,7 +127,7 @@ class RuntimeExecutionTests(unittest.TestCase):
             target.write_text("def add(a, b):\n    return a + b\n", encoding="utf-8")
             profile = load_profile("local-dev", workspace)
             result = CodeTaskRunner(profile, AuditLogger(profile)).complete(
-                "local-analysis-small", target, 2, dry_run=True
+                "fixture-analysis-small", target, 2, dry_run=True
             )
             self.assertIn("Before cursor", result.output)
             self.assertIn("After cursor", result.output)
@@ -133,7 +135,7 @@ class RuntimeExecutionTests(unittest.TestCase):
     def test_code_write_dry_run_builds_prompt(self) -> None:
         profile = load_profile("local-dev", Path.cwd())
         result = CodeTaskRunner(profile, AuditLogger(profile)).write(
-            "local-analysis-small", "add email validation", dry_run=True
+            "fixture-analysis-small", "add email validation", dry_run=True
         )
         self.assertIn("add email validation", result.output)
 
@@ -218,7 +220,7 @@ class RuntimeExecutionTests(unittest.TestCase):
             patch.object(
                 CodeTaskRunner,
                 "write",
-                return_value=CodeTaskResult("write", "local-analysis-small", "prompt", "ok", False),
+                return_value=CodeTaskResult("write", "fixture-analysis-small", "prompt", "ok", False),
             ) as write,
             redirect_stdout(stdout),
         ):
@@ -227,7 +229,7 @@ class RuntimeExecutionTests(unittest.TestCase):
                     "code",
                     "write",
                     "--model",
-                    "local-analysis-small",
+                    "fixture-analysis-small",
                     "--task",
                     "add email validation",
                     "--timeout-seconds",
@@ -246,13 +248,13 @@ class RuntimeExecutionTests(unittest.TestCase):
             outside.write_text("print('x')", encoding="utf-8")
             profile = load_profile("local-dev", workspace)
             with self.assertRaises(PermissionError):
-                CodeTaskRunner(profile, AuditLogger(profile)).analyze("local-analysis-small", outside, dry_run=True)
+                CodeTaskRunner(profile, AuditLogger(profile)).analyze("fixture-analysis-small", outside, dry_run=True)
 
     def test_code_task_rejects_non_task_capable_model_even_on_dry_run(self) -> None:
         profile = load_profile("local-dev", Path.cwd())
         with self.assertRaisesRegex(ValueError, "not suitable for write execution"):
             CodeTaskRunner(profile, AuditLogger(profile)).write(
-                "local-embedding-small", "add email validation", dry_run=True
+                "fixture-embedding-small", "add email validation", dry_run=True
             )
 
     def test_model_complete_supports_openai_compatible_backend(self) -> None:
@@ -824,7 +826,7 @@ exit 0
     def test_runtime_remove_and_clear_require_confirmation(self) -> None:
         stdout = StringIO()
         with redirect_stdout(stdout):
-            code = cli_main(["runtimes", "remove", "ollama", "--model", "local-chat-small"])
+            code = cli_main(["runtimes", "remove", "ollama", "--model", "fixture-chat-small"])
         self.assertEqual(code, 2)
         payload = json.loads(stdout.getvalue())
         self.assertEqual(payload["name"], "runtime_destructive_confirmation_required")

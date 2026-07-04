@@ -92,11 +92,12 @@ For end-to-end command sequences and combinations, see [Practical Workflows](wor
 
 ## Local Coding Stack Doctor
 
-Start with `aiplane quickstart local-coding` when evaluating a laptop, workstation, or hybrid AI coding profile. It creates or previews the editable local profile through the same bootstrap path, runs the local doctor when the profile exists, and prints the next export commands. Use `aiplane doctor` when you only want to inspect an already configured profile. It aggregates the local control-plane checks that matter for the first public wedge: profile files, required environment tools, runtime prerequisites, model defaults with provider/endpoint details, selected role-default endpoint readiness, active hardware and role-model fit, provider state, Continue/Aider role capability readiness, and MCP manifest availability. It is read-only and does not install runtimes, pull models, edit IDE config, or mutate cloud resources.
+Start with `aiplane quickstart local-coding` when evaluating a laptop, workstation, or hybrid AI coding profile. It creates or previews the editable local profile through the same bootstrap path, runs the local doctor when the profile exists, and prints the next export commands. Use `aiplane doctor` when you only want to inspect an already configured profile. It aggregates the local control-plane checks that matter for the first public wedge: profile files, required environment tools, runtime prerequisites, model defaults with provider/endpoint details, selected role-default endpoint readiness, active hardware and role-model fit, provider state, Continue/Aider role capability readiness, and MCP manifest and local-coding read-surface readiness. The doctor itself is read-only. The quickstart does not install runtimes, edit IDE config, or mutate cloud resources; model pulls are opt-in with `--pull-model`; use `--dry-run` to preview without pulling model weights.
 
 ```bash
 aiplane quickstart local-coding
 aiplane quickstart local-coding --dry-run
+aiplane quickstart local-coding --pull-model MODEL_ALIAS
 aiplane doctor
 aiplane doctor --format json
 aiplane doctor --include-optional

@@ -59,6 +59,6 @@ aiplane quickstart local-coding
 aiplane quickstart local-coding --dry-run
 ```
 
-This uses the same lower-level bootstrap path as `aiplane profiles bootstrap-local`: it copies the shipped `local-dev` template into `profiles/local-dev`, validates it, can attempt bounded provider discovery into ignored `models.discovered.yaml`, runs the local doctor when the profile exists, and prints the next safe export commands. Use `aiplane profiles bootstrap-local --no-discovery` when you only want the editable profile files, or `--dry-run` to preview the create/discovery steps.
+This uses the same lower-level bootstrap path as `aiplane profiles bootstrap-local`: it copies the shipped `local-dev` template into `profiles/local-dev`, validates it, can attempt bounded provider discovery into ignored `models.discovered.yaml`, runs the local doctor when the profile exists, can execute a runtime-helper model pull with `--pull-model` or preview it with `--dry-run --pull-model`, and prints the next safe export commands. Use `aiplane profiles bootstrap-local --no-discovery` when you only want the editable profile files, or `--dry-run` to preview the create/discovery steps.
 
 Use `--profile` only when you need to override the default for one command.

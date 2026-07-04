@@ -182,8 +182,9 @@ def _main(argv: list[str] | None = None) -> int:
         help="Bootstrap and inspect the local AI coding profile",
         description=(
             "Create or refresh a local-dev style profile using the existing profile bootstrap path, "
-            "then print the local coding stack doctor summary and exact next commands. It does not "
-            "install runtimes, pull models, edit IDE config, or mutate cloud resources."
+            "then print the local coding stack doctor summary and exact next commands. If --pull-model "
+            "is supplied, the selected model is pulled through the existing runtime helper unless "
+            "--dry-run is also supplied; it does not install runtimes, edit IDE config, or mutate cloud resources."
         ),
         formatter_class=HelpFormatter,
     )
@@ -212,6 +213,19 @@ def _main(argv: list[str] | None = None) -> int:
     local_coding.add_argument("--disable-new", action="store_true", help="Write newly discovered entries as disabled")
     local_coding.add_argument("--verbose", action="store_true", help="Include per-model discovery rows")
     local_coding.add_argument("--dry-run", action="store_true", help="Preview bootstrap/discovery without writing")
+    local_coding.add_argument(
+        "--pull-model",
+        help="Optional configured model alias to pull through the existing runtime helper after bootstrap",
+    )
+    local_coding.add_argument(
+        "--pull-runtime",
+        help="Runtime/provider to use for --pull-model. Defaults to the model preferred/runtime selection.",
+    )
+    local_coding.add_argument(
+        "--pull-substrate",
+        choices=["native", "docker"],
+        help="Override the runtime helper substrate for --pull-model; Ollama supports native and docker",
+    )
     local_coding.add_argument(
         "--format",
         choices=["json", "text"],
@@ -3493,16 +3507,42 @@ def _bootstrap_local_profile(args, workspace: Path, profiles_dir: Path | None) -
 def _quickstart_local_coding(args, workspace: Path, profiles_dir: Path | None) -> dict[str, object]:
     bootstrap = _bootstrap_local_profile(args, workspace, profiles_dir)
     doctor_payload = None
+    pull = None
     profile_path = Path(str(bootstrap.get("path", "")))
+    profile = None
     if profile_path.exists():
         profile = load_profile(args.name, workspace, profiles_dir=profiles_dir)
+        if args.pull_model:
+            pull = _quickstart_pull_model(
+                profile,
+                args.name,
+                args.pull_model,
+                runtime=args.pull_runtime,
+                substrate=args.pull_substrate,
+                execute=not args.dry_run,
+            )
         doctor_payload = local_coding_doctor(profile, include_optional=False)
+    elif args.pull_model:
+        pull = {
+            "name": "quickstart_model_pull",
+            "model": args.pull_model,
+            "executed": False,
+            "dry_run": True,
+            "skipped": True,
+            "reason": "profile does not exist yet; rerun quickstart without --dry-run before pulling models",
+        }
     commands = [
         f"aiplane doctor --profile {args.name}",
         f"aiplane integrations export continue --profile {args.name}",
         f"aiplane integrations export aider --profile {args.name}",
         "aiplane mcp manifest",
     ]
+    if args.pull_model:
+        pull_runtime = (pull.get("runtime") if isinstance(pull, dict) else None) or args.pull_runtime or "RUNTIME"
+        commands.insert(
+            1,
+            f"aiplane runtimes pull {pull_runtime} --model {args.pull_model}" + (" --dry-run" if args.dry_run else ""),
+        )
     if args.dry_run and not profile_path.exists():
         commands.insert(0, f"aiplane quickstart local-coding --name {args.name}")
     return {
@@ -3510,12 +3550,67 @@ def _quickstart_local_coding(args, workspace: Path, profiles_dir: Path | None) -
         "profile": args.name,
         "dry_run": args.dry_run,
         "bootstrap": bootstrap,
+        "pull": pull,
         "doctor": doctor_payload,
         "commands": commands,
         "notes": [
-            "This quickstart stays in the control-plane lane: it creates or previews a local profile, runs discovery/doctor checks, and prints export commands.",
-            "It does not install runtimes, pull models, edit IDE configuration, start cloud resources, or run an agent conversation.",
+            "This quickstart stays in the control-plane lane: it creates or previews a local profile, runs discovery/doctor checks, optionally delegates an explicit model pull, and prints export commands.",
+            "Use --dry-run with --pull-model to preview the existing runtime helper pull path without pulling model weights.",
+            "It does not install runtimes, edit IDE configuration, start cloud resources, or run an agent conversation.",
         ],
+    }
+
+
+def _quickstart_pull_model(
+    profile,
+    profile_name: str,
+    model_name: str,
+    runtime: str | None = None,
+    substrate: str | None = None,
+    execute: bool = False,
+) -> dict[str, object]:
+    catalog = ModelCatalog(profile)
+    model = catalog.get(model_name)
+    provider = catalog.providers().get(str(model.get("provider") or ""), {})
+    if str(model.get("ownership") or provider.get("ownership") or "") == "managed_service":
+        return {
+            "name": "quickstart_model_pull",
+            "model": model_name,
+            "executed": False,
+            "dry_run": True,
+            "ok": False,
+            "reason": "managed-service model aliases are endpoint-backed and do not use local runtime model pulls",
+        }
+    selected_runtime = runtime or RuntimeCatalog(profile).select_runtime(model_name).get("selected")
+    if not selected_runtime:
+        return {
+            "name": "quickstart_model_pull",
+            "model": model_name,
+            "executed": False,
+            "dry_run": True,
+            "ok": False,
+            "reason": "no supported runtime is configured for this model alias",
+        }
+    resolved_substrate = _runtime_helper_substrate(profile, str(selected_runtime), substrate)
+    completed = _run_provider_helper(
+        str(selected_runtime),
+        "pull",
+        profile_name,
+        model_name,
+        substrate=resolved_substrate,
+        dry_run=not execute,
+    )
+    return {
+        "name": "quickstart_model_pull",
+        "model": model_name,
+        "runtime": str(selected_runtime),
+        "substrate": resolved_substrate,
+        "executed": execute,
+        "dry_run": not execute,
+        "ok": completed.returncode == 0,
+        "returncode": completed.returncode,
+        "stdout": completed.stdout,
+        "stderr": completed.stderr,
     }
 
 
@@ -3530,6 +3625,12 @@ def _quickstart_local_coding_text(payload: dict[str, object]) -> str:
     validation = bootstrap.get("validation") if isinstance(bootstrap.get("validation"), dict) else None
     if validation is not None:
         lines.append(f"profile validation: {'ok' if validation.get('ok') else 'needs attention'}")
+    pull = payload.get("pull") if isinstance(payload.get("pull"), dict) else None
+    if pull is not None:
+        lines.append(
+            f"pull: {'executed' if pull.get('executed') else 'preview'}; "
+            f"model: {pull.get('model')}; runtime: {pull.get('runtime', 'n/a')}"
+        )
     if doctor is not None:
         summary = doctor.get("summary") if isinstance(doctor.get("summary"), dict) else {}
         lines.append(

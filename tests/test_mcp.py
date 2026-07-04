@@ -215,7 +215,7 @@ class McpTests(unittest.TestCase):
                 "method": "tools/call",
                 "params": {
                     "name": "aiplane.models.show",
-                    "arguments": {"model": "local-analysis-small"},
+                    "arguments": {"model": "fixture-analysis-small"},
                 },
             }
         )
@@ -270,15 +270,15 @@ class McpTests(unittest.TestCase):
                             "name": "aiplane.models.use",
                             "arguments": {
                                 "role": "code_model",
-                                "model": "local-code-small",
+                                "model": "fixture-code-small",
                             },
                         },
                     }
                 )
             self.assertIsNotNone(allowed)
-            self.assertEqual(allowed["result"]["structuredContent"]["name"], "local-code-small")
+            self.assertEqual(allowed["result"]["structuredContent"]["name"], "fixture-code-small")
             self.assertIn(
-                "code_model: local-code-small",
+                "code_model: fixture-code-small",
                 (root / "models.yaml").read_text(encoding="utf-8"),
             )
             events = AuditLogger(profile).tail(1)
@@ -357,14 +357,14 @@ class McpTests(unittest.TestCase):
                     "name": "aiplane.integrations.plan",
                     "arguments": {
                         "tool": "openai-compatible",
-                        "model": "local-analysis-small",
+                        "model": "fixture-analysis-small",
                     },
                 },
             }
         )
         self.assertEqual(
             plan["result"]["structuredContent"]["selection"]["primary"]["name"],
-            "local-analysis-small",
+            "fixture-analysis-small",
         )
 
         orchestrators = server.handle_message(
@@ -498,7 +498,7 @@ class McpTests(unittest.TestCase):
                 "method": "tools/call",
                 "params": {
                     "name": "aiplane.integrations.export",
-                    "arguments": {"tool": "cline", "model": "local-analysis-small"},
+                    "arguments": {"tool": "cline", "model": "fixture-analysis-small"},
                 },
             }
         )
@@ -510,7 +510,7 @@ class McpTests(unittest.TestCase):
     def test_mcp_can_preview_refresh_and_runtime_status(self) -> None:
         source = load_profile("local-dev", Path.cwd())
         models_config = json.loads(json.dumps(source.models))
-        models_config.setdefault("models", {})["local-chat-small"] = {
+        models_config.setdefault("models", {})["fixture-chat-small"] = {
             "provider": "ollama",
             "model": "provider-chat-small:8b",
             "enabled": True,

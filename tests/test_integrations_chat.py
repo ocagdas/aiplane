@@ -36,17 +36,17 @@ class IntegrationChatTests(unittest.TestCase):
         self.assertIn("tabAutocompleteModel:", exported.content)
         self.assertIn("model: provider-code-base:1.5b", exported.content)
         self.assertIn("embeddingsProvider:", exported.content)
-        self.assertIn("model: local-embedding-small:latest", exported.content)
+        self.assertIn("model: fixture-embedding-small:latest", exported.content)
 
     def test_integrations_plan_selects_defaults_best_and_manual_overrides(self) -> None:
         with _isolated_test_profile() as profile:
             manager = IntegrationManager(profile)
 
             default_plan = manager.plan("continue")
-            self.assertEqual(default_plan["selection"]["chat"]["name"], "local-chat-small")
+            self.assertEqual(default_plan["selection"]["chat"]["name"], "fixture-chat-small")
             self.assertIn("tool_use", default_plan["selection"]["chat"]["role_capabilities"])
-            self.assertEqual(default_plan["selection"]["autocomplete"]["name"], "local-code-base")
-            self.assertEqual(default_plan["selection"]["embedding"]["name"], "local-embedding-small")
+            self.assertEqual(default_plan["selection"]["autocomplete"]["name"], "fixture-code-base")
+            self.assertEqual(default_plan["selection"]["embedding"]["name"], "fixture-embedding-small")
 
             best_plan = manager.plan("continue", runtime="ollama", select_best=True)
             self.assertEqual(best_plan["constraints"]["runtime"], "ollama")
@@ -54,12 +54,12 @@ class IntegrationChatTests(unittest.TestCase):
 
             manual = manager.plan(
                 "continue",
-                chat="local-code-small",
-                autocomplete="local-code-base",
-                embedding="local-embedding-small",
+                chat="fixture-code-small",
+                autocomplete="fixture-code-base",
+                embedding="fixture-embedding-small",
             )
-            self.assertEqual(manual["selection"]["chat"]["name"], "local-code-small")
-            self.assertEqual(manual["overrides"]["chat"], "local-code-small")
+            self.assertEqual(manual["selection"]["chat"]["name"], "fixture-code-small")
+            self.assertEqual(manual["overrides"]["chat"], "fixture-code-small")
 
     def test_integrations_setup_dry_run_plans_runtime_actions(self) -> None:
         with _isolated_test_profile() as profile:
@@ -92,9 +92,9 @@ class IntegrationChatTests(unittest.TestCase):
         ):
             result = IntegrationManager(profile).setup(
                 "continue",
-                chat="local-chat-small",
-                autocomplete="local-chat-small",
-                embedding="local-chat-small",
+                chat="fixture-chat-small",
+                autocomplete="fixture-chat-small",
+                embedding="fixture-chat-small",
                 dry_run=True,
             )
         actions = [action["action"] for action in result["actions"]]
@@ -173,7 +173,7 @@ class IntegrationChatTests(unittest.TestCase):
             action = IntegrationManager(profile)._setup_action(
                 "ollama",
                 "pull",
-                "local-chat-small",
+                "fixture-chat-small",
                 dry_run=False,
                 execute=True,
                 reason="test pull",
@@ -244,7 +244,7 @@ class IntegrationChatTests(unittest.TestCase):
                 action = IntegrationManager(profile)._setup_action(
                     "ollama",
                     "pull",
-                    "local-chat-small",
+                    "fixture-chat-small",
                     dry_run=False,
                     execute=True,
                     reason="test pull",
@@ -265,7 +265,7 @@ class IntegrationChatTests(unittest.TestCase):
             action = IntegrationManager(profile)._setup_action(
                 "ollama",
                 "pull",
-                "local-chat-small",
+                "fixture-chat-small",
                 dry_run=False,
                 execute=True,
                 reason="test pull",
@@ -412,7 +412,7 @@ class IntegrationChatTests(unittest.TestCase):
 
     def test_integrations_continue_single_model_export_still_works(self) -> None:
         profile = load_profile("local-dev", Path.cwd())
-        exported = IntegrationManager(profile).export("continue", "local-analysis-small")
+        exported = IntegrationManager(profile).export("continue", "fixture-analysis-small")
         self.assertEqual(exported.tool, "continue")
         self.assertIn("apiBase: http://localhost:11434/v1", exported.content)
         self.assertIn("model: provider-text-small:0.5b", exported.content)
@@ -430,16 +430,16 @@ class IntegrationChatTests(unittest.TestCase):
                     "--chat",
                     "managed-chat-small",
                     "--autocomplete",
-                    "local-code-base",
+                    "fixture-code-base",
                     "--embedding",
-                    "local-embedding-small",
+                    "fixture-embedding-small",
                 ]
             )
         self.assertEqual(code, 0)
         output = stdout.getvalue()
         self.assertIn("model: managed-chat-model", output)
         self.assertIn("model: provider-code-base:1.5b", output)
-        self.assertIn("model: local-embedding-small:latest", output)
+        self.assertIn("model: fixture-embedding-small:latest", output)
 
         with tempfile.TemporaryDirectory() as tmp:
             plan_path = Path(tmp) / "plan.json"
@@ -453,9 +453,9 @@ class IntegrationChatTests(unittest.TestCase):
                         "--chat",
                         "managed-chat-small",
                         "--autocomplete",
-                        "local-code-base",
+                        "fixture-code-base",
                         "--embedding",
-                        "local-embedding-small",
+                        "fixture-embedding-small",
                     ]
                 )
             self.assertEqual(code, 0)
@@ -507,13 +507,13 @@ class IntegrationChatTests(unittest.TestCase):
                         "--framework",
                         "langgraph",
                         "--model",
-                        "local-analysis-small",
+                        "fixture-analysis-small",
                     ]
                 )
             self.assertEqual(code, 0)
             payload = json.loads(stdout.getvalue())
             self.assertEqual(payload["name"], "agent_plan")
-            self.assertEqual(payload["selection"]["model_alias"], "local-analysis-small")
+            self.assertEqual(payload["selection"]["model_alias"], "fixture-analysis-small")
             self.assertIn("agent.py", payload["files"])
 
             stdout = StringIO()
@@ -528,7 +528,7 @@ class IntegrationChatTests(unittest.TestCase):
                         "--framework",
                         "simple-openai",
                         "--model",
-                        "local-analysis-small",
+                        "fixture-analysis-small",
                         "--file",
                         "agent.py",
                     ]
@@ -559,7 +559,7 @@ class IntegrationChatTests(unittest.TestCase):
                             "plan",
                             "demo",
                             "--model",
-                            "local-analysis-small",
+                            "fixture-analysis-small",
                         ]
                     )
                 self.assertEqual(code, 0)
@@ -578,7 +578,7 @@ class IntegrationChatTests(unittest.TestCase):
                             "plan",
                             "demo",
                             "--model",
-                            "local-analysis-small",
+                            "fixture-analysis-small",
                         ]
                     )
                 self.assertEqual(code, 0)
@@ -596,7 +596,7 @@ class IntegrationChatTests(unittest.TestCase):
                             "plan",
                             "demo",
                             "--model",
-                            "local-analysis-small",
+                            "fixture-analysis-small",
                             "--output-dir",
                             str(override),
                         ]
@@ -644,7 +644,7 @@ class IntegrationChatTests(unittest.TestCase):
         profile = load_profile("local-dev", Path.cwd())
         exported = IntegrationManager(profile).export(
             "openai-compatible",
-            "local-analysis-small",
+            "fixture-analysis-small",
             endpoint="https://llm.example.com/v1",
         )
         self.assertIn("https://llm.example.com/v1", exported.content)
@@ -708,7 +708,7 @@ class IntegrationChatTests(unittest.TestCase):
                         "plan",
                         "cline",
                         "--model",
-                        "local-analysis-small",
+                        "fixture-analysis-small",
                         "--endpoint",
                         "http://localhost:11434/v1",
                     ]
@@ -716,7 +716,7 @@ class IntegrationChatTests(unittest.TestCase):
         self.assertEqual(code, 0)
         payload = json.loads(stdout.getvalue())
         self.assertEqual(payload["tool"], "cline")
-        self.assertEqual(payload["selection"]["primary"]["name"], "local-analysis-small")
+        self.assertEqual(payload["selection"]["primary"]["name"], "fixture-analysis-small")
         self.assertEqual(payload["selection"]["primary"]["endpoint"], "http://localhost:11434/v1")
 
     def test_integrations_export_non_continue_can_select_best(self) -> None:
@@ -746,9 +746,9 @@ class IntegrationChatTests(unittest.TestCase):
 
     def test_integrations_export_cline_zed_and_aider(self) -> None:
         profile = load_profile("local-dev", Path.cwd())
-        cline = IntegrationManager(profile).export("cline", "local-analysis-small")
-        zed = IntegrationManager(profile).export("zed", "local-analysis-small")
-        aider = IntegrationManager(profile).export("aider", "local-analysis-small")
+        cline = IntegrationManager(profile).export("cline", "fixture-analysis-small")
+        zed = IntegrationManager(profile).export("zed", "fixture-analysis-small")
+        aider = IntegrationManager(profile).export("aider", "fixture-analysis-small")
         self.assertEqual(cline.tool, "cline")
         self.assertIn("baseUrl", cline.content)
         self.assertEqual(zed.tool, "zed")
@@ -758,9 +758,9 @@ class IntegrationChatTests(unittest.TestCase):
 
     def test_integrations_export_mcp_client_configs(self) -> None:
         profile = load_profile("local-dev", Path.cwd())
-        vscode = IntegrationManager(profile).export("vscode-mcp", "local-analysis-small")
-        continue_mcp = IntegrationManager(profile).export("continue-mcp", "local-analysis-small")
-        generic = IntegrationManager(profile).export("generic-mcp", "local-analysis-small")
+        vscode = IntegrationManager(profile).export("vscode-mcp", "fixture-analysis-small")
+        continue_mcp = IntegrationManager(profile).export("continue-mcp", "fixture-analysis-small")
+        generic = IntegrationManager(profile).export("generic-mcp", "fixture-analysis-small")
         self.assertEqual(vscode.tool, "vscode-mcp")
         self.assertIn('"servers"', vscode.content)
         self.assertIn('"aiplane"', vscode.content)
@@ -773,7 +773,7 @@ class IntegrationChatTests(unittest.TestCase):
         output = IntegrationManager(profile).run_chat(None, prompt="hello", dry_run=True)
         payload = json.loads(output)
         self.assertEqual(payload["name"], "chat_plan")
-        self.assertEqual(payload["model"], "local-chat-small")
+        self.assertEqual(payload["model"], "fixture-chat-small")
         self.assertEqual(payload["protocol"], "ollama_api")
         self.assertEqual(payload["prompt"], "hello")
 
@@ -791,7 +791,7 @@ class IntegrationChatTests(unittest.TestCase):
         profile = load_profile("local-dev", Path.cwd())
         command = IntegrationManager(profile).run_chat(None, dry_run=True, native_ollama=True)
         self.assertEqual(command, "ollama run provider-chat-small:8b")
-        override = IntegrationManager(profile).run_chat("local-analysis-small", dry_run=True, native_ollama=True)
+        override = IntegrationManager(profile).run_chat("fixture-analysis-small", dry_run=True, native_ollama=True)
         self.assertEqual(override, "ollama run provider-text-small:0.5b")
 
     def test_chat_native_ollama_opt_in_resolves_huggingface_gguf_for_ollama(self) -> None:
@@ -811,7 +811,7 @@ class IntegrationChatTests(unittest.TestCase):
     def test_chat_rejects_non_chat_capable_model(self) -> None:
         profile = load_profile("local-dev", Path.cwd())
         with self.assertRaisesRegex(ValueError, "not suitable for chat execution"):
-            IntegrationManager(profile).run_chat("local-embedding-small", prompt="hello", dry_run=True)
+            IntegrationManager(profile).run_chat("fixture-embedding-small", prompt="hello", dry_run=True)
 
     def test_managed_provider_alias_exports_continue_config(self) -> None:
         stdout = StringIO()
