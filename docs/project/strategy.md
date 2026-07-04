@@ -12,12 +12,15 @@ Good design choices flow from that standard:
 - Prefer composability over replacement. Integrate with tools developers already use rather than duplicating them.
 - Prefer explicitness over convenience at the cost of control. Profile-driven configuration is intentionally visible.
 - Prefer depth over breadth. Do the control-plane job well before expanding scope.
+- Prefer a polished local/hybrid AI coding stack doctor over broad integration lists that are not end-to-end useful.
 
 ## Positioning
 
-`aiplane` is a configuration and operations control-plane CLI for local, remote, VM, and cloud-adjacent AI development environments.
+`aiplane` is a local-first configuration and operations control-plane CLI for AI coding environments across local, remote, VM, and cloud-adjacent machines. Its sharpest wedge is making local and hybrid AI coding stacks reproducible, inspectable, policy-aware, and portable from one profile.
 
-It is not a coding agent, IDE assistant, chat UI, inference server, model marketplace, model proxy, or cloud platform. Existing tools such as Continue, Cline, Cursor, Codex-like CLIs, Claude Code, Aider, OpenHands, Ollama, LM Studio, vLLM, TGI, llama.cpp, LocalAI, OpenAI, Anthropic, and Azure OpenAI already cover large parts of those domains. `aiplane` should configure, check, plan, export, and govern those pieces rather than replacing them.
+It is not a coding agent, IDE assistant, full chat UI, inference server, model marketplace, model proxy, or cloud platform. Existing tools such as Continue, Cline, Cursor, Codex-like CLIs, Claude Code, Aider, OpenHands, Ollama, LM Studio, vLLM, TGI, llama.cpp, LocalAI, OpenAI, Anthropic, and Azure OpenAI already cover large parts of those domains. `aiplane` should configure, check, plan, export, and govern those pieces rather than replacing them.
+
+Scope anchor: changing this boundary is allowed only as an explicit product decision recorded in strategy and roadmap. Do not drift into agent execution, runtime implementation, broad cloud apply, IDE replacement, or a generic chat/session product through incremental feature work.
 
 ## Core Problem
 

@@ -4,9 +4,11 @@ This file is the short resume point for future `aiplane` development sessions. U
 
 ## Current Milestone
 
-**Cloud, VM, and workstation workflow hardening** has an implemented foundation; the next active milestone is tool/task matrix and setup doctor expansion unless roadmap priorities change.
+**Test-suite structure and local coding wedge hardening** is now the active milestone. Cloud/VM/workstation workflow hardening and tool/task doctor expansion have implemented foundations, but the next work should improve maintainability and sharpen the public wedge before adding broad new scope.
 
-The PR has merged, so the immediate work moves from demo/merge readiness to making the merged MVP surface easier to maintain and extend. Priorities are: modularize the largest code hotspots, bring MCP into deliberate parity with useful CLI inspection/planning/export features, add a versioned `aiplane` agent skill package, and deepen orchestrator support for multi-agent workflow metadata without turning `aiplane` into the agent runner.
+The immediate priority is to break down `tests/test_mvp.py` into focused modules with shared fixtures while preserving coverage and keeping the full suite green. Product work should continue to serve the narrow public story: a reproducible, inspectable, policy-aware local/hybrid AI coding stack doctor for profiles, providers, model aliases, runtimes/endpoints, hardware fit, Continue/Aider exports, MCP inspection, and audit.
+
+Scope anchor: `aiplane` remains the control plane, not the coding agent, full chat UI, model runtime, general proxy, cloud platform, IDE extension, or infrastructure-tool replacement. Changing that direction is allowed only if the strategy and roadmap explicitly say the project is changing course.
 
 ## Product Boundary
 
@@ -122,8 +124,8 @@ Orchestrator support now has stack role metadata over reviewed model aliases and
 
 ## Next Useful Work
 
-1. Add Docker-aware stack lifecycle paths where helpers can safely render/execute Docker commands without hiding host mutation.
-2. Harden framework-specific starter templates only where stable framework APIs justify more than generic metadata.
-3. Continue splitting the large CLI implementation by command family while preserving the current `aiplane` entrypoint and tests.
-4. Continue splitting `tests/test_mvp.py` into focused files and keep the full `scripts/check.sh` suite green during the split.
-5. Keep provider/model/runtime docs aligned as discovery, runtime pulls, hardware fit, and managed-service endpoint behavior continue to harden.
+1. Split `tests/test_mvp.py` into focused modules without changing behavior: start with `test_profiles_config.py`, `test_models_providers.py`, `test_runtimes_execution.py`, `test_integrations_chat.py`, `test_mcp.py`, `test_machines_stacks.py`, and `test_deploy_remote.py` or similarly clear boundaries.
+2. Extract shared test support for isolated profiles, fixture model catalogs, mock HTTP endpoints, subprocess/runtime helper fakes, and CLI stdout/stderr capture so new files do not copy setup code.
+3. Keep focused test runs green after each move, then run the full `scripts/check.sh` gate before calling the split complete.
+4. Preserve the local/hybrid AI coding stack doctor as the public wedge while doing cleanup; do not use test restructuring as a reason to broaden agent, chat UI, runtime, cloud apply, or IDE scope.
+5. After the test split, resume Docker-aware stack lifecycle and framework-specific starter template hardening only where stable official APIs justify it.

@@ -10,18 +10,52 @@ This document is the developer-facing status map. It separates what is implement
 - **Research**: worth investigating before committing to a design.
 - **Deferred**: intentionally not a near-term priority.
 
-## Current Milestone: Post-Merge Architecture and Integration Hardening
+## Scope Anchors
 
-Goal: turn the merged MVP surface into a maintainable beta foundation before adding broad new execution scope.
+These anchors are deliberate product constraints, not incidental wording. Change them only with an explicit roadmap/strategy update that says the project is changing course.
+
+- `aiplane` is a local-first control plane for AI coding environments: profiles, providers, model aliases, runtimes, endpoints, hardware fit, readiness checks, exports, MCP inspection, policy, and audit.
+- The strongest public wedge is: **make local and hybrid AI coding stacks reproducible, inspectable, policy-aware, and portable from one profile**.
+- `aiplane` configures and checks tools such as Ollama, vLLM, Continue, Aider, Cline, MCP clients, OpenAI-compatible endpoints, Anthropic, OpenAI, and Azure OpenAI; it does not replace them.
+- Do not grow `aiplane` into a coding agent, full chat UI, inference runtime, general model proxy, model marketplace, IDE extension, production cloud platform, or Terraform/Ansible/Docker replacement.
+- Runtime helpers must stay thin delegates to official tools. Deployment features must stay AI-specific, inspectable, previewable, and guarded.
+- Orchestrator support means metadata, role bindings, endpoint/policy export, and readiness checks for established frameworks, not running autonomous agent conversations inside `aiplane`.
+- MCP remains a structured inspection/planning/export surface with narrow audited writes. Arbitrary shell execution, broad cloud apply, secret writes, runtime installs, and model pulls stay out unless guardrails are explicitly designed and documented.
+
+## Public Adoption Wedge
+
+The first public story should be narrow enough to be polished:
+
+```bash
+aiplane quickstart local-coding
+aiplane doctor
+aiplane integrations export continue
+aiplane integrations export aider
+aiplane mcp manifest
+```
+
+That flow should answer: what is installed, which models/endpoints are configured, what fits this hardware, which model aliases are approved for chat/autocomplete/embedding/code roles, whether cloud escalation is allowed, what is unsafe or missing, and what config to export.
+
+Recommended public roadmap:
+
+1. **Local AI Coding Stack Doctor**: local Ollama/vLLM-style endpoints, Continue/Aider exports, hardware recommendations, model alias policy, doctor output, MCP read surface, and clean examples.
+2. **Remote GPU Workstation Profile**: SSH tunnel checks, remote runtime endpoint status, vLLM/Ollama model fit, stack doctor, endpoint export, and safety checks.
+3. **Team Policy and Governance**: shared profile templates, repo-level allowed-provider policy, cloud escalation rules, audit output, supportable reference stacks, and optional managed profile sync later.
+
+Advanced cloud, Kubernetes, broad provisioning, custom IDEs, general agent execution, and full session products should not lead the public story. They remain later or explicit-change-course work.
+
+## Current Milestone: Test-Suite Structure and Local Coding Wedge Hardening
+
+Goal: make the existing MVP surface easier to trust, maintain, and present through the local/hybrid AI coding control-plane wedge before adding broad new execution scope.
 
 Required outcomes:
 
-1. Keep the public CLI, docs, command coverage, MCP surface, planned/implemented skills, and tests aligned after the PR merge.
-2. Reduce architectural pressure from the large CLI, model catalog, integration manager, runtime catalog, shell helpers, and monolithic MVP test file without changing user-visible behavior gratuitously.
-3. Solidify MCP as the structured inspection/planning/export surface, with narrow audited writes only where guardrails are clear.
-4. Add a versioned `aiplane` agent skill package for Codex-style and other skill-capable assistants, distinct from MCP and focused on safe workflow guidance.
-5. Move orchestrator support from catalog/setup scaffolding toward explicit multi-agent workflow metadata: roles, model aliases, endpoints, tool policies, approvals, audit labels, and exports for established frameworks.
-6. Keep provider/model discovery, runtime setup, stack planning, and local execution reliable enough for repeatable demos and early adopters.
+1. Break down the monolithic `tests/test_mvp.py` into focused test modules by behavior area while preserving coverage and keeping the full suite green.
+2. Keep shared fixtures, profile bootstrapping, mocked provider/runtime boundaries, and CLI helpers reusable instead of duplicating setup across new files.
+3. Keep the public CLI, docs, command coverage, MCP surface, planned/implemented skills, and tests aligned as behavior moves or tightens.
+4. Keep the first public story focused on local/hybrid AI coding stack doctor flows: profile validation, runtime/provider readiness, model alias policy, hardware fit, Continue/Aider exports, MCP manifest, and clear examples.
+5. Solidify MCP as a structured inspection/planning/export surface with narrow audited writes only where guardrails are clear.
+6. Preserve the control-plane boundary: do not use test cleanup or chat/task work as a back door into agent-runner, model-runtime, broad deployment, or custom IDE scope.
 
 ## Implemented
 
@@ -134,12 +168,13 @@ Required outcomes:
    - Add benchmark comparison across models, runtimes, and machines.
    - Defer automated code execution grading until sandboxing and language runners are designed.
 
-11. **Test-suite performance and isolation** - Planned
+11. **Test-suite structure, performance, and isolation** - Current
+   - Split the large MVP test module into focused files by area so slow tests and ownership are easier to see. Start with behavior boundaries that already exist in code: profiles/config, providers/models, runtimes/execution, integrations/chat, MCP, machines/stacks, deployment, and CLI smoke coverage.
+   - Extract shared test fixtures and helpers for isolated profiles, local model caches, mocked HTTP endpoints, mocked subprocess boundaries, and CLI stdout/stderr capture.
    - Keep the full automated suite useful as a PR gate without letting local discovery caches or external-machine state dominate runtime.
-   - Split the large MVP test module into focused files by area so slow tests and ownership are easier to see.
    - Continue replacing repeated full-catalog enrichment with cached or single-pass helpers where behavior is unchanged.
    - Evaluate `pytest-xdist` only after filesystem, environment-variable, and profile-fixture isolation are strong enough for safe parallel execution.
-   - Keep quality intact: optimize hot paths and fixtures, not assertions or behavioral coverage.
+   - Keep quality intact: move tests and optimize fixtures, not assertions or behavioral coverage.
 
 ## Planned But Not Implemented
 

@@ -1328,8 +1328,15 @@ class ModelCatalog:
             raise RuntimeError(output or f"ollama pull failed for {model_id}")
         return output
 
-    def complete(self, name: str, prompt: str, timeout_seconds: int | None = None) -> BackendResult:
+    def complete(
+        self,
+        name: str,
+        prompt: str,
+        timeout_seconds: int | None = None,
+        purpose: str = "chat",
+    ) -> BackendResult:
         model = self.get(name)
+        self.require_execution_capability(name, model, purpose)
         provider_name = self._runtime_for_model(name, model)
         if provider_name in {"ollama", "ollama_cloud"}:
             return self._ollama_backend(provider_name, timeout_seconds=timeout_seconds).chat(
@@ -1351,6 +1358,48 @@ class ModelCatalog:
             f"execution is not wired for runtime/provider: {provider_name}; "
             "supported protocols are ollama_api, openai_compatible, azure_openai, and anthropic_api"
         )
+
+    def require_execution_capability(self, name: str, model: dict[str, Any], purpose: str) -> None:
+        roles = {str(role) for role in model.get("roles", []) or []}
+        scores = model.get("capability_scores")
+        if not isinstance(scores, dict):
+            capabilities = model.get("capabilities")
+            if isinstance(capabilities, dict):
+                scores = capabilities.get("scores")
+        score_names = {key for key, value in (scores or {}).items() if self._positive_score(value)}
+        purpose_roles = {
+            "chat": {"chat", "generation"},
+            "analysis": {"analysis", "chat"},
+            "completion": {"completion", "autocomplete", "code", "chat"},
+            "write": {"generation", "refactor", "code", "chat"},
+        }
+        purpose_scores = {
+            "chat": {"general_chat", "reasoning", "tool_use"},
+            "analysis": {"code_analysis", "reasoning", "general_chat"},
+            "completion": {"code_completion", "code_generation", "general_chat"},
+            "write": {"code_generation", "debugging_refactor", "general_chat"},
+        }
+        allowed_roles = purpose_roles.get(purpose, purpose_roles["chat"])
+        allowed_scores = purpose_scores.get(purpose, purpose_scores["chat"])
+        if roles.intersection(allowed_roles) or score_names.intersection(allowed_scores):
+            return
+        provider_name = str(model.get("provider") or "unknown")
+        model_id = str(model.get("model") or "")
+        role_text = ", ".join(sorted(roles)) or "none"
+        role_hint = next(iter(sorted(allowed_roles)))
+        raise ValueError(
+            f"model {name!r} is not suitable for {purpose} execution: roles={role_text}. "
+            f"Use `aiplane models list --role {role_hint} --enabled-only` to select a compatible model, "
+            "or promote/add a reviewed chat/task-capable alias. "
+            f"Provider={provider_name!r}, model={model_id!r}."
+        )
+
+    @staticmethod
+    def _positive_score(value: Any) -> bool:
+        try:
+            return float(value) > 0
+        except (TypeError, ValueError):
+            return False
 
     def _execution_model_id(self, runtime_name: str, model: dict[str, Any]) -> str:
         return runtime_model_id(self.profile, runtime_name, model)

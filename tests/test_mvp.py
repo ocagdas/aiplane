@@ -5065,14 +5065,35 @@ class MvpTests(unittest.TestCase):
         self.assertNotIn("--profile", continue_mcp.content)
         self.assertIn('"mcpServers"', generic.content)
 
-    def test_chat_wrapper_dry_run_resolves_ollama_model(self) -> None:
+    def test_chat_endpoint_dry_run_previews_runtime_agnostic_plan(self) -> None:
         profile = load_profile("local-dev", Path.cwd())
-        command = IntegrationManager(profile).run_chat(None, dry_run=True)
+        output = IntegrationManager(profile).run_chat(None, prompt="hello", dry_run=True)
+        payload = json.loads(output)
+        self.assertEqual(payload["name"], "chat_plan")
+        self.assertEqual(payload["model"], "local-chat-small")
+        self.assertEqual(payload["protocol"], "ollama_api")
+        self.assertEqual(payload["prompt"], "hello")
+
+    def test_chat_endpoint_executes_openai_compatible_runtime(self) -> None:
+        profile = load_profile("local-dev", Path.cwd())
+        with TestHttpServer() as endpoint:
+            profile.models["providers"]["vllm"]["enabled"] = True
+            profile.models["providers"]["vllm"]["endpoint"] = endpoint
+            profile.models["models"]["provider-code-large-vllm"]["enabled"] = True
+            profile.models["models"]["provider-code-large-vllm"]["model"] = "test-model"
+            output = IntegrationManager(profile).run_chat("provider-code-large-vllm", prompt="hello")
+        self.assertEqual(output, "handled test-model")
+
+    def test_chat_native_ollama_opt_in_resolves_ollama_model(self) -> None:
+        profile = load_profile("local-dev", Path.cwd())
+        command = IntegrationManager(profile).run_chat(None, dry_run=True, native_ollama=True)
         self.assertEqual(command, "ollama run provider-chat-small:8b")
-        override = IntegrationManager(profile).run_chat("local-analysis-small", dry_run=True)
+        override = IntegrationManager(profile).run_chat(
+            "local-analysis-small", dry_run=True, native_ollama=True
+        )
         self.assertEqual(override, "ollama run provider-text-small:0.5b")
 
-    def test_chat_wrapper_dry_run_resolves_huggingface_gguf_for_ollama(self) -> None:
+    def test_chat_native_ollama_opt_in_resolves_huggingface_gguf_for_ollama(self) -> None:
         profile = load_profile("local-dev", Path.cwd())
         profile.models.setdefault("models", {})["hf-gguf-chat"] = {
             "provider": "llamacpp",
@@ -5083,8 +5104,20 @@ class MvpTests(unittest.TestCase):
             "preferred_runtime": "llamacpp",
             "roles": ["chat"],
         }
-        command = IntegrationManager(profile).run_chat("hf-gguf-chat", dry_run=True)
+        command = IntegrationManager(profile).run_chat("hf-gguf-chat", dry_run=True, native_ollama=True)
         self.assertEqual(command, "ollama run hf.co/Example/Chat-GGUF")
+
+    def test_chat_rejects_non_chat_capable_model(self) -> None:
+        profile = load_profile("local-dev", Path.cwd())
+        with self.assertRaisesRegex(ValueError, "not suitable for chat execution"):
+            IntegrationManager(profile).run_chat("local-embedding-small", prompt="hello", dry_run=True)
+
+    def test_code_task_rejects_non_task_capable_model_even_on_dry_run(self) -> None:
+        profile = load_profile("local-dev", Path.cwd())
+        with self.assertRaisesRegex(ValueError, "not suitable for write execution"):
+            CodeTaskRunner(profile, AuditLogger(profile)).write(
+                "local-embedding-small", "add email validation", dry_run=True
+            )
 
     def test_model_complete_supports_openai_compatible_backend(self) -> None:
         profile = load_profile("local-dev", Path.cwd())

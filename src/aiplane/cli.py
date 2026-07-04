@@ -1344,9 +1344,9 @@ def _main(argv: list[str] | None = None) -> int:
     chat_cmd = _command(
         subparsers,
         "chat",
-        "Launch provider-native chat for a model",
-        "Resolve a model alias and delegate to the provider-native chat CLI. Currently supports local Ollama models.",
-        "Examples:\n  aiplane chat --model MODEL_ALIAS --dry-run\n  aiplane chat --model MODEL_ALIAS",
+        "Run endpoint-backed chat for a model",
+        "Resolve a chat-capable model alias and send prompts through its configured runtime/provider endpoint.",
+        "Examples:\n  aiplane chat --model MODEL_ALIAS --prompt 'Say hello'\n  echo 'Say hello' | aiplane chat --model MODEL_ALIAS --stdin\n  aiplane chat --model MODEL_ALIAS --native-ollama",
     )
     _profile_arg(chat_cmd)
     chat_cmd.add_argument(
@@ -1354,9 +1354,28 @@ def _main(argv: list[str] | None = None) -> int:
         help="Model alias to launch. If omitted, uses the profile chat_model default",
     )
     chat_cmd.add_argument(
+        "--prompt",
+        help="Prompt to send through the configured chat endpoint",
+    )
+    chat_cmd.add_argument(
+        "--stdin",
+        action="store_true",
+        help="Read the chat prompt from standard input",
+    )
+    chat_cmd.add_argument(
+        "--timeout-seconds",
+        type=int,
+        help="Override provider/runtime request timeout for endpoint chat",
+    )
+    chat_cmd.add_argument(
+        "--native-ollama",
+        action="store_true",
+        help="Use Ollama's native `ollama run` CLI instead of endpoint-backed chat; only works for Ollama-runnable aliases",
+    )
+    chat_cmd.add_argument(
         "--dry-run",
         action="store_true",
-        help="Print the provider-native command without running it",
+        help="Preview the endpoint chat plan, or the native Ollama command when --native-ollama is used",
     )
 
     deploy_cmd = _command(
@@ -2780,9 +2799,42 @@ def _main(argv: list[str] | None = None) -> int:
 
     if args.command == "chat":
         profile = load_profile(effective_profile, workspace, profiles_dir=profiles_dir)
-        output = IntegrationManager(profile).run_chat(args.model, dry_run=args.dry_run)
-        if output:
-            print(output)
+        manager = IntegrationManager(profile)
+        prompt = args.prompt
+        if args.stdin:
+            prompt = sys.stdin.read()
+        if args.native_ollama or args.dry_run or prompt is not None:
+            output = manager.run_chat(
+                args.model,
+                prompt=prompt,
+                dry_run=args.dry_run,
+                timeout_seconds=args.timeout_seconds,
+                native_ollama=args.native_ollama,
+            )
+            if output:
+                print(output)
+            return 0
+        if not sys.stdin.isatty():
+            prompt = sys.stdin.read()
+            if not prompt.strip():
+                raise ValueError("endpoint chat requires a prompt; pass --prompt, --stdin, or use --native-ollama")
+            output = manager.run_chat(args.model, prompt=prompt, timeout_seconds=args.timeout_seconds)
+            if output:
+                print(output)
+            return 0
+        print("Endpoint chat. Type /exit to quit.")
+        while True:
+            try:
+                prompt = input("aiplane chat> ")
+            except EOFError:
+                break
+            if prompt.strip() in {"/exit", "/quit"}:
+                break
+            if not prompt.strip():
+                continue
+            output = manager.run_chat(args.model, prompt=prompt, timeout_seconds=args.timeout_seconds)
+            if output:
+                print(output)
         return 0
 
     if args.command == "deploy":

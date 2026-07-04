@@ -638,30 +638,77 @@ class IntegrationManager:
         return lines[-limit:]
 
     def chat_command(self, model_name: str | None = None) -> list[str]:
-        model_name = model_name or self._default_model_name("chat_model", "self_managed_model", "code_model")
+        model_name = self._chat_model_name(model_name)
         model = self.catalog.get(model_name)
+        self.catalog.require_execution_capability(model_name, model, "chat")
         ollama_model_id = self._ollama_model_id(model)
         if not ollama_model_id:
             provider_name = str(model.get("provider") or "unknown")
             runtime = str(model.get("preferred_runtime") or provider_name or "unknown")
             supported = RuntimeCatalog(self.profile).supported_runtimes(model_name)
             raise ValueError(
-                f"chat wrapper currently supports aliases that can run through local Ollama; "
+                f"native Ollama chat requires an alias that can run through local Ollama; "
                 f"model {model_name!r} uses provider {provider_name!r}, preferred runtime {runtime!r}, "
                 f"and supported runtimes {supported}. "
-                "Select an alias with `aiplane models list --runtime ollama --role chat --name-only`."
+                "Use endpoint chat without --native-ollama, or select an alias with "
+                "`aiplane models list --runtime ollama --role chat --name-only`."
             )
         return ["ollama", "run", ollama_model_id]
+
+    def chat_plan(self, model_name: str | None = None, prompt: str | None = None) -> dict[str, Any]:
+        model_name = self._chat_model_name(model_name)
+        model = self.catalog.get(model_name)
+        self.catalog.require_execution_capability(model_name, model, "chat")
+        provider_name = str(model.get("provider") or "")
+        provider = self.catalog.providers().get(provider_name, {})
+        supported = RuntimeCatalog(self.profile).supported_runtimes(model_name)
+        runtime = provider_name if provider.get("ownership") == "managed_service" else str(
+            model.get("preferred_runtime") or (supported[0] if supported else provider_name)
+        )
+        protocol = str(provider.get("protocol") or ("ollama_api" if runtime == "ollama" else "openai_compatible"))
+        return {
+            "name": "chat_plan",
+            "profile": self.profile.name,
+            "model": model_name,
+            "provider": provider_name,
+            "runtime": runtime,
+            "protocol": protocol,
+            "endpoint": str(provider.get("endpoint") or ""),
+            "prompt": prompt or "",
+            "notes": [
+                "Endpoint chat uses the same protocol backend as `aiplane run` and `aiplane models test`.",
+                "It does not install runtimes or pull model weights; run runtime/setup commands first when needed.",
+            ],
+        }
+
+    def _chat_model_name(self, model_name: str | None = None) -> str:
+        return model_name or self._default_model_name("chat_model", "self_managed_model", "code_model")
 
     def _ollama_model_id(self, model: dict[str, Any]) -> str:
         return ollama_model_id(self.profile, model)
 
-    def run_chat(self, model_name: str | None = None, dry_run: bool = False) -> str:
-        command = self.chat_command(model_name)
+    def run_chat(
+        self,
+        model_name: str | None = None,
+        prompt: str | None = None,
+        dry_run: bool = False,
+        timeout_seconds: int | None = None,
+        native_ollama: bool = False,
+    ) -> str:
+        if native_ollama:
+            command = self.chat_command(model_name)
+            if dry_run:
+                return " ".join(command)
+            subprocess.run(command, cwd=self.profile.workspace, check=True)
+            return ""
+
+        model_name = self._chat_model_name(model_name)
         if dry_run:
-            return " ".join(command)
-        subprocess.run(command, cwd=self.profile.workspace, check=True)
-        return ""
+            return json_dumps(self.chat_plan(model_name, prompt), indent=2, sort_keys=True)
+        if prompt is None or not prompt.strip():
+            raise ValueError("endpoint chat requires a prompt; pass --prompt, --stdin, or run from an interactive TTY")
+        result = self.catalog.complete(model_name, prompt, timeout_seconds=timeout_seconds, purpose="chat")
+        return result.text
 
     def _api_key_env_for(self, model: dict[str, Any], provider_name: str) -> str:
         provider = self.catalog.providers().get(provider_name, {})

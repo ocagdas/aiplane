@@ -72,7 +72,8 @@ class CodeTaskRunner:
         details: dict[str, object],
         timeout_seconds: int | None = None,
     ) -> CodeTaskResult:
-        self.catalog.get(model_name)
+        model = self.catalog.get(model_name)
+        self.catalog.require_execution_capability(model_name, model, task)
         action = f"code:{task}"
         if dry_run:
             self.audit.record(
@@ -89,7 +90,7 @@ class CodeTaskRunner:
                 )
             )
             return CodeTaskResult(task, model_name, prompt, prompt, True)
-        result = self._call_model(model_name, prompt, timeout_seconds=timeout_seconds)
+        result = self._call_model(model_name, prompt, purpose=task, timeout_seconds=timeout_seconds)
         self.audit.record(
             AuditEvent(
                 "code",
@@ -106,9 +107,15 @@ class CodeTaskRunner:
         )
         return CodeTaskResult(task, model_name, prompt, result.text, False)
 
-    def _call_model(self, model_name: str, prompt: str, timeout_seconds: int | None = None) -> BackendResult:
+    def _call_model(
+        self,
+        model_name: str,
+        prompt: str,
+        purpose: str,
+        timeout_seconds: int | None = None,
+    ) -> BackendResult:
         self.catalog.get(model_name)
-        return self.catalog.complete(model_name, prompt, timeout_seconds=timeout_seconds)
+        return self.catalog.complete(model_name, prompt, timeout_seconds=timeout_seconds, purpose=purpose)
 
     def _workspace_file(self, target: Path) -> Path:
         path = target if target.is_absolute() else self.profile.workspace / target
