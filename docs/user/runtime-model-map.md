@@ -256,14 +256,14 @@ Grouping meanings:
 
 ## Single-Prompt Execution Protocols
 
-`aiplane run` and `aiplane models test` use profile-owned model aliases and provider endpoint metadata. They do not install runtimes, pull weights, or run a coding agent. They currently execute against these protocols:
+`aiplane run`, `aiplane chat`, `aiplane models test`, and code task commands use profile-owned model aliases and provider endpoint metadata. They do not install runtimes, pull weights, or run a coding agent. They currently execute against these protocols:
 
 - `ollama_api`: local or configured Ollama endpoint.
 - `openai_compatible`: OpenAI-compatible `/chat/completions` endpoint, including OpenAI, vLLM, TGI, llama.cpp, LocalAI, LM Studio, and custom compatible gateways when configured.
 - `azure_openai`: Azure OpenAI deployment chat completions; the model id is the deployment name.
 - `anthropic_api` / `anthropic_messages`: Anthropic Messages API.
 
-For runtimes that are libraries or file loaders, such as raw Transformers or Diffusers, expose a supported HTTP endpoint first or use a framework-specific export. Unsupported protocols fail explicitly.
+For runtimes that are libraries or file loaders, such as raw Transformers or Diffusers, expose a supported HTTP endpoint first or use a framework-specific export. Unsupported protocols fail explicitly. Chat/task execution also checks the selected alias role and capability metadata before calling a backend, so embedding-only, media-only, or otherwise non-chat/task aliases fail with a selection hint instead of being sent to a chat endpoint.
 
 ## Current Runtime Policy
 

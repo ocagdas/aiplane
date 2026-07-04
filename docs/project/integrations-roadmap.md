@@ -22,7 +22,7 @@ chat UI before the provider/session contracts are stable.
    - Ongoing: validate more client-specific config shapes as tools evolve.
 
 2. **CLI wrapper commands - Partially implemented**
-   - Implemented: `aiplane chat`, which resolves a configured Ollama-runnable model alias and delegates to `ollama run <model>`.
+   - Implemented: `aiplane chat`, which resolves a chat-capable profile alias and uses configured endpoints by default; `--native-ollama` delegates Ollama-runnable aliases to `ollama run <model>`.
    - Planned: broader launch wrappers around stable tool-native CLIs such as `ollama launch`, Continue CLI, Codex-style tools, or Claude Code where support is explicit.
 
 3. **Thin `aiplane session` layer - Planned**
@@ -62,7 +62,7 @@ provisioners, model runtimes, or configuration-management engines.
 | Aider | CLI pair-programming path against selected model endpoints. | Config/export first; launch wrapper later if useful. | Export implemented; wrapper planned. |
 | Cursor / Windsurf | Commercial IDE paths where custom endpoint or MCP support is available. | Research, config export where supported, no brittle plugin assumptions. | Research/planned. |
 | Codex CLI / Claude Code / Copilot-style tools | Existing agentic CLI or IDE tools. | Possible launch wrappers and environment/config handoff only. | Planned/research. |
-| Ollama | Local/self-managed runtime and native CLI chat. | Install/update/start/stop/status/pull helpers; `aiplane chat` delegates to `ollama run`. | Implemented for core flow. |
+| Ollama | Local/self-managed runtime and optional native CLI chat. | Install/update/start/stop/status/pull helpers; endpoint-backed `aiplane chat` by default, with `--native-ollama` delegating to `ollama run`. | Implemented for core flow. |
 | vLLM / llama.cpp / TGI / LocalAI / LM Studio | Self-managed model serving runtimes. | Runtime catalog, setup helpers where practical, endpoint export, stack lifecycle planning. | Partial/ongoing. |
 | LangGraph / CrewAI / AutoGen / OpenHands / Semantic Kernel / LlamaIndex Workflows | Agent/workflow orchestration frameworks on top of model endpoints, including future agent-to-agent role graphs. | Catalog/readiness metadata now; stack binding and package/export support; planned multi-agent role metadata; no custom agent runner yet. | Partial/ongoing. |
 | Docker / Compose | Reproducible local or VM-hosted runtime stacks. | Tool doctor/install hints, stack artifact export, future Docker-aware lifecycle execution. | Partial/ongoing. |
@@ -107,8 +107,11 @@ A full custom active chat/session UI is medium effort and easy to overbuild. The
 better first implementation is a thin command layer. Current status:
 
 ```bash
-# Implemented: Ollama-native chat wrapper for configured Ollama-runnable aliases.
-aiplane chat
+# Implemented: endpoint-backed chat for configured chat-capable aliases.
+aiplane chat --prompt "Say hello"
+
+# Implemented: optional Ollama-native chat for configured Ollama-runnable aliases.
+aiplane chat --native-ollama
 
 # Planned / not implemented yet:
 aiplane launch --tool continue --model MODEL_ALIAS
@@ -143,7 +146,7 @@ delegate the interactive UX to Ollama.
 Start with:
 
 1. Continue config generation for VS Code. - **Implemented**
-2. `aiplane chat` wrapper for `ollama run`. - **Implemented for local Ollama-runnable aliases**
+2. `aiplane chat` endpoint-backed smoke chat, plus `--native-ollama` for `ollama run`. - **Implemented for configured chat-capable aliases; native Ollama path is opt-in**
 3. `aiplane launch` wrapper for `ollama launch` where supported. - **Planned, not implemented**
 4. Cline/Zed/Aider exporter or wrapper research against their documented endpoint/MCP/config surfaces. - **Exporters implemented; wrappers still planned/research**
 5. Minimal session metadata/audit around those launches. - **Planned, not implemented**

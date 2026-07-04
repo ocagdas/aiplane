@@ -662,8 +662,10 @@ class IntegrationManager:
         provider_name = str(model.get("provider") or "")
         provider = self.catalog.providers().get(provider_name, {})
         supported = RuntimeCatalog(self.profile).supported_runtimes(model_name)
-        runtime = provider_name if provider.get("ownership") == "managed_service" else str(
-            model.get("preferred_runtime") or (supported[0] if supported else provider_name)
+        runtime = (
+            provider_name
+            if provider.get("ownership") == "managed_service"
+            else str(model.get("preferred_runtime") or (supported[0] if supported else provider_name))
         )
         protocol = str(provider.get("protocol") or ("ollama_api" if runtime == "ollama" else "openai_compatible"))
         return {

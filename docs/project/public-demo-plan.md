@@ -40,7 +40,7 @@ Show that `aiplane` gives a structured path from intent to usable AI environment
 
 ## Quick Exec Demo Path
 
-Use this short command path when you want a compact local execution demo with the default `local-dev` profile. It uses an Ollama-runnable alias for the native chat wrapper; `openai-compatible` is only for HTTP clients that speak OpenAI-style `/v1` APIs, not for the native `aiplane chat` path.
+Use this short command path when you want a compact local execution demo with the default `local-dev` profile. `aiplane chat` uses the configured endpoint path by default; add `--native-ollama` only when you explicitly want Ollama's `ollama run` CLI path for an Ollama-runnable alias.
 
 ```bash
 # Install and validate the CLI/profile.
@@ -72,13 +72,14 @@ aiplane integrations setup openai-compatible --model "$OLLAMA_CHAT_ALIAS" --dry-
 aiplane integrations setup openai-compatible --model "$OLLAMA_CHAT_ALIAS"
 
 # Native interactive chat through Ollama.
-aiplane chat --model "$OLLAMA_CHAT_ALIAS" --dry-run
-aiplane chat --model "$OLLAMA_CHAT_ALIAS"
+aiplane chat --model "$OLLAMA_CHAT_ALIAS" --prompt "Say hello from the configured endpoint" --dry-run
+aiplane chat --model "$OLLAMA_CHAT_ALIAS" --prompt "Say hello from the configured endpoint"
+aiplane chat --model "$OLLAMA_CHAT_ALIAS" --native-ollama --dry-run
 
 # One-shot model tasks from the CLI. Check runtime readiness before the live call.
 aiplane runtimes status ollama
 aiplane runtimes list-runtime-models ollama
-# Native chat uses `ollama run` and may wait longer during first model load; code tasks use the HTTP API timeout.
+# Endpoint chat uses the configured runtime/provider API. The optional --native-ollama path uses `ollama run` and may wait longer during first model load.
 aiplane code write --model "$OLLAMA_CHAT_ALIAS" --task "write a Python function that validates an email address" --dry-run
 aiplane code write --model "$OLLAMA_CHAT_ALIAS" --task "write a Python function that validates an email address" --timeout-seconds 180
 aiplane code analyze --model "$OLLAMA_CHAT_ALIAS" src/aiplane/cli.py --dry-run
@@ -87,7 +88,7 @@ aiplane code analyze --model "$OLLAMA_CHAT_ALIAS" src/aiplane/cli.py --dry-run
 aiplane integrations export continue --chat "$OLLAMA_CHAT_ALIAS"
 ```
 
-If setup appears to be doing a real install/start/pull, it now reports per-step progress to stderr. The native chat wrapper requires an Ollama-runnable alias because it delegates to `ollama run <model-id>`; Ollama-library aliases and resolvable Hugging Face GGUF aliases can both work.
+If setup appears to be doing a real install/start/pull, it now reports per-step progress to stderr. Endpoint chat requires a chat-capable alias and a reachable configured endpoint. The optional `--native-ollama` path requires an Ollama-runnable alias because it delegates to `ollama run <model-id>`; Ollama-library aliases and resolvable Hugging Face GGUF aliases can both work.
 Large first-run models can time out while Ollama is loading them; use `aiplane runtimes status ollama`, `aiplane runtimes list-runtime-models ollama`, and a smaller `--runtime ollama` alias for the live recording path when needed.
 
 Key points to say explicitly:
@@ -292,7 +293,7 @@ Voiceover:
 
 > Runtimes are separate from model catalogs. The selected aiplane alias maps to a runtime-native model id, and setup delegates storage to the runtime. Native Ollama uses its normal local model store; Docker Ollama uses the mounted Docker volume at `/root/.ollama` inside the container. aiplane records the alias mapping and endpoint, not a copy of the model weights.
 
-Recording note: `aiplane chat` resolves the model entry and delegates to provider-native chat, currently local Ollama. Only run mutating setup live if the machine is prepared. Otherwise keep this as a dry-run and show `status` from an already-running runtime.
+Recording note: `aiplane chat` resolves the model entry and uses the configured endpoint path by default. Only run mutating setup live if the machine is prepared. Otherwise keep this as a dry-run and show `status` from an already-running runtime. Use `--native-ollama` only to demonstrate Ollama's native CLI path.
 
 ### 2:00-2:30 - Continue Config
 
@@ -497,9 +498,10 @@ aiplane models show "$OLLAMA_CHAT_ALIAS"
 aiplane integrations setup openai-compatible --model "$OLLAMA_CHAT_ALIAS" --dry-run
 aiplane integrations setup openai-compatible --model "$OLLAMA_CHAT_ALIAS"
 
-# Ollama-native interactive chat.
-aiplane chat --model "$OLLAMA_CHAT_ALIAS" --dry-run
-aiplane chat --model "$OLLAMA_CHAT_ALIAS"
+# Endpoint chat, plus optional Ollama-native CLI preview.
+aiplane chat --model "$OLLAMA_CHAT_ALIAS" --prompt "Say hello from the configured endpoint" --dry-run
+aiplane chat --model "$OLLAMA_CHAT_ALIAS" --prompt "Say hello from the configured endpoint"
+aiplane chat --model "$OLLAMA_CHAT_ALIAS" --native-ollama --dry-run
 
 # CLI task prompts. Keep dry-run for recording unless the runtime is ready and output timing is rehearsed.
 aiplane runtimes status ollama
@@ -512,7 +514,7 @@ aiplane code analyze --model "$OLLAMA_CHAT_ALIAS" src/aiplane/cli.py --dry-run
 aiplane integrations export continue --chat "$OLLAMA_CHAT_ALIAS"
 ```
 
-For this checklist, `openai-compatible` is the generic client protocol used by setup planning for a single model endpoint. The native interactive chat command is still `aiplane chat`, which uses Ollama's native CLI path.
+For this checklist, `openai-compatible` is the generic client protocol used by setup planning for a single model endpoint. `aiplane chat` uses configured endpoints by default; Ollama's native CLI path is available with `--native-ollama`.
 
 ## What We Are Not Claiming Yet
 

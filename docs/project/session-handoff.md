@@ -6,7 +6,7 @@ This file is the short resume point for future `aiplane` development sessions. U
 
 **Test-suite structure and local coding wedge hardening** is now the active milestone. Cloud/VM/workstation workflow hardening and tool/task doctor expansion have implemented foundations, but the next work should improve maintainability and sharpen the public wedge before adding broad new scope.
 
-The immediate priority is to break down `tests/test_mvp.py` into focused modules with shared fixtures while preserving coverage and keeping the full suite green. Product work should continue to serve the narrow public story: a reproducible, inspectable, policy-aware local/hybrid AI coding stack doctor for profiles, providers, model aliases, runtimes/endpoints, hardware fit, Continue/Aider exports, MCP inspection, and audit.
+The first mechanical split of `tests/test_mvp.py` has moved MVP coverage into focused modules with shared fixtures in `tests/support.py`; the next priority is to refine boundaries and reduce duplicated setup while preserving coverage and keeping the full suite green. Product work should continue to serve the narrow public story: a reproducible, inspectable, policy-aware local/hybrid AI coding stack doctor for profiles, providers, model aliases, runtimes/endpoints, hardware fit, Continue/Aider exports, MCP inspection, and audit.
 
 Scope anchor: `aiplane` remains the control plane, not the coding agent, full chat UI, model runtime, general proxy, cloud platform, IDE extension, or infrastructure-tool replacement. Changing that direction is allowed only if the strategy and roadmap explicitly say the project is changing course.
 
@@ -76,10 +76,10 @@ PYTHONPATH=src python -m aiplane models clear-cache --dry-run
 PYTHONPATH=src python -m aiplane deploy workflow-plan --target azure_gpu_vm
 PYTHONPATH=src python -m aiplane deploy apply --target azure_gpu_vm
 PYTHONPATH=src python -m aiplane models refresh --provider huggingface --query text-to-video --dry-run --verbose --limit 2
-PYTHONPATH=src python -m pytest -q tests/test_mvp.py -k "models_list_and_defaults_support_grouping or managed_service_models_do_not_mix_into_runtime_groups or model_catalog_cloud_doctor_checks_env_var or runtime_catalog_maps_sources_and_models or integrations_export_continue_uses_planner_constraints"
+PYTHONPATH=src python -m pytest -q tests/test_models_providers.py tests/test_runtimes_execution.py tests/test_integrations_chat.py -k "models_list_and_defaults_support_grouping or managed_service_models_do_not_mix_into_runtime_groups or model_catalog_cloud_doctor_checks_env_var or runtime_catalog_maps_sources_and_models or integrations_export_continue_uses_planner_constraints"
 PYTHONPATH=src python -m aiplane models list --profile local-dev --group-by provider-kind
 PYTHONPATH=src python -m aiplane models list --profile local-dev --group-by runtime
-PYTHONPATH=src python -m pytest tests/test_mvp.py -q -k "models_add or models_clone or models_promote"
+PYTHONPATH=src python -m pytest tests/test_models_providers.py -q -k "models_add or models_clone or models_promote"
 conda run -n aiplane scripts/check.sh
 ```
 
@@ -88,7 +88,7 @@ Results:
 - Profile validation passed with `ok: true`.
 - `environment doctor --required-only` passed with `2/2` mandatory tools installed; runtime prerequisite checks now come from provider/runtime config rather than shipped model defaults.
 - JSON environment doctor passed with mandatory tools installed and runtime prerequisite rows for Ollama and vLLM.
-- Full local gate passed: `conda run -n aiplane scripts/check.sh` completed with formatter check, Ruff lint, and `253 passed in 65.78s`. A separate duration run reported `253 passed in 65.08s`, down from the earlier 144-146s baseline by moving fixture-only tests off the real local discovered-model cache.
+- Latest local gate passed after the test split: `scripts/check.sh` completed with formatter check, Ruff lint, and `257 passed in 20.87s`. The original `tests/test_mvp.py` monolith is now a legacy pointer; MVP coverage lives in focused domain modules with shared setup in `tests/support.py`. Earlier full-gate baselines reported `253 passed` before the chat/task behavior tests and split.
 - `tools matrix` passed and reported `16` tools, `2` mandatory, `14` optional, `11` installable by `aiplane`, `7` exports available, and `9` workflow categories: `4` complete, `1` partial, and `4` needing setup on this machine.
 - `tools plan opentofu` passed and reported OpenTofu as optional/manual with non-mutating IaC plan guidance.
 - `models list` returned an empty list for the clean structural profile template until discovery or local model entries are added.
@@ -124,7 +124,7 @@ Orchestrator support now has stack role metadata over reviewed model aliases and
 
 ## Next Useful Work
 
-1. Split `tests/test_mvp.py` into focused modules without changing behavior: start with `test_profiles_config.py`, `test_models_providers.py`, `test_runtimes_execution.py`, `test_integrations_chat.py`, `test_mcp.py`, `test_machines_stacks.py`, and `test_deploy_remote.py` or similarly clear boundaries.
+1. Refine the new focused test modules without changing behavior: `test_profiles_config.py`, `test_models_providers.py`, `test_runtimes_execution.py`, `test_integrations_chat.py`, `test_mcp.py`, `test_hardware_machines.py`, `test_stacks_orchestrators.py`, `test_environment_tools_benchmarks.py`, and `test_deploy_remote.py`.
 2. Extract shared test support for isolated profiles, fixture model catalogs, mock HTTP endpoints, subprocess/runtime helper fakes, and CLI stdout/stderr capture so new files do not copy setup code.
 3. Keep focused test runs green after each move, then run the full `scripts/check.sh` gate before calling the split complete.
 4. Preserve the local/hybrid AI coding stack doctor as the public wedge while doing cleanup; do not use test restructuring as a reason to broaden agent, chat UI, runtime, cloud apply, or IDE scope.

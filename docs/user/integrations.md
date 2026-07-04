@@ -352,17 +352,26 @@ Agent artifact paths are intentionally separate from profiles. Use `--output-dir
 
 This is the step after environment preparation: once `environment doctor`, runtime setup, model aliases, and endpoint exports are understood, the agent application is the actual Python code that uses those settings to perform a task.
 
-## CLI Chat Wrapper
+## CLI Chat
 
-For local Ollama-runnable models, `aiplane` can resolve the model alias and delegate to
-Ollama's native chat CLI:
+`aiplane chat` resolves a chat-capable profile model alias and uses the same endpoint-backed protocol path as `aiplane run` and `aiplane models test` by default. It works with configured Ollama, OpenAI-compatible, Azure OpenAI, and Anthropic chat-capable aliases when their endpoints and credentials are ready:
 
 ```bash
-aiplane chat --dry-run
-aiplane chat
+aiplane chat --model MODEL_ALIAS --prompt "Say hello"
+echo "Say hello" | aiplane chat --model MODEL_ALIAS --stdin
+aiplane chat --model MODEL_ALIAS --dry-run
 ```
 
-The actual command is based on the active profile's `chat_model` default, for example:
+If no prompt is provided and stdin is a terminal, `aiplane chat` opens a small endpoint-backed prompt loop. This is for smoke testing configured endpoints; it is not a replacement for Continue, Aider, Cline, or a full chat product.
+
+For local Ollama-runnable aliases, keep the old native Ollama CLI route explicitly with `--native-ollama`:
+
+```bash
+aiplane chat --model MODEL_ALIAS --native-ollama --dry-run
+aiplane chat --model MODEL_ALIAS --native-ollama
+```
+
+That native path resolves the profile alias to a command such as:
 
 ```bash
 ollama run provider-chat-small:8b

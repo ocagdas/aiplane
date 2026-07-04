@@ -25,7 +25,7 @@ When changing behavior, update these together in the same change whenever releva
 - `docs/project/roadmap.md` for implemented/planned status;
 - `docs/project/session-handoff.md` for current handoff state;
 - `docs/project/command-coverage.md` for public CLI coverage;
-- tests in `tests/test_mvp.py` or a focused new test file.
+- focused tests under `tests/` using the domain-specific modules and shared `tests/support.py` helpers.
 
 Behavior changes should normally land with matching test updates in the same change. Tests should cover the behavior contract, failure mode, or regression risk that matters; do not add tests just to increase counts. If a behavior change genuinely does not need a new or changed test, make that an explicit engineering decision and still run the relevant focused tests. Do not leave roadmap, handoff, command coverage, or tests stale after adding commands, changing defaults, or moving a feature between planned/in-progress/implemented.
 

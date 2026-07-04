@@ -50,7 +50,7 @@ Goal: make the existing MVP surface easier to trust, maintain, and present throu
 
 Required outcomes:
 
-1. Break down the monolithic `tests/test_mvp.py` into focused test modules by behavior area while preserving coverage and keeping the full suite green.
+1. Refine the focused test modules created from the original `tests/test_mvp.py` split while preserving coverage and keeping the full suite green.
 2. Keep shared fixtures, profile bootstrapping, mocked provider/runtime boundaries, and CLI helpers reusable instead of duplicating setup across new files.
 3. Keep the public CLI, docs, command coverage, MCP surface, planned/implemented skills, and tests aligned as behavior moves or tightens.
 4. Keep the first public story focused on local/hybrid AI coding stack doctor flows: profile validation, runtime/provider readiness, model alias policy, hardware fit, Continue/Aider exports, MCP manifest, and clear examples.

@@ -1,0 +1,541 @@
+# ruff: noqa: F403,F405
+from __future__ import annotations
+
+from .support import *  # noqa: F403
+
+
+class ProfileConfigTests(unittest.TestCase):
+    def test_profile_loads(self) -> None:
+        profile = load_profile("local-dev", Path.cwd())
+        self.assertEqual(profile.name, "local-dev")
+        self.assertEqual(profile.tools["mode"], "full_automation")
+
+    def test_shipped_profile_template_does_not_hardcode_model_entries(self) -> None:
+        data = agent_config.parse_yaml(
+            (Path.cwd() / "profile-templates/local-dev/models.yaml").read_text(encoding="utf-8")
+        )
+        self.assertEqual(data.get("defaults"), {})
+        self.assertEqual(data.get("models"), {})
+        self.assertNotIn("providers", data)
+
+    def test_profile_templates_are_listed(self) -> None:
+        self.assertIn("local-dev", list_profile_templates())
+
+    def test_create_profile_copies_template_without_modifying_template(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            templates = root / "profile-templates" / "base"
+            templates.mkdir(parents=True)
+            for filename in agent_config.CONFIG_FILES.values():
+                (templates / filename).write_text("value: original\n", encoding="utf-8")
+            profiles = root / "profiles"
+            profiles.mkdir()
+            original_project_root = agent_config.project_root
+            agent_config.project_root = lambda: root
+            try:
+                created = create_profile("custom", template="base")
+            finally:
+                agent_config.project_root = original_project_root
+            self.assertEqual(created, profiles / "custom")
+            (created / "models.yaml").write_text("value: changed\n", encoding="utf-8")
+            self.assertEqual(
+                (templates / "models.yaml").read_text(encoding="utf-8"),
+                "value: original\n",
+            )
+
+    def test_create_profile_supports_custom_profiles_dir(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            templates = root / "profile-templates" / "base"
+            templates.mkdir(parents=True)
+            for filename in agent_config.CONFIG_FILES.values():
+                (templates / filename).write_text("value: original\n", encoding="utf-8")
+            custom_profiles = root / "custom-profiles"
+            original_project_root = agent_config.project_root
+            agent_config.project_root = lambda: root
+            try:
+                created = create_profile("custom", template="base", profiles_dir=custom_profiles)
+                self.assertEqual(agent_config.list_profiles(custom_profiles), ["custom"])
+            finally:
+                agent_config.project_root = original_project_root
+            self.assertEqual(created, custom_profiles / "custom")
+
+    def test_remove_profile_previews_without_yes_and_deletes_with_yes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            profiles_dir = Path(tmp) / "profiles"
+            create_profile("local-dev", profiles_dir=profiles_dir)
+            profile_path = profiles_dir / "local-dev"
+
+            preview = remove_profile("local-dev", profiles_dir=profiles_dir)
+
+            self.assertTrue(preview["would_remove"])
+            self.assertTrue(preview["requires_yes"])
+            self.assertFalse(preview["removed"])
+            self.assertTrue(profile_path.exists())
+
+            removed = remove_profile("local-dev", profiles_dir=profiles_dir, yes=True)
+
+            self.assertTrue(removed["removed"])
+            self.assertFalse(profile_path.exists())
+
+    def test_profiles_remove_cli_previews_and_removes_profile_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            profiles_dir = Path(tmp) / "profiles"
+            create_profile("local-dev", profiles_dir=profiles_dir)
+            profile_path = profiles_dir / "local-dev"
+
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = cli_main(
+                    [
+                        "--profiles-dir",
+                        str(profiles_dir),
+                        "profiles",
+                        "remove",
+                        "local-dev",
+                    ]
+                )
+
+            self.assertEqual(code, 0)
+            preview = json.loads(stdout.getvalue())
+            self.assertTrue(preview["would_remove"])
+            self.assertTrue(profile_path.exists())
+
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = cli_main(
+                    [
+                        "--profiles-dir",
+                        str(profiles_dir),
+                        "profiles",
+                        "remove",
+                        "local-dev",
+                        "--yes",
+                    ]
+                )
+
+            self.assertEqual(code, 0)
+            removed = json.loads(stdout.getvalue())
+            self.assertTrue(removed["removed"])
+            self.assertFalse(profile_path.exists())
+
+    def test_repair_profile_restores_missing_models_yaml_from_template(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            profiles_dir = Path(tmp) / "profiles"
+            create_profile("local-dev", profiles_dir=profiles_dir)
+            models_path = profiles_dir / "local-dev" / "models.yaml"
+            models_path.unlink()
+
+            result = repair_profile("local-dev", files=["models.yaml"], profiles_dir=profiles_dir)
+
+            self.assertEqual(result["copied"], ["models.yaml"])
+            self.assertTrue(models_path.exists())
+            restored = agent_config.parse_yaml(models_path.read_text(encoding="utf-8"))
+            self.assertEqual(restored.get("defaults"), {})
+            self.assertEqual(restored.get("models"), {})
+            self.assertNotIn("providers", restored)
+            profile = _REAL_LOAD_PROFILE("local-dev", Path.cwd(), profiles_dir=profiles_dir)
+            self.assertTrue(cli_module._validate_profile(profile)["ok"])
+
+    def test_profiles_repair_cli_restores_selected_missing_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            profiles_dir = Path(tmp) / "profiles"
+            create_profile("local-dev", profiles_dir=profiles_dir)
+            models_path = profiles_dir / "local-dev" / "models.yaml"
+            models_path.unlink()
+            stdout = StringIO()
+
+            with redirect_stdout(stdout):
+                code = cli_main(
+                    [
+                        "--profiles-dir",
+                        str(profiles_dir),
+                        "profiles",
+                        "repair",
+                        "local-dev",
+                        "--file",
+                        "models.yaml",
+                    ]
+                )
+
+            self.assertEqual(code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(payload["copied"], ["models.yaml"])
+            self.assertEqual(payload["skipped_existing"], [])
+            self.assertTrue(models_path.exists())
+
+    def test_profiles_repair_dry_run_does_not_write(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            profiles_dir = Path(tmp) / "profiles"
+            create_profile("local-dev", profiles_dir=profiles_dir)
+            models_path = profiles_dir / "local-dev" / "models.yaml"
+            models_path.unlink()
+            stdout = StringIO()
+
+            with redirect_stdout(stdout):
+                code = cli_main(
+                    [
+                        "--profiles-dir",
+                        str(profiles_dir),
+                        "profiles",
+                        "repair",
+                        "local-dev",
+                        "--file",
+                        "models.yaml",
+                        "--dry-run",
+                    ]
+                )
+
+            self.assertEqual(code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(payload["would_copy"], ["models.yaml"])
+            self.assertFalse(models_path.exists())
+
+    def test_profiles_bootstrap_local_includes_hardware_discovery(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            profiles_dir = Path(tmp) / "profiles"
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = cli_main(
+                    [
+                        "--profiles-dir",
+                        str(profiles_dir),
+                        "profiles",
+                        "bootstrap-local",
+                        "--no-discovery",
+                        "--select-closest-hardware",
+                    ]
+                )
+            self.assertEqual(code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertTrue(payload["hardware_discovery_requested"])
+            self.assertTrue(payload["hardware"]["selected"])
+
+    def test_profiles_bootstrap_local_creates_template_profile_without_discovery(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            profiles_dir = Path(tmp) / "profiles"
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = cli_main(
+                    [
+                        "--profiles-dir",
+                        str(profiles_dir),
+                        "profiles",
+                        "bootstrap-local",
+                        "--no-discovery",
+                    ]
+                )
+            payload = json.loads(stdout.getvalue())
+
+            self.assertEqual(code, 0)
+            self.assertTrue(payload["created"])
+            self.assertFalse(payload["discovery_requested"])
+            self.assertTrue(payload["validation"]["ok"])
+            models_path = profiles_dir / "local-dev" / "models.yaml"
+            self.assertTrue(models_path.exists())
+            self.assertFalse((profiles_dir / "local-dev" / "models.discovered.yaml").exists())
+            models_config = agent_config.parse_yaml(models_path.read_text(encoding="utf-8"))
+            self.assertEqual(models_config.get("defaults"), {})
+            self.assertEqual(models_config.get("models"), {})
+            self.assertNotIn("providers", models_config)
+
+            profile = _REAL_LOAD_PROFILE("local-dev", Path.cwd(), profiles_dir=profiles_dir)
+            runtimes = RuntimeCatalog(profile).list(include_gui=True)
+            ollama = next(row for row in runtimes if row["name"] == "ollama")
+            self.assertFalse(ollama["configured"])
+            self.assertTrue(ollama["enabled"])
+            self.assertEqual(ollama["endpoint"], "http://localhost:11434")
+            self.assertEqual(
+                ModelCatalog(profile).providers()["ollama"]["origin"],
+                "default_runtime_catalog",
+            )
+
+    def test_profiles_root_uses_env_var(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            old = os.environ.get("AIPLANE_PROFILES_DIR")
+            os.environ["AIPLANE_PROFILES_DIR"] = tmp
+            try:
+                self.assertEqual(agent_config.profiles_root(), Path(tmp).resolve())
+            finally:
+                if old is None:
+                    os.environ.pop("AIPLANE_PROFILES_DIR", None)
+                else:
+                    os.environ["AIPLANE_PROFILES_DIR"] = old
+
+    def test_local_config_template_is_listed(self) -> None:
+        self.assertIn("local", list_config_templates())
+
+    def test_local_config_can_set_profiles_dir(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config_path = root / "config.yaml"
+            profiles_dir = root / "external-profiles"
+            config_path.write_text(f"profiles_dir: {profiles_dir}\n", encoding="utf-8")
+            old_config = os.environ.get("AIPLANE_CONFIG")
+            old_profiles = os.environ.get("AIPLANE_PROFILES_DIR")
+            os.environ["AIPLANE_CONFIG"] = str(config_path)
+            os.environ.pop("AIPLANE_PROFILES_DIR", None)
+            try:
+                self.assertEqual(agent_config.profiles_root(), profiles_dir.resolve())
+            finally:
+                if old_config is None:
+                    os.environ.pop("AIPLANE_CONFIG", None)
+                else:
+                    os.environ["AIPLANE_CONFIG"] = old_config
+                if old_profiles is not None:
+                    os.environ["AIPLANE_PROFILES_DIR"] = old_profiles
+
+    def test_init_local_config_copies_template(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "config.yaml"
+            created = init_local_config(path=path)
+            self.assertEqual(created, path)
+            loaded = load_local_config(path)
+            self.assertIn("profiles_dir", loaded)
+            self.assertEqual(loaded["default_profile"], "local-dev")
+
+    def test_default_profile_comes_from_local_config(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = Path(tmp) / "config.yaml"
+            old_config = os.environ.get("AIPLANE_CONFIG")
+            old_profile = os.environ.get("AIPLANE_PROFILE")
+            os.environ["AIPLANE_CONFIG"] = str(config_path)
+            os.environ.pop("AIPLANE_PROFILE", None)
+            try:
+                set_default_profile("custom", path=config_path)
+                self.assertEqual(default_profile(), "custom")
+            finally:
+                if old_config is None:
+                    os.environ.pop("AIPLANE_CONFIG", None)
+                else:
+                    os.environ["AIPLANE_CONFIG"] = old_config
+                if old_profile is not None:
+                    os.environ["AIPLANE_PROFILE"] = old_profile
+
+    def test_resolve_profile_uses_single_available_profile_and_errors_without_profiles(
+        self,
+    ) -> None:
+        source = load_profile("local-dev", Path.cwd())
+        with tempfile.TemporaryDirectory() as tmp:
+            profiles_root = Path(tmp) / "profiles"
+            only = profiles_root / "only-one"
+            only.mkdir(parents=True)
+            for filename, data in agent_config.CONFIG_FILES.items():
+                (only / data).write_text(agent_config.dump_yaml(getattr(source, filename)), encoding="utf-8")
+            self.assertEqual(resolve_profile_name(None, profiles_dir=profiles_root), "only-one")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaisesRegex(ValueError, "profiles create local-dev"):
+                resolve_profile_name(None, profiles_dir=Path(tmp) / "empty")
+
+    def test_config_default_profile_cli_sets_local_config(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = Path(tmp) / "config.yaml"
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = cli_main(
+                    [
+                        "config",
+                        "default-profile",
+                        "local-dev",
+                        "--path",
+                        str(config_path),
+                    ]
+                )
+            self.assertEqual(code, 0)
+            self.assertEqual(load_local_config(config_path)["default_profile"], "local-dev")
+
+    def test_config_get_set_cli_updates_local_config(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = Path(tmp) / "config.yaml"
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = cli_main(
+                    [
+                        "config",
+                        "set",
+                        "profiles_dir",
+                        str(Path(tmp) / "profiles"),
+                        "--path",
+                        str(config_path),
+                    ]
+                )
+            self.assertEqual(code, 0)
+            self.assertIn("profiles_dir", load_local_config(config_path))
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = cli_main(["config", "get", "profiles_dir", "--path", str(config_path)])
+            self.assertEqual(code, 0)
+            self.assertEqual(json.loads(stdout.getvalue())["key"], "profiles_dir")
+
+    def test_config_show_includes_default_and_active_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            profiles_dir = root / "profiles"
+            shutil.copytree(
+                Path.cwd() / "profile-templates" / "local-dev",
+                profiles_dir / "local-dev",
+            )
+            config_path = root / "config.yaml"
+            config_path.write_text(
+                f"default_profile: local-dev\nprofiles_dir: {profiles_dir}\ncredentials_path: {root / 'credentials.yaml'}\nagent_artifacts_dir: {root / 'agents'}\n",
+                encoding="utf-8",
+            )
+
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = cli_main(["config", "show", "--path", str(config_path)])
+
+            self.assertEqual(code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(payload["path"], str(config_path.resolve()))
+            self.assertEqual(payload["paths"]["config"]["active"], str(config_path.resolve()))
+            self.assertTrue(payload["paths"]["config"]["default"].endswith(".aiplane/config.yaml"))
+            self.assertEqual(payload["paths"]["profiles"]["active_root"], str(profiles_dir.resolve()))
+            self.assertTrue(payload["paths"]["profiles"]["default_root"].endswith("profiles"))
+            self.assertEqual(
+                payload["paths"]["profiles"]["default_profile_path"],
+                str((profiles_dir / "local-dev").resolve()),
+            )
+            self.assertEqual(
+                payload["paths"]["profiles"]["current_profile_path"],
+                str((profiles_dir / "local-dev").resolve()),
+            )
+            self.assertEqual(
+                payload["effective"]["credentials_path"],
+                str((root / "credentials.yaml").resolve()),
+            )
+            self.assertEqual(
+                payload["effective"]["agent_artifacts_dir"],
+                str((root / "agents").resolve()),
+            )
+
+    def test_profiles_show_defaults_to_effective_profile(self) -> None:
+        stdout = StringIO()
+        with redirect_stdout(stdout):
+            code = cli_main(["profiles", "show", "--selected"])
+        self.assertEqual(code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["name"], "local-dev")
+        self.assertIn("environment", payload)
+        self.assertIn("models", payload)
+
+    def test_profiles_show_full_starts_with_name_and_selected(self) -> None:
+        stdout = StringIO()
+        with redirect_stdout(stdout):
+            code = cli_main(["profiles", "show", "local-dev"])
+        self.assertEqual(code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(
+            list(payload.keys())[:5],
+            ["name", "default", "root", "workspace", "selected"],
+        )
+        self.assertIn("environment", payload["selected"])
+
+    def test_profiles_selected_entries_put_name_first(self) -> None:
+        profile = load_profile("local-dev", Path.cwd())
+        selected = __import__("aiplane.cli", fromlist=["_profile_selected"])._profile_selected(profile, "local-dev")
+        self.assertTrue(selected["models"])
+        self.assertEqual(next(iter(selected["models"][0].keys())), "name")
+        self.assertTrue(selected["providers"])
+        self.assertEqual(next(iter(selected["providers"][0].keys())), "name")
+
+    def test_profiles_validate_accepts_default_profile(self) -> None:
+        stdout = StringIO()
+        with redirect_stdout(stdout):
+            code = cli_main(["profiles", "validate", "local-dev"])
+        self.assertEqual(code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["name"], "local-dev")
+
+    def test_top_level_help_has_examples_and_command_descriptions(self) -> None:
+        stdout = StringIO()
+        with redirect_stdout(stdout), self.assertRaises(SystemExit) as raised:
+            cli_main(["--help"])
+        self.assertEqual(raised.exception.code, 0)
+        output = stdout.getvalue()
+        self.assertIn("Common flows", output)
+        self.assertIn("Configure, check, and connect", output)
+        self.assertIn("hardware", output)
+
+    def test_profiles_help_points_to_hardware_discovery_commands(self) -> None:
+        stdout = StringIO()
+        with redirect_stdout(stdout), self.assertRaises(SystemExit) as raised:
+            cli_main(["profiles", "--help"])
+        self.assertEqual(raised.exception.code, 0)
+        output = stdout.getvalue()
+        self.assertIn("aiplane hardware discover", output)
+        self.assertIn("aiplane hardware export-machine", output)
+        self.assertIn("aiplane profiles remove old-local --dry-run", output)
+
+    def test_command_help_mentions_argument_purpose(self) -> None:
+        stdout = StringIO()
+        with redirect_stdout(stdout), self.assertRaises(SystemExit) as raised:
+            cli_main(["integrations", "export", "--help"])
+        self.assertEqual(raised.exception.code, 0)
+        output = stdout.getvalue()
+        self.assertIn("Print configuration", output)
+        self.assertIn("Override provider endpoint", output)
+        self.assertIn("Endpoint examples", output)
+
+    def test_policy_allows_read_and_requires_write_approval(self) -> None:
+        profile = load_profile("local-dev", Path.cwd())
+        policy = PolicyEngine(profile)
+        self.assertFalse(policy.tool_decision("read_file").requires_approval)
+        self.assertTrue(policy.tool_decision("write_file").requires_approval)
+
+    def test_workspace_boundary_blocks_parent_escape(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            profile = load_profile("local-dev", Path(tmp))
+            decision = PolicyEngine(profile).path_decision(Path(tmp).parent / "outside.txt")
+            self.assertFalse(decision.allowed)
+
+    def test_secret_detection_and_redaction(self) -> None:
+        text = "api_key = 'abcdefghijklmnop'"
+        self.assertTrue(contains_secret(text))
+        self.assertEqual(redact(text), "[REDACTED_SECRET]")
+
+    def test_credentials_cli_lists_and_redacts_local_accounts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "credentials.yaml"
+            path.write_text(
+                "providers:\n"
+                "  openai:\n"
+                "    accounts:\n"
+                "      personal:\n"
+                "        api_key: dummy-api-key-value-123456\n"
+                "        endpoint: https://api.openai.com/v1\n"
+                "      business_a:\n"
+                "        api_key_env: OPENAI_BUSINESS_A_API_KEY\n",
+                encoding="utf-8",
+            )
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = cli_main(["credentials", "list", "--path", str(path)])
+            self.assertEqual(code, 0)
+            payload = json.loads(stdout.getvalue())
+            refs = {row["ref"] for row in payload["credentials"]}
+            self.assertIn("openai.personal", refs)
+            self.assertIn("openai.business_a", refs)
+
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = cli_main(["credentials", "show", "openai.personal", "--path", str(path)])
+            self.assertEqual(code, 0)
+            output = stdout.getvalue()
+            self.assertIn("[REDACTED_SECRET]", output)
+            self.assertNotIn("dummy-api-key-value-123456", output)
+
+    def test_credentials_cli_missing_file_lists_empty_without_path_noise(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "missing-credentials.yaml"
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = cli_main(["credentials", "list", "--path", str(path)])
+        self.assertEqual(code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload, {"name": "credentials", "credentials": []})
+        self.assertNotIn("missing-credentials.yaml", stdout.getvalue())
