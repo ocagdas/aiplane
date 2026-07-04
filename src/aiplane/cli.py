@@ -169,6 +169,56 @@ def _main(argv: list[str] | None = None) -> int:
         help="Include optional external workflow tools in the environment section",
     )
 
+    quickstart_cmd = _command(
+        subparsers,
+        "quickstart",
+        "Start a guided local AI coding setup",
+        "Run narrow, control-plane quickstarts for reproducible local/hybrid AI coding profiles.",
+        "Examples:\n  aiplane quickstart local-coding\n  aiplane quickstart local-coding --dry-run\n  aiplane quickstart local-coding --no-discovery",
+    )
+    quickstart_sub = quickstart_cmd.add_subparsers(dest="quickstart_command", required=True, metavar="command")
+    local_coding = quickstart_sub.add_parser(
+        "local-coding",
+        help="Bootstrap and inspect the local AI coding profile",
+        description=(
+            "Create or refresh a local-dev style profile using the existing profile bootstrap path, "
+            "then print the local coding stack doctor summary and exact next commands. It does not "
+            "install runtimes, pull models, edit IDE config, or mutate cloud resources."
+        ),
+        formatter_class=HelpFormatter,
+    )
+    local_coding.add_argument("--name", default="local-dev", help="Editable profile name to create or inspect")
+    local_coding.add_argument(
+        "--template", default="local-dev", help="Profile template to use when creating the profile"
+    )
+    local_coding.add_argument("--overwrite", action="store_true", help="Replace an existing profile directory first")
+    local_coding.add_argument("--no-discovery", action="store_true", help="Skip provider model discovery refresh")
+    local_coding.add_argument("--no-hardware-discovery", action="store_true", help="Skip local hardware discovery")
+    local_coding.add_argument(
+        "--select-closest-hardware",
+        action="store_true",
+        help="Set active hardware to the closest discovered template during bootstrap",
+    )
+    local_coding.add_argument("--provider", default="all", help="Model provider to refresh, or all")
+    local_coding.add_argument("--query", help="Optional provider catalog search query")
+    local_coding.add_argument("--limit", type=int, default=25, help="Maximum model ids to read per provider catalog")
+    local_coding.add_argument(
+        "--provider-limit",
+        action="append",
+        default=[],
+        metavar="PROVIDER=COUNT",
+        help="Override --limit for one model provider",
+    )
+    local_coding.add_argument("--disable-new", action="store_true", help="Write newly discovered entries as disabled")
+    local_coding.add_argument("--verbose", action="store_true", help="Include per-model discovery rows")
+    local_coding.add_argument("--dry-run", action="store_true", help="Preview bootstrap/discovery without writing")
+    local_coding.add_argument(
+        "--format",
+        choices=["json", "text"],
+        default="json",
+        help="Output format. JSON is the default for reproducible setup logs.",
+    )
+
     config_cmd = _command(
         subparsers,
         "config",
@@ -2238,92 +2288,9 @@ def _main(argv: list[str] | None = None) -> int:
             print(_json(result, indent=2, sort_keys=True))
             return 0
         if args.profile_command == "bootstrap-local":
-            root = profiles_root(profiles_dir)
-            profile_path = root / args.name
-            created = False
-            would_create = False
-            if args.dry_run:
-                would_create = args.overwrite or not profile_path.exists()
-            elif args.overwrite or not profile_path.exists():
-                profile_path = create_profile(
-                    args.name,
-                    template=args.template,
-                    overwrite=args.overwrite,
-                    profiles_dir=profiles_dir,
-                )
-                created = True
-            profile_exists = profile_path.exists()
-            validation = None
-            discovery = None
-            hardware = None
-            if profile_exists:
-                profile = load_profile(args.name, workspace, profiles_dir=profiles_dir)
-                validation = _validate_profile(profile)
-                if not args.no_hardware_discovery:
-                    manager = HardwareManager(profile)
-                    hardware = (
-                        manager.select_closest_discovered(dry_run=args.dry_run)
-                        if args.select_closest_hardware
-                        else manager.discover()
-                    )
-                if not args.no_discovery:
-                    catalog = ModelCatalog(profile)
-                    provider_limits = _parse_provider_limits(args.provider_limit)
-                    progress = _refresh_progress()
-                    write = not args.dry_run
-                    try:
-                        if args.provider == "all":
-                            discovery = catalog.refresh_all(
-                                write=write,
-                                enable=not args.disable_new,
-                                query=args.query,
-                                limit=args.limit,
-                                provider_limits=provider_limits,
-                                progress=progress,
-                                verbose=args.verbose,
-                            )
-                        else:
-                            provider_limit = int(provider_limits.get(args.provider, args.limit))
-                            discovery = catalog.refresh(
-                                args.provider,
-                                write=write,
-                                enable=not args.disable_new,
-                                query=args.query,
-                                limit=provider_limit,
-                                progress=progress,
-                                verbose=args.verbose,
-                            )
-                    finally:
-                        if progress:
-                            progress("done", "", "")
-            elif not args.no_discovery or not args.no_hardware_discovery:
-                skipped = "profile does not exist yet; rerun without --dry-run to create it before discovery"
-                if not args.no_discovery:
-                    discovery = {"skipped": True, "reason": skipped}
-                if not args.no_hardware_discovery:
-                    hardware = {"skipped": True, "reason": skipped}
-            print(
-                _json(
-                    {
-                        "name": "profiles_bootstrap_local",
-                        "profile": args.name,
-                        "template": args.template,
-                        "path": str(profile_path),
-                        "created": created,
-                        "would_create": would_create,
-                        "overwrite": args.overwrite,
-                        "dry_run": args.dry_run,
-                        "discovery_requested": not args.no_discovery,
-                        "discovery": discovery,
-                        "hardware_discovery_requested": not args.no_hardware_discovery,
-                        "hardware": hardware,
-                        "validation": validation,
-                        "next_steps": _profile_bootstrap_next_steps(args.name, not args.no_discovery, args.dry_run),
-                    },
-                    indent=2,
-                    sort_keys=True,
-                )
-            )
+            result = _bootstrap_local_profile(args, workspace, profiles_dir)
+            print(_json(result, indent=2, sort_keys=True))
+            validation = result.get("validation") if isinstance(result.get("validation"), dict) else None
             return 0 if validation is None or validation.get("ok", False) else 1
         effective_profile = resolve_profile_name(requested_profile, profiles_dir=profiles_dir)
         profile_name = args.name or effective_profile
@@ -2339,6 +2306,18 @@ def _main(argv: list[str] | None = None) -> int:
         )
         print(_json(payload, indent=2))
         return 0
+
+    if args.command == "quickstart":
+        if args.quickstart_command == "local-coding":
+            result = _quickstart_local_coding(args, workspace, profiles_dir)
+            if args.format == "text":
+                print(_quickstart_local_coding_text(result))
+            else:
+                print(_json(result, indent=2, sort_keys=True))
+            validation = (
+                result.get("bootstrap", {}).get("validation") if isinstance(result.get("bootstrap"), dict) else None
+            )
+            return 0 if validation is None or validation.get("ok", False) else 1
 
     effective_profile = resolve_profile_name(requested_profile, profiles_dir=profiles_dir)
 
@@ -3426,6 +3405,143 @@ def _environment_doctor_text(payload: dict[str, object]) -> str:
         lines.append("next steps:")
         lines.extend(f"- {note}" for note in notes[:3])
     return "\n".join(lines)
+
+
+def _bootstrap_local_profile(args, workspace: Path, profiles_dir: Path | None) -> dict[str, object]:
+    root = profiles_root(profiles_dir)
+    profile_path = root / args.name
+    created = False
+    would_create = False
+    if args.dry_run:
+        would_create = args.overwrite or not profile_path.exists()
+    elif args.overwrite or not profile_path.exists():
+        profile_path = create_profile(
+            args.name,
+            template=args.template,
+            overwrite=args.overwrite,
+            profiles_dir=profiles_dir,
+        )
+        created = True
+    profile_exists = profile_path.exists()
+    validation = None
+    discovery = None
+    hardware = None
+    if profile_exists:
+        profile = load_profile(args.name, workspace, profiles_dir=profiles_dir)
+        validation = _validate_profile(profile)
+        if not args.no_hardware_discovery:
+            manager = HardwareManager(profile)
+            hardware = (
+                manager.select_closest_discovered(dry_run=args.dry_run)
+                if args.select_closest_hardware
+                else manager.discover()
+            )
+        if not args.no_discovery:
+            catalog = ModelCatalog(profile)
+            provider_limits = _parse_provider_limits(args.provider_limit)
+            progress = _refresh_progress()
+            write = not args.dry_run
+            try:
+                if args.provider == "all":
+                    discovery = catalog.refresh_all(
+                        write=write,
+                        enable=not args.disable_new,
+                        query=args.query,
+                        limit=args.limit,
+                        provider_limits=provider_limits,
+                        progress=progress,
+                        verbose=args.verbose,
+                    )
+                else:
+                    provider_limit = int(provider_limits.get(args.provider, args.limit))
+                    discovery = catalog.refresh(
+                        args.provider,
+                        write=write,
+                        enable=not args.disable_new,
+                        query=args.query,
+                        limit=provider_limit,
+                        progress=progress,
+                        verbose=args.verbose,
+                    )
+            finally:
+                if progress:
+                    progress("done", "", "")
+    elif not args.no_discovery or not args.no_hardware_discovery:
+        skipped = "profile does not exist yet; rerun without --dry-run to create it before discovery"
+        if not args.no_discovery:
+            discovery = {"skipped": True, "reason": skipped}
+        if not args.no_hardware_discovery:
+            hardware = {"skipped": True, "reason": skipped}
+    return {
+        "name": "profiles_bootstrap_local",
+        "profile": args.name,
+        "template": args.template,
+        "path": str(profile_path),
+        "created": created,
+        "would_create": would_create,
+        "overwrite": args.overwrite,
+        "dry_run": args.dry_run,
+        "discovery_requested": not args.no_discovery,
+        "discovery": discovery,
+        "hardware_discovery_requested": not args.no_hardware_discovery,
+        "hardware": hardware,
+        "validation": validation,
+        "next_steps": _profile_bootstrap_next_steps(args.name, not args.no_discovery, args.dry_run),
+    }
+
+
+def _quickstart_local_coding(args, workspace: Path, profiles_dir: Path | None) -> dict[str, object]:
+    bootstrap = _bootstrap_local_profile(args, workspace, profiles_dir)
+    doctor_payload = None
+    profile_path = Path(str(bootstrap.get("path", "")))
+    if profile_path.exists():
+        profile = load_profile(args.name, workspace, profiles_dir=profiles_dir)
+        doctor_payload = local_coding_doctor(profile, include_optional=False)
+    commands = [
+        f"aiplane doctor --profile {args.name}",
+        f"aiplane integrations export continue --profile {args.name}",
+        f"aiplane integrations export aider --profile {args.name}",
+        "aiplane mcp manifest",
+    ]
+    if args.dry_run and not profile_path.exists():
+        commands.insert(0, f"aiplane quickstart local-coding --name {args.name}")
+    return {
+        "name": "quickstart_local_coding",
+        "profile": args.name,
+        "dry_run": args.dry_run,
+        "bootstrap": bootstrap,
+        "doctor": doctor_payload,
+        "commands": commands,
+        "notes": [
+            "This quickstart stays in the control-plane lane: it creates or previews a local profile, runs discovery/doctor checks, and prints export commands.",
+            "It does not install runtimes, pull models, edit IDE configuration, start cloud resources, or run an agent conversation.",
+        ],
+    }
+
+
+def _quickstart_local_coding_text(payload: dict[str, object]) -> str:
+    bootstrap = payload.get("bootstrap") if isinstance(payload.get("bootstrap"), dict) else {}
+    doctor = payload.get("doctor") if isinstance(payload.get("doctor"), dict) else None
+    lines = [
+        f"local coding quickstart for profile {payload.get('profile', 'unknown')}",
+        f"profile path: {bootstrap.get('path', '')}",
+        f"created: {bootstrap.get('created', False)}; dry_run: {payload.get('dry_run', False)}",
+    ]
+    validation = bootstrap.get("validation") if isinstance(bootstrap.get("validation"), dict) else None
+    if validation is not None:
+        lines.append(f"profile validation: {'ok' if validation.get('ok') else 'needs attention'}")
+    if doctor is not None:
+        summary = doctor.get("summary") if isinstance(doctor.get("summary"), dict) else {}
+        lines.append(
+            f"doctor: {'ok' if doctor.get('ok') else 'needs attention'}; "
+            f"blocking: {summary.get('blocking', 0)}; warnings: {summary.get('warnings', 0)}"
+        )
+    lines.append("")
+    lines.append("next commands:")
+    commands = payload.get("commands", [])
+    if isinstance(commands, list):
+        lines.extend(f"- {command}" for command in commands)
+    return "\n".join(lines).rstrip()
 
 
 def _profile_bootstrap_next_steps(profile: str, discovery_requested: bool, dry_run: bool) -> list[str]:

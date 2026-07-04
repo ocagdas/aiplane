@@ -80,9 +80,11 @@ aiplane config show
 
 ## Quick Start
 
-Check the configured local AI coding stack first:
+Start with the local coding quickstart, then inspect the doctor output directly when needed:
 
 ```bash
+aiplane quickstart local-coding
+aiplane quickstart local-coding --dry-run
 aiplane doctor
 aiplane doctor --format json
 aiplane profiles list
@@ -91,7 +93,7 @@ aiplane profiles validate
 aiplane environment doctor
 ```
 
-`aiplane doctor` is the local/hybrid coding-stack summary: profile files, required environment tools, configured model defaults with provider/endpoint details, selected role-default endpoint readiness, active hardware and role-model fit, provider state, Continue/Aider role capability readiness, MCP manifest availability, and the next safe commands to run.
+`aiplane quickstart local-coding` creates or previews the editable local profile through the same bootstrap path, runs the local doctor when the profile exists, and prints the next export commands. It does not install runtimes, pull models, edit IDE config, or mutate cloud resources. `aiplane doctor` is the local/hybrid coding-stack summary: profile files, required environment tools, configured model defaults with provider/endpoint details, selected role-default endpoint readiness, active hardware and role-model fit, provider state, Continue/Aider role capability readiness, MCP manifest availability, and the next safe commands to run.
 
 Inspect provider state, then populate an ignored local model cache from discovery when needed:
 

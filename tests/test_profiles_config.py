@@ -219,6 +219,58 @@ class ProfileConfigTests(unittest.TestCase):
             self.assertEqual(payload["would_copy"], ["models.yaml"])
             self.assertFalse(models_path.exists())
 
+    def test_quickstart_local_coding_dry_run_reports_public_flow_without_writes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            profiles_dir = Path(tmp) / "profiles"
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = cli_main(
+                    [
+                        "--profiles-dir",
+                        str(profiles_dir),
+                        "quickstart",
+                        "local-coding",
+                        "--dry-run",
+                        "--no-discovery",
+                    ]
+                )
+            payload = json.loads(stdout.getvalue())
+
+            self.assertEqual(code, 0)
+            self.assertEqual(payload["name"], "quickstart_local_coding")
+            self.assertTrue(payload["dry_run"])
+            self.assertTrue(payload["bootstrap"]["would_create"])
+            self.assertFalse((profiles_dir / "local-dev").exists())
+            self.assertIn("aiplane quickstart local-coding --name local-dev", payload["commands"])
+            self.assertIn("aiplane doctor --profile local-dev", payload["commands"])
+            self.assertIsNone(payload["doctor"])
+
+    def test_quickstart_local_coding_text_lists_next_commands(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            profiles_dir = Path(tmp) / "profiles"
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = cli_main(
+                    [
+                        "--profiles-dir",
+                        str(profiles_dir),
+                        "quickstart",
+                        "local-coding",
+                        "--no-discovery",
+                        "--no-hardware-discovery",
+                        "--format",
+                        "text",
+                    ]
+                )
+            output = stdout.getvalue()
+
+            self.assertEqual(code, 0)
+            self.assertIn("local coding quickstart for profile local-dev", output)
+            self.assertIn("profile validation: ok", output)
+            self.assertIn("aiplane doctor --profile local-dev", output)
+            self.assertIn("aiplane integrations export continue --profile local-dev", output)
+            self.assertTrue((profiles_dir / "local-dev" / "models.yaml").exists())
+
     def test_profiles_bootstrap_local_includes_hardware_discovery(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             profiles_dir = Path(tmp) / "profiles"

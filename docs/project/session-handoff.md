@@ -36,7 +36,7 @@ High-level implemented areas:
 
 - profiles, local config, ignored credential references, provider credential tests, and validation;
 - environment planning/doctor checks for system Python, `venv`, Conda, and Docker, with setup helpers that bootstrap ignored `profiles/local-dev` before profile-aware checks;
-- provider/model catalogs including NVIDIA Hugging Face-scoped open model discovery, OpenAI-compatible `/v1/models` discovery, structural shipped profile config, ignored discovery cache review, direct profile-owned model add/clone, runtime/source mapping, local model defaults, local coding stack doctor summaries, protocol-backed single-prompt execution for Ollama/OpenAI-compatible/Azure OpenAI/Anthropic, and benchmark smoke checks;
+- provider/model catalogs including NVIDIA Hugging Face-scoped open model discovery, OpenAI-compatible `/v1/models` discovery, structural shipped profile config, ignored discovery cache review, direct profile-owned model add/clone, runtime/source mapping, local model defaults, local coding quickstart/doctor summaries, protocol-backed single-prompt execution for Ollama/OpenAI-compatible/Azure OpenAI/Anthropic, and benchmark smoke checks;
 - hardware discovery, machine inventory, Azure SKU discovery/import, and stack planning;
 - tool doctors/plans/exports for infrastructure, quality, and automation tools;
 - integration role inspection, setup, and exports for Continue, Cline, Zed, Aider, OpenAI-compatible clients, and MCP client snippets, with setup planning supported helper install/start/pull actions and skipping unsupported source/runtime pull combinations;
@@ -66,6 +66,8 @@ Latest checks from this session:
 PYTHONPATH=src python -m aiplane profiles validate local-dev
 PYTHONPATH=src python -m aiplane environment doctor --required-only
 PYTHONPATH=src python -m aiplane environment doctor --required-only --format json
+PYTHONPATH=src python -m aiplane quickstart local-coding --dry-run --no-discovery
+PYTHONPATH=src python -m aiplane quickstart local-coding --dry-run --no-discovery --format text
 PYTHONPATH=src python -m aiplane doctor --profile local-dev
 PYTHONPATH=src python -m aiplane doctor --profile local-dev --format json
 PYTHONPATH=src python -m pytest -q
@@ -90,8 +92,9 @@ Results:
 - Profile validation passed with `ok: true`.
 - `environment doctor --required-only` passed with `2/2` mandatory tools installed; runtime prerequisite checks now come from provider/runtime config rather than shipped model defaults.
 - JSON environment doctor passed with mandatory tools installed and runtime prerequisite rows for Ollama and vLLM.
+- `aiplane quickstart local-coding --dry-run --no-discovery` passed in JSON and text modes, previewing the local profile bootstrap and printing the doctor/export/MCP command sequence without writing profile files.
 - Top-level `aiplane doctor --profile local-dev` passed in text and JSON modes. It is read-only and summarizes profile status, required/optional environment checks, configured model defaults with provider/endpoint details, selected role-default endpoint readiness, active hardware and role-model fit, provider readiness, Continue/Aider role capability readiness, MCP manifest availability, and next safe steps.
-- Latest local gate passed after explicit test imports, focused fixture split, and local doctor coverage: `scripts/check.sh` completed with formatter check, Ruff lint, and `264 passed in 27.17s`. The original `tests/test_mvp.py` monolith is now a legacy pointer; MVP coverage lives in focused domain modules with shared setup in `tests/support.py`, `tests/profile_fixtures.py`, and `tests/http_fixtures.py`. Earlier full-gate baselines reported `253 passed` before the chat/task behavior tests and split.
+- Latest local gate passed after explicit test imports, focused fixture split, and local doctor coverage: `scripts/check.sh` completed with formatter check, Ruff lint, and `266 passed in 21.20s`. The original `tests/test_mvp.py` monolith is now a legacy pointer; MVP coverage lives in focused domain modules with shared setup in `tests/support.py`, `tests/profile_fixtures.py`, and `tests/http_fixtures.py`. Earlier full-gate baselines reported `253 passed` before the chat/task behavior tests and split.
 - `tools matrix` passed and reported `16` tools, `2` mandatory, `14` optional, `11` installable by `aiplane`, `7` exports available, and `9` workflow categories: `4` complete, `1` partial, and `4` needing setup on this machine.
 - `tools plan opentofu` passed and reported OpenTofu as optional/manual with non-mutating IaC plan guidance.
 - `models list` returned an empty list for the clean structural profile template until discovery or local model entries are added.
@@ -127,7 +130,7 @@ Orchestrator support now has stack role metadata over reviewed model aliases and
 
 ## Next Useful Work
 
-1. Continue the local coding doctor wedge by tightening only the remaining details that directly help the first public flow: clean examples/quickstart copy, MCP read-surface status, and any Continue/Aider export gaps that appear in real smoke usage.
+1. Continue the local coding doctor wedge by tightening only the remaining details that directly help the first public flow: MCP read-surface status and any Continue/Aider export gaps that appear in real smoke usage.
 2. Treat the test split as structurally complete for now; only refine test modules or fixtures when new behavior work exposes duplication, unclear ownership, or slow/fragile setup.
 3. Keep shared helpers explicit: isolated profiles, fixture model catalogs, mock HTTP endpoints, subprocess/runtime helper fakes, and CLI stdout/stderr capture should stay reusable without reintroducing wildcard imports or duplicated setup.
 4. Preserve the local/hybrid AI coding stack doctor as the public wedge while doing cleanup; do not use test restructuring as a reason to broaden agent, chat UI, runtime, cloud apply, or IDE scope.
