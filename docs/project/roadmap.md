@@ -101,10 +101,11 @@ Required outcomes:
    - Remote execution boundaries remain explicit for SSH/Azure/AKS stacks; non-local lifecycle commands still return plans rather than executing.
    - Docker-aware stack lifecycle paths remain the next hardening area after same-host helper execution and endpoint planning.
 
-6. **Cloud, VM, and workstation workflow hardening** - In progress
+6. **Cloud, VM, and workstation workflow hardening** - Implemented foundation / in progress
    - Use OpenTofu as the default provider-agnostic IaC target, Terraform as a compatible alternative, and Pulumi as an optional language-native IaC path.
    - Harden Vagrant, Packer, Ansible, Dev Container, and IaC starter exports into provider-specific workflows.
-   - Keep local install, local VM provisioning, remote VM provisioning, remote PC setup, and cloud provisioning distinct.
+   - Keep local install, local VM provisioning, remote VM provisioning, remote PC setup, and cloud provisioning distinct. `deploy workflow-plan` now exposes those boundaries and recommended tool ownership.
+   - Keep mutating target bootstrap behind explicit confirmation; `deploy apply` requires `--yes` and broad cloud apply remains out of scope until provider-specific guardrails are ready.
    - Keep public demo paths focused on repeatable local, endpoint, MCP, stack, and Azure discovery workflows without unsafe mutation.
 
 7. **Tool/task matrix and setup doctor expansion** - In progress

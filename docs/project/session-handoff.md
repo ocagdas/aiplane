@@ -4,7 +4,7 @@ This file is the short resume point for future `aiplane` development sessions. U
 
 ## Current Milestone
 
-**Post-merge architecture and integration hardening** is the active milestone.
+**Cloud, VM, and workstation workflow hardening** has an implemented foundation; the next active milestone is tool/task matrix and setup doctor expansion unless roadmap priorities change.
 
 The PR has merged, so the immediate work moves from demo/merge readiness to making the merged MVP surface easier to maintain and extend. Priorities are: modularize the largest code hotspots, bring MCP into deliberate parity with useful CLI inspection/planning/export features, add a versioned `aiplane` agent skill package, and deepen orchestrator support for multi-agent workflow metadata without turning `aiplane` into the agent runner.
 
@@ -48,11 +48,13 @@ Known in-progress areas:
 - managed-service endpoint binding for stacks/orchestrator exports without mixing those models into self-managed runtime-fit checks;
 - stack role metadata is implemented for planner/coder/reviewer-style model bindings, including managed-service role endpoint binding and warning-level doctor checks for risky tool-policy/approval combinations; framework starter exports and MCP stack export read parity now exist, with deeper framework-specific templates still next; the first `aiplane` agent skill package documents safe assistant workflows and MCP usage;
 - remote execution and Docker-aware stack lifecycle;
+- deploy workflow classification now separates local install, local VM, remote workstation/VM, cloud VM, and cloud Kubernetes boundaries with non-mutating `deploy workflow-plan`;
+- `deploy apply` now requires explicit `--yes`, and broad cloud apply remains intentionally out of scope until provider-specific guardrails are ready;
 - provider-specific IaC/playbook/template hardening;
 - broader deployment apply paths;
 - endpoint authentication/gateway planning now exists at stack level through endpoint auth/TLS/gateway metadata and `stacks endpoint-plan`; richer runtime-agnostic chat/task UX beyond single-prompt execution remains planned;
 - benchmark metrics, comparisons, and repeated-run summaries;
-- continued test-suite performance/isolation hardening after the first focused contract-test split.
+- continued test-suite performance/isolation hardening. Default tests should use synthetic fixture profiles, temp roots, mocked subprocess/network boundaries, and controlled generated caches; real disk/cache/tool dependencies should be explicit and isolated in dev setup.
 
 ## Validation Baseline
 
@@ -69,6 +71,8 @@ PYTHONPATH=src python -m aiplane agents templates
 PYTHONPATH=src python -m aiplane stacks list
 PYTHONPATH=src python -m aiplane models list
 PYTHONPATH=src python -m aiplane models clear-cache --dry-run
+PYTHONPATH=src python -m aiplane deploy workflow-plan --target azure_gpu_vm
+PYTHONPATH=src python -m aiplane deploy apply --target azure_gpu_vm
 PYTHONPATH=src python -m aiplane models refresh --provider huggingface --query text-to-video --dry-run --verbose --limit 2
 PYTHONPATH=src python -m pytest -q tests/test_mvp.py -k "models_list_and_defaults_support_grouping or managed_service_models_do_not_mix_into_runtime_groups or model_catalog_cloud_doctor_checks_env_var or runtime_catalog_maps_sources_and_models or integrations_export_continue_uses_planner_constraints"
 PYTHONPATH=src python -m aiplane models list --profile local-dev --group-by provider-kind
@@ -82,12 +86,14 @@ Results:
 - Profile validation passed with `ok: true`.
 - `environment doctor --required-only` passed with `2/2` mandatory tools installed; runtime prerequisite checks now come from provider/runtime config rather than shipped model defaults.
 - JSON environment doctor passed with mandatory tools installed and runtime prerequisite rows for Ollama and vLLM.
-- Full local orchestrator/provider-hardening milestone check passed: `conda run -n aiplane scripts/check.sh` completed with formatter check, Ruff lint, and `249 passed in 144.03s`.
+- Full local gate passed: `conda run -n aiplane scripts/check.sh` completed with formatter check, Ruff lint, and `253 passed in 65.78s`. A separate duration run reported `253 passed in 65.08s`, down from the earlier 144-146s baseline by moving fixture-only tests off the real local discovered-model cache.
 - `tools matrix` passed and reported `16` tools, `2` mandatory, `14` optional, `11` installable by `aiplane`, `7` exports available, and `9` workflow categories: `4` complete, `1` partial, and `4` needing setup on this machine.
 - `tools plan opentofu` passed and reported OpenTofu as optional/manual with non-mutating IaC plan guidance.
 - `models list` returned an empty list for the clean structural profile template until discovery or local model entries are added.
 - `models list --machine` and `models list --machine-file` are implemented and tested; they derive RAM, VRAM, GPU vendor, and accelerator API filters from named/imported machine profiles or portable machine files while leaving parameter-count filters explicit.
 - `models clear-cache --dry-run` passed with `include_curated: true` and zero removals on the clean cache.
+- `deploy workflow-plan --target azure_gpu_vm` passed and classified the target as `cloud_vm` with explicit cloud provisioning boundaries, `az`/SSH/IaC/Packer/Ansible tool ownership, and read-only MCP policy.
+- `deploy apply --target azure_gpu_vm` without `--yes` correctly failed before mutation with `error: deploy apply is mutating; run deploy plan first`.
 - Hugging Face `text-to-video` refresh dry-run contacted the source API, reported `profile_models_before_refresh: 0`, and mapped returned candidates to `video_generation` on the `diffusers` runtime.
 - Continue integration planning is now documented as a discovery-first demo step: refresh provider catalogs into the ignored discovery cache, derive chat/autocomplete/embedding aliases, then pass explicit role aliases to plan/export.
 - Focused provider-kind, managed-service runtime separation, and Ollama Docker-substrate dry-run tests passed. The Docker dry-run path prints `docker pull ollama/ollama:latest` and `docker run ... ollama/ollama:latest` without starting containers.

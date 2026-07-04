@@ -49,7 +49,11 @@ from .model_catalog import ModelCatalog
 from .orchestrators import OrchestratorCatalog
 from .output import json_dumps as _json
 from .policy import PolicyEngine
-from .providers import ProviderRegistry, SUPPORTED_CATALOG_ADAPTERS, SUPPORTED_ENDPOINT_FAMILIES
+from .providers import (
+    ProviderRegistry,
+    SUPPORTED_CATALOG_ADAPTERS,
+    SUPPORTED_ENDPOINT_FAMILIES,
+)
 from .remote import RemoteManager
 from .secrets import CredentialStore, credentials_path
 from .router import Router
@@ -578,7 +582,9 @@ def _main(argv: list[str] | None = None) -> int:
     )
     _profile_arg(hardware_clear)
     hardware_clear.add_argument(
-        "--dry-run", action="store_true", help="Preview the reset without writing hardware.yaml"
+        "--dry-run",
+        action="store_true",
+        help="Preview the reset without writing hardware.yaml",
     )
     hardware_doctor = hardware_sub.add_parser(
         "doctor",
@@ -916,7 +922,16 @@ def _main(argv: list[str] | None = None) -> int:
     stacks_setup.add_argument("--endpoint", help="Endpoint URL override")
     stacks_setup.add_argument(
         "--endpoint-auth",
-        choices=["none", "bearer", "api_key", "basic", "oauth2", "oidc", "mtls", "gateway"],
+        choices=[
+            "none",
+            "bearer",
+            "api_key",
+            "basic",
+            "oauth2",
+            "oidc",
+            "mtls",
+            "gateway",
+        ],
         help="Auth method expected at the endpoint gateway/reverse proxy",
     )
     stacks_setup.add_argument(
@@ -1197,7 +1212,9 @@ def _main(argv: list[str] | None = None) -> int:
         help="Print the prompt without calling the provider",
     )
     code_analyze.add_argument(
-        "--timeout-seconds", type=int, help="Override provider request timeout for this code task"
+        "--timeout-seconds",
+        type=int,
+        help="Override provider request timeout for this code task",
     )
     code_analyze.add_argument("target", help="File path inside the workspace")
     code_complete = code_sub.add_parser(
@@ -1215,7 +1232,9 @@ def _main(argv: list[str] | None = None) -> int:
         help="Print the prompt without calling the provider",
     )
     code_complete.add_argument(
-        "--timeout-seconds", type=int, help="Override provider request timeout for this code task"
+        "--timeout-seconds",
+        type=int,
+        help="Override provider request timeout for this code task",
     )
     code_complete.add_argument("target", help="File path inside the workspace")
     code_write = code_sub.add_parser(
@@ -1232,7 +1251,11 @@ def _main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Print the prompt without calling the provider",
     )
-    code_write.add_argument("--timeout-seconds", type=int, help="Override provider request timeout for this code task")
+    code_write.add_argument(
+        "--timeout-seconds",
+        type=int,
+        help="Override provider request timeout for this code task",
+    )
 
     add_integrations_parser(
         subparsers,
@@ -1341,7 +1364,7 @@ def _main(argv: list[str] | None = None) -> int:
         "deploy",
         "Plan/check/apply remote deployment targets",
         "Work with configured cloud/shared deployment targets. Apply is guarded and intentionally narrow.",
-        "Examples:\n  aiplane deploy list\n  aiplane deploy plan --target aks_gpu_pool\n  aiplane deploy doctor --target aks_gpu_pool\n  aiplane deploy apply --target aks_gpu_pool",
+        "Examples:\n  aiplane deploy list\n  aiplane deploy workflow-plan --target azure_gpu_vm\n  aiplane deploy plan --target aks_gpu_pool\n  aiplane deploy doctor --target aks_gpu_pool\n  aiplane deploy apply --target aks_gpu_pool --yes",
     )
     deploy_sub = deploy_cmd.add_subparsers(dest="deploy_command", required=True, metavar="command")
     deploy_list = deploy_sub.add_parser(
@@ -1359,6 +1382,14 @@ def _main(argv: list[str] | None = None) -> int:
     )
     _profile_arg(deploy_show)
     deploy_show.add_argument("--target", help="Target name, such as aks_gpu_pool")
+    deploy_workflow = deploy_sub.add_parser(
+        "workflow-plan",
+        help="Classify a deployment workflow",
+        description="Show whether a target is local install, local VM, remote workstation/VM, cloud VM, or Kubernetes/cloud provisioning, and which external tools own each phase.",
+        formatter_class=HelpFormatter,
+    )
+    _profile_arg(deploy_workflow)
+    deploy_workflow.add_argument("--target", help="Target name; defaults to profile target default")
     deploy_plan = deploy_sub.add_parser(
         "plan",
         help="Render deployment plan",
@@ -1383,6 +1414,11 @@ def _main(argv: list[str] | None = None) -> int:
     )
     _profile_arg(deploy_apply)
     deploy_apply.add_argument("--target", help="Target name; defaults to profile target default")
+    deploy_apply.add_argument(
+        "--yes",
+        action="store_true",
+        help="Confirm that mutating target bootstrap commands should run",
+    )
 
     remote_cmd = _command(
         subparsers,
@@ -2080,7 +2116,7 @@ def _main(argv: list[str] | None = None) -> int:
             "default_profile": configured_default_profile,
             "default_profile_path": str(profile_root / configured_default_profile),
             "current_profile": current_profile,
-            "current_profile_path": str(profile_root / current_profile) if current_profile else None,
+            "current_profile_path": (str(profile_root / current_profile) if current_profile else None),
         }
         if current_profile_error:
             profile_paths["current_profile_error"] = current_profile_error
@@ -2375,7 +2411,13 @@ def _main(argv: list[str] | None = None) -> int:
             print(_json(result, indent=2, sort_keys=True))
             return 0
         if args.hardware_command == "clear":
-            print(_json(manager.clear_selection(dry_run=args.dry_run), indent=2, sort_keys=True))
+            print(
+                _json(
+                    manager.clear_selection(dry_run=args.dry_run),
+                    indent=2,
+                    sort_keys=True,
+                )
+            )
             return 0
         if args.hardware_command == "recommend":
             print(
@@ -2658,14 +2700,26 @@ def _main(argv: list[str] | None = None) -> int:
         runner = CodeTaskRunner(profile, AuditLogger(profile))
         if args.code_command == "analyze":
             result = runner.analyze(
-                args.model, Path(args.target), dry_run=args.dry_run, timeout_seconds=args.timeout_seconds
+                args.model,
+                Path(args.target),
+                dry_run=args.dry_run,
+                timeout_seconds=args.timeout_seconds,
             )
         elif args.code_command == "complete":
             result = runner.complete(
-                args.model, Path(args.target), args.line, dry_run=args.dry_run, timeout_seconds=args.timeout_seconds
+                args.model,
+                Path(args.target),
+                args.line,
+                dry_run=args.dry_run,
+                timeout_seconds=args.timeout_seconds,
             )
         else:
-            result = runner.write(args.model, args.task, dry_run=args.dry_run, timeout_seconds=args.timeout_seconds)
+            result = runner.write(
+                args.model,
+                args.task,
+                dry_run=args.dry_run,
+                timeout_seconds=args.timeout_seconds,
+            )
         print(result.output)
         return 0
 
@@ -2740,14 +2794,19 @@ def _main(argv: list[str] | None = None) -> int:
         if args.deploy_command == "show":
             print(_json(manager.show(args.target), indent=2, sort_keys=True))
             return 0
+        if args.deploy_command == "workflow-plan":
+            print(_json(manager.workflow_plan(args.target), indent=2, sort_keys=True))
+            return 0
         if args.deploy_command == "plan":
             print(_json(manager.plan(args.target), indent=2, sort_keys=True))
             return 0
         if args.deploy_command == "doctor":
             print(_json(manager.doctor(args.target), indent=2, sort_keys=True))
             return 0
-        print(_json(manager.apply(args.target, yes=True), indent=2, sort_keys=True))
-        return 0
+        if args.deploy_command == "apply":
+            print(_json(manager.apply(args.target, yes=args.yes), indent=2, sort_keys=True))
+            return 0
+        raise ValueError(f"unknown deploy command: {args.deploy_command}")
 
     if args.command == "remote":
         profile = load_profile(effective_profile, workspace, profiles_dir=profiles_dir)
@@ -3075,15 +3134,17 @@ def _profile_selected(profile, default_name: str | None = None) -> dict[str, obj
             for name, provider in _dict_value(providers).items()
             if bool(provider.get("enabled", True))
         ],
-        "model_defaults": profile.models.get("defaults", {}) if isinstance(profile.models, dict) else {},
+        "model_defaults": (profile.models.get("defaults", {}) if isinstance(profile.models, dict) else {}),
         "models": [
             {"name": name, **model} for name, model in _dict_value(models).items() if bool(model.get("enabled", True))
         ],
         "targets": {
-            "default": profile.targets.get("default") if isinstance(profile.targets, dict) else None,
-            "config": _dict_value(targets).get(str(profile.targets.get("default")), {})
-            if isinstance(profile.targets, dict)
-            else {},
+            "default": (profile.targets.get("default") if isinstance(profile.targets, dict) else None),
+            "config": (
+                _dict_value(targets).get(str(profile.targets.get("default")), {})
+                if isinstance(profile.targets, dict)
+                else {}
+            ),
         },
         "repository": profile.repository,
     }
@@ -3226,7 +3287,11 @@ def _environment_doctor_text(payload: dict[str, object]) -> str:
     rows.extend(
         sorted(
             tool_rows,
-            key=lambda row: (0 if row["required"] == "mandatory" else 1, row["status"] != "installed", row["name"]),
+            key=lambda row: (
+                0 if row["required"] == "mandatory" else 1,
+                row["status"] != "installed",
+                row["name"],
+            ),
         )
     )
     values = payload.get("runtime_prerequisites", [])
@@ -3241,9 +3306,9 @@ def _environment_doctor_text(payload: dict[str, object]) -> str:
             {
                 "name": str(item.get("runtime") or ""),
                 "kind": "runtime",
-                "status": "ready"
-                if item.get("ok")
-                else (f"missing {missing_count}" if missing_count else "needs setup"),
+                "status": (
+                    "ready" if item.get("ok") else (f"missing {missing_count}" if missing_count else "needs setup")
+                ),
                 "required": "optional",
                 "why": why,
             }

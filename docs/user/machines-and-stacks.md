@@ -204,7 +204,7 @@ aiplane deploy doctor --target azure_gpu_vm
 6. To create the VM through `aiplane`, review the plan and doctor output first, then run guarded apply:
 
 ```bash
-aiplane deploy apply --target azure_gpu_vm
+aiplane deploy apply --target azure_gpu_vm --yes
 ```
 
 This runs the mutating Azure CLI steps shown in the plan, such as resource group creation, VM creation, and optional SSH port opening. It can create billable Azure resources.
