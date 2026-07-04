@@ -44,24 +44,23 @@ Recommended public roadmap:
 
 Advanced cloud, Kubernetes, broad provisioning, custom IDEs, general agent execution, and full session products should not lead the public story. They remain later or explicit-change-course work.
 
-## Current Milestone: Test-Suite Structure and Local Coding Wedge Hardening
+## Current Milestone: Local AI Coding Stack Doctor
 
-Goal: make the existing MVP surface easier to trust, maintain, and present through the local/hybrid AI coding control-plane wedge before adding broad new execution scope.
+Goal: make the first public local/hybrid AI coding flow useful, inspectable, and narrow before adding broad new execution scope.
 
 Required outcomes:
 
-1. Refine the focused test modules created from the original `tests/test_mvp.py` split while preserving coverage and keeping the full suite green.
-2. Keep shared fixtures, profile bootstrapping, mocked provider/runtime boundaries, and CLI helpers reusable instead of duplicating setup across new files.
-3. Keep the public CLI, docs, command coverage, MCP surface, planned/implemented skills, and tests aligned as behavior moves or tightens.
-4. Keep the first public story focused on local/hybrid AI coding stack doctor flows: profile validation, runtime/provider readiness, model alias policy, hardware fit, Continue/Aider exports, MCP manifest, and clear examples.
-5. Solidify MCP as a structured inspection/planning/export surface with narrow audited writes only where guardrails are clear.
-6. Preserve the control-plane boundary: do not use test cleanup or chat/task work as a back door into agent-runner, model-runtime, broad deployment, or custom IDE scope.
+1. Keep `aiplane doctor` focused on read-only readiness: profile files, required environment tools, runtime prerequisites, model defaults, endpoint readiness, hardware fit, Continue/Aider readiness, provider state, MCP manifest, and next safe commands.
+2. Keep role-default checks practical: selected aliases must exist, be enabled, match the expected task capability, expose provider/endpoint details, and report endpoint/model status clearly.
+3. Keep the public CLI, docs, command coverage, MCP surface, planned/implemented skills, and tests aligned as doctor behavior tightens.
+4. Preserve the control-plane boundary: do not turn the doctor into a chat UI, model runtime, installer, IDE mutator, broad cloud deployer, or agent runner.
+5. Treat the test split as structurally complete; only refine test modules or fixtures when new behavior exposes real duplication, unclear ownership, or fragility.
 
 ## Implemented
 
 - Profile loading, validation, templates, selected/default profile handling, ignored local config, and external profile directory support.
 - Ignored local credential references with redacted credential inspection commands and provider connection tests for selected managed endpoints.
-- Top-level local coding stack doctor plus environment planning and doctor checks for system Python, `venv`, Conda, and Docker execution mode; setup helpers install the CLI and bootstrap ignored `profiles/local-dev` from the shipped template before profile-aware checks.
+- Top-level local coding stack doctor with profile, environment, provider/endpoint, role default, selected endpoint readiness, hardware-fit, Continue/Aider readiness, and MCP manifest summaries; environment planning and doctor checks cover system Python, `venv`, Conda, and Docker execution mode; setup helpers install the CLI and bootstrap ignored `profiles/local-dev` from the shipped template before profile-aware checks.
 - External tool catalog, doctors, guarded install previews, non-mutating plans, and starter exports for Azure CLI, OpenTofu/Terraform, Pulumi, Vagrant, Packer, Docker/Compose, Dev Container CLI, kubectl, Helm, OpenSSH, Ansible, and benchmark helpers.
 - Provider/model catalog foundations for Ollama, Ollama Cloud placeholder, OpenAI-compatible runtimes, OpenAI, Anthropic, Azure OpenAI, ElevenLabs TTS, Hugging Face, NVIDIA Hugging Face-scoped open model repos, GGUF/local files, and user-defined discovery providers. Shipped profile templates keep `models.yaml` structural, runtime/provider endpoint values live as conventional built-in defaults with local override support, and model grouping separates managed-service providers from self-managed runtime sources while preserving managed endpoint metadata for exports, stacks, and orchestrator plans.
 - Ignored discovered provider/model cache flow plus `profiles bootstrap-local`, `models add`, `models clone`, and `models promote` as reviewed paths into editable local profile YAML; `models clear-cache` clears discovered entries and profile-owned review entries by default so discovery can be repopulated from providers, and `models refresh --reset-cache` combines clearing and repopulating for refreshed providers.
@@ -111,7 +110,7 @@ Required outcomes:
    - Add focused tests that compare MCP schemas and behavior with the CLI surfaces they intentionally mirror.
    - Treat MCP/skills synchronization as a recurring checkpoint and pre-PR cleanup task, not a requirement after every small feature.
 
-3. **Orchestrator and multi-agent workflow metadata** - Current
+3. **Orchestrator and multi-agent workflow metadata** - Implemented foundation / ongoing hardening
    - Stack setup can carry optional role metadata such as planner, coder, reviewer, researcher, tool-runner, and summarizer while preserving one primary lifecycle model for runtime install/pull/start actions.
    - Role metadata binds reviewed model aliases to provider/runtime or managed endpoint ownership plus tool policy, approval mode, limits, and audit labels; stack plan/doctor/status/export surface the metadata, and doctor warns on disabled role models, missing managed endpoints, and risky tool-policy/approval combinations.
    - Framework starter exports now emit reviewed role/endpoint/tool/approval/audit metadata for LangGraph, CrewAI, AutoGen, Semantic Kernel, LlamaIndex Workflows, and OpenHands; next harden framework-specific templates where stable APIs justify it.
@@ -168,7 +167,7 @@ Required outcomes:
    - Add benchmark comparison across models, runtimes, and machines.
    - Defer automated code execution grading until sandboxing and language runners are designed.
 
-11. **Test-suite structure, performance, and isolation** - Current
+11. **Test-suite structure, performance, and isolation** - Structurally complete / incremental
    - Split the large MVP test module into focused files by area so slow tests and ownership are easier to see. Start with behavior boundaries that already exist in code: profiles/config, providers/models, runtimes/execution, integrations/chat, MCP, machines/stacks, deployment, and CLI smoke coverage.
    - Extract shared test fixtures and helpers for isolated profiles, local model caches, mocked HTTP endpoints, mocked subprocess boundaries, and CLI stdout/stderr capture.
    - Keep the full automated suite useful as a PR gate without letting local discovery caches or external-machine state dominate runtime.

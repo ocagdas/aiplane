@@ -3,8 +3,9 @@ from __future__ import annotations
 from typing import Any
 
 from .config import CONFIG_FILES
+from .hardware import HardwareManager
 from .integration_contracts import required_roles
-from .model_catalog import ModelCatalog
+from .model_catalog import ModelCatalog, ownership_for_model
 from .models import Profile
 from .mcp import mcp_manifest
 from .tools import ToolchainManager
@@ -26,7 +27,9 @@ def local_coding_doctor(profile: Profile, include_optional: bool = False) -> dic
     sections = [
         _profile_section(profile),
         _environment_section(profile, include_optional=include_optional),
-        _model_defaults_section(catalog, models, defaults, model_statuses),
+        _model_defaults_section(catalog, models, defaults, model_statuses, providers),
+        _endpoint_section(models, defaults, model_statuses, providers),
+        _hardware_section(profile, models, defaults),
         _provider_section(providers),
         _integration_section(defaults, models),
         _mcp_section(),
@@ -127,20 +130,33 @@ def _model_defaults_section(
     models: dict[str, dict[str, Any]],
     defaults: dict[str, Any],
     statuses: dict[str, Any],
+    providers: dict[str, dict[str, Any]],
 ) -> dict[str, Any]:
     checks = []
     for label, default_role in LOCAL_CODING_DEFAULT_ROLES.items():
         alias = defaults.get(default_role)
         model = models.get(str(alias)) if alias else None
         status = statuses.get(str(alias)) if alias else None
+        capability_ok, capability_reason = _role_capability(default_role, model)
+        provider_name = str(model.get("provider") or "") if isinstance(model, dict) else ""
+        provider = providers.get(provider_name, {})
+        endpoint = _provider_endpoint(provider_name, provider)
+        ownership = ownership_for_model(model, provider) if isinstance(model, dict) else None
+        configured = bool(alias and isinstance(model, dict) and bool(model.get("enabled", True)))
         checks.append(
             {
                 "name": default_role,
-                "ok": bool(alias and isinstance(model, dict) and bool(model.get("enabled", True))),
-                "detail": str(alias or "not configured"),
-                "reason": (status.reason if status else "missing profile-owned or discovered model alias"),
-                "provider": (status.provider if status else None),
+                "ok": bool(configured and capability_ok),
+                "detail": _default_detail(str(alias or "not configured"), provider_name, endpoint),
+                "reason": capability_reason if configured and not capability_ok else _status_reason(status),
+                "provider": provider_name or (status.provider if status else None),
+                "endpoint": endpoint,
+                "ownership": ownership,
+                "runtime": model.get("preferred_runtime") or model.get("runtime") if isinstance(model, dict) else None,
+                "model": model.get("model") if isinstance(model, dict) else None,
+                "roles": model.get("roles", []) if isinstance(model, dict) else [],
                 "usable": (status.usable if status else False),
+                "warning": bool(configured and capability_ok and status and not status.usable),
                 "role": label,
             }
         )
@@ -153,6 +169,80 @@ def _model_defaults_section(
         }
     )
     return {"name": "model_defaults", "ok": all(check["ok"] for check in checks), "checks": checks}
+
+
+def _endpoint_section(
+    models: dict[str, dict[str, Any]],
+    defaults: dict[str, Any],
+    statuses: dict[str, Any],
+    providers: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    checks: list[dict[str, Any]] = []
+    aliases = _configured_default_aliases(defaults, models)
+    checks.append(
+        {
+            "name": "role_default_endpoints",
+            "ok": bool(aliases),
+            "detail": f"{len(aliases)} configured role default endpoint aliases"
+            if aliases
+            else "no configured role default aliases",
+        }
+    )
+    for role, alias, model in aliases:
+        provider_name = str(model.get("provider") or "")
+        provider = providers.get(provider_name, {})
+        endpoint = _provider_endpoint(provider_name, provider)
+        status = statuses.get(alias)
+        provider_enabled = bool(provider.get("enabled", True))
+        checks.append(
+            {
+                "name": f"endpoint:{role}",
+                "ok": bool(provider_enabled and endpoint and status and status.usable),
+                "detail": _endpoint_detail(alias, provider_name, endpoint),
+                "reason": _status_reason(status),
+                "alias": alias,
+                "provider": provider_name or None,
+                "endpoint": endpoint,
+                "provider_enabled": provider_enabled,
+                "model": model.get("model"),
+            }
+        )
+    return {"name": "endpoints", "ok": all(check["ok"] for check in checks), "checks": checks}
+
+
+def _hardware_section(profile: Profile, models: dict[str, dict[str, Any]], defaults: dict[str, Any]) -> dict[str, Any]:
+    manager = HardwareManager(profile)
+    active = manager.active_config()
+    machine = active.get("machine") if isinstance(active.get("machine"), dict) else {}
+    checks: list[dict[str, Any]] = [
+        {
+            "name": "active_machine",
+            "ok": bool(machine),
+            "detail": _machine_detail(machine) if machine else "no effective machine profile",
+        }
+    ]
+    seen_aliases: set[str] = set()
+    for role, default_role in LOCAL_CODING_DEFAULT_ROLES.items():
+        alias = defaults.get(default_role)
+        if not alias or str(alias) in seen_aliases:
+            continue
+        seen_aliases.add(str(alias))
+        model = models.get(str(alias))
+        if not isinstance(model, dict):
+            continue
+        fit = manager.check_model_fit({"name": str(alias), **model})
+        checks.append(
+            {
+                "name": f"model_fit:{default_role}",
+                "ok": bool(fit.usable),
+                "detail": f"{alias}: {fit.reason}",
+                "model": fit.model,
+                "alias": str(alias),
+                "role": role,
+                "warning": bool(fit.usable and "below recommended" in fit.reason),
+            }
+        )
+    return {"name": "hardware", "ok": all(check["ok"] for check in checks), "checks": checks}
 
 
 def _provider_section(providers: dict[str, dict[str, Any]]) -> dict[str, Any]:
@@ -172,18 +262,25 @@ def _integration_section(defaults: dict[str, Any], models: dict[str, dict[str, A
         "embedding": "embedding_model",
     }
     for tool in ["continue", "aider"]:
-        missing = []
+        gaps = []
+        role_aliases: dict[str, str] = {}
         for role in required_roles(tool):
             role_name = role["name"]
             default_role = role_defaults.get(role_name, "chat_model")
             alias = defaults.get(default_role)
-            if not alias or str(alias) not in models:
-                missing.append(role_name)
+            role_aliases[role_name] = str(alias or "")
+            model = models.get(str(alias)) if alias else None
+            capability_ok, reason = _role_capability(default_role, model)
+            if not alias or not isinstance(model, dict):
+                gaps.append(f"{role_name}:missing")
+            elif not capability_ok:
+                gaps.append(f"{role_name}:incompatible ({reason})")
         checks.append(
             {
                 "name": f"integration:{tool}",
-                "ok": not missing,
-                "detail": "ready" if not missing else "missing roles: " + ", ".join(missing),
+                "ok": not gaps,
+                "detail": "ready" if not gaps else "role gaps: " + ", ".join(gaps),
+                "role_aliases": role_aliases,
             }
         )
     return {"name": "integrations", "ok": all(check["ok"] for check in checks), "checks": checks}
@@ -202,6 +299,100 @@ def _mcp_section() -> dict[str, Any]:
     return {"name": "mcp", "ok": all(check["ok"] for check in checks), "checks": checks}
 
 
+def _configured_default_aliases(
+    defaults: dict[str, Any], models: dict[str, dict[str, Any]]
+) -> list[tuple[str, str, dict[str, Any]]]:
+    aliases: list[tuple[str, str, dict[str, Any]]] = []
+    seen: set[str] = set()
+    for role, default_role in LOCAL_CODING_DEFAULT_ROLES.items():
+        alias = defaults.get(default_role)
+        if not alias or str(alias) in seen:
+            continue
+        model = models.get(str(alias))
+        if not isinstance(model, dict):
+            continue
+        aliases.append((role, str(alias), model))
+        seen.add(str(alias))
+    return aliases
+
+
+def _role_capability(default_role: str, model: dict[str, Any] | None) -> tuple[bool, str]:
+    if not isinstance(model, dict):
+        return False, "missing profile-owned or discovered model alias"
+    roles = {str(role) for role in model.get("roles", []) or []}
+    scores = model.get("capability_scores") if isinstance(model.get("capability_scores"), dict) else {}
+    positive_scores = {name for name, value in scores.items() if _positive_score(value)}
+    allowed_roles = {
+        "chat_model": {"chat", "generation"},
+        "autocomplete_model": {"completion", "autocomplete", "code", "chat"},
+        "embedding_model": {"embedding"},
+        "code_model": {"completion", "generation", "refactor", "code", "chat"},
+    }.get(default_role, {"chat", "generation"})
+    allowed_scores = {
+        "chat_model": {"general_chat", "reasoning", "tool_use"},
+        "autocomplete_model": {"code_completion", "code_generation", "general_chat"},
+        "embedding_model": {"embedding"},
+        "code_model": {"code_generation", "debugging_refactor", "general_chat"},
+    }.get(default_role, {"general_chat"})
+    if roles.intersection(allowed_roles) or positive_scores.intersection(allowed_scores):
+        return True, "role capability is compatible"
+    role_text = ", ".join(sorted(roles)) or "none"
+    return False, f"alias roles are not suitable for {default_role}: roles={role_text}"
+
+
+def _positive_score(value: Any) -> bool:
+    try:
+        return float(value) > 0
+    except (TypeError, ValueError):
+        return False
+
+
+def _status_reason(status: Any) -> str:
+    return status.reason if status else "missing profile-owned or discovered model alias"
+
+
+def _provider_endpoint(provider_name: str, provider: dict[str, Any]) -> str | None:
+    endpoint = provider.get("endpoint")
+    if endpoint:
+        return str(endpoint)
+    if provider_name == "openai":
+        return "https://api.openai.com/v1"
+    if provider_name == "anthropic":
+        return "https://api.anthropic.com"
+    if provider_name == "ollama":
+        return "http://localhost:11434"
+    return None
+
+
+def _endpoint_detail(alias: str, provider: str, endpoint: str | None) -> str:
+    if endpoint:
+        return f"{alias}; provider={provider or 'unknown'}; endpoint={endpoint}"
+    return f"{alias}; provider={provider or 'unknown'}; endpoint not configured"
+
+
+def _default_detail(alias: str, provider: str, endpoint: str | None) -> str:
+    parts = [alias]
+    if provider:
+        parts.append(f"provider={provider}")
+    if endpoint:
+        parts.append(f"endpoint={endpoint}")
+    return "; ".join(parts)
+
+
+def _machine_detail(machine: dict[str, Any]) -> str:
+    memory = machine.get("memory_gb")
+    gpu = machine.get("gpu_model") or machine.get("gpu_vendor")
+    vram = machine.get("total_vram_gb") or machine.get("vram_gb")
+    parts = []
+    if memory is not None:
+        parts.append(f"RAM={memory}GB")
+    if gpu:
+        parts.append(f"GPU={gpu}")
+    if vram is not None:
+        parts.append(f"VRAM={vram}GB")
+    return ", ".join(parts) or str(machine.get("machine_tag") or machine.get("provider") or "configured")
+
+
 def _next_steps(profile: str, sections: list[dict[str, Any]]) -> list[str]:
     section_ok = {section["name"]: bool(section.get("ok")) for section in sections}
     steps = []
@@ -215,6 +406,12 @@ def _next_steps(profile: str, sections: list[dict[str, Any]]) -> list[str]:
         steps.append(
             "Run `aiplane models refresh --dry-run`, then promote/add reviewed aliases and set chat/autocomplete/embedding defaults."
         )
+    if not section_ok.get("endpoints", False):
+        steps.append(
+            "Run `aiplane runtimes status <runtime>` or `aiplane providers test <provider>` for endpoint-specific diagnostics."
+        )
+    if not section_ok.get("hardware", False):
+        steps.append("Run `aiplane hardware doctor` or choose a smaller local model alias for this machine.")
     if not section_ok.get("integrations", False):
         steps.append(
             "Run `aiplane integrations roles continue` and `aiplane integrations plan continue` after model defaults are configured."

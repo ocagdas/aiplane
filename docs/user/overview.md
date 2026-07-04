@@ -92,7 +92,7 @@ For end-to-end command sequences and combinations, see [Practical Workflows](wor
 
 ## Local Coding Stack Doctor
 
-Start with `aiplane doctor` when evaluating a laptop, workstation, or hybrid AI coding profile. It aggregates the local control-plane checks that matter for the first public wedge: profile files, required environment tools, runtime prerequisites, model defaults, provider state, Continue/Aider role readiness, and MCP manifest availability. It is read-only and does not install runtimes, pull models, edit IDE config, or mutate cloud resources.
+Start with `aiplane doctor` when evaluating a laptop, workstation, or hybrid AI coding profile. It aggregates the local control-plane checks that matter for the first public wedge: profile files, required environment tools, runtime prerequisites, model defaults with provider/endpoint details, selected role-default endpoint readiness, active hardware and role-model fit, provider state, Continue/Aider role capability readiness, and MCP manifest availability. It is read-only and does not install runtimes, pull models, edit IDE config, or mutate cloud resources.
 
 ```bash
 aiplane doctor

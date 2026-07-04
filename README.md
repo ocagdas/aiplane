@@ -91,7 +91,7 @@ aiplane profiles validate
 aiplane environment doctor
 ```
 
-`aiplane doctor` is the local/hybrid coding-stack summary: profile files, required environment tools, configured model defaults, provider state, Continue/Aider role readiness, MCP manifest availability, and the next safe commands to run.
+`aiplane doctor` is the local/hybrid coding-stack summary: profile files, required environment tools, configured model defaults with provider/endpoint details, selected role-default endpoint readiness, active hardware and role-model fit, provider state, Continue/Aider role capability readiness, MCP manifest availability, and the next safe commands to run.
 
 Inspect provider state, then populate an ignored local model cache from discovery when needed:
 
