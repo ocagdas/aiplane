@@ -79,7 +79,7 @@ Required outcomes:
 
 3. **Orchestrator and multi-agent workflow metadata** - Current
    - Stack setup can carry optional role metadata such as planner, coder, reviewer, researcher, tool-runner, and summarizer while preserving one primary lifecycle model for runtime install/pull/start actions.
-   - Role metadata binds reviewed model aliases to provider/runtime/endpoint ownership plus tool policy, approval mode, limits, and audit labels; stack plan/doctor/status/export surface the metadata.
+   - Role metadata binds reviewed model aliases to provider/runtime or managed endpoint ownership plus tool policy, approval mode, limits, and audit labels; stack plan/doctor/status/export surface the metadata, and doctor warns on disabled role models, missing managed endpoints, and risky tool-policy/approval combinations.
    - Framework starter exports now emit reviewed role/endpoint/tool/approval/audit metadata for LangGraph, CrewAI, AutoGen, Semantic Kernel, LlamaIndex Workflows, and OpenHands; next harden framework-specific templates where stable APIs justify it.
    - Keep `aiplane` as setup/config/policy/export, not the autonomous multi-agent runner.
    - Keep extending doctor/plan checks so they explain missing packages, missing endpoints, model/runtime incompatibility, and unsafe tool-policy combinations before anything is run.
@@ -92,14 +92,14 @@ Required outcomes:
    - Refresh/promote/add/clone output explains the safe next step from dry-run discovery to discovered entries to traceable profile-owned model entries.
    - `models list` now filters from active hardware, named/imported machines, external machine files, the currently probed machine, and explicit RAM/VRAM/GPU/API/parameter constraints. Parameter count remains explicit because it is a model property rather than a machine-derived fact.
    - Managed-provider online catalog failures, such as an unconfigured Azure OpenAI deployment endpoint/key, now return structured refresh failure JSON with provider-test/show next steps instead of silently looking successful through an empty profile-catalog fallback.
-   - Ongoing hardening remains for richer managed-provider discovery, provider-specific live credential tests, and Anthropic/OpenAI discovery fallbacks where APIs or maintained catalogs allow it.
+   - OpenAI-compatible `/v1/models`, Azure OpenAI deployment, and ElevenLabs voice discovery now share the managed-provider failure path when endpoint/key configuration is missing. Ongoing hardening remains for richer managed-provider discovery, provider-specific live credential tests, and Anthropic discovery fallbacks where APIs or maintained catalogs allow it.
 
-5. **Runtime, stack lifecycle, and endpoint hardening** - In progress
-   - Improve same-host lifecycle result reporting and status verification after prepare/start.
-   - Add Docker-aware stack lifecycle paths after same-host helper execution is stable.
-   - Let stacks bind managed-service model endpoints where the runtime field represents a hosted protocol or endpoint contract, while keeping those entries out of self-managed runtime fit checks.
-   - Add first-class plans for reverse proxy or gateway auth in front of public/shared model endpoints.
-   - Keep remote execution boundaries explicit for SSH/Azure/AKS stacks.
+5. **Runtime, stack lifecycle, and endpoint hardening** - Implemented foundation / ongoing lifecycle hardening
+   - Same-host lifecycle result reporting includes execution mode, step counts, failed step, timing fields, stdout/stderr tails, and best-effort runtime status before and after execution.
+   - Stack endpoint planning now records endpoint auth/TLS/gateway hints, surfaces `stacks endpoint-plan`, and feeds plan/doctor checks for public/shared endpoint readiness.
+   - Stacks can bind managed-service model endpoints where the runtime field represents a hosted protocol or endpoint contract, while keeping those entries out of self-managed runtime fit checks.
+   - Remote execution boundaries remain explicit for SSH/Azure/AKS stacks; non-local lifecycle commands still return plans rather than executing.
+   - Docker-aware stack lifecycle paths remain the next hardening area after same-host helper execution and endpoint planning.
 
 6. **Cloud, VM, and workstation workflow hardening** - In progress
    - Use OpenTofu as the default provider-agnostic IaC target, Terraform as a compatible alternative, and Pulumi as an optional language-native IaC path.

@@ -4951,7 +4951,7 @@ class MvpTests(unittest.TestCase):
         by_name = {row["name"]: row for row in rows}
         self.assertEqual(by_name["azure_openai"]["catalog_adapter"], "azure_openai")
         self.assertEqual(by_name["azure_openai"]["ownership"], "managed_service")
-        self.assertEqual(by_name["openai"]["catalog_adapter"], "profile_catalog")
+        self.assertEqual(by_name["openai"]["catalog_adapter"], "openai")
         self.assertEqual(by_name["openai"]["endpoint_family"], "openai")
         self.assertEqual(by_name["openai"]["typical_runtimes"], [])
         self.assertEqual(by_name["openai"]["auth"], {"required": True, "method": "bearer"})
@@ -5003,6 +5003,7 @@ class MvpTests(unittest.TestCase):
         self.assertIn("azure_openai", families)
         self.assertIn("profile_catalog", adapters)
         self.assertIn("huggingface", adapters)
+        self.assertIn("openai", adapters)
 
     def test_provider_add_cli_rejects_unsupported_api_family(self) -> None:
         stderr = StringIO()
@@ -5291,6 +5292,44 @@ class MvpTests(unittest.TestCase):
         self.assertEqual(result.models, ["nvidia/Nemotron-Test"])
         self.assertIn("author=nvidia", requested_urls[0])
         self.assertIn("search=Nemotron", requested_urls[0])
+
+    def test_provider_models_can_query_openai_compatible_catalog_with_mocked_http(self) -> None:
+        profile = load_profile("local-dev", Path.cwd())
+        profile.models.setdefault("providers", {})["openai"] = {
+            "ownership": "managed_service",
+            "protocol": "openai_compatible",
+            "endpoint": "https://api.example.test/v1",
+            "enabled": True,
+            "api_key_env": "OPENAI_API_KEY",
+        }
+        payload = {
+            "data": [
+                {"id": "general-chat", "object": "model", "owned_by": "provider"},
+                {"id": "coding-chat", "object": "model", "owned_by": "provider"},
+            ]
+        }
+
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def read(self):
+                return json.dumps(payload).encode("utf-8")
+
+        with (
+            patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}),
+            patch("aiplane.providers.urlopen", return_value=FakeResponse()) as opened,
+        ):
+            result = ProviderRegistry(profile).models("openai", online=True, query="coding", limit=5)
+        self.assertEqual(result.source, "provider_api")
+        self.assertEqual(result.models, ["coding-chat"])
+        self.assertEqual(result.model_metadata["coding-chat"]["owned_by"], "provider")
+        request = opened.call_args.args[0]
+        self.assertEqual(request.full_url, "https://api.example.test/v1/models")
+        self.assertEqual(request.headers.get("Authorization"), "Bearer test-key")
 
     def test_provider_models_can_query_azure_openai_deployments_with_mocked_http(
         self,
@@ -6597,6 +6636,62 @@ exit 0
             self.assertEqual(status["orchestrator"], "langgraph")
             self.assertEqual(status["limits"]["max_parallel_agents"], 3)
 
+    def test_stack_role_doctor_allows_managed_service_roles_and_flags_risky_tools(self) -> None:
+        source = load_profile("local-dev", Path.cwd())
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            models_config = json.loads(json.dumps(source.models))
+            models_config.setdefault("models", {})["managed-chat"] = {
+                "provider": "openai",
+                "model": "coding-chat",
+                "ownership": "managed_service",
+                "roles": ["chat", "planner"],
+                "enabled": True,
+            }
+            profile = Profile(
+                name="tmp",
+                root=root,
+                workspace=Path.cwd(),
+                hardware=json.loads(json.dumps(source.hardware)),
+                backends=source.backends,
+                repository=source.repository,
+                tools=source.tools,
+                approvals=source.approvals,
+                environment=source.environment,
+                models=models_config,
+                targets=source.targets,
+                orchestrators=source.orchestrators,
+            )
+            exported = MachineManager(profile).export_machine("local_box")
+            machine_path = root / "local_box.json"
+            machine_path.write_text(json.dumps(exported), encoding="utf-8")
+            MachineManager(profile).import_file(machine_path)
+            stacks = StackManager(profile)
+            stacks.setup(
+                "mixed_agents",
+                orchestrator="langgraph",
+                runtime="ollama",
+                model="local-analysis-small",
+                machine="local_box",
+                roles={"planner": "managed-chat"},
+                tools={"shell": "unrestricted"},
+                approval_mode="auto",
+                audit_label="mixed_agents",
+            )
+            plan = stacks.plan("mixed_agents")
+            doctor = stacks.doctor("mixed_agents")
+            framework = stacks.export("langgraph", "mixed_agents")
+        self.assertEqual(plan["roles"]["planner"]["runtime"], "openai")
+        self.assertEqual(plan["roles"]["planner"]["endpoint"], "https://api.openai.com/v1")
+        checks = {check["name"]: check for check in doctor["checks"]}
+        self.assertTrue(checks["role_runtime_or_endpoint:planner"]["ok"])
+        self.assertTrue(checks["role_endpoint:planner"]["ok"])
+        self.assertFalse(checks["role_tool_policy:planner:shell"]["ok"])
+        self.assertTrue(checks["role_tool_policy:planner:shell"].get("warning"))
+        framework_payload = parse_yaml(framework["content"])
+        self.assertEqual(framework_payload["roles"]["planner"]["runtime"], "openai")
+        self.assertEqual(framework_payload["roles"]["planner"]["endpoint"], "https://api.openai.com/v1")
+
     def test_stack_setup_cli_accepts_limits_and_tool_policies(self) -> None:
         source = load_profile("local-dev", Path.cwd())
         with tempfile.TemporaryDirectory() as tmp:
@@ -6646,6 +6741,137 @@ exit 0
             self.assertEqual(payload["stack"]["tools"]["shell"], "guarded")
             self.assertEqual(payload["stack"]["roles"]["planner"]["model"], "local-analysis-small")
             self.assertEqual(payload["stack"]["roles"]["planner"]["approval_mode"], "guarded")
+
+    def test_stack_endpoint_plan_checks_shared_gateway_controls(self) -> None:
+        source = load_profile("local-dev", Path.cwd())
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "hardware.yaml").write_text("", encoding="utf-8")
+            profile = Profile(
+                name="tmp",
+                root=root,
+                workspace=Path.cwd(),
+                hardware=json.loads(json.dumps(source.hardware)),
+                backends=source.backends,
+                repository=source.repository,
+                tools=source.tools,
+                approvals=source.approvals,
+                environment=source.environment,
+                models=source.models,
+                targets=source.targets,
+            )
+            exported = MachineManager(profile).export_machine("local_box")
+            machine_path = root / "local_box.json"
+            machine_path.write_text(json.dumps(exported), encoding="utf-8")
+            MachineManager(profile).import_file(machine_path)
+            stacks = StackManager(profile)
+            stacks.setup(
+                "shared_stack",
+                orchestrator=None,
+                runtime="ollama",
+                model="local-analysis-small",
+                machine="local_box",
+                access="gateway",
+                endpoint_policy="shared",
+                endpoint="https://llm.example.com/v1",
+                endpoint_auth={
+                    "method": "bearer",
+                    "api_key_env": "LLM_GATEWAY_API_KEY",
+                    "tls": "terminated",
+                    "gateway": "caddy",
+                },
+            )
+            ready = stacks.endpoint_plan("shared_stack")
+            doctor = stacks.doctor("shared_stack")
+            stacks.setup(
+                "unsafe_shared_stack",
+                orchestrator=None,
+                runtime="ollama",
+                model="local-analysis-small",
+                machine="local_box",
+                access="gateway",
+                endpoint_policy="shared",
+                endpoint="http://llm.example.com/v1",
+            )
+            unsafe = stacks.endpoint_plan("unsafe_shared_stack")
+        self.assertTrue(ready["ready_for_policy"])
+        self.assertEqual(ready["auth"], {"method": "bearer", "api_key_env": "LLM_GATEWAY_API_KEY"})
+        ready_checks = {check["name"]: check for check in ready["checks"]}
+        self.assertTrue(ready_checks["endpoint_tls"]["ok"])
+        self.assertTrue(ready_checks["endpoint_auth"]["ok"])
+        doctor_checks = {check["name"]: check for check in doctor["checks"]}
+        self.assertTrue(doctor_checks["endpoint_auth"]["ok"])
+        self.assertFalse(unsafe["ready_for_policy"])
+        unsafe_checks = {check["name"]: check for check in unsafe["checks"]}
+        self.assertFalse(unsafe_checks["endpoint_tls"]["ok"])
+        self.assertTrue(unsafe_checks["endpoint_tls"].get("warning"))
+        self.assertFalse(unsafe_checks["endpoint_auth"]["ok"])
+        self.assertTrue(unsafe["next_steps"])
+
+    def test_stack_endpoint_plan_cli_uses_endpoint_auth_flags(self) -> None:
+        source = load_profile("local-dev", Path.cwd())
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            profiles_dir = root / "profiles"
+            profile_root = profiles_dir / "tmp"
+            profile_root.mkdir(parents=True)
+            for key, filename in agent_config.CONFIG_FILES.items():
+                (profile_root / filename).write_text(agent_config.dump_yaml(getattr(source, key)), encoding="utf-8")
+            profile = load_profile("tmp", Path.cwd(), profiles_dir=profiles_dir)
+            exported = MachineManager(profile).export_machine("local_box")
+            machine_path = root / "local_box.json"
+            machine_path.write_text(json.dumps(exported), encoding="utf-8")
+            MachineManager(profile).import_file(machine_path)
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = cli_main(
+                    [
+                        "--profiles-dir",
+                        str(profiles_dir),
+                        "stacks",
+                        "setup",
+                        "shared_stack",
+                        "--runtime",
+                        "ollama",
+                        "--model",
+                        "local-analysis-small",
+                        "--machine",
+                        "local_box",
+                        "--access",
+                        "gateway",
+                        "--endpoint-policy",
+                        "shared",
+                        "--endpoint",
+                        "https://llm.example.com/v1",
+                        "--endpoint-auth",
+                        "api_key",
+                        "--endpoint-auth-env",
+                        "LLM_GATEWAY_API_KEY",
+                        "--endpoint-tls",
+                        "terminated",
+                        "--gateway",
+                        "apim",
+                    ]
+                )
+            self.assertEqual(code, 0)
+            created = json.loads(stdout.getvalue())
+            self.assertEqual(created["stack"]["endpoint_auth"]["method"], "api_key")
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = cli_main(
+                    [
+                        "--profiles-dir",
+                        str(profiles_dir),
+                        "stacks",
+                        "endpoint-plan",
+                        "shared_stack",
+                    ]
+                )
+        self.assertEqual(code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertTrue(payload["ready_for_policy"])
+        self.assertEqual(payload["gateway"], "apim")
+        self.assertEqual(payload["auth"]["api_key_env"], "LLM_GATEWAY_API_KEY")
 
     def test_stack_lifecycle_uses_provider_helper_directly(self) -> None:
         source = load_profile("local-dev", Path.cwd())
@@ -6730,7 +6956,13 @@ exit 0
         self.assertEqual(result["steps_total"], 1)
         self.assertEqual(result["steps_executed"], 1)
         self.assertIsNone(result["failed_step"])
+        self.assertEqual(result["execution_mode"], "same_host")
+        self.assertIn("started_at", result)
+        self.assertIn("finished_at", result)
+        self.assertIn("duration_seconds", result)
+        self.assertIn("runtime_status_before", result)
         self.assertIn("runtime_status_after", result)
+        self.assertIn("available", result["runtime_status_before"])
         self.assertIn("available", result["runtime_status_after"])
 
     def test_stack_lifecycle_reports_failed_step(self) -> None:

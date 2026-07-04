@@ -10,7 +10,7 @@ It must not become a coding agent, model runtime, model proxy, IDE extension, or
 
 ## Open Source Quality Bar
 
-Treat `aiplane` as a public open-source project that should be worthy of trust, adoption, and contribution. Keep code, documentation, roadmap, implemented features, command coverage, handoff notes, examples, and tests aligned and held to a high standard. Do not let the project drift into a collection of impressive but undocumented, untested, or overstated capabilities.
+Treat `aiplane` as a public open-source project that should be worthy of trust, adoption, and contribution. Code quality, practical tests, CLI help, user docs, roadmap/status notes, command coverage, and handoff updates are part of every implementation task unless there is a concrete engineering reason they do not apply. Keep code, documentation, roadmap, implemented features, command coverage, handoff notes, examples, and tests aligned and held to a high standard. Do not let the project drift into a collection of impressive but undocumented, untested, or overstated capabilities.
 
 ## Local Direction Notes
 
@@ -27,7 +27,7 @@ When changing behavior, update these together in the same change whenever releva
 - `docs/project/command-coverage.md` for public CLI coverage;
 - tests in `tests/test_mvp.py` or a focused new test file.
 
-Behavior changes should normally land with matching test updates in the same change. If a behavior change genuinely does not need a new or changed test, make that an explicit engineering decision and still run the relevant focused tests. Do not leave roadmap, handoff, command coverage, or tests stale after adding commands, changing defaults, or moving a feature between planned/in-progress/implemented.
+Behavior changes should normally land with matching test updates in the same change. Tests should cover the behavior contract, failure mode, or regression risk that matters; do not add tests just to increase counts. If a behavior change genuinely does not need a new or changed test, make that an explicit engineering decision and still run the relevant focused tests. Do not leave roadmap, handoff, command coverage, or tests stale after adding commands, changing defaults, or moving a feature between planned/in-progress/implemented.
 
 ## Compatibility Policy
 

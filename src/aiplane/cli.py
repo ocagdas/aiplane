@@ -910,9 +910,28 @@ def _main(argv: list[str] | None = None) -> int:
     stacks_setup.add_argument(
         "--endpoint-policy",
         default="private",
-        help="Endpoint policy label, such as private, vpn, or gateway",
+        choices=["private", "vpn", "gateway", "public", "shared"],
+        help="Endpoint exposure policy; shared/public/gateway require auth/TLS planning before team use",
     )
     stacks_setup.add_argument("--endpoint", help="Endpoint URL override")
+    stacks_setup.add_argument(
+        "--endpoint-auth",
+        choices=["none", "bearer", "api_key", "basic", "oauth2", "oidc", "mtls", "gateway"],
+        help="Auth method expected at the endpoint gateway/reverse proxy",
+    )
+    stacks_setup.add_argument(
+        "--endpoint-auth-env",
+        help="Environment variable that will hold the endpoint/gateway credential for bearer or api_key auth",
+    )
+    stacks_setup.add_argument(
+        "--endpoint-tls",
+        choices=["required", "terminated", "not_configured", "not_required"],
+        help="TLS posture for endpoint planning; use terminated when TLS is handled by a gateway",
+    )
+    stacks_setup.add_argument(
+        "--gateway",
+        help="Gateway/reverse proxy pattern or name, such as caddy, nginx, traefik, apim, or kubernetes-gateway",
+    )
     stacks_setup.add_argument(
         "--limit",
         action="append",
@@ -955,11 +974,19 @@ def _main(argv: list[str] | None = None) -> int:
     stacks_doctor = stacks_sub.add_parser(
         "doctor",
         help="Check a stack",
-        description="Check machine fit and runtime availability for a stack.",
+        description="Check machine fit, runtime availability, preflight checks, role endpoint bindings, and risky role tool-policy combinations for a stack.",
         formatter_class=HelpFormatter,
     )
     _profile_arg(stacks_doctor)
     stacks_doctor.add_argument("name", help="Stack name")
+    stacks_endpoint_plan = stacks_sub.add_parser(
+        "endpoint-plan",
+        help="Plan endpoint auth and gateway controls",
+        description="Render a non-mutating endpoint security plan for a stack, including TLS, auth, gateway, and private/shared exposure checks.",
+        formatter_class=HelpFormatter,
+    )
+    _profile_arg(stacks_endpoint_plan)
+    stacks_endpoint_plan.add_argument("name", help="Stack name")
     stacks_export = stacks_sub.add_parser(
         "export",
         help="Export stack artifacts",
@@ -1454,14 +1481,14 @@ def _main(argv: list[str] | None = None) -> int:
         epilog=(
             "Examples:\n"
             "  aiplane providers endpoint-types\n"
-            "  aiplane providers add my_gateway --ownership managed_service --endpoint-family custom_openai_compatible --catalog-adapter profile_catalog --auth-method bearer --api-key-env MY_GATEWAY_API_KEY"
+            "  aiplane providers add my_gateway --ownership managed_service --endpoint-family custom_openai_compatible --catalog-adapter openai --auth-method bearer --api-key-env MY_GATEWAY_API_KEY"
         ),
     )
     _profile_arg(providers_endpoint_types)
     providers_models = providers_sub.add_parser(
         "models",
         help="List catalog provider models",
-        description="List known model ids for a model provider. Online source discovery will be added provider by provider; currently this reports configured aiplane catalog entries.",
+        description="List known model ids for a model provider. With --online, query supported catalog adapters such as Ollama, Hugging Face, OpenAI-compatible /v1/models, Azure OpenAI deployments, and ElevenLabs voices.",
         formatter_class=HelpFormatter,
     )
     _profile_arg(providers_models)
@@ -2522,6 +2549,16 @@ def _main(argv: list[str] | None = None) -> int:
                         access=args.access,
                         endpoint_policy=args.endpoint_policy,
                         endpoint=args.endpoint,
+                        endpoint_auth={
+                            key: value
+                            for key, value in {
+                                "method": args.endpoint_auth,
+                                "api_key_env": args.endpoint_auth_env,
+                                "tls": args.endpoint_tls,
+                                "gateway": args.gateway,
+                            }.items()
+                            if value
+                        },
                         limits=_parse_settings(args.limit),
                         tools=_parse_settings(args.tool),
                         roles={key: str(value) for key, value in _parse_settings(args.role).items()},
@@ -2538,6 +2575,9 @@ def _main(argv: list[str] | None = None) -> int:
             return 0
         if args.stacks_command == "doctor":
             print(_json(manager.doctor(args.name), indent=2))
+            return 0
+        if args.stacks_command == "endpoint-plan":
+            print(_json(manager.endpoint_plan(args.name), indent=2))
             return 0
         if args.stacks_command == "export":
             exported = manager.export(args.artifact, args.name)

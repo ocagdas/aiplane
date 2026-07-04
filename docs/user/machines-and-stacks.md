@@ -233,7 +233,7 @@ aiplane stacks plan qwen32b_on_h100
 aiplane stacks doctor qwen32b_on_h100
 ```
 
-Stack plans include preflight checks for runtime prerequisites, likely port conflicts on local endpoints, endpoint auth policy, and model cache-path hints. Doctor output folds those checks into the normal readiness checks so you can catch missing host tools or risky endpoint settings before running lifecycle commands.
+Stack plans include preflight checks for runtime prerequisites, likely port conflicts on local endpoints, endpoint auth policy, and model cache-path hints. Doctor output folds those checks into the normal readiness checks and also checks role model aliases, disabled role models, managed-service endpoints, gateway/TLS/auth readiness, and warning-level risky tool-policy combinations so you can catch missing host tools or unsafe endpoint/role settings before running lifecycle commands.
 
 ## Stacks
 
@@ -260,7 +260,7 @@ aiplane stacks setup coding_agents \
 ```
 
 
-Stack `--limit`, `--tool`, and `--role` values are structured pass-through metadata. `aiplane` stores and exports them, but enforcement belongs to the runtime, orchestrator, wrapper script, or later workload runner. A `--role ROLE=MODEL_ALIAS` entry validates that the model alias exists in the profile, records provider/runtime/endpoint ownership, and adds role-level approval and audit labels.
+Stack `--limit`, `--tool`, and `--role` values are structured pass-through metadata. `aiplane` stores and exports them, but enforcement belongs to the runtime, orchestrator, wrapper script, or later workload runner. A `--role ROLE=MODEL_ALIAS` entry validates that the model alias exists in the profile, records provider/runtime or managed-service endpoint ownership, and adds role-level approval and audit labels. Managed-service role aliases keep their provider endpoint, while the primary stack model remains the only model used for local runtime lifecycle install/pull/start actions.
 
 Common examples:
 
@@ -294,7 +294,26 @@ Plan and check it:
 ```bash
 aiplane stacks plan coding_agents
 aiplane stacks doctor coding_agents
+aiplane stacks endpoint-plan coding_agents
 aiplane stacks status coding_agents
+```
+
+For shared or public endpoints, record the intended gateway controls when creating the stack. This still does not configure the gateway; it gives plan/doctor/export enough metadata to warn before a raw model runtime is exposed:
+
+```bash
+aiplane stacks setup shared_ollama \
+  --runtime ollama \
+  --model MODEL_ALIAS \
+  --machine local_box \
+  --access gateway \
+  --endpoint-policy shared \
+  --endpoint https://llm.example.com/v1 \
+  --endpoint-auth bearer \
+  --endpoint-auth-env LLM_GATEWAY_API_KEY \
+  --endpoint-tls terminated \
+  --gateway caddy
+
+aiplane stacks endpoint-plan shared_ollama
 ```
 
 Prepare the stack. This is the convenience lifecycle command for install/pull/config style actions:
@@ -315,7 +334,7 @@ aiplane stacks restart coding_agents
 
 `start` does not implicitly install or pull models. Use `prepare` first when you want the higher-level install/pull/config path.
 
-For same-host/local stacks, lifecycle commands return structured execution reporting: `status`, `outcome`, `steps_total`, `steps_executed`, `failed_step`, per-step stdout/stderr tails, and a best-effort `runtime_status_after` snapshot. Remote, SSH, Azure, and AKS stacks still return planned commands instead of executing.
+For same-host/local stacks, lifecycle commands return structured execution reporting: `status`, `outcome`, `execution_mode`, `steps_total`, `steps_executed`, `failed_step`, `started_at`, `finished_at`, `duration_seconds`, per-step stdout/stderr tails, and best-effort `runtime_status_before` / `runtime_status_after` snapshots. Remote, SSH, Azure, and AKS stacks still return planned commands instead of executing.
 
 Export IDE or packaging artifacts:
 
@@ -388,7 +407,7 @@ aiplane stacks setup coding_agents \
   --tool shell=guarded
 ```
 
-Limits, role bindings, approval labels, audit labels, and tool policies for orchestrated workloads are structured pass-through stack fields. `aiplane` stores and exports them, but the orchestrator/runtime or managed provider decides whether and how to enforce them. For managed-service models, keep endpoint credentials in ignored local credential references or environment variables; do not place raw provider secrets in stack or profile YAML.
+Limits, role bindings, approval labels, audit labels, and tool policies for orchestrated workloads are structured pass-through stack fields. `aiplane` stores and exports them, and `stacks doctor` warns about obviously risky combinations such as unrestricted shell-style tools with auto/no approval, but the orchestrator/runtime or managed provider decides whether and how to enforce them. For managed-service models, keep endpoint credentials in ignored local credential references or environment variables; do not place raw provider secrets in stack or profile YAML.
 
 ## Current Limits
 

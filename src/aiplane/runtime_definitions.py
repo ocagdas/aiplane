@@ -191,7 +191,7 @@ SOURCE_DEFINITIONS: dict[str, dict[str, Any]] = {
         "api_key_env": "OPENAI_API_KEY",
         "auth": {"required": True, "method": "bearer"},
         "typical_runtimes": [],
-        "catalog_adapter": "profile_catalog",
+        "catalog_adapter": "openai",
     },
     "anthropic": {
         "ownership": "managed_service",

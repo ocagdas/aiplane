@@ -129,7 +129,7 @@ Authentication options, from simplest to stronger:
 - Azure Entra ID, managed identity, or API Management for Azure-hosted endpoints.
 - mTLS for high-control internal environments.
 
-`aiplane` should store endpoint URL, auth mode, and API key environment-variable names in profile config. It should not store real secrets in YAML. IDE/CLI export should then point tools such as Continue, Cursor-compatible clients, or generic OpenAI-compatible clients at the controlled endpoint.
+`aiplane` should store endpoint URL, auth mode, gateway/TLS posture, and API key environment-variable names in profile config. It should not store real secrets in YAML. `aiplane stacks endpoint-plan STACK` renders a non-mutating checklist for those controls; it does not configure the proxy, gateway, firewall, or identity provider. IDE/CLI export should then point tools such as Continue, Cursor-compatible clients, or generic OpenAI-compatible clients at the controlled endpoint.
 
 Example target endpoint shape:
 

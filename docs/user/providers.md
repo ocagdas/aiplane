@@ -226,13 +226,14 @@ aiplane providers models ollama --online --query model_row --limit 500
 aiplane providers models huggingface --online --query text-generation --limit 500
 aiplane providers models huggingface --online --query text-to-speech --limit 50
 aiplane providers models nvidia --online --query Nemotron --limit 50
+aiplane providers models openai --online --query chat --limit 20
 aiplane providers models elevenlabs --online --query voice --limit 20
 aiplane providers models huggingface --online --query text-to-image --limit 50
 aiplane providers models huggingface --online --query text-to-video --limit 50
 aiplane providers models huggingface_gguf --online --query llama-3.1-8b --limit 500
 ```
 
-Current default catalog adapters are `ollama`, `huggingface`, `nvidia`, `huggingface_gguf`, `azure_openai` deployments when endpoint/key configuration is present, and `elevenlabs` voices when `ELEVENLABS_API_KEY` or a credential reference is configured. The `nvidia` provider uses the Hugging Face adapter scoped to NVIDIA-owned repos. Hugging Face discovery can return media pipeline metadata that `models refresh` maps into roles such as `text_to_speech`, `image_generation`, and `video_generation` before candidates are filtered or promoted. If a self-managed online query fails or the provider has no adapter yet, `aiplane` falls back to the profile catalog and includes the reason. Fallback is non-destructive: it does not update or prune local entries because it is only re-reading the local profile. Managed providers with live catalog adapters report missing endpoint/credential configuration as structured refresh failures instead of presenting an empty local fallback as success.
+Current default catalog adapters are `ollama`, `huggingface`, `nvidia`, `huggingface_gguf`, OpenAI-compatible `/v1/models` for `openai` when endpoint/key configuration is present, `azure_openai` deployments when endpoint/key configuration is present, and `elevenlabs` voices when `ELEVENLABS_API_KEY` or a credential reference is configured. The `nvidia` provider uses the Hugging Face adapter scoped to NVIDIA-owned repos. Hugging Face discovery can return media pipeline metadata that `models refresh` maps into roles such as `text_to_speech`, `image_generation`, and `video_generation` before candidates are filtered or promoted. If a self-managed online query fails or the provider has no adapter yet, `aiplane` falls back to the profile catalog and includes the reason. Fallback is non-destructive: it does not update or prune local entries because it is only re-reading the local profile. Managed providers with live catalog adapters report missing endpoint/credential configuration as structured refresh failures instead of presenting an empty local fallback as success.
 
 ## Provider Configuration Files
 
@@ -260,7 +261,7 @@ aiplane providers init-defaults --overwrite
 
 Without `--overwrite`, `init-defaults` writes `model-providers.yaml` only when it does not already exist. If the file exists, the command exits with an error instead of replacing your provider config.
 
-Provider APIs are not universally standardized. A user-added provider must declare one of the endpoint families and catalog adapters listed by `aiplane providers endpoint-types`. If the provider uses a different catalog API, auth scheme, pagination shape, or deployment/listing API, `aiplane` needs a code update before live discovery or provider tests can support it. Use `--catalog-adapter profile_catalog` for providers whose model list is curated manually instead of fetched from a live API.
+Provider APIs are not universally standardized. A user-added provider must declare one of the endpoint families and catalog adapters listed by `aiplane providers endpoint-types`. If the provider uses a different catalog API, auth scheme, pagination shape, or deployment/listing API, `aiplane` needs a code update before live discovery or provider tests can support it. Use `--catalog-adapter openai` for OpenAI-compatible `/v1/models` catalogs, and use `--catalog-adapter profile_catalog` for providers whose model list is curated manually instead of fetched from a live API.
 
 Use `--runtime` only for `self_managed` providers that supply model artifacts for local runtimes. Use `--endpoint-family` for `managed_service` providers. Managed services can declare `--auth-method`, `--api-key-env`, `--credential-ref`, and `--endpoint`; raw keys still belong in environment variables or ignored `.aiplane/credentials.yaml`, not provider YAML.
 
@@ -269,7 +270,7 @@ To inspect supported provider API shapes and add, disable, enable, remove, or cl
 ```bash
 aiplane providers endpoint-types
 aiplane providers add private_hf --ownership self_managed --runtime vllm --catalog-adapter huggingface
-aiplane providers add my_gateway --ownership managed_service --endpoint-family custom_openai_compatible --catalog-adapter profile_catalog --endpoint https://gateway.example.com/v1 --auth-method bearer --api-key-env MY_GATEWAY_API_KEY
+aiplane providers add my_gateway --ownership managed_service --endpoint-family custom_openai_compatible --catalog-adapter openai --endpoint https://gateway.example.com/v1 --auth-method bearer --api-key-env MY_GATEWAY_API_KEY
 aiplane providers disable ollama
 aiplane providers enable all
 aiplane providers remove local_file
@@ -287,7 +288,7 @@ aiplane providers clear --scope all
 
 When an online source adapter succeeds, the source result is treated as authoritative for discovered/imported entries when it is not a query or limit-truncated window: new source ids are imported into `models.discovered.yaml`, stale discovered ids are pruned, and changed source metadata updates discovered entries. Profile-owned entries in `models.yaml` are preserved by refresh; if a local profile-owned entry points at a returned source id, only source-derived metadata is refreshed while human-maintained fields stay intact. In this context, profile-owned means human-maintained data such as entry names, enabled/disabled state, roles, preferred runtime, RAM/VRAM overrides, and notes.
 
-When a self-managed online source fails or no online adapter exists, refresh reports the reason and falls back to local profile entries without pruning or updating. Managed providers with live catalog adapters, such as Azure OpenAI deployments or ElevenLabs voices, report a structured refresh failure when endpoint or credential configuration is missing; fix `providers show` / `providers test` first, then rerun refresh.
+When a self-managed online source fails or no online adapter exists, refresh reports the reason and falls back to local profile entries without pruning or updating. Managed providers with live catalog adapters, such as OpenAI-compatible `/v1/models`, Azure OpenAI deployments, or ElevenLabs voices, report a structured refresh failure when endpoint or credential configuration is missing; fix `providers show` / `providers test` first, then rerun refresh.
 
 ```bash
 aiplane models refresh --dry-run

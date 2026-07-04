@@ -21,7 +21,7 @@ Treat `aiplane` as a control-plane CLI. It plans, checks, prepares, and exports 
 ## Change Rules
 
 - Keep behavior, docs, roadmap/handoff, command coverage, MCP surfaces, and tests aligned.
-- Add or update tests for behavior changes unless there is a clear engineering reason not to; still run focused tests.
+- Add or update tests for behavior changes unless there is a clear engineering reason not to; tests should prove real behavior, contracts, regressions, or failure modes rather than increase counts; still run focused tests.
 - Keep tests deterministic and avoid live cloud/provider/runtime dependency unless mocked or explicitly requested.
 - Use plan, doctor, dry-run, and export flows before mutation.
 - Do not expose runtime installs, model pulls, cloud apply, secret writes, or arbitrary shell execution through MCP unless explicit guardrails exist.

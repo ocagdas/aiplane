@@ -34,7 +34,7 @@ High-level implemented areas:
 
 - profiles, local config, ignored credential references, provider credential tests, and validation;
 - environment planning/doctor checks for system Python, `venv`, Conda, and Docker, with setup helpers that bootstrap ignored `profiles/local-dev` before profile-aware checks;
-- provider/model catalogs including NVIDIA Hugging Face-scoped open model discovery, structural shipped profile config, ignored discovery cache review, direct profile-owned model add/clone, runtime/source mapping, local model defaults, protocol-backed single-prompt execution for Ollama/OpenAI-compatible/Azure OpenAI/Anthropic, and benchmark smoke checks;
+- provider/model catalogs including NVIDIA Hugging Face-scoped open model discovery, OpenAI-compatible `/v1/models` discovery, structural shipped profile config, ignored discovery cache review, direct profile-owned model add/clone, runtime/source mapping, local model defaults, protocol-backed single-prompt execution for Ollama/OpenAI-compatible/Azure OpenAI/Anthropic, and benchmark smoke checks;
 - hardware discovery, machine inventory, Azure SKU discovery/import, and stack planning;
 - tool doctors/plans/exports for infrastructure, quality, and automation tools;
 - integration role inspection, setup, and exports for Continue, Cline, Zed, Aider, OpenAI-compatible clients, and MCP client snippets, with setup planning supported helper install/start/pull actions and skipping unsupported source/runtime pull combinations;
@@ -46,11 +46,11 @@ Known in-progress areas:
 
 - richer managed-provider discovery and provider-specific live credential tests;
 - managed-service endpoint binding for stacks/orchestrator exports without mixing those models into self-managed runtime-fit checks;
-- stack role metadata is implemented for planner/coder/reviewer-style model bindings; framework starter exports and MCP stack export read parity now exist, with deeper framework-specific templates still next; the first `aiplane` agent skill package documents safe assistant workflows and MCP usage;
+- stack role metadata is implemented for planner/coder/reviewer-style model bindings, including managed-service role endpoint binding and warning-level doctor checks for risky tool-policy/approval combinations; framework starter exports and MCP stack export read parity now exist, with deeper framework-specific templates still next; the first `aiplane` agent skill package documents safe assistant workflows and MCP usage;
 - remote execution and Docker-aware stack lifecycle;
 - provider-specific IaC/playbook/template hardening;
 - broader deployment apply paths;
-- endpoint authentication/gateway planning and richer runtime-agnostic chat/task UX beyond single-prompt execution;
+- endpoint authentication/gateway planning now exists at stack level through endpoint auth/TLS/gateway metadata and `stacks endpoint-plan`; richer runtime-agnostic chat/task UX beyond single-prompt execution remains planned;
 - benchmark metrics, comparisons, and repeated-run summaries;
 - continued test-suite performance/isolation hardening after the first focused contract-test split.
 
@@ -82,7 +82,7 @@ Results:
 - Profile validation passed with `ok: true`.
 - `environment doctor --required-only` passed with `2/2` mandatory tools installed; runtime prerequisite checks now come from provider/runtime config rather than shipped model defaults.
 - JSON environment doctor passed with mandatory tools installed and runtime prerequisite rows for Ollama and vLLM.
-- Full local architecture/provider-hardening milestone check passed: `conda run -n aiplane scripts/check.sh` completed with formatter check, Ruff lint, and `242 passed in 145.19s`.
+- Full local orchestrator/provider-hardening milestone check passed: `conda run -n aiplane scripts/check.sh` completed with formatter check, Ruff lint, and `249 passed in 144.03s`.
 - `tools matrix` passed and reported `16` tools, `2` mandatory, `14` optional, `11` installable by `aiplane`, `7` exports available, and `9` workflow categories: `4` complete, `1` partial, and `4` needing setup on this machine.
 - `tools plan opentofu` passed and reported OpenTofu as optional/manual with non-mutating IaC plan guidance.
 - `models list` returned an empty list for the clean structural profile template until discovery or local model entries are added.
@@ -92,11 +92,13 @@ Results:
 - Continue integration planning is now documented as a discovery-first demo step: refresh provider catalogs into the ignored discovery cache, derive chat/autocomplete/embedding aliases, then pass explicit role aliases to plan/export.
 - Focused provider-kind, managed-service runtime separation, and Ollama Docker-substrate dry-run tests passed. The Docker dry-run path prints `docker pull ollama/ollama:latest` and `docker run ... ollama/ollama:latest` without starting containers.
 - Agent template listing passed with `langgraph` and `simple-openai` templates.
+- Focused provider/stack tests passed for OpenAI-compatible online catalog discovery, Azure OpenAI discovery, endpoint-type help, stack framework export metadata, and managed-service role doctor warnings.
+- Focused endpoint/lifecycle tests passed for `stacks endpoint-plan`, endpoint auth/TLS/gateway flags, shared endpoint warnings, and same-host lifecycle timing/status reporting.
 - Stack listing passed and returned an empty configured stack list.
 
 ## Current Follow-Up Work
 
-Provider discovery and model import now has an implemented foundation: structural shipped model templates, discovery-backed add/promote/clone flows, refresh next-step guidance, machine-derived `models list` filtering, and structured managed-provider refresh failures for missing live catalog configuration. Remaining work in that area is richer provider-specific live discovery and credential tests.
+Provider discovery and model import now has an implemented foundation: structural shipped model templates, discovery-backed add/promote/clone flows, refresh next-step guidance, machine-derived `models list` filtering, OpenAI-compatible `/v1/models` discovery, Azure OpenAI deployment discovery, ElevenLabs voice discovery, and structured managed-provider refresh failures for missing live catalog configuration. Remaining work in that area is richer provider-specific live discovery and credential tests where provider APIs justify dedicated adapters.
 
 The roadmap milestones are now grouped into three bands:
 
@@ -110,11 +112,12 @@ MCP is implemented and tested, but it is still a hand-maintained adapter. It now
 
 The first versioned `aiplane` skill package exists at `skills/aiplane/SKILL.md`. It documents safe workflows for coding assistants: read the guidance docs, inspect profiles/providers/models/runtimes separately, prefer doctor/plan/dry-run/export, use MCP when a structured read/planning tool exists, keep docs/tests aligned, and run focused checks before proposing PRs.
 
-Orchestrator support is catalog/setup oriented today. The next design step is a multi-role workflow schema over reviewed model aliases and endpoints: planner/coder/reviewer/researcher/tool-runner roles, tool policies, approval modes, limits, and audit labels, with exports for LangGraph, CrewAI, AutoGen, Semantic Kernel, LlamaIndex Workflows, and OpenHands. `aiplane` should configure and validate those workflows, not execute autonomous agent conversations directly.
+Orchestrator support now has stack role metadata over reviewed model aliases and endpoints: planner/coder/reviewer/researcher/tool-runner roles, tool policies, approval modes, limits, audit labels, managed-service endpoint bindings, doctor checks, and starter exports for LangGraph, CrewAI, AutoGen, Semantic Kernel, LlamaIndex Workflows, and OpenHands. Runtime/stack hardening now adds endpoint auth/TLS/gateway planning and clearer same-host lifecycle result metadata. `aiplane` should keep configuring and validating those workflows, not execute autonomous agent conversations directly.
 
 ## Next Useful Work
 
-1. Design the multi-role orchestrator/stack schema before adding deeper exports or setup commands.
-2. Continue splitting the large CLI implementation by command family while preserving the current `aiplane` entrypoint and tests.
-3. Continue splitting `tests/test_mvp.py` into focused files and keep the full `scripts/check.sh` suite green during the split.
-4. Keep provider/model/runtime docs aligned as discovery, runtime pulls, hardware fit, and managed-service endpoint behavior continue to harden.
+1. Add Docker-aware stack lifecycle paths where helpers can safely render/execute Docker commands without hiding host mutation.
+2. Harden framework-specific starter templates only where stable framework APIs justify more than generic metadata.
+3. Continue splitting the large CLI implementation by command family while preserving the current `aiplane` entrypoint and tests.
+4. Continue splitting `tests/test_mvp.py` into focused files and keep the full `scripts/check.sh` suite green during the split.
+5. Keep provider/model/runtime docs aligned as discovery, runtime pulls, hardware fit, and managed-service endpoint behavior continue to harden.
