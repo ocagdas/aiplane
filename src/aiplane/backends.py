@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from urllib.error import URLError
+from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 from typing import Mapping
 
@@ -145,3 +146,99 @@ class OpenAICompatibleBackend:
         if isinstance(message, dict):
             return BackendResult(self.name, str(message.get("content", "")), False)
         return BackendResult(self.name, str(first.get("text", "")), False)
+
+
+class AnthropicMessagesBackend:
+    name = "anthropic_messages"
+
+    def __init__(
+        self,
+        endpoint: str = "https://api.anthropic.com",
+        timeout_seconds: int = 60,
+        headers: Mapping[str, str] | None = None,
+        api_version: str = "2023-06-01",
+    ):
+        self.endpoint = endpoint.rstrip("/")
+        self.timeout_seconds = timeout_seconds
+        self.headers = dict(headers or {})
+        self.api_version = api_version
+
+    def chat(self, model: str, prompt: str) -> BackendResult:
+        payload = {
+            "model": model,
+            "max_tokens": 1024,
+            "messages": [{"role": "user", "content": prompt}],
+        }
+        headers = {
+            "Content-Type": "application/json",
+            "anthropic-version": self.api_version,
+            **self.headers,
+        }
+        request = Request(
+            f"{self.endpoint}/v1/messages",
+            data=json.dumps(payload).encode("utf-8"),
+            headers=headers,
+            method="POST",
+        )
+        try:
+            with urlopen(request, timeout=self.timeout_seconds) as response:
+                body = json.loads(response.read().decode("utf-8"))
+        except (URLError, TimeoutError, OSError, ConnectionError) as exc:
+            raise RuntimeError(
+                f"Anthropic Messages endpoint is not reachable at {self.endpoint}. "
+                f"Check provider credentials and endpoint configuration. Details: {exc}"
+            ) from exc
+        chunks = body.get("content", [])
+        if isinstance(chunks, list):
+            return BackendResult(
+                self.name,
+                "".join(str(chunk.get("text", "")) for chunk in chunks if isinstance(chunk, dict)),
+                True,
+            )
+        return BackendResult(self.name, str(chunks or ""), True)
+
+
+class AzureOpenAIBackend:
+    name = "azure_openai"
+
+    def __init__(
+        self,
+        endpoint: str,
+        api_version: str = "2024-02-01",
+        timeout_seconds: int = 60,
+        headers: Mapping[str, str] | None = None,
+    ):
+        self.endpoint = endpoint.rstrip("/")
+        self.api_version = api_version
+        self.timeout_seconds = timeout_seconds
+        self.headers = dict(headers or {})
+
+    def chat(self, deployment: str, prompt: str) -> BackendResult:
+        payload = {
+            "stream": False,
+            "messages": [{"role": "user", "content": prompt}],
+        }
+        base = self.endpoint[:-7] if self.endpoint.endswith("/openai") else self.endpoint
+        query = urlencode({"api-version": self.api_version})
+        url = f"{base}/openai/deployments/{deployment}/chat/completions?{query}"
+        request = Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json", **self.headers},
+            method="POST",
+        )
+        try:
+            with urlopen(request, timeout=self.timeout_seconds) as response:
+                body = json.loads(response.read().decode("utf-8"))
+        except (URLError, TimeoutError, OSError, ConnectionError) as exc:
+            raise RuntimeError(
+                f"Azure OpenAI endpoint is not reachable at {self.endpoint}. "
+                f"Check the resource endpoint, deployment name, api-version, and credentials. Details: {exc}"
+            ) from exc
+        choices = body.get("choices", [])
+        if not choices or not isinstance(choices[0], dict):
+            return BackendResult(self.name, "", True)
+        message = choices[0].get("message")
+        if isinstance(message, dict):
+            return BackendResult(self.name, str(message.get("content", "")), True)
+        return BackendResult(self.name, str(choices[0].get("text", "")), True)

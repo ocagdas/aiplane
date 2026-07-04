@@ -254,6 +254,17 @@ Grouping meanings:
 - `model`: groups by provider-native model id. This is useful when multiple profile-owned entries point at the same underlying model id. It is less useful when equivalent models use different naming schemes across sources.
 - defaults grouped by `provider`: shows which default roles, such as `chat_model`, `autocomplete_model`, `embedding_model`, `self_managed_model`, or `reasoning_model`, resolve to each provider.
 
+## Single-Prompt Execution Protocols
+
+`aiplane run` and `aiplane models test` use profile-owned model aliases and provider endpoint metadata. They do not install runtimes, pull weights, or run a coding agent. They currently execute against these protocols:
+
+- `ollama_api`: local or configured Ollama endpoint.
+- `openai_compatible`: OpenAI-compatible `/chat/completions` endpoint, including OpenAI, vLLM, TGI, llama.cpp, LocalAI, LM Studio, and custom compatible gateways when configured.
+- `azure_openai`: Azure OpenAI deployment chat completions; the model id is the deployment name.
+- `anthropic_api` / `anthropic_messages`: Anthropic Messages API.
+
+For runtimes that are libraries or file loaders, such as raw Transformers or Diffusers, expose a supported HTTP endpoint first or use a framework-specific export. Unsupported protocols fail explicitly.
+
 ## Current Runtime Policy
 
 - **Ollama**: full helper support for install/update/start/stop/restart/status/doctor/pull/list. Native is the default; `--substrate docker` uses the official `ollama/ollama` image when Docker is available.

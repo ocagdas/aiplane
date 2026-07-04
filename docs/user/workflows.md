@@ -96,7 +96,26 @@ Practical tips:
 - `--endpoint` is the URL the target tool will call. For a tunnel, this is usually a local URL even when the model runs elsewhere.
 - `export` can select a model directly, or it can use the same `--runtime`, `--capability`, and `--select-best` logic as `plan`.
 
-## Workflow 4: MCP Plus Model Endpoint
+## Workflow 4: Run One Prompt Through a Configured Model
+
+Use this when you want a quick smoke prompt against a reviewed profile model alias without opening an IDE or agent framework. `aiplane run` is a thin execution path: it sends one prompt to the selected model endpoint and returns text. It does not edit files, run tools, or start an autonomous agent loop.
+
+```bash
+aiplane run --dry-run --model MODEL_ALIAS "explain this setup"
+aiplane run --model MODEL_ALIAS "summarize this repository goal"
+aiplane run --escalate "draft a short migration checklist"
+```
+
+Supported execution protocols are currently:
+
+- local Ollama API for Ollama-backed aliases;
+- OpenAI-compatible chat completions for OpenAI, vLLM, TGI, llama.cpp, LocalAI, LM Studio, and custom OpenAI-compatible endpoints when configured as reachable HTTP endpoints;
+- Azure OpenAI chat completions, where the model id is the deployment name;
+- Anthropic Messages API for Anthropic aliases.
+
+If a model points at a provider/runtime without one of those protocols, `aiplane run` and `models test` fail explicitly instead of guessing. Use `--dry-run` first to confirm the selected alias and prompt.
+
+## Workflow 5: MCP Plus Model Endpoint
 
 Use this when an IDE or agent should query `aiplane` as tools as well as call a model endpoint.
 
@@ -113,7 +132,7 @@ How to think about it:
 - MCP is for structured `aiplane` tools: profile inspection, model lists, hardware recommendations, integration snippets, tunnel plans, and guarded profile edits.
 - MCP exports do not select inference models.
 
-## Workflow 5: Refresh Source Catalogs Without Breaking Defaults
+## Workflow 6: Refresh Source Catalogs Without Breaking Defaults
 
 Use this when you want local searchable model-source data in the ignored discovery cache. The shipped profile has no model defaults; local defaults should be added only after discovery and review.
 

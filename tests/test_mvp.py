@@ -4813,6 +4813,128 @@ class MvpTests(unittest.TestCase):
         command = IntegrationManager(profile).run_chat("hf-gguf-chat", dry_run=True)
         self.assertEqual(command, "ollama run hf.co/Example/Chat-GGUF")
 
+    def test_model_complete_supports_openai_compatible_backend(self) -> None:
+        profile = load_profile("local-dev", Path.cwd())
+        profile.models.setdefault("providers", {})["openai"] = {
+            "ownership": "managed_service",
+            "runtime": "openai",
+            "protocol": "openai_compatible",
+            "endpoint": "https://api.example.test/v1",
+            "enabled": True,
+            "api_key_env": "OPENAI_API_KEY",
+        }
+        profile.models.setdefault("models", {})["openai-main"] = {
+            "provider": "openai",
+            "model": "gpt-demo",
+            "roles": ["chat"],
+            "local": False,
+            "enabled": True,
+        }
+
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def read(self):
+                return json.dumps({"choices": [{"message": {"content": "openai ok"}}]}).encode("utf-8")
+
+        with (
+            patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}),
+            patch("aiplane.backends.urlopen", return_value=FakeResponse()) as opened,
+        ):
+            result = ModelCatalog(profile).complete("openai-main", "hello")
+        self.assertEqual(result.backend, "openai_compatible")
+        self.assertEqual(result.text, "openai ok")
+        request = opened.call_args.args[0]
+        self.assertEqual(request.full_url, "https://api.example.test/v1/chat/completions")
+        self.assertEqual(request.headers.get("Authorization"), "Bearer test-key")
+
+    def test_model_complete_supports_anthropic_messages_backend(self) -> None:
+        profile = load_profile("local-dev", Path.cwd())
+        profile.models.setdefault("providers", {})["anthropic"] = {
+            "ownership": "managed_service",
+            "runtime": "anthropic",
+            "protocol": "anthropic_api",
+            "endpoint": "https://api.anthropic.test",
+            "enabled": True,
+            "api_key_env": "ANTHROPIC_API_KEY",
+        }
+        profile.models.setdefault("models", {})["claude-main"] = {
+            "provider": "anthropic",
+            "model": "claude-demo",
+            "roles": ["chat"],
+            "local": False,
+            "enabled": True,
+        }
+
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def read(self):
+                return json.dumps({"content": [{"type": "text", "text": "anthropic ok"}]}).encode("utf-8")
+
+        with (
+            patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}),
+            patch("aiplane.backends.urlopen", return_value=FakeResponse()) as opened,
+        ):
+            result = ModelCatalog(profile).complete("claude-main", "hello")
+        self.assertEqual(result.backend, "anthropic_messages")
+        self.assertEqual(result.text, "anthropic ok")
+        request = opened.call_args.args[0]
+        self.assertEqual(request.full_url, "https://api.anthropic.test/v1/messages")
+        self.assertEqual(request.headers.get("X-api-key"), "test-key")
+        self.assertEqual(request.headers.get("Anthropic-version"), "2023-06-01")
+
+    def test_model_complete_supports_azure_openai_backend(self) -> None:
+        profile = load_profile("local-dev", Path.cwd())
+        profile.models.setdefault("providers", {})["azure_openai"] = {
+            "ownership": "managed_service",
+            "runtime": "azure_openai",
+            "protocol": "azure_openai",
+            "endpoint": "https://example.openai.azure.com",
+            "api_version": "2024-02-01",
+            "enabled": True,
+            "api_key_env": "AZURE_OPENAI_API_KEY",
+        }
+        profile.models.setdefault("models", {})["azure-main"] = {
+            "provider": "azure_openai",
+            "model": "demo-deployment",
+            "roles": ["chat"],
+            "local": False,
+            "enabled": True,
+        }
+
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def read(self):
+                return json.dumps({"choices": [{"message": {"content": "azure ok"}}]}).encode("utf-8")
+
+        with (
+            patch.dict(os.environ, {"AZURE_OPENAI_API_KEY": "test-key"}),
+            patch("aiplane.backends.urlopen", return_value=FakeResponse()) as opened,
+        ):
+            result = ModelCatalog(profile).complete("azure-main", "hello")
+        self.assertEqual(result.backend, "azure_openai")
+        self.assertEqual(result.text, "azure ok")
+        request = opened.call_args.args[0]
+        self.assertEqual(
+            request.full_url,
+            "https://example.openai.azure.com/openai/deployments/demo-deployment/chat/completions?api-version=2024-02-01",
+        )
+        self.assertEqual(request.headers.get("Api-key"), "test-key")
+
     def test_disabled_general_candidate_is_configured(self) -> None:
         profile = load_profile("local-dev", Path.cwd())
         general_row = ModelCatalog(profile).show("local-general-small")

@@ -6,7 +6,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-from .backends import BackendResult, OllamaBackend, OpenAICompatibleBackend
+from .backends import (
+    AnthropicMessagesBackend,
+    AzureOpenAIBackend,
+    BackendResult,
+    OllamaBackend,
+    OpenAICompatibleBackend,
+)
 from .models import Profile
 from .model_resources import (
     accelerator_api_requirements as _accelerator_api_requirements,
@@ -1330,10 +1336,21 @@ class ModelCatalog:
                 self._execution_model_id(provider_name, model), prompt
             )
         if self._is_openai_compatible(provider_name):
-            return self._openai_compatible_backend(provider_name, timeout_seconds=timeout_seconds).chat(
+            return self._openai_compatible_backend(provider_name, model, timeout_seconds=timeout_seconds).chat(
                 str(model.get("model")), prompt
             )
-        raise ValueError(f"execution is not wired for runtime/provider: {provider_name}")
+        if self._is_azure_openai(provider_name):
+            return self._azure_openai_backend(provider_name, model, timeout_seconds=timeout_seconds).chat(
+                str(model.get("model")), prompt
+            )
+        if self._is_anthropic(provider_name):
+            return self._anthropic_backend(provider_name, model, timeout_seconds=timeout_seconds).chat(
+                str(model.get("model")), prompt
+            )
+        raise ValueError(
+            f"execution is not wired for runtime/provider: {provider_name}; "
+            "supported protocols are ollama_api, openai_compatible, azure_openai, and anthropic_api"
+        )
 
     def _execution_model_id(self, runtime_name: str, model: dict[str, Any]) -> str:
         return runtime_model_id(self.profile, runtime_name, model)
@@ -1382,20 +1399,60 @@ class ModelCatalog:
         return OllamaBackend(endpoint, timeout, headers)
 
     def _openai_compatible_backend(
-        self, provider_name: str, timeout_seconds: int | None = None
+        self,
+        provider_name: str,
+        model: dict[str, Any] | None = None,
+        timeout_seconds: int | None = None,
     ) -> OpenAICompatibleBackend:
         provider = self.providers().get(provider_name, {})
         endpoint = self._openai_compatible_endpoint(provider_name, provider)
         timeout = int(timeout_seconds or provider.get("timeout_seconds", 60))
         headers = {}
-        credential_ref = str(provider.get("credential_ref") or "")
-        api_key = CredentialStore().api_key(credential_ref) if credential_ref else None
-        key_env = provider.get("api_key_env")
-        if not api_key and key_env and os.environ.get(str(key_env)):
-            api_key = os.environ[str(key_env)]
+        api_key = self._api_key(provider, model)
         if api_key:
             headers["Authorization"] = "Bearer " + api_key
         return OpenAICompatibleBackend(endpoint, timeout, headers)
+
+    def _azure_openai_backend(
+        self,
+        provider_name: str,
+        model: dict[str, Any] | None = None,
+        timeout_seconds: int | None = None,
+    ) -> AzureOpenAIBackend:
+        provider = self.providers().get(provider_name, {})
+        endpoint = str(provider.get("endpoint") or "")
+        if not endpoint:
+            raise ValueError(f"provider {provider_name!r} is missing endpoint")
+        timeout = int(timeout_seconds or provider.get("timeout_seconds", 60))
+        headers = {}
+        api_key = self._api_key(provider, model)
+        if api_key:
+            headers["api-key"] = api_key
+        return AzureOpenAIBackend(endpoint, str(provider.get("api_version") or "2024-02-01"), timeout, headers)
+
+    def _anthropic_backend(
+        self,
+        provider_name: str,
+        model: dict[str, Any] | None = None,
+        timeout_seconds: int | None = None,
+    ) -> AnthropicMessagesBackend:
+        provider = self.providers().get(provider_name, {})
+        endpoint = str(provider.get("endpoint") or "https://api.anthropic.com")
+        timeout = int(timeout_seconds or provider.get("timeout_seconds", 60))
+        headers = {}
+        api_key = self._api_key(provider, model)
+        if api_key:
+            headers["x-api-key"] = api_key
+        return AnthropicMessagesBackend(endpoint, timeout, headers, str(provider.get("api_version") or "2023-06-01"))
+
+    def _api_key(self, provider: dict[str, Any], model: dict[str, Any] | None = None) -> str | None:
+        model = model or {}
+        credential_ref = str(model.get("credential_ref") or provider.get("credential_ref") or "")
+        api_key = CredentialStore().api_key(credential_ref) if credential_ref else None
+        key_env = model.get("api_key_env") or provider.get("api_key_env")
+        if not api_key and key_env and os.environ.get(str(key_env)):
+            api_key = os.environ[str(key_env)]
+        return api_key
 
     def _openai_compatible_endpoint(self, provider_name: str, provider: dict[str, Any] | None = None) -> str:
         provider = provider or self.providers().get(provider_name, {})
@@ -1418,18 +1475,32 @@ class ModelCatalog:
             "openai",
         }
 
+    def _is_azure_openai(self, provider_name: str) -> bool:
+        provider = self.providers().get(provider_name, {})
+        return provider_name == "azure_openai" or str(provider.get("protocol") or "") == "azure_openai"
+
+    def _is_anthropic(self, provider_name: str) -> bool:
+        provider = self.providers().get(provider_name, {})
+        return provider_name == "anthropic" or str(provider.get("protocol") or "") in {
+            "anthropic_api",
+            "anthropic_messages",
+        }
+
     def test_prompt(self, name: str, task: str, target: Path | None = None, dry_run: bool = False) -> BackendResult:
         model = self.get(name)
         prompt = build_smoke_prompt(task, target)
         if dry_run:
             return BackendResult("dry_run", prompt, False)
         provider_name = str(model.get("provider"))
-        if provider_name not in {
-            "ollama",
-            "ollama_cloud",
-        } and not self._is_openai_compatible(provider_name):
+        if (
+            provider_name not in {"ollama", "ollama_cloud"}
+            and not self._is_openai_compatible(provider_name)
+            and not self._is_azure_openai(provider_name)
+            and not self._is_anthropic(provider_name)
+        ):
             raise ValueError(
-                "model test cannot execute this provider yet; use --dry-run or configure an OpenAI-compatible endpoint"
+                "model test cannot execute this provider yet; use --dry-run or configure an Ollama, "
+                "OpenAI-compatible, Azure OpenAI, or Anthropic Messages endpoint"
             )
         return self.complete(name, prompt)
 
@@ -1468,21 +1539,12 @@ class ModelCatalog:
                 "model is pulled" if pulled else f"model is not pulled: ollama pull {model_id}",
             )
         if self._is_openai_compatible(provider_name):
-            credential_ref = str(model.get("credential_ref") or provider.get("credential_ref") or "")
-            key_env = provider.get("api_key_env")
-            if credential_ref and not CredentialStore().api_key(credential_ref):
-                return ModelStatus(
-                    name,
-                    provider_name,
-                    True,
-                    False,
-                    f"missing credential {credential_ref}",
-                )
-            if not credential_ref and key_env and not os.environ.get(str(key_env)):
-                return ModelStatus(name, provider_name, True, False, f"missing env var {key_env}")
+            credential_problem = self._credential_problem(model, provider)
+            if credential_problem:
+                return ModelStatus(name, provider_name, True, False, credential_problem)
             if not bool(provider.get("enabled", True)):
                 return ModelStatus(name, provider_name, True, False, "provider is disabled")
-            backend = self._openai_compatible_backend(provider_name)
+            backend = self._openai_compatible_backend(provider_name, model)
             reachable, reason = backend.is_reachable()
             if not reachable:
                 return ModelStatus(name, provider_name, True, False, reason)
@@ -1499,6 +1561,15 @@ class ModelCatalog:
                 usable,
                 "model is available" if usable else f"model was not listed by provider: {model_id}",
             )
+        if self._is_azure_openai(provider_name) or self._is_anthropic(provider_name):
+            credential_problem = self._credential_problem(model, provider)
+            if credential_problem:
+                return ModelStatus(name, provider_name, True, False, credential_problem)
+            if not bool(provider.get("enabled", True)):
+                return ModelStatus(name, provider_name, True, False, "provider is disabled")
+            if self._is_azure_openai(provider_name) and not provider.get("endpoint"):
+                return ModelStatus(name, provider_name, True, False, "provider is missing endpoint")
+            return ModelStatus(name, provider_name, True, True, "model endpoint is configured")
         credential_ref = str(model.get("credential_ref") or provider.get("credential_ref") or "")
         if credential_ref:
             present = bool(CredentialStore().api_key(credential_ref))
@@ -1526,6 +1597,15 @@ class ModelCatalog:
             False,
             "provider has no usable local check yet",
         )
+
+    def _credential_problem(self, model: dict[str, Any], provider: dict[str, Any]) -> str | None:
+        credential_ref = str(model.get("credential_ref") or provider.get("credential_ref") or "")
+        key_env = model.get("api_key_env") or provider.get("api_key_env")
+        if credential_ref and not CredentialStore().api_key(credential_ref):
+            return f"missing credential {credential_ref}"
+        if not credential_ref and key_env and not os.environ.get(str(key_env)):
+            return f"missing env var {key_env}"
+        return None
 
 
 def capability_profile(model: dict[str, Any]) -> dict[str, Any]:

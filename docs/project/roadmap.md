@@ -44,7 +44,7 @@ Required outcomes:
 - SSH tunnel plan/start/status/stop for configured remote model endpoints.
 - Model list/show/defaults/use/add/clone/remove/enable/disable/refresh/promote/clear-cache/pull/test/benchmark commands.
 - Benchmark framework list/doctor/install/plan helpers for smoke/custom checks, lm-evaluation-harness, vLLM serving benchmarks, and Locust-style load tests.
-- `aiplane run` for single-prompt routing through configured model defaults with dry-run and policy-gated non-local escalation.
+- `aiplane run` for single-prompt routing through configured model defaults with dry-run, policy-gated non-local escalation, and protocol backends for Ollama, OpenAI-compatible chat completions, Azure OpenAI chat completions, and Anthropic Messages.
 - Integration role inspection plus plan/setup/export for Continue, Cline, Zed, Aider, generic OpenAI-compatible clients, and MCP client snippets; setup can dry-run or execute supported helper install/start/pull actions for selected runtime/model aliases and skips unsupported source/runtime pull combinations with an explicit reason.
 - MCP stdio server with read tools and narrow guarded writes for model defaults, hardware selection, runtime preference, model refresh, and SSH tunnel lifecycle. Read/planning tools cover models, providers, hardware, machine recommendations, stack inspection/planning/doctor checks, integrations, orchestrators, runtime status, and tunnel plans.
 - Policy checks, approval handling, secret redaction, JSONL audit foundations, and shared JSON output ordering.
@@ -52,7 +52,7 @@ Required outcomes:
 ## In Progress
 
 - Provider discovery: Ollama, Hugging Face, NVIDIA Hugging Face-scoped repos, Hugging Face GGUF, OpenAI-compatible `/v1/models`, Azure OpenAI deployment paths, structural shipped profile templates, profile-local provider default refresh with enabled-flag preservation, ignored user provider overrides, and discovery-derived AI media roles exist; richer managed-provider and specialist media catalog discovery needs hardening.
-- Runtime and stack lifecycle: same-host/local helpers exist; remote execution, endpoint authentication, GPU mapping, service management, and production tuning remain early.
+- Runtime and stack lifecycle: same-host/local helpers exist; remote execution, endpoint authentication, GPU mapping, service management, and production tuning remain early. Single-prompt execution is protocol-based for Ollama/OpenAI-compatible/Azure OpenAI/Anthropic, while richer chat/task UX remains planned.
 - Tool integrations: doctors, install previews, plans, and starter exports exist; provider-specific modules/playbooks/templates remain planned.
 - Azure deployment: planning, doctor checks, and narrow VM apply exist; broader AKS/cloud apply needs hardening before expansion.
 - MCP governance: read tools and audited narrow writes exist; broader write tools require explicit risk controls.

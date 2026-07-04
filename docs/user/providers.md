@@ -65,7 +65,7 @@ Managed providers are not local runtimes. They sit in `aiplane` as hosted provid
 4. `models add`/`models promote` creates profile-owned aliases under `models:`. For Azure OpenAI, the alias `model` value is the deployment name.
 5. `models list` and `models show` expose these aliases as `managed_service` entries under `no_runtime`; they are not runtime-fit candidates.
 6. `integrations plan/export` turns selected aliases into IDE/tool config using the provider endpoint, protocol, and API-key environment variable.
-7. `aiplane run` or `models test` can use managed aliases only through provider endpoint support and policy/credential checks; runtime bundle/install/start/pull paths remain self-managed only.
+7. `aiplane run` or `models test` can use managed aliases through supported endpoint protocols and policy/credential checks. Current execution protocols cover OpenAI-compatible chat completions, Azure OpenAI chat completions, and Anthropic Messages. Runtime bundle/install/start/pull paths remain self-managed only.
 
 The practical flow is:
 

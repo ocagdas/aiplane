@@ -34,7 +34,7 @@ High-level implemented areas:
 
 - profiles, local config, ignored credential references, provider credential tests, and validation;
 - environment planning/doctor checks for system Python, `venv`, Conda, and Docker, with setup helpers that bootstrap ignored `profiles/local-dev` before profile-aware checks;
-- provider/model catalogs including NVIDIA Hugging Face-scoped open model discovery, structural shipped profile config, ignored discovery cache review, direct profile-owned model add/clone, runtime/source mapping, local model defaults, and benchmark smoke checks;
+- provider/model catalogs including NVIDIA Hugging Face-scoped open model discovery, structural shipped profile config, ignored discovery cache review, direct profile-owned model add/clone, runtime/source mapping, local model defaults, protocol-backed single-prompt execution for Ollama/OpenAI-compatible/Azure OpenAI/Anthropic, and benchmark smoke checks;
 - hardware discovery, machine inventory, Azure SKU discovery/import, and stack planning;
 - tool doctors/plans/exports for infrastructure, quality, and automation tools;
 - integration role inspection, setup, and exports for Continue, Cline, Zed, Aider, OpenAI-compatible clients, and MCP client snippets, with setup planning supported helper install/start/pull actions and skipping unsupported source/runtime pull combinations;
@@ -50,7 +50,7 @@ Known in-progress areas:
 - remote execution and Docker-aware stack lifecycle;
 - provider-specific IaC/playbook/template hardening;
 - broader deployment apply paths;
-- endpoint authentication/gateway planning;
+- endpoint authentication/gateway planning and richer runtime-agnostic chat/task UX beyond single-prompt execution;
 - benchmark metrics, comparisons, and repeated-run summaries;
 - continued test-suite performance/isolation hardening after the first focused contract-test split.
 
