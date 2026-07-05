@@ -2226,9 +2226,9 @@ def _main(argv: list[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
     workspace = Path(args.workspace).resolve()
-    profiles_dir = (
-        Path(args.profiles_dir).expanduser().resolve() if args.profiles_dir else _profiles_dir_from_env()
-    )
+    profiles_dir = Path(args.profiles_dir).expanduser().resolve() if args.profiles_dir else None
+    if profiles_dir is None and args.command != "config":
+        profiles_dir = _profiles_dir_from_env()
     requested_profile = getattr(args, "profile", None)
 
     if args.command == "config":
