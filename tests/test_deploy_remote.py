@@ -30,9 +30,7 @@ class DeployRemoteTests(unittest.TestCase):
         self.assertEqual(vm["workflow"], "cloud_vm")
         self.assertTrue(vm["boundaries"]["cloud_resource_provisioning"])
         self.assertIn("az", vm["recommended_tools"])
-        self.assertIn(
-            "SSH/Ansible/cloud-init", {phase["tool_owner"] for phase in vm["phases"]}
-        )
+        self.assertIn("SSH/Ansible/cloud-init", {phase["tool_owner"] for phase in vm["phases"]})
         self.assertEqual(aks["workflow"], "cloud_kubernetes")
         self.assertIn("kubectl", aks["recommended_tools"])
         self.assertEqual(remote["workflow"], "remote_workstation")
@@ -79,9 +77,7 @@ class DeployRemoteTests(unittest.TestCase):
         self.assertIn("ssh", plan["required_tools"])
         self.assertIn("training_finetune", plan["resource_classes"])
         commands = [step["command"] for step in plan["steps"]]
-        self.assertTrue(
-            any(command[:3] == ["az", "vm", "create"] for command in commands)
-        )
+        self.assertTrue(any(command[:3] == ["az", "vm", "create"] for command in commands))
 
     def test_deploy_apply_supports_guarded_azure_vm_steps(self) -> None:
         profile = load_profile("local-dev", Path.cwd())
@@ -96,9 +92,7 @@ class DeployRemoteTests(unittest.TestCase):
         self.assertEqual(result["target"], "azure_gpu_vm")
         self.assertTrue(result["results"])
         commands = [call.args[0] for call in run.call_args_list]
-        self.assertTrue(
-            any(command[:3] == ["az", "vm", "create"] for command in commands)
-        )
+        self.assertTrue(any(command[:3] == ["az", "vm", "create"] for command in commands))
 
     def test_deploy_apply_cli_requires_explicit_yes(self) -> None:
         stdout = StringIO()
@@ -159,9 +153,7 @@ class DeployRemoteTests(unittest.TestCase):
         self.assertEqual(plan["type"], "ssh_tunnel")
         self.assertIn("-L", plan["command"])
         self.assertEqual(plan["endpoint"], "http://localhost:11434/v1")
-        self.assertEqual(
-            plan["connection"]["ide_endpoint"], "http://localhost:11434/v1"
-        )
+        self.assertEqual(plan["connection"]["ide_endpoint"], "http://localhost:11434/v1")
         self.assertIn("remote_service", plan["connection"])
 
     def test_remote_tunnel_lifecycle_is_guarded_and_status_uses_pid_file(self) -> None:
@@ -194,9 +186,7 @@ class DeployRemoteTests(unittest.TestCase):
             ):
                 started = manager.tunnel_start("gpu_workstation_ssh", yes=True)
             self.assertEqual(started["status"], "started")
-            self.assertTrue(
-                (workspace / ".aiplane" / "remote" / "gpu_workstation_ssh.pid").exists()
-            )
+            self.assertTrue((workspace / ".aiplane" / "remote" / "gpu_workstation_ssh.pid").exists())
             with patch("aiplane.remote.os.kill") as kill:
                 status = manager.tunnel_status("gpu_workstation_ssh")
             self.assertTrue(status["running"])

@@ -48,10 +48,7 @@ REQUIRED_INTEGRATION_ROLES = {"chat"}
 
 
 def integration_list() -> list[dict[str, str]]:
-    return [
-        {"name": name, "description": INTEGRATION_DESCRIPTIONS[name]}
-        for name in ALL_INTEGRATION_TOOLS
-    ]
+    return [{"name": name, "description": INTEGRATION_DESCRIPTIONS[name]} for name in ALL_INTEGRATION_TOOLS]
 
 
 def required_roles(tool: str) -> list[dict[str, Any]]:

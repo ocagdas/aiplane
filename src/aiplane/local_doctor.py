@@ -31,9 +31,7 @@ LOCAL_CODING_MCP_TOOLS = {
 }
 
 
-def local_coding_doctor(
-    profile: Profile, include_optional: bool = False
-) -> dict[str, Any]:
+def local_coding_doctor(profile: Profile, include_optional: bool = False) -> dict[str, Any]:
     catalog = ModelCatalog(profile)
     providers = catalog.providers()
     models = catalog.models()
@@ -49,12 +47,8 @@ def local_coding_doctor(
         _integration_section(defaults, models),
         _mcp_section(),
     ]
-    blocking = sum(
-        1 for section in sections for check in section["checks"] if not check.get("ok")
-    )
-    warnings = sum(
-        1 for section in sections for check in section["checks"] if check.get("warning")
-    )
+    blocking = sum(1 for section in sections for check in section["checks"] if not check.get("ok"))
+    warnings = sum(1 for section in sections for check in section["checks"] if check.get("warning"))
     return {
         "name": "local_coding_doctor",
         "profile": profile.name,
@@ -75,9 +69,7 @@ def local_coding_doctor(
 
 
 def local_coding_doctor_text(payload: dict[str, Any]) -> str:
-    summary = (
-        payload.get("summary", {}) if isinstance(payload.get("summary"), dict) else {}
-    )
+    summary = payload.get("summary", {}) if isinstance(payload.get("summary"), dict) else {}
     lines = [
         f"aiplane doctor for profile {payload.get('profile', 'unknown')}",
         f"status: {'ok' if payload.get('ok') else 'needs attention'}; checks: {summary.get('checks', 0)}; blocking: {summary.get('blocking', 0)}; warnings: {summary.get('warnings', 0)}",
@@ -116,16 +108,8 @@ def _profile_section(profile: Profile) -> dict[str, Any]:
         }
         for filename in CONFIG_FILES.values()
     ]
-    active = (
-        profile.environment.get("active")
-        if isinstance(profile.environment, dict)
-        else None
-    )
-    modes = (
-        profile.environment.get("modes", {})
-        if isinstance(profile.environment, dict)
-        else {}
-    )
+    active = profile.environment.get("active") if isinstance(profile.environment, dict) else None
+    modes = profile.environment.get("modes", {}) if isinstance(profile.environment, dict) else {}
     checks.append(
         {
             "name": "environment:active_mode",
@@ -141,12 +125,8 @@ def _profile_section(profile: Profile) -> dict[str, Any]:
 
 
 def _environment_section(profile: Profile, include_optional: bool) -> dict[str, Any]:
-    doctor = ToolchainManager(profile).environment_doctor(
-        include_optional=include_optional
-    )
-    summary = (
-        doctor.get("summary", {}) if isinstance(doctor.get("summary"), dict) else {}
-    )
+    doctor = ToolchainManager(profile).environment_doctor(include_optional=include_optional)
+    summary = doctor.get("summary", {}) if isinstance(doctor.get("summary"), dict) else {}
     missing_tools = int(summary.get("tools_missing_installable_by_aiplane", 0)) + int(
         summary.get("tools_missing_manual_or_platform_specific", 0)
     )
@@ -184,43 +164,27 @@ def _model_defaults_section(
         model = models.get(str(alias)) if alias else None
         status = statuses.get(str(alias)) if alias else None
         capability_ok, capability_reason = _role_capability(default_role, model)
-        provider_name = (
-            str(model.get("provider") or "") if isinstance(model, dict) else ""
-        )
+        provider_name = str(model.get("provider") or "") if isinstance(model, dict) else ""
         provider = providers.get(provider_name, {})
         endpoint = _provider_endpoint(provider_name, provider)
-        ownership = (
-            ownership_for_model(model, provider) if isinstance(model, dict) else None
-        )
-        configured = bool(
-            alias and isinstance(model, dict) and bool(model.get("enabled", True))
-        )
+        ownership = ownership_for_model(model, provider) if isinstance(model, dict) else None
+        configured = bool(alias and isinstance(model, dict) and bool(model.get("enabled", True)))
         checks.append(
             {
                 "name": default_role,
                 "ok": bool(configured and capability_ok),
-                "detail": _default_detail(
-                    str(alias or "not configured"), provider_name, endpoint
-                ),
-                "reason": (
-                    capability_reason
-                    if configured and not capability_ok
-                    else _status_reason(status)
-                ),
+                "detail": _default_detail(str(alias or "not configured"), provider_name, endpoint),
+                "reason": (capability_reason if configured and not capability_ok else _status_reason(status)),
                 "provider": provider_name or (status.provider if status else None),
                 "endpoint": endpoint,
                 "ownership": ownership,
                 "runtime": (
-                    model.get("preferred_runtime") or model.get("runtime")
-                    if isinstance(model, dict)
-                    else None
+                    model.get("preferred_runtime") or model.get("runtime") if isinstance(model, dict) else None
                 ),
                 "model": model.get("model") if isinstance(model, dict) else None,
                 "roles": model.get("roles", []) if isinstance(model, dict) else [],
                 "usable": (status.usable if status else False),
-                "warning": bool(
-                    configured and capability_ok and status and not status.usable
-                ),
+                "warning": bool(configured and capability_ok and status and not status.usable),
                 "role": label,
             }
         )
@@ -284,9 +248,7 @@ def _endpoint_section(
     }
 
 
-def _hardware_section(
-    profile: Profile, models: dict[str, dict[str, Any]], defaults: dict[str, Any]
-) -> dict[str, Any]:
+def _hardware_section(profile: Profile, models: dict[str, dict[str, Any]], defaults: dict[str, Any]) -> dict[str, Any]:
     manager = HardwareManager(profile)
     active = manager.active_config()
     machine = active.get("machine") if isinstance(active.get("machine"), dict) else {}
@@ -294,9 +256,7 @@ def _hardware_section(
         {
             "name": "active_machine",
             "ok": bool(machine),
-            "detail": (
-                _machine_detail(machine) if machine else "no effective machine profile"
-            ),
+            "detail": (_machine_detail(machine) if machine else "no effective machine profile"),
         }
     ]
     seen_aliases: set[str] = set()
@@ -328,11 +288,7 @@ def _hardware_section(
 
 
 def _provider_section(providers: dict[str, dict[str, Any]]) -> dict[str, Any]:
-    enabled = [
-        name
-        for name, provider in providers.items()
-        if bool(provider.get("enabled", True))
-    ]
+    enabled = [name for name, provider in providers.items() if bool(provider.get("enabled", True))]
     checks = [
         {
             "name": "providers_configured",
@@ -352,9 +308,7 @@ def _provider_section(providers: dict[str, dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def _integration_section(
-    defaults: dict[str, Any], models: dict[str, dict[str, Any]]
-) -> dict[str, Any]:
+def _integration_section(defaults: dict[str, Any], models: dict[str, dict[str, Any]]) -> dict[str, Any]:
     checks = []
     role_defaults = {
         "chat": "chat_model",
@@ -393,15 +347,9 @@ def _integration_section(
 def _mcp_section() -> dict[str, Any]:
     manifest = mcp_manifest()
     tools = manifest.get("tools", []) if isinstance(manifest, dict) else []
-    tool_names = {
-        str(tool.get("name"))
-        for tool in tools
-        if isinstance(tool, dict) and tool.get("name")
-    }
+    tool_names = {str(tool.get("name")) for tool in tools if isinstance(tool, dict) and tool.get("name")}
     missing_wedge_tools = sorted(LOCAL_CODING_MCP_TOOLS - tool_names)
-    guarded_writes = sorted(
-        name for name in tool_names if name in _guarded_mcp_write_tools()
-    )
+    guarded_writes = sorted(name for name in tool_names if name in _guarded_mcp_write_tools())
     checks = [
         {
             "name": "mcp_manifest",
@@ -411,11 +359,7 @@ def _mcp_section() -> dict[str, Any]:
         {
             "name": "mcp_local_coding_read_surface",
             "ok": not missing_wedge_tools,
-            "detail": (
-                "ready"
-                if not missing_wedge_tools
-                else "missing tools: " + ", ".join(missing_wedge_tools)
-            ),
+            "detail": ("ready" if not missing_wedge_tools else "missing tools: " + ", ".join(missing_wedge_tools)),
             "required_tools": sorted(LOCAL_CODING_MCP_TOOLS),
             "missing_tools": missing_wedge_tools,
         },
@@ -459,17 +403,11 @@ def _configured_default_aliases(
     return aliases
 
 
-def _role_capability(
-    default_role: str, model: dict[str, Any] | None
-) -> tuple[bool, str]:
+def _role_capability(default_role: str, model: dict[str, Any] | None) -> tuple[bool, str]:
     if not isinstance(model, dict):
         return False, "missing profile-owned or discovered model alias"
     roles = {str(role) for role in model.get("roles", []) or []}
-    scores = (
-        model.get("capability_scores")
-        if isinstance(model.get("capability_scores"), dict)
-        else {}
-    )
+    scores = model.get("capability_scores") if isinstance(model.get("capability_scores"), dict) else {}
     positive_scores = {name for name, value in scores.items() if _positive_score(value)}
     allowed_roles = {
         "chat_model": {"chat", "generation"},
@@ -483,9 +421,7 @@ def _role_capability(
         "embedding_model": {"embedding"},
         "code_model": {"code_generation", "debugging_refactor", "general_chat"},
     }.get(default_role, {"general_chat"})
-    if roles.intersection(allowed_roles) or positive_scores.intersection(
-        allowed_scores
-    ):
+    if roles.intersection(allowed_roles) or positive_scores.intersection(allowed_scores):
         return True, "role capability is compatible"
     role_text = ", ".join(sorted(roles)) or "none"
     return False, f"alias roles are not suitable for {default_role}: roles={role_text}"
@@ -499,9 +435,7 @@ def _positive_score(value: Any) -> bool:
 
 
 def _status_reason(status: Any) -> str:
-    return (
-        status.reason if status else "missing profile-owned or discovered model alias"
-    )
+    return status.reason if status else "missing profile-owned or discovered model alias"
 
 
 def _provider_endpoint(provider_name: str, provider: dict[str, Any]) -> str | None:
@@ -543,18 +477,14 @@ def _machine_detail(machine: dict[str, Any]) -> str:
         parts.append(f"GPU={gpu}")
     if vram is not None:
         parts.append(f"VRAM={vram}GB")
-    return ", ".join(parts) or str(
-        machine.get("machine_tag") or machine.get("provider") or "configured"
-    )
+    return ", ".join(parts) or str(machine.get("machine_tag") or machine.get("provider") or "configured")
 
 
 def _next_steps(profile: str, sections: list[dict[str, Any]]) -> list[str]:
     section_ok = {section["name"]: bool(section.get("ok")) for section in sections}
     steps = []
     if not section_ok.get("profile", False):
-        steps.append(
-            f"Run `aiplane profiles validate {profile}` and repair missing profile files before setup."
-        )
+        steps.append(f"Run `aiplane profiles validate {profile}` and repair missing profile files before setup.")
     if not section_ok.get("environment", False):
         steps.append(
             "Run `aiplane environment doctor --required-only` and fix required tool/runtime prerequisites first."
@@ -568,9 +498,7 @@ def _next_steps(profile: str, sections: list[dict[str, Any]]) -> list[str]:
             "Run `aiplane runtimes status <runtime>` or `aiplane providers test <provider>` for endpoint-specific diagnostics."
         )
     if not section_ok.get("hardware", False):
-        steps.append(
-            "Run `aiplane hardware doctor` or choose a smaller local model alias for this machine."
-        )
+        steps.append("Run `aiplane hardware doctor` or choose a smaller local model alias for this machine.")
     if not section_ok.get("integrations", False):
         steps.append(
             "Run `aiplane integrations roles continue` and `aiplane integrations plan continue` after model defaults are configured."
@@ -579,7 +507,5 @@ def _next_steps(profile: str, sections: list[dict[str, Any]]) -> list[str]:
         steps.append(
             "Export configs with `aiplane integrations export continue` and `aiplane integrations export aider`."
         )
-    steps.append(
-        "Inspect MCP availability with `aiplane mcp manifest` when connecting IDE or agent clients."
-    )
+    steps.append("Inspect MCP availability with `aiplane mcp manifest` when connecting IDE or agent clients.")
     return steps

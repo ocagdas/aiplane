@@ -46,11 +46,7 @@ def list_config_templates() -> list[str]:
     root = config_templates_root()
     if not root.exists():
         return []
-    return sorted(
-        path.stem
-        for path in root.iterdir()
-        if path.is_file() and path.suffix in {".yaml", ".yml"}
-    )
+    return sorted(path.stem for path in root.iterdir() if path.is_file() and path.suffix in {".yaml", ".yml"})
 
 
 def load_local_config(path: Path | str | None = None) -> dict[str, Any]:
@@ -60,9 +56,7 @@ def load_local_config(path: Path | str | None = None) -> dict[str, Any]:
     return parse_yaml(config_path.read_text(encoding="utf-8"))
 
 
-def init_local_config(
-    template: str = "local", path: Path | str | None = None, overwrite: bool = False
-) -> Path:
+def init_local_config(template: str = "local", path: Path | str | None = None, overwrite: bool = False) -> Path:
     if not template or "/" in template or "\\" in template:
         raise ValueError("config template name must be a simple name")
     source = config_templates_root() / f"{template}.yaml"
@@ -97,9 +91,7 @@ def get_local_config_value(key: str, path: Path | str | None = None) -> Any:
     return config.get(key)
 
 
-def set_local_config_value(
-    key: str, value: Any, path: Path | str | None = None
-) -> Path:
+def set_local_config_value(key: str, value: Any, path: Path | str | None = None) -> Path:
     if not key or "." in key:
         raise ValueError("config set currently supports one top-level key")
     config_path = local_config_path(path)
@@ -110,9 +102,7 @@ def set_local_config_value(
     return config_path
 
 
-def agent_artifacts_root(
-    path: Path | str | None = None, config_path: Path | str | None = None
-) -> Path:
+def agent_artifacts_root(path: Path | str | None = None, config_path: Path | str | None = None) -> Path:
     if path is not None:
         return Path(path).expanduser().resolve()
     env_path = os.environ.get("AIPLANE_AGENT_ARTIFACTS_DIR")
@@ -130,9 +120,7 @@ def default_profiles_root() -> Path:
     return project_root() / "profiles"
 
 
-def profiles_root(
-    path: Path | str | None = None, config_path: Path | str | None = None
-) -> Path:
+def profiles_root(path: Path | str | None = None, config_path: Path | str | None = None) -> Path:
     if path is not None:
         return Path(path).expanduser().resolve()
     env_path = os.environ.get("AIPLANE_PROFILES_DIR")
@@ -165,15 +153,9 @@ def create_profile(
 ) -> Path:
     _validate_profile_name(name)
     source = _profile_template_path(template)
-    missing = [
-        filename
-        for filename in CONFIG_FILES.values()
-        if not (source / filename).exists()
-    ]
+    missing = [filename for filename in CONFIG_FILES.values() if not (source / filename).exists()]
     if missing:
-        raise ValueError(
-            f"profile template {template!r} is missing: {', '.join(missing)}"
-        )
+        raise ValueError(f"profile template {template!r} is missing: {', '.join(missing)}")
     destination = profiles_root(profiles_dir) / name
     if destination.exists():
         if not overwrite:
@@ -276,9 +258,7 @@ def list_profiles(profiles_dir: Path | str | None = None) -> list[str]:
     return sorted(path.name for path in root.iterdir() if path.is_dir())
 
 
-def resolve_profile_name(
-    name: str | None = None, profiles_dir: Path | str | None = None
-) -> str:
+def resolve_profile_name(name: str | None = None, profiles_dir: Path | str | None = None) -> str:
     if name:
         return name
     profiles = list_profiles(profiles_dir)
@@ -298,9 +278,7 @@ def resolve_profile_name(
     )
 
 
-def load_profile(
-    name: str, workspace: Path | None = None, profiles_dir: Path | str | None = None
-) -> Profile:
+def load_profile(name: str, workspace: Path | None = None, profiles_dir: Path | str | None = None) -> Profile:
     root = profiles_root(profiles_dir) / name
     if not root.is_dir():
         raise ValueError(f"unknown profile: {name}")
@@ -366,11 +344,7 @@ def parse_yaml(text: str) -> dict[str, Any]:
         if value == "[]":
             parent[key] = []
         elif value.startswith("[") and value.endswith("]"):
-            parent[key] = [
-                _parse_scalar(item.strip())
-                for item in value[1:-1].split(",")
-                if item.strip()
-            ]
+            parent[key] = [_parse_scalar(item.strip()) for item in value[1:-1].split(",") if item.strip()]
         else:
             parent[key] = _parse_scalar(value)
 
@@ -384,9 +358,7 @@ def _parse_scalar(value: str) -> Any:
         return False
     if value in {"null", "None"}:
         return None
-    if (value.startswith('"') and value.endswith('"')) or (
-        value.startswith("'") and value.endswith("'")
-    ):
+    if (value.startswith('"') and value.endswith('"')) or (value.startswith("'") and value.endswith("'")):
         return value[1:-1]
     try:
         return int(value)

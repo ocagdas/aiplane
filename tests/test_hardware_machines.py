@@ -21,9 +21,7 @@ from .support import (
 class HardwareMachineTests(unittest.TestCase):
     def test_hardware_template_uses_normalized_machine_fields_only(self) -> None:
         data = agent_config.parse_yaml(
-            (Path.cwd() / "profile-templates/local-dev/hardware.yaml").read_text(
-                encoding="utf-8"
-            )
+            (Path.cwd() / "profile-templates/local-dev/hardware.yaml").read_text(encoding="utf-8")
         )
         selected_values = data["selected"]["values"]
         self.assertNotIn("type", selected_values)
@@ -153,9 +151,7 @@ class HardwareMachineTests(unittest.TestCase):
         profile = load_profile("local-dev", Path.cwd())
         result = HardwareManager(profile).recommend()
         self.assertIn("criteria", result)
-        self.assertEqual(
-            list(result["models"].keys()), ["recommended", "usable", "remote_or_cloud"]
-        )
+        self.assertEqual(list(result["models"].keys()), ["recommended", "usable", "remote_or_cloud"])
         self.assertNotIn("not_recommended", result["models"])
         self.assertGreaterEqual(result["hidden"]["not_recommended_count"], 1)
         first_group = result["models"]["recommended"] or result["models"]["usable"]
@@ -176,9 +172,7 @@ class HardwareMachineTests(unittest.TestCase):
                 "recommended_vram_gb",
             ],
         )
-        scores = [
-            row["capability_avg_score"] for row in result["models"]["recommended"]
-        ]
+        scores = [row["capability_avg_score"] for row in result["models"]["recommended"]]
         self.assertEqual(scores, sorted(scores, reverse=True))
 
     def test_hardware_recommend_can_include_not_recommended(self) -> None:
@@ -202,18 +196,12 @@ class HardwareMachineTests(unittest.TestCase):
                 "model_name": "fixture-analysis-small",
                 "summary": {"average_score": 88, "average_elapsed_ms": 1234},
             }
-            (root / "20260619T000000Z-fixture-analysis-small.json").write_text(
-                json.dumps(benchmark), encoding="utf-8"
-            )
+            (root / "20260619T000000Z-fixture-analysis-small.json").write_text(json.dumps(benchmark), encoding="utf-8")
             profile = load_profile("local-dev", workspace)
             result = HardwareManager(profile).recommend()
             rows = [row for group in result["models"].values() for row in group]
-            model_row = next(
-                row for row in rows if row["name"] == "fixture-analysis-small"
-            )
-            self.assertEqual(
-                model_row["latest_benchmark"]["summary"]["average_score"], 88
-            )
+            model_row = next(row for row in rows if row["name"] == "fixture-analysis-small")
+            self.assertEqual(model_row["latest_benchmark"]["summary"]["average_score"], 88)
 
     def test_hardware_schema_and_active_machine_are_available(self) -> None:
         profile = load_profile("local-dev", Path.cwd())
@@ -259,9 +247,7 @@ class HardwareMachineTests(unittest.TestCase):
                 },
             )
             result = manager.recommend()
-            self.assertEqual(
-                result["machine"]["stock"]["machine_tag"], "azure_h100_test"
-            )
+            self.assertEqual(result["machine"]["stock"]["machine_tag"], "azure_h100_test")
             self.assertEqual(result["machine"]["gpu"]["vram_gb"], 94)
             recommended_names = {row["name"] for row in result["models"]["recommended"]}
             self.assertIn("local-code-large", recommended_names)
@@ -288,17 +274,13 @@ class HardwareMachineTests(unittest.TestCase):
             exported = manager.export_machine("this_pc")
             export_path = root / "this_pc.machine.json"
             export_path.write_text(json.dumps(exported), encoding="utf-8")
-            imported = manager.import_file(
-                export_path, overrides={"memory_gb": 128, "vram_gb": 48}
-            )
+            imported = manager.import_file(export_path, overrides={"memory_gb": 128, "vram_gb": 48})
             self.assertEqual(imported["name"], "this_pc")
             rows = manager.list()
             self.assertEqual(rows[0]["name"], "this_pc")
             recommendation = manager.recommend(model="local-code-large", runtime="vllm")
             self.assertEqual(recommendation["machines"][0]["level"], "recommended")
-            remote = manager.profile_remote_plan(
-                "gpu_box_01", "gpu.example.com", user="dev"
-            )
+            remote = manager.profile_remote_plan("gpu_box_01", "gpu.example.com", user="dev")
             self.assertEqual(remote["mode"], "ssh_remote_profile")
             self.assertIn("ssh", remote["steps"][1]["command"][0])
 
@@ -383,9 +365,7 @@ class HardwareMachineTests(unittest.TestCase):
                 patch("aiplane.machines.shutil.which", return_value="/usr/bin/az"),
                 patch("aiplane.machines.subprocess.run", side_effect=fake_run),
             ):
-                result = MachineManager(profile).discover_azure(
-                    "uksouth", workload="inference_large", limit=1
-                )
+                result = MachineManager(profile).discover_azure("uksouth", workload="inference_large", limit=1)
             self.assertEqual(result["discovery"]["method"], "live")
             self.assertTrue(result["quota"]["ok"])
             self.assertEqual(result["quota"]["items"][0]["remaining"], 96)
@@ -416,9 +396,7 @@ class HardwareMachineTests(unittest.TestCase):
             )
             manager = MachineManager(profile)
             with patch("aiplane.machines.shutil.which", return_value=None):
-                offline = manager.discover_azure(
-                    "uksouth", workload="inference_large", limit=2
-                )
+                offline = manager.discover_azure("uksouth", workload="inference_large", limit=2)
             self.assertEqual(offline["discovery"]["method"], "offline")
             self.assertTrue(offline["discovery"]["cache"]["written"])
             self.assertEqual(offline["discovery"]["cache"]["action"], "created")
@@ -432,15 +410,11 @@ class HardwareMachineTests(unittest.TestCase):
                 patch("aiplane.machines.shutil.which", return_value="/usr/bin/az"),
                 patch("aiplane.machines.subprocess.run", return_value=Completed()),
             ):
-                live = manager.discover_azure(
-                    "uksouth", workload="inference_large", limit=2
-                )
+                live = manager.discover_azure("uksouth", workload="inference_large", limit=2)
             self.assertEqual(live["discovery"]["method"], "live")
             self.assertEqual(live["discovery"]["cache"]["previous_method"], "offline")
             self.assertEqual(live["discovery"]["cache"]["action"], "overrode_previous")
-            cache = json.loads(
-                (root / "machine-discovery-cache.json").read_text(encoding="utf-8")
-            )
+            cache = json.loads((root / "machine-discovery-cache.json").read_text(encoding="utf-8"))
             only_entry = next(iter(cache.values()))
             self.assertEqual(only_entry["discovery"]["method"], "live")
             self.assertEqual(
@@ -467,9 +441,7 @@ class HardwareMachineTests(unittest.TestCase):
                 targets=source.targets,
             )
             manager = MachineManager(profile)
-            manager.import_azure_sku(
-                "Standard_NC40ads_H100_v5", "uksouth", name="azure_h100_test"
-            )
+            manager.import_azure_sku("Standard_NC40ads_H100_v5", "uksouth", name="azure_h100_test")
             self.assertTrue(manager.validate("azure_h100_test")["ok"])
             with patch("aiplane.machines.shutil.which", return_value=None):
                 status = manager.azure_status(region="uksouth", run_sku_probe=True)
@@ -492,9 +464,7 @@ class HardwareMachineTests(unittest.TestCase):
 
             with (
                 patch("aiplane.machines.shutil.which", return_value="/usr/bin/az"),
-                patch(
-                    "aiplane.machines.subprocess.run", return_value=AccountCompleted()
-                ),
+                patch("aiplane.machines.subprocess.run", return_value=AccountCompleted()),
             ):
                 logged_in = manager.azure_status()
             self.assertEqual(logged_in["account"]["user_name"], "[redacted]")
@@ -531,18 +501,12 @@ class HardwareMachineTests(unittest.TestCase):
             )
             manager = MachineManager(profile)
             with patch("aiplane.machines.shutil.which", return_value=None):
-                discovered = manager.discover_azure(
-                    "uksouth", workload="inference_large", limit=2
-                )
+                discovered = manager.discover_azure("uksouth", workload="inference_large", limit=2)
             self.assertEqual(discovered["provider"], "azure")
             self.assertEqual(discovered["discovery"]["method"], "offline")
             self.assertTrue(discovered["candidates"])
-            imported = manager.import_azure_sku(
-                "Standard_NC40ads_H100_v5", "uksouth", name="azure_h100_test"
-            )
-            self.assertEqual(
-                imported["machine"]["stock"]["stock_sku"], "Standard_NC40ads_H100_v5"
-            )
+            imported = manager.import_azure_sku("Standard_NC40ads_H100_v5", "uksouth", name="azure_h100_test")
+            self.assertEqual(imported["machine"]["stock"]["stock_sku"], "Standard_NC40ads_H100_v5")
             self.assertIn("azure_h100_test", {row["name"] for row in manager.list()})
 
     def test_hardware_use_template_copies_selected_values(self) -> None:

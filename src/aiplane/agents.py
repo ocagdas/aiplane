@@ -50,9 +50,7 @@ class AgentManager:
         self.integrations = IntegrationManager(profile)
 
     def templates(self) -> list[dict[str, Any]]:
-        return [
-            {"name": name, **spec} for name, spec in sorted(AGENT_FRAMEWORKS.items())
-        ]
+        return [{"name": name, **spec} for name, spec in sorted(AGENT_FRAMEWORKS.items())]
 
     def plan(
         self,
@@ -145,9 +143,7 @@ class AgentManager:
         elif file == "README.md":
             content = _readme(name, framework, selection)
         else:
-            raise ValueError(
-                "file must be agent.py, requirements.txt, .env.example, or README.md"
-            )
+            raise ValueError("file must be agent.py, requirements.txt, .env.example, or README.md")
         return {
             "name": "agent_export",
             "agent": name,

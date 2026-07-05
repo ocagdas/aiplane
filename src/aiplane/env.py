@@ -74,9 +74,7 @@ class EnvironmentManager:
         modes = self.modes()
         mode_config = modes.get(mode, {})
         if mode == "system":
-            return ExecutionPlan(
-                mode, command, self.profile.workspace, "host system shell"
-            )
+            return ExecutionPlan(mode, command, self.profile.workspace, "host system shell")
         if mode == "venv":
             return self._venv_plan(command, mode_config)
         if mode == "conda":
@@ -91,9 +89,7 @@ class EnvironmentManager:
         if not path.is_absolute():
             path = self.profile.workspace / path
         python_path = path / "bin" / "python"
-        planned = (
-            [str(python_path), *command[1:]] if command[0] == "python" else command
-        )
+        planned = [str(python_path), *command[1:]] if command[0] == "python" else command
         return ExecutionPlan("venv", planned, self.profile.workspace, f"venv at {path}")
 
     def _conda_plan(self, command: list[str], config: object) -> ExecutionPlan:
@@ -141,9 +137,7 @@ class EnvironmentManager:
             planned.extend(["--network", str(network)])
 
         planned.extend([image, *command])
-        return ExecutionPlan(
-            "docker", planned, self.profile.workspace, f"docker image {image}"
-        )
+        return ExecutionPlan("docker", planned, self.profile.workspace, f"docker image {image}")
 
 
 def _list_value(value: object) -> list[object]:

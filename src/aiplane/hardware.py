@@ -71,11 +71,7 @@ class HardwareManager:
         if isinstance(selected, dict) and isinstance(selected.get("values"), dict):
             origin = selected.get("origin")
             values = copy.deepcopy(selected["values"])
-            template = (
-                _template_values(self.templates().get(str(origin), {}))
-                if origin
-                else {}
-            )
+            template = _template_values(self.templates().get(str(origin), {})) if origin else {}
             custom = bool(selected.get("custom", values != template))
             active_config = {
                 "name": active,
@@ -83,9 +79,7 @@ class HardwareManager:
                 "custom": custom or origin is None,
                 "values": values,
             }
-            active_config["machine"] = _machine_from_active(
-                active_config, self.discover()
-            )
+            active_config["machine"] = _machine_from_active(active_config, self.discover())
             return active_config
 
         template = self.templates().get(active)
@@ -96,9 +90,7 @@ class HardwareManager:
                 "custom": False,
                 "values": _template_values(template),
             }
-            active_config["machine"] = _machine_from_active(
-                active_config, self.discover()
-            )
+            active_config["machine"] = _machine_from_active(active_config, self.discover())
             return active_config
         active_config = {
             "name": active,
@@ -109,9 +101,7 @@ class HardwareManager:
         active_config["machine"] = _machine_from_active(active_config, self.discover())
         return active_config
 
-    def use_template(
-        self, template_name: str, overrides: dict[str, Any] | None = None
-    ) -> dict[str, Any]:
+    def use_template(self, template_name: str, overrides: dict[str, Any] | None = None) -> dict[str, Any]:
         templates = self.templates()
         template = templates.get(template_name)
         if not isinstance(template, dict):
@@ -210,9 +200,7 @@ class HardwareManager:
         discovered["gpus"].extend(_nvidia_gpus())
         discovered["gpus"].extend(_amd_gpus())
         if not discovered["gpus"]:
-            discovered["notes"].append(
-                "No NVIDIA/AMD GPU discovered through available CLI tools"
-            )
+            discovered["notes"].append("No NVIDIA/AMD GPU discovered through available CLI tools")
         discovered["closest_profiles"] = self._closest_profiles(discovered)
         return discovered
 
@@ -224,10 +212,7 @@ class HardwareManager:
         if model_name:
             model_rows = [catalog.show(model_name)]
         else:
-            model_rows = [
-                {"name": name, **dict(model)}
-                for name, model in catalog.models().items()
-            ]
+            model_rows = [{"name": name, **dict(model)} for name, model in catalog.models().items()]
         needs_fit: list[dict[str, Any]] = []
         no_fit_required: list[dict[str, Any]] = []
         for row in model_rows:
@@ -271,9 +256,7 @@ class HardwareManager:
                 )
                 continue
             level, reason = _recommend_model(payload, fit_basis)
-            groups[level].append(
-                _recommendation_payload(payload, level, reason, benchmark_summary)
-            )
+            groups[level].append(_recommendation_payload(payload, level, reason, benchmark_summary))
         ordered_groups: dict[str, list[dict[str, Any]]] = {
             "recommended": groups["recommended"],
             "usable": groups["usable"],
@@ -295,9 +278,7 @@ class HardwareManager:
             "remote_or_cloud": "fit is checked against provider quota/keys, not local RAM/VRAM",
         }
         if include_not_recommended:
-            criteria["not_recommended"] = (
-                "does not meet configured minimum local load/run targets"
-            )
+            criteria["not_recommended"] = "does not meet configured minimum local load/run targets"
         return {
             "criteria": criteria,
             "machine": machine,
@@ -335,18 +316,14 @@ class HardwareManager:
         return sorted(scored, key=lambda item: item["score"], reverse=True)[:3]
 
 
-def _machine_from_active(
-    active: dict[str, Any], discovered: dict[str, Any]
-) -> dict[str, Any]:
+def _machine_from_active(active: dict[str, Any], discovered: dict[str, Any]) -> dict[str, Any]:
     values = active.get("values", {}) if isinstance(active, dict) else {}
     if not isinstance(values, dict):
         values = {}
     gpus = [gpu for gpu in discovered.get("gpus", []) if isinstance(gpu, dict)]
     first_gpu = gpus[0] if gpus else {}
     max_vram = _max_vram_gb(discovered)
-    cpu_threads = _resolve_number(
-        values.get("cpu_threads"), discovered.get("cpu_count")
-    )
+    cpu_threads = _resolve_number(values.get("cpu_threads"), discovered.get("cpu_count"))
     cpu_cores = _resolve_number(values.get("cpu_cores", values.get("cpu")), cpu_threads)
     ram = _resolve_number(values.get("memory_gb"), discovered.get("memory_gb"))
     unified = _resolve_number(values.get("unified_memory_gb"), None)
@@ -357,9 +334,7 @@ def _machine_from_active(
         values.get("gpu_vendor", values.get("vendor")),
         first_gpu.get("vendor") if first_gpu else None,
     )
-    gpu_model = _resolve_text(
-        values.get("gpu_model"), first_gpu.get("name") if first_gpu else None
-    )
+    gpu_model = _resolve_text(values.get("gpu_model"), first_gpu.get("name") if first_gpu else None)
     return {
         "name": active.get("name") or values.get("machine_tag") or "custom",
         "origin": active.get("origin") or "custom",
@@ -367,16 +342,12 @@ def _machine_from_active(
         "stock": {
             "machine_tag": values.get("machine_tag") or active.get("name") or "custom",
             "provider": values.get("provider"),
-            "stock_sku": values.get("stock_sku")
-            or values.get("instance_type")
-            or values.get("gpu_sku"),
+            "stock_sku": values.get("stock_sku") or values.get("instance_type") or values.get("gpu_sku"),
         },
         "placement": values.get("placement") or values.get("type"),
         "substrate": values.get("substrate"),
         "cpu": {
-            "architecture": _resolve_text(
-                values.get("cpu_architecture"), discovered.get("machine")
-            ),
+            "architecture": _resolve_text(values.get("cpu_architecture"), discovered.get("machine")),
             "cores": cpu_cores,
             "threads": cpu_threads,
         },
@@ -384,9 +355,7 @@ def _machine_from_active(
             "ram_gb": ram,
             "unified_memory_gb": unified,
             "memory_architecture": values.get("memory_architecture"),
-            "memory_bandwidth_gbps": _resolve_number(
-                values.get("memory_bandwidth_gbps"), None
-            ),
+            "memory_bandwidth_gbps": _resolve_number(values.get("memory_bandwidth_gbps"), None),
         },
         "gpu": {
             "vendor": gpu_vendor or "none",
@@ -396,31 +365,20 @@ def _machine_from_active(
             "total_vram_gb": total_vram,
             "indices": values.get("gpu_indices"),
         },
-        "accelerator_apis": values.get("accelerator_apis")
-        or _default_accelerators(str(gpu_vendor or "")),
+        "accelerator_apis": values.get("accelerator_apis") or _default_accelerators(str(gpu_vendor or "")),
         "os": _resolve_text(values.get("os"), platform.system().lower()),
         "notes": values.get("notes"),
     }
 
 
-def _discovered_from_machine(
-    machine: dict[str, Any], discovered: dict[str, Any]
-) -> dict[str, Any]:
+def _discovered_from_machine(machine: dict[str, Any], discovered: dict[str, Any]) -> dict[str, Any]:
     result = copy.deepcopy(discovered)
-    memory = (
-        machine.get("memory", {}) if isinstance(machine.get("memory"), dict) else {}
-    )
+    memory = machine.get("memory", {}) if isinstance(machine.get("memory"), dict) else {}
     gpu = machine.get("gpu", {}) if isinstance(machine.get("gpu"), dict) else {}
-    ram = _float_or_none(memory.get("ram_gb")) or _float_or_none(
-        memory.get("unified_memory_gb")
-    )
+    ram = _float_or_none(memory.get("ram_gb")) or _float_or_none(memory.get("unified_memory_gb"))
     if ram is not None:
         result["memory_gb"] = ram
-    vram = (
-        _float_or_none(gpu.get("vram_gb"))
-        or _float_or_none(memory.get("unified_memory_gb"))
-        or 0.0
-    )
+    vram = _float_or_none(gpu.get("vram_gb")) or _float_or_none(memory.get("unified_memory_gb")) or 0.0
     count = int(_float_or_none(gpu.get("count")) or (1 if vram else 0))
     vendor = str(gpu.get("vendor") or "unknown")
     model = str(gpu.get("model") or "configured GPU")
@@ -564,22 +522,16 @@ def _amd_gpus() -> list[dict[str, Any]]:
         if result.returncode == 0:
             for line in result.stdout.splitlines():
                 lower = line.lower()
-                if "amd" in lower and (
-                    "vga" in lower or "display" in lower or "3d" in lower
-                ):
+                if "amd" in lower and ("vga" in lower or "display" in lower or "3d" in lower):
                     gpus.append({"vendor": "amd", "name": line.strip()})
     return gpus
 
 
-def _score_template(
-    template: dict[str, Any], discovered: dict[str, Any]
-) -> tuple[int, list[str]]:
+def _score_template(template: dict[str, Any], discovered: dict[str, Any]) -> tuple[int, list[str]]:
     score = 0
     reasons: list[str] = []
     gpus = discovered.get("gpus", [])
-    vendors = {
-        str(gpu.get("vendor", "")).lower() for gpu in gpus if isinstance(gpu, dict)
-    }
+    vendors = {str(gpu.get("vendor", "")).lower() for gpu in gpus if isinstance(gpu, dict)}
     memory_gb = discovered.get("memory_gb")
     max_vram_gb = 0.0
     for gpu in gpus:
@@ -596,11 +548,7 @@ def _score_template(
     if vendor and vendor in vendors:
         score += 50
         reasons.append(f"{vendor} GPU discovered")
-    if (
-        not gpus
-        and placement in {"same_host", "workstation"}
-        and gpu_count in (None, 0)
-    ):
+    if not gpus and placement in {"same_host", "workstation"} and gpu_count in (None, 0):
         score += 20
         reasons.append("local CPU/system-memory profile")
     if max_vram_gb:
@@ -612,9 +560,7 @@ def _score_template(
             score += 15
             reasons.append(f"GPU VRAM {max_vram_gb:.1f}GB meets template minimum")
     if memory_gb:
-        mem_range = _parse_range(
-            template.get("memory_gb") or template.get("unified_memory_gb")
-        )
+        mem_range = _parse_range(template.get("memory_gb") or template.get("unified_memory_gb"))
         if mem_range and mem_range[0] <= float(memory_gb) <= mem_range[1]:
             score += 15
             reasons.append(f"system memory {memory_gb:g}GB fits template range")
@@ -654,9 +600,7 @@ def _recommendation_payload(
         "name": model.get("name"),
         "model": model.get("model"),
         "provider": model.get("provider"),
-        "capability_avg_score": _average_capability_score(
-            {"capabilities": capabilities}
-        ),
+        "capability_avg_score": _average_capability_score({"capabilities": capabilities}),
         "level": level,
         "enabled": bool(model.get("enabled", True)),
         "min_ram_gb": model.get("min_ram_gb"),
@@ -694,9 +638,7 @@ def _latest_benchmark_summaries(workspace: Path) -> dict[str, dict[str, Any]]:
     return summaries
 
 
-def _recommend_model(
-    model: dict[str, Any], discovered: dict[str, Any]
-) -> tuple[str, str]:
+def _recommend_model(model: dict[str, Any], discovered: dict[str, Any]) -> tuple[str, str]:
     memory_gb = _float_or_none(discovered.get("memory_gb"))
     gpu_vram_gb = _max_vram_gb(discovered)
     min_ram = _float_or_none(model.get("min_ram_gb"))
@@ -708,23 +650,15 @@ def _recommend_model(
     if min_ram is not None and memory_gb is not None and memory_gb < min_ram:
         blockers.append(f"needs at least {min_ram:g}GB RAM; discovered {memory_gb:g}GB")
     if min_vram is not None and gpu_vram_gb < min_vram:
-        blockers.append(
-            f"needs at least {min_vram:g}GB VRAM; discovered {gpu_vram_gb:.1f}GB"
-        )
+        blockers.append(f"needs at least {min_vram:g}GB VRAM; discovered {gpu_vram_gb:.1f}GB")
     if blockers:
         return "not_recommended", "; ".join(blockers)
 
     gaps = []
-    if (
-        recommended_ram is not None
-        and memory_gb is not None
-        and memory_gb < recommended_ram
-    ):
+    if recommended_ram is not None and memory_gb is not None and memory_gb < recommended_ram:
         gaps.append(f"below recommended RAM ({memory_gb:g}GB < {recommended_ram:g}GB)")
     if recommended_vram is not None and gpu_vram_gb < recommended_vram:
-        gaps.append(
-            f"below recommended VRAM ({gpu_vram_gb:.1f}GB < {recommended_vram:g}GB)"
-        )
+        gaps.append(f"below recommended VRAM ({gpu_vram_gb:.1f}GB < {recommended_vram:g}GB)")
     if gaps:
         return "usable", "; ".join(gaps)
     return "recommended", "meets configured recommended RAM/VRAM targets"
@@ -741,9 +675,7 @@ def _max_vram_gb(discovered: dict[str, Any]) -> float:
 def _fit_model(model: dict[str, Any], discovered: dict[str, Any]) -> HardwareFit:
     model_id = str(model.get("model", model.get("name", "unknown")))
     if not bool(model.get("local", False)):
-        return HardwareFit(
-            model_id, True, "remote/cloud model does not require local fit check"
-        )
+        return HardwareFit(model_id, True, "remote/cloud model does not require local fit check")
 
     memory_gb = discovered.get("memory_gb")
     min_ram = _float_or_none(model.get("min_ram_gb"))
@@ -763,19 +695,13 @@ def _fit_model(model: dict[str, Any], discovered: dict[str, Any]) -> HardwareFit
             False,
             f"requires at least {min_vram:g}GB VRAM; discovered {gpu_vram_gb:.1f}GB",
         )
-    if (
-        recommended_ram is not None
-        and memory_gb is not None
-        and memory_gb < recommended_ram
-    ):
+    if recommended_ram is not None and memory_gb is not None and memory_gb < recommended_ram:
         return HardwareFit(
             model_id,
             True,
             f"usable but below recommended RAM ({memory_gb:g}GB < {recommended_ram:g}GB)",
         )
-    return HardwareFit(
-        model_id, True, "hardware appears sufficient for configured minimums"
-    )
+    return HardwareFit(model_id, True, "hardware appears sufficient for configured minimums")
 
 
 def _float_or_none(value: object) -> float | None:

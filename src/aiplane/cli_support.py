@@ -28,9 +28,7 @@ def parse_provider_limits(values: list[str]) -> dict[str, int]:
     limits: dict[str, int] = {}
     for value in values:
         if "=" not in value:
-            raise ValueError(
-                "provider limit must use PROVIDER=COUNT, for example huggingface=25"
-            )
+            raise ValueError("provider limit must use PROVIDER=COUNT, for example huggingface=25")
         provider, raw_count = value.split("=", 1)
         provider = provider.strip()
         if not provider:
@@ -38,9 +36,7 @@ def parse_provider_limits(values: list[str]) -> dict[str, int]:
         try:
             count = int(raw_count.strip())
         except ValueError as exc:
-            raise ValueError(
-                f"provider limit for {provider} must be an integer"
-            ) from exc
+            raise ValueError(f"provider limit for {provider} must be an integer") from exc
         if count < 1:
             raise ValueError(f"provider limit for {provider} must be at least 1")
         limits[provider] = count

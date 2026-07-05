@@ -54,9 +54,7 @@ class EnvironmentToolBenchmarkTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             workspace = Path(tmp)
             profile = load_profile("local-dev", workspace)
-            executor = ToolExecutor(
-                profile, AuditLogger(profile), ApprovalHandler(assume_yes=True)
-            )
+            executor = ToolExecutor(profile, AuditLogger(profile), ApprovalHandler(assume_yes=True))
             executor.run("write_file", ["note.txt", "hello"])
             self.assertEqual(executor.run("read_file", ["note.txt"]), "hello")
 
@@ -90,9 +88,7 @@ class EnvironmentToolBenchmarkTests(unittest.TestCase):
             self.assertIn("system", {row["name"] for row in rows})
             result = manager.use("venv")
             self.assertEqual(result["active"], "venv")
-            self.assertIn(
-                "active: venv", (root / "environment.yaml").read_text(encoding="utf-8")
-            )
+            self.assertIn("active: venv", (root / "environment.yaml").read_text(encoding="utf-8"))
             self.assertEqual(manager.active_mode(), "venv")
 
     def test_environment_use_rejects_unknown_mode(self) -> None:
@@ -118,9 +114,7 @@ class EnvironmentToolBenchmarkTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             profile = load_profile("local-dev", Path(tmp))
             audit = AuditLogger(profile)
-            ToolExecutor(profile, audit, ApprovalHandler(assume_yes=True)).run(
-                "write_file", ["audit.txt", "ok"]
-            )
+            ToolExecutor(profile, audit, ApprovalHandler(assume_yes=True)).run("write_file", ["audit.txt", "ok"])
             events = audit.tail(1)
             self.assertEqual(events[0]["event_type"], "tool")
             json.dumps(events[0])
@@ -194,9 +188,7 @@ class EnvironmentToolBenchmarkTests(unittest.TestCase):
         quality_tools = {tool["name"]: tool for tool in categories["quality"]["tools"]}
         self.assertIn("ruff", quality_tools)
         self.assertIn("black", quality_tools)
-        self.assertIn(
-            workflows["iac"]["readiness"], {"complete", "partial", "needs_setup"}
-        )
+        self.assertIn(workflows["iac"]["readiness"], {"complete", "partial", "needs_setup"})
         self.assertIn(
             "provider-agnostic infrastructure provisioning",
             workflows["iac"]["primary_tasks"],
@@ -233,9 +225,7 @@ class EnvironmentToolBenchmarkTests(unittest.TestCase):
         stdout = StringIO()
         stderr = StringIO()
         with redirect_stdout(stdout), redirect_stderr(stderr):
-            code = cli_main(
-                ["environment", "doctor", "--required-only", "--format", "json"]
-            )
+            code = cli_main(["environment", "doctor", "--required-only", "--format", "json"])
         self.assertEqual(code, 0)
         self.assertIn("checking tool", stderr.getvalue())
         self.assertIn("\r", stderr.getvalue())
@@ -282,21 +272,13 @@ class EnvironmentToolBenchmarkTests(unittest.TestCase):
         self.assertIn("mandatory", output)
         self.assertIn("runtime", output)
         tool_lines = [line for line in output.splitlines() if "  tool" in line]
-        mandatory_indexes = [
-            index for index, line in enumerate(tool_lines) if " mandatory" in line
-        ]
-        optional_indexes = [
-            index for index, line in enumerate(tool_lines) if " optional" in line
-        ]
+        mandatory_indexes = [index for index, line in enumerate(tool_lines) if " mandatory" in line]
+        optional_indexes = [index for index, line in enumerate(tool_lines) if " optional" in line]
         if mandatory_indexes and optional_indexes:
             self.assertLess(max(mandatory_indexes), min(optional_indexes))
         for indexes in [mandatory_indexes, optional_indexes]:
-            installed_indexes = [
-                index for index in indexes if " installed" in tool_lines[index]
-            ]
-            missing_indexes = [
-                index for index in indexes if " missing" in tool_lines[index]
-            ]
+            installed_indexes = [index for index in indexes if " installed" in tool_lines[index]]
+            missing_indexes = [index for index in indexes if " missing" in tool_lines[index]]
             if installed_indexes and missing_indexes:
                 self.assertLess(max(installed_indexes), min(missing_indexes))
 
@@ -311,9 +293,7 @@ class EnvironmentToolBenchmarkTests(unittest.TestCase):
 
         stdout = StringIO()
         with redirect_stdout(stdout):
-            code = cli_main(
-                ["benchmarks", "install", "lm-evaluation-harness", "--dry-run"]
-            )
+            code = cli_main(["benchmarks", "install", "lm-evaluation-harness", "--dry-run"])
         self.assertEqual(code, 0)
         payload = json.loads(stdout.getvalue())
         self.assertEqual(payload["name"], "lm-evaluation-harness")
@@ -336,9 +316,7 @@ class EnvironmentToolBenchmarkTests(unittest.TestCase):
         self.assertEqual(code, 0)
         payload = json.loads(stdout.getvalue())
         self.assertEqual(payload["name"], "vllm-serving")
-        self.assertEqual(
-            payload["commands"][1]["command"][0:3], ["vllm", "bench", "serve"]
-        )
+        self.assertEqual(payload["commands"][1]["command"][0:3], ["vllm", "bench", "serve"])
 
     def test_custom_benchmark_spec_dry_run_plans_evaluator_environment(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

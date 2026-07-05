@@ -18,9 +18,7 @@ def merge_machine_model_filters(
 ) -> dict[str, Any]:
     selected = [bool(machine), bool(machine_file), bool(current_machine)]
     if sum(selected) > 1:
-        raise ValueError(
-            "choose only one of --machine, --machine-file, or --current-machine"
-        )
+        raise ValueError("choose only one of --machine, --machine-file, or --current-machine")
     if not any(selected):
         return filters
 
@@ -89,11 +87,7 @@ def _normalized_vendor(value: Any) -> str | None:
 
 
 def _preferred_accelerator(values: Any, vendor: str | None) -> str | None:
-    accelerators = (
-        [str(item).strip().lower() for item in values]
-        if isinstance(values, list)
-        else []
-    )
+    accelerators = [str(item).strip().lower() for item in values] if isinstance(values, list) else []
     for preferred in ["cuda", "rocm", "metal", "vulkan", "openvino", "cpu"]:
         if preferred in accelerators:
             return preferred

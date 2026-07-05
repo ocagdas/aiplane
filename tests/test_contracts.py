@@ -61,12 +61,8 @@ def test_runtime_definition_reexports_keep_catalog_contracts_stable() -> None:
 
 
 def test_runtime_pull_support_is_pure_and_source_based() -> None:
-    assert runtime_pull_support(
-        "ollama", {"provider": "llamacpp", "source": "huggingface_gguf"}
-    )["supported"]
-    unsupported = runtime_pull_support(
-        "localai", {"provider": "llamacpp", "source": "huggingface_gguf"}
-    )
+    assert runtime_pull_support("ollama", {"provider": "llamacpp", "source": "huggingface_gguf"})["supported"]
+    unsupported = runtime_pull_support("localai", {"provider": "llamacpp", "source": "huggingface_gguf"})
     assert not unsupported["supported"]
     assert "manual" in unsupported["reason"]
 

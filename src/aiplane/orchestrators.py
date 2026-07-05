@@ -118,13 +118,9 @@ class OrchestratorCatalog:
                 "config_style": spec.get("config_style"),
                 "endpoint_protocols": spec.get("endpoint_protocols", []),
             }
-            if provider_filter and not provider_filter.intersection(
-                row["supported_providers"]
-            ):
+            if provider_filter and not provider_filter.intersection(row["supported_providers"]):
                 continue
-            if runtime_filter and not runtime_filter.issubset(
-                set(row["supported_runtimes"])
-            ):
+            if runtime_filter and not runtime_filter.issubset(set(row["supported_runtimes"])):
                 continue
             rows.append(row)
         rows = sorted(rows, key=lambda row: int(row["priority"]))
@@ -175,9 +171,7 @@ class OrchestratorCatalog:
         install: bool = False,
     ) -> dict[str, Any]:
         spec = self._definition(name)
-        if runtime and runtime not in {
-            row["name"] for row in RuntimeCatalog(self.profile).list(include_gui=True)
-        }:
+        if runtime and runtime not in {row["name"] for row in RuntimeCatalog(self.profile).list(include_gui=True)}:
             raise ValueError(f"unknown runtime: {runtime}")
         if model:
             ModelCatalog(self.profile).get(model)
@@ -193,14 +187,8 @@ class OrchestratorCatalog:
             "limits": limits or {},
             "tools": tools or {},
         }
-        install_command = (
-            ["python", "-m", "pip", "install", *packages] if packages else []
-        )
-        install_plan = (
-            self.environment.plan(install_command, mode=env_mode)
-            if install_command
-            else None
-        )
+        install_command = ["python", "-m", "pip", "install", *packages] if packages else []
+        install_plan = self.environment.plan(install_command, mode=env_mode) if install_command else None
         payload: dict[str, Any] = {
             "name": name,
             "dry_run": dry_run or not yes,
@@ -278,9 +266,7 @@ class OrchestratorCatalog:
                     "name": str(package),
                     "module": module,
                     "ok": _module_available(module),
-                    "detail": (
-                        "importable" if _module_available(module) else "not importable"
-                    ),
+                    "detail": ("importable" if _module_available(module) else "not importable"),
                 }
             )
         checks = [
@@ -288,11 +274,7 @@ class OrchestratorCatalog:
             {
                 "name": "configured",
                 "ok": bool(configured),
-                "detail": (
-                    "configured in orchestrators.yaml"
-                    if configured
-                    else "not configured yet"
-                ),
+                "detail": ("configured in orchestrators.yaml" if configured else "not configured yet"),
             },
             {
                 "name": "environment_known",
@@ -323,9 +305,7 @@ class OrchestratorCatalog:
         supported = []
         for name, runtime in RUNTIME_DEFINITIONS.items():
             protocol = str(runtime.get("protocol") or "")
-            if protocol in protocols or (
-                name == "ollama" and "openai_compatible" in protocols
-            ):
+            if protocol in protocols or (name == "ollama" and "openai_compatible" in protocols):
                 supported.append(name)
         return sorted(supported)
 
@@ -356,9 +336,7 @@ class OrchestratorCatalog:
     ) -> dict[str, Any]:
         if group_by not in {"provider", "runtime"}:
             raise ValueError("group_by must be provider or runtime")
-        key_name = (
-            "supported_providers" if group_by == "provider" else "supported_runtimes"
-        )
+        key_name = "supported_providers" if group_by == "provider" else "supported_runtimes"
         groups: dict[str, list[dict[str, Any]]] = {}
         for row in rows:
             keys = [str(value) for value in row.get(key_name) or ["none"]]
@@ -370,8 +348,7 @@ class OrchestratorCatalog:
             "name": "orchestrators",
             "group_by": group_by,
             "groups": {
-                key: sorted(value, key=lambda item: int(item["priority"]))
-                for key, value in sorted(groups.items())
+                key: sorted(value, key=lambda item: int(item["priority"])) for key, value in sorted(groups.items())
             },
         }
 
@@ -399,9 +376,7 @@ def _dockerfile(name: str, packages: list[str]) -> str:
     if install:
         lines.append(f"RUN python -m pip install {install}")
     else:
-        lines.append(
-            f"# Install {name} using its project-specific container/service instructions"
-        )
+        lines.append(f"# Install {name} using its project-specific container/service instructions")
     lines.append('CMD ["python", "-c", "print("orchestrator environment ready")"]')
     return "\n".join(lines) + "\n"
 

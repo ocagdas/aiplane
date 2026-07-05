@@ -65,9 +65,7 @@ def accelerator_api_requirements(model: dict[str, Any]) -> list[str]:
     return []
 
 
-def matches_gpu_vendor_requirement(
-    model: dict[str, Any], available_vendor: str
-) -> bool:
+def matches_gpu_vendor_requirement(model: dict[str, Any], available_vendor: str) -> bool:
     available = available_vendor.strip().lower()
     requirement = gpu_vendor_requirement(model)
     if available in {"", "any", "generic"}:
@@ -79,9 +77,7 @@ def matches_gpu_vendor_requirement(
     return requirement == available
 
 
-def matches_accelerator_api_requirement(
-    model: dict[str, Any], available_api: str
-) -> bool:
+def matches_accelerator_api_requirement(model: dict[str, Any], available_api: str) -> bool:
     available = available_api.strip().lower()
     requirements = accelerator_api_requirements(model)
     if not requirements:

@@ -26,9 +26,7 @@ class MockCloudBackend:
     name = "mock_cloud"
 
     def complete(self, task: str) -> BackendResult:
-        return BackendResult(
-            self.name, f"mock cloud backend handled escalated task: {task}", True
-        )
+        return BackendResult(self.name, f"mock cloud backend handled escalated task: {task}", True)
 
 
 class OllamaBackend:
@@ -48,11 +46,7 @@ class OllamaBackend:
         request = Request(f"{self.endpoint}/api/tags", headers=self.headers)
         with urlopen(request, timeout=5) as response:
             payload = json.loads(response.read().decode("utf-8"))
-        return [
-            model.get("name", "")
-            for model in payload.get("models", [])
-            if model.get("name")
-        ]
+        return [model.get("name", "") for model in payload.get("models", []) if model.get("name")]
 
     def is_reachable(self) -> tuple[bool, str]:
         try:
@@ -113,11 +107,7 @@ class OpenAICompatibleBackend:
         with urlopen(request, timeout=5) as response:
             payload = json.loads(response.read().decode("utf-8"))
         data = payload.get("data", [])
-        return sorted(
-            str(model.get("id"))
-            for model in data
-            if isinstance(model, dict) and model.get("id")
-        )
+        return sorted(str(model.get("id")) for model in data if isinstance(model, dict) and model.get("id"))
 
     def is_reachable(self) -> tuple[bool, str]:
         try:
@@ -202,11 +192,7 @@ class AnthropicMessagesBackend:
         if isinstance(chunks, list):
             return BackendResult(
                 self.name,
-                "".join(
-                    str(chunk.get("text", ""))
-                    for chunk in chunks
-                    if isinstance(chunk, dict)
-                ),
+                "".join(str(chunk.get("text", "")) for chunk in chunks if isinstance(chunk, dict)),
                 True,
             )
         return BackendResult(self.name, str(chunks or ""), True)
@@ -232,9 +218,7 @@ class AzureOpenAIBackend:
             "stream": False,
             "messages": [{"role": "user", "content": prompt}],
         }
-        base = (
-            self.endpoint[:-7] if self.endpoint.endswith("/openai") else self.endpoint
-        )
+        base = self.endpoint[:-7] if self.endpoint.endswith("/openai") else self.endpoint
         query = urlencode({"api-version": self.api_version})
         url = f"{base}/openai/deployments/{deployment}/chat/completions?{query}"
         request = Request(

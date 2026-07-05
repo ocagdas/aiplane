@@ -41,9 +41,7 @@ class ProfileConfigTests(unittest.TestCase):
 
     def test_shipped_profile_template_does_not_hardcode_model_entries(self) -> None:
         data = agent_config.parse_yaml(
-            (Path.cwd() / "profile-templates/local-dev/models.yaml").read_text(
-                encoding="utf-8"
-            )
+            (Path.cwd() / "profile-templates/local-dev/models.yaml").read_text(encoding="utf-8")
         )
         self.assertEqual(data.get("defaults"), {})
         self.assertEqual(data.get("models"), {})
@@ -85,12 +83,8 @@ class ProfileConfigTests(unittest.TestCase):
             original_project_root = agent_config.project_root
             agent_config.project_root = lambda: root
             try:
-                created = create_profile(
-                    "custom", template="base", profiles_dir=custom_profiles
-                )
-                self.assertEqual(
-                    agent_config.list_profiles(custom_profiles), ["custom"]
-                )
+                created = create_profile("custom", template="base", profiles_dir=custom_profiles)
+                self.assertEqual(agent_config.list_profiles(custom_profiles), ["custom"])
             finally:
                 agent_config.project_root = original_project_root
             self.assertEqual(created, custom_profiles / "custom")
@@ -161,9 +155,7 @@ class ProfileConfigTests(unittest.TestCase):
             models_path = profiles_dir / "local-dev" / "models.yaml"
             models_path.unlink()
 
-            result = repair_profile(
-                "local-dev", files=["models.yaml"], profiles_dir=profiles_dir
-            )
+            result = repair_profile("local-dev", files=["models.yaml"], profiles_dir=profiles_dir)
 
             self.assertEqual(result["copied"], ["models.yaml"])
             self.assertTrue(models_path.exists())
@@ -171,9 +163,7 @@ class ProfileConfigTests(unittest.TestCase):
             self.assertEqual(restored.get("defaults"), {})
             self.assertEqual(restored.get("models"), {})
             self.assertNotIn("providers", restored)
-            profile = _REAL_LOAD_PROFILE(
-                "local-dev", Path.cwd(), profiles_dir=profiles_dir
-            )
+            profile = _REAL_LOAD_PROFILE("local-dev", Path.cwd(), profiles_dir=profiles_dir)
             self.assertTrue(cli_module._validate_profile(profile)["ok"])
 
     def test_profiles_repair_cli_restores_selected_missing_file(self) -> None:
@@ -254,9 +244,7 @@ class ProfileConfigTests(unittest.TestCase):
             self.assertTrue(payload["dry_run"])
             self.assertTrue(payload["bootstrap"]["would_create"])
             self.assertFalse((profiles_dir / "local-dev").exists())
-            self.assertIn(
-                "aiplane quickstart local-coding --name local-dev", payload["commands"]
-            )
+            self.assertIn("aiplane quickstart local-coding --name local-dev", payload["commands"])
             self.assertIn("aiplane doctor --profile local-dev", payload["commands"])
             self.assertIsNone(payload["doctor"])
 
@@ -283,9 +271,7 @@ class ProfileConfigTests(unittest.TestCase):
             self.assertIn("local coding quickstart for profile local-dev", output)
             self.assertIn("profile validation: ok", output)
             self.assertIn("aiplane doctor --profile local-dev", output)
-            self.assertIn(
-                "aiplane integrations export continue --profile local-dev", output
-            )
+            self.assertIn("aiplane integrations export continue --profile local-dev", output)
             self.assertTrue((profiles_dir / "local-dev" / "models.yaml").exists())
 
     def test_quickstart_local_coding_pull_model_executes_runtime_pull_by_default(
@@ -298,9 +284,7 @@ class ProfileConfigTests(unittest.TestCase):
             )
             stdout = StringIO()
             with (
-                patch(
-                    "aiplane.cli._run_provider_helper", return_value=completed
-                ) as helper,
+                patch("aiplane.cli._run_provider_helper", return_value=completed) as helper,
                 redirect_stdout(stdout),
             ):
                 code = cli_main(
@@ -361,9 +345,7 @@ class ProfileConfigTests(unittest.TestCase):
             )
             stdout = StringIO()
             with (
-                patch(
-                    "aiplane.cli._run_provider_helper", return_value=completed
-                ) as helper,
+                patch("aiplane.cli._run_provider_helper", return_value=completed) as helper,
                 redirect_stdout(stdout),
             ):
                 code = cli_main(
@@ -438,19 +420,13 @@ class ProfileConfigTests(unittest.TestCase):
             self.assertTrue(payload["validation"]["ok"])
             models_path = profiles_dir / "local-dev" / "models.yaml"
             self.assertTrue(models_path.exists())
-            self.assertFalse(
-                (profiles_dir / "local-dev" / "models.discovered.yaml").exists()
-            )
-            models_config = agent_config.parse_yaml(
-                models_path.read_text(encoding="utf-8")
-            )
+            self.assertFalse((profiles_dir / "local-dev" / "models.discovered.yaml").exists())
+            models_config = agent_config.parse_yaml(models_path.read_text(encoding="utf-8"))
             self.assertEqual(models_config.get("defaults"), {})
             self.assertEqual(models_config.get("models"), {})
             self.assertNotIn("providers", models_config)
 
-            profile = _REAL_LOAD_PROFILE(
-                "local-dev", Path.cwd(), profiles_dir=profiles_dir
-            )
+            profile = _REAL_LOAD_PROFILE("local-dev", Path.cwd(), profiles_dir=profiles_dir)
             runtimes = RuntimeCatalog(profile).list(include_gui=True)
             ollama = next(row for row in runtimes if row["name"] == "ollama")
             self.assertFalse(ollama["configured"])
@@ -532,12 +508,8 @@ class ProfileConfigTests(unittest.TestCase):
             only = profiles_root / "only-one"
             only.mkdir(parents=True)
             for filename, data in agent_config.CONFIG_FILES.items():
-                (only / data).write_text(
-                    agent_config.dump_yaml(getattr(source, filename)), encoding="utf-8"
-                )
-            self.assertEqual(
-                resolve_profile_name(None, profiles_dir=profiles_root), "only-one"
-            )
+                (only / data).write_text(agent_config.dump_yaml(getattr(source, filename)), encoding="utf-8")
+            self.assertEqual(resolve_profile_name(None, profiles_dir=profiles_root), "only-one")
 
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaisesRegex(ValueError, "profiles create local-dev"):
@@ -558,9 +530,7 @@ class ProfileConfigTests(unittest.TestCase):
                     ]
                 )
             self.assertEqual(code, 0)
-            self.assertEqual(
-                load_local_config(config_path)["default_profile"], "local-dev"
-            )
+            self.assertEqual(load_local_config(config_path)["default_profile"], "local-dev")
 
     def test_config_get_set_cli_updates_local_config(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -581,9 +551,7 @@ class ProfileConfigTests(unittest.TestCase):
             self.assertIn("profiles_dir", load_local_config(config_path))
             stdout = StringIO()
             with redirect_stdout(stdout):
-                code = cli_main(
-                    ["config", "get", "profiles_dir", "--path", str(config_path)]
-                )
+                code = cli_main(["config", "get", "profiles_dir", "--path", str(config_path)])
             self.assertEqual(code, 0)
             self.assertEqual(json.loads(stdout.getvalue())["key"], "profiles_dir")
 
@@ -608,18 +576,10 @@ class ProfileConfigTests(unittest.TestCase):
             self.assertEqual(code, 0)
             payload = json.loads(stdout.getvalue())
             self.assertEqual(payload["path"], str(config_path.resolve()))
-            self.assertEqual(
-                payload["paths"]["config"]["active"], str(config_path.resolve())
-            )
-            self.assertTrue(
-                payload["paths"]["config"]["default"].endswith(".aiplane/config.yaml")
-            )
-            self.assertEqual(
-                payload["paths"]["profiles"]["active_root"], str(profiles_dir.resolve())
-            )
-            self.assertTrue(
-                payload["paths"]["profiles"]["default_root"].endswith("profiles")
-            )
+            self.assertEqual(payload["paths"]["config"]["active"], str(config_path.resolve()))
+            self.assertTrue(payload["paths"]["config"]["default"].endswith(".aiplane/config.yaml"))
+            self.assertEqual(payload["paths"]["profiles"]["active_root"], str(profiles_dir.resolve()))
+            self.assertTrue(payload["paths"]["profiles"]["default_root"].endswith("profiles"))
             self.assertEqual(
                 payload["paths"]["profiles"]["default_profile_path"],
                 str((profiles_dir / "local-dev").resolve()),
@@ -661,9 +621,7 @@ class ProfileConfigTests(unittest.TestCase):
 
     def test_profiles_selected_entries_put_name_first(self) -> None:
         profile = load_profile("local-dev", Path.cwd())
-        selected = __import__(
-            "aiplane.cli", fromlist=["_profile_selected"]
-        )._profile_selected(profile, "local-dev")
+        selected = __import__("aiplane.cli", fromlist=["_profile_selected"])._profile_selected(profile, "local-dev")
         self.assertTrue(selected["models"])
         self.assertEqual(next(iter(selected["models"][0].keys())), "name")
         self.assertTrue(selected["providers"])
@@ -717,9 +675,7 @@ class ProfileConfigTests(unittest.TestCase):
     def test_workspace_boundary_blocks_parent_escape(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             profile = load_profile("local-dev", Path(tmp))
-            decision = PolicyEngine(profile).path_decision(
-                Path(tmp).parent / "outside.txt"
-            )
+            decision = PolicyEngine(profile).path_decision(Path(tmp).parent / "outside.txt")
             self.assertFalse(decision.allowed)
 
     def test_secret_detection_and_redaction(self) -> None:
@@ -752,9 +708,7 @@ class ProfileConfigTests(unittest.TestCase):
 
             stdout = StringIO()
             with redirect_stdout(stdout):
-                code = cli_main(
-                    ["credentials", "show", "openai.personal", "--path", str(path)]
-                )
+                code = cli_main(["credentials", "show", "openai.personal", "--path", str(path)])
             self.assertEqual(code, 0)
             output = stdout.getvalue()
             self.assertIn("[REDACTED_SECRET]", output)

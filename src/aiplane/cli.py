@@ -64,15 +64,11 @@ from .stacks import StackManager
 from .tools import ToolExecutor, ToolchainManager
 
 
-class HelpFormatter(
-    argparse.ArgumentDefaultsHelpFormatter, argparse.RawDescriptionHelpFormatter
-):
+class HelpFormatter(argparse.ArgumentDefaultsHelpFormatter, argparse.RawDescriptionHelpFormatter):
     pass
 
 
-def _command(
-    subparsers, name: str, help_text: str, description: str, epilog: str | None = None
-):
+def _command(subparsers, name: str, help_text: str, description: str, epilog: str | None = None):
     return subparsers.add_parser(
         name,
         help=help_text,
@@ -110,15 +106,9 @@ def _integration_selection_args(parser) -> None:
         action="store_true",
         help="Select best-fit catalog models instead of using profile defaults",
     )
-    parser.add_argument(
-        "--chat", help="Force a model alias for Continue chat/edit/apply"
-    )
-    parser.add_argument(
-        "--autocomplete", help="Force a model alias for Continue autocomplete"
-    )
-    parser.add_argument(
-        "--embedding", help="Force a model alias for Continue embeddings/retrieval"
-    )
+    parser.add_argument("--chat", help="Force a model alias for Continue chat/edit/apply")
+    parser.add_argument("--autocomplete", help="Force a model alias for Continue autocomplete")
+    parser.add_argument("--embedding", help="Force a model alias for Continue embeddings/retrieval")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -189,9 +179,7 @@ def _main(argv: list[str] | None = None) -> int:
         "Run narrow, control-plane quickstarts for reproducible local/hybrid AI coding profiles.",
         "Examples:\n  aiplane quickstart local-coding\n  aiplane quickstart local-coding --dry-run\n  aiplane quickstart local-coding --no-discovery",
     )
-    quickstart_sub = quickstart_cmd.add_subparsers(
-        dest="quickstart_command", required=True, metavar="command"
-    )
+    quickstart_sub = quickstart_cmd.add_subparsers(dest="quickstart_command", required=True, metavar="command")
     local_coding = quickstart_sub.add_parser(
         "local-coding",
         help="Bootstrap and inspect the local AI coding profile",
@@ -204,9 +192,7 @@ def _main(argv: list[str] | None = None) -> int:
         formatter_class=HelpFormatter,
         allow_abbrev=False,
     )
-    local_coding.add_argument(
-        "--name", default="local-dev", help="Editable profile name to create or inspect"
-    )
+    local_coding.add_argument("--name", default="local-dev", help="Editable profile name to create or inspect")
     local_coding.add_argument(
         "--template",
         default="local-dev",
@@ -232,9 +218,7 @@ def _main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Set active hardware to the closest discovered template during bootstrap",
     )
-    local_coding.add_argument(
-        "--provider", default="all", help="Model provider to refresh, or all"
-    )
+    local_coding.add_argument("--provider", default="all", help="Model provider to refresh, or all")
     local_coding.add_argument("--query", help="Optional provider catalog search query")
     local_coding.add_argument(
         "--limit",
@@ -254,9 +238,7 @@ def _main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Write newly discovered entries as disabled",
     )
-    local_coding.add_argument(
-        "--verbose", action="store_true", help="Include per-model discovery rows"
-    )
+    local_coding.add_argument("--verbose", action="store_true", help="Include per-model discovery rows")
     local_coding.add_argument(
         "--dry-run",
         action="store_true",
@@ -289,9 +271,7 @@ def _main(argv: list[str] | None = None) -> int:
         "Create and inspect the local .aiplane/config.yaml file used for machine/user-specific defaults.",
         "Examples:\n  aiplane config templates\n  aiplane config init --template local\n  aiplane config show\n  aiplane config default-profile\n  aiplane config default-profile my-local",
     )
-    config_sub = config_cmd.add_subparsers(
-        dest="config_command", required=True, metavar="command"
-    )
+    config_sub = config_cmd.add_subparsers(dest="config_command", required=True, metavar="command")
     config_sub.add_parser(
         "templates",
         help="List local config templates",
@@ -315,9 +295,7 @@ def _main(argv: list[str] | None = None) -> int:
         "--path",
         help="Optional output path. Defaults to AIPLANE_CONFIG or .aiplane/config.yaml",
     )
-    config_init.add_argument(
-        "--overwrite", action="store_true", help="Replace an existing local config file"
-    )
+    config_init.add_argument("--overwrite", action="store_true", help="Replace an existing local config file")
     config_show = config_sub.add_parser(
         "show",
         help="Show local config",
@@ -336,9 +314,7 @@ def _main(argv: list[str] | None = None) -> int:
         formatter_class=HelpFormatter,
         allow_abbrev=False,
     )
-    config_default.add_argument(
-        "name", nargs="?", help="Profile name to persist as the default"
-    )
+    config_default.add_argument("name", nargs="?", help="Profile name to persist as the default")
     config_default.add_argument(
         "--path",
         help="Optional config path. Defaults to AIPLANE_CONFIG or .aiplane/config.yaml",
@@ -350,9 +326,7 @@ def _main(argv: list[str] | None = None) -> int:
         formatter_class=HelpFormatter,
         allow_abbrev=False,
     )
-    config_get.add_argument(
-        "key", help="Top-level config key, such as profiles_dir or default_profile"
-    )
+    config_get.add_argument("key", help="Top-level config key, such as profiles_dir or default_profile")
     config_get.add_argument(
         "--path",
         help="Optional config path. Defaults to AIPLANE_CONFIG or .aiplane/config.yaml",
@@ -364,9 +338,7 @@ def _main(argv: list[str] | None = None) -> int:
         formatter_class=HelpFormatter,
         allow_abbrev=False,
     )
-    config_set.add_argument(
-        "key", help="Top-level config key, such as profiles_dir or default_profile"
-    )
+    config_set.add_argument("key", help="Top-level config key, such as profiles_dir or default_profile")
     config_set.add_argument("value", help="Value to store")
     config_set.add_argument(
         "--path",
@@ -394,9 +366,7 @@ def _main(argv: list[str] | None = None) -> int:
             "  aiplane machines import local_box.machine.yaml"
         ),
     )
-    profile_sub = profiles.add_subparsers(
-        dest="profile_command", required=True, metavar="command"
-    )
+    profile_sub = profiles.add_subparsers(dest="profile_command", required=True, metavar="command")
     profile_sub.add_parser(
         "list",
         help="List profile names",
@@ -419,9 +389,7 @@ def _main(argv: list[str] | None = None) -> int:
         allow_abbrev=False,
         epilog="Examples:\n  aiplane profiles create laptop --template local-dev\n  aiplane profiles create cloud-test --template local-dev --overwrite",
     )
-    create.add_argument(
-        "name", help="New editable profile name to create under profiles/"
-    )
+    create.add_argument("name", help="New editable profile name to create under profiles/")
     create.add_argument(
         "--template",
         default="local-dev",
@@ -484,9 +452,7 @@ def _main(argv: list[str] | None = None) -> int:
         ),
         formatter_class=HelpFormatter,
         allow_abbrev=False,
-        epilog=(
-            "Examples:\n  aiplane profiles remove old-local --dry-run\n  aiplane profiles remove old-local --yes"
-        ),
+        epilog=("Examples:\n  aiplane profiles remove old-local --dry-run\n  aiplane profiles remove old-local --yes"),
     )
     remove.add_argument("name", help="Editable profile name to remove")
     remove.add_argument(
@@ -552,9 +518,7 @@ def _main(argv: list[str] | None = None) -> int:
         default="all",
         help="Model provider to refresh after profile creation, or all for every configured provider",
     )
-    bootstrap.add_argument(
-        "--query", help="Optional search query passed to provider catalog adapters"
-    )
+    bootstrap.add_argument("--query", help="Optional search query passed to provider catalog adapters")
     bootstrap.add_argument(
         "--limit",
         type=int,
@@ -650,9 +614,7 @@ def _main(argv: list[str] | None = None) -> int:
         "Examples:\n  aiplane tool read_file README.md\n  aiplane tool write_file note.txt hello",
     )
     _profile_arg(tool)
-    tool.add_argument(
-        "tool_name", help="Configured tool name, such as read_file or write_file"
-    )
+    tool.add_argument("tool_name", help="Configured tool name, such as read_file or write_file")
     tool.add_argument(
         "tool_args",
         nargs=argparse.REMAINDER,
@@ -666,9 +628,7 @@ def _main(argv: list[str] | None = None) -> int:
         "Discover local CPU/RAM/GPU resources, manage active hardware config, and recommend models.",
         "Examples:\n  aiplane hardware discover\n  aiplane hardware templates\n  aiplane hardware use cpu_laptop --set memory_gb=32\n  aiplane hardware active\n  aiplane hardware recommend",
     )
-    hardware_sub = hardware_cmd.add_subparsers(
-        dest="hardware_command", required=True, metavar="command"
-    )
+    hardware_sub = hardware_cmd.add_subparsers(dest="hardware_command", required=True, metavar="command")
     hardware_show = hardware_sub.add_parser(
         "show",
         help="Show raw hardware profile config",
@@ -711,9 +671,7 @@ def _main(argv: list[str] | None = None) -> int:
         epilog="Example:\n  aiplane hardware use nvidia_consumer_gpu --set vram_gb=16 --set memory_gb=64",
     )
     _profile_arg(hardware_use)
-    hardware_use.add_argument(
-        "template", help="Template name from aiplane hardware templates"
-    )
+    hardware_use.add_argument("template", help="Template name from aiplane hardware templates")
     hardware_use.add_argument(
         "--set",
         dest="settings",
@@ -810,9 +768,7 @@ def _main(argv: list[str] | None = None) -> int:
         default="local",
         help="Origin label, such as local, onprem, azure_vm, ssh_discovered, or manual",
     )
-    hardware_export.add_argument(
-        "--format", choices=["json", "yaml"], default="yaml", help="Export format"
-    )
+    hardware_export.add_argument("--format", choices=["json", "yaml"], default="yaml", help="Export format")
     hardware_export.add_argument(
         "--include-discovery",
         action="store_true",
@@ -826,9 +782,7 @@ def _main(argv: list[str] | None = None) -> int:
         "Import, list, recommend, and discover self-managed machines that can run local runtimes on local PCs, shared workstations, or cloud VMs.",
         "Examples:\n  aiplane machines import gpu_box_01.machine.yaml\n  aiplane machines list\n  aiplane machines recommend --model MODEL_ALIAS --runtime vllm\n  aiplane machines discover azure --region uksouth --workload inference_large",
     )
-    machines_sub = machines_cmd.add_subparsers(
-        dest="machines_command", required=True, metavar="command"
-    )
+    machines_sub = machines_cmd.add_subparsers(dest="machines_command", required=True, metavar="command")
     machines_list = machines_sub.add_parser(
         "list",
         help="List imported machines",
@@ -880,9 +834,7 @@ def _main(argv: list[str] | None = None) -> int:
         allow_abbrev=False,
     )
     _profile_arg(machines_azure_status)
-    machines_azure_status.add_argument(
-        "--region", help="Region for optional SKU query probe, such as uksouth"
-    )
+    machines_azure_status.add_argument("--region", help="Region for optional SKU query probe, such as uksouth")
     machines_azure_status.add_argument(
         "--sku-query",
         action="store_true",
@@ -913,19 +865,13 @@ def _main(argv: list[str] | None = None) -> int:
         allow_abbrev=False,
     )
     _profile_arg(machines_recommend)
-    machines_recommend.add_argument(
-        "--model", help="Configured model alias, such as a discovered or promoted alias"
-    )
-    machines_recommend.add_argument(
-        "--runtime", help="Runtime name, such as ollama, vllm, llamacpp, or tgi"
-    )
+    machines_recommend.add_argument("--model", help="Configured model alias, such as a discovered or promoted alias")
+    machines_recommend.add_argument("--runtime", help="Runtime name, such as ollama, vllm, llamacpp, or tgi")
     machines_recommend.add_argument(
         "--workload",
         help="Workload class, such as inference_large, training_finetune, compile_build, or media_generation",
     )
-    machines_recommend.add_argument(
-        "--limit", type=int, help="Maximum machines to return"
-    )
+    machines_recommend.add_argument("--limit", type=int, help="Maximum machines to return")
     machines_discover = machines_sub.add_parser(
         "discover",
         help="Discover machine candidates from a provider",
@@ -934,18 +880,12 @@ def _main(argv: list[str] | None = None) -> int:
         allow_abbrev=False,
     )
     _profile_arg(machines_discover)
-    machines_discover.add_argument(
-        "provider", choices=["azure"], help="Machine provider to discover"
-    )
-    machines_discover.add_argument(
-        "--region", required=True, help="Provider region, such as uksouth"
-    )
+    machines_discover.add_argument("provider", choices=["azure"], help="Machine provider to discover")
+    machines_discover.add_argument("--region", required=True, help="Provider region, such as uksouth")
     machines_discover.add_argument("--workload", help="Workload class filter")
     machines_discover.add_argument("--model", help="Configured model alias filter")
     machines_discover.add_argument("--runtime", help="Runtime name filter")
-    machines_discover.add_argument(
-        "--limit", type=int, default=20, help="Maximum candidates to return"
-    )
+    machines_discover.add_argument("--limit", type=int, default=20, help="Maximum candidates to return")
     machines_import_azure = machines_sub.add_parser(
         "import-azure-sku",
         help="Import an Azure SKU as a machine",
@@ -954,9 +894,7 @@ def _main(argv: list[str] | None = None) -> int:
         allow_abbrev=False,
     )
     _profile_arg(machines_import_azure)
-    machines_import_azure.add_argument(
-        "sku", help="Azure VM SKU, such as Standard_NC40ads_H100_v5"
-    )
+    machines_import_azure.add_argument("sku", help="Azure VM SKU, such as Standard_NC40ads_H100_v5")
     machines_import_azure.add_argument("--region", required=True, help="Azure region")
     machines_import_azure.add_argument("--name", help="Machine name to create")
     machines_import_azure.add_argument(
@@ -974,16 +912,10 @@ def _main(argv: list[str] | None = None) -> int:
         allow_abbrev=False,
     )
     _profile_arg(machines_profile_remote)
-    machines_profile_remote.add_argument(
-        "--name", required=True, help="Machine name to assign to the remote export"
-    )
-    machines_profile_remote.add_argument(
-        "--host", required=True, help="Remote hostname or IP"
-    )
+    machines_profile_remote.add_argument("--name", required=True, help="Machine name to assign to the remote export")
+    machines_profile_remote.add_argument("--host", required=True, help="Remote hostname or IP")
     machines_profile_remote.add_argument("--user", help="SSH username")
-    machines_profile_remote.add_argument(
-        "--port", type=int, default=22, help="SSH port"
-    )
+    machines_profile_remote.add_argument("--port", type=int, default=22, help="SSH port")
 
     orchestrators_cmd = _command(
         subparsers,
@@ -992,9 +924,7 @@ def _main(argv: list[str] | None = None) -> int:
         "List, inspect, and health-check orchestrator frameworks such as LangGraph, CrewAI, AutoGen, and OpenHands. Operational setup happens through stacks.",
         "Examples:\n  aiplane orchestrators list\n  aiplane orchestrators show langgraph\n  aiplane orchestrators setup langgraph --runtime ollama --model MODEL_ALIAS --dry-run\n  aiplane orchestrators doctor langgraph",
     )
-    orchestrators_sub = orchestrators_cmd.add_subparsers(
-        dest="orchestrators_command", required=True, metavar="command"
-    )
+    orchestrators_sub = orchestrators_cmd.add_subparsers(dest="orchestrators_command", required=True, metavar="command")
     orchestrators_list = orchestrators_sub.add_parser(
         "list",
         help="List supported orchestrators",
@@ -1050,12 +980,8 @@ def _main(argv: list[str] | None = None) -> int:
         "--runtime",
         help="Runtime to pair with the orchestrator, such as ollama or vllm",
     )
-    orchestrators_setup.add_argument(
-        "--model", help="Configured model alias to pair with the orchestrator"
-    )
-    orchestrators_setup.add_argument(
-        "--endpoint", help="Endpoint URL to pass to the orchestrator config"
-    )
+    orchestrators_setup.add_argument("--model", help="Configured model alias to pair with the orchestrator")
+    orchestrators_setup.add_argument("--endpoint", help="Endpoint URL to pass to the orchestrator config")
     orchestrators_setup.add_argument(
         "--environment",
         help="Environment mode to use, such as system, venv, conda, or docker",
@@ -1103,9 +1029,7 @@ def _main(argv: list[str] | None = None) -> int:
         "Bind an optional orchestrator, runtime, model, machine, and access policy into a stack that can be planned, checked, exported, and later deployed.",
         "Examples:\n  aiplane stacks setup coding_agents --orchestrator langgraph --runtime vllm --model MODEL_ALIAS --machine gpu_box_01 --dry-run\n  aiplane stacks plan coding_agents\n  aiplane stacks export continue coding_agents",
     )
-    stacks_sub = stacks_cmd.add_subparsers(
-        dest="stacks_command", required=True, metavar="command"
-    )
+    stacks_sub = stacks_cmd.add_subparsers(dest="stacks_command", required=True, metavar="command")
     stacks_list = stacks_sub.add_parser(
         "list",
         help="List stacks",
@@ -1297,9 +1221,7 @@ def _main(argv: list[str] | None = None) -> int:
         "Inspect the active execution environment, check prerequisite tools, or render how a command would run in that mode.",
         "Examples:\n  aiplane environment list\n  aiplane environment active\n  aiplane environment doctor\n  aiplane environment use venv\n  aiplane environment plan python -m unittest",
     )
-    env_sub = environment.add_subparsers(
-        dest="environment_command", required=True, metavar="command"
-    )
+    env_sub = environment.add_subparsers(dest="environment_command", required=True, metavar="command")
     env_show = env_sub.add_parser(
         "show",
         help="Show environment config",
@@ -1333,9 +1255,7 @@ def _main(argv: list[str] | None = None) -> int:
         epilog="Examples:\n  aiplane environment use system\n  aiplane environment use venv\n  aiplane environment use conda\n  aiplane environment use docker",
     )
     _profile_arg(env_use)
-    env_use.add_argument(
-        "mode", help="Configured mode name, such as system, venv, conda, or docker"
-    )
+    env_use.add_argument("mode", help="Configured mode name, such as system, venv, conda, or docker")
     env_plan = env_sub.add_parser(
         "plan",
         help="Render command execution plan",
@@ -1376,9 +1296,7 @@ def _main(argv: list[str] | None = None) -> int:
         "Inspect optional benchmark frameworks and render commands for aiplane smoke benchmarks, lm-evaluation-harness, vLLM serving benchmarks, and endpoint load tests.",
         "Examples:\n  aiplane benchmarks list\n  aiplane benchmarks doctor\n  aiplane benchmarks install lm-evaluation-harness --dry-run\n  aiplane benchmarks plan aiplane-smoke --model MODEL_ALIAS",
     )
-    benchmarks_sub = benchmarks_cmd.add_subparsers(
-        dest="benchmarks_command", required=True, metavar="command"
-    )
+    benchmarks_sub = benchmarks_cmd.add_subparsers(dest="benchmarks_command", required=True, metavar="command")
     benchmarks_list = benchmarks_sub.add_parser(
         "list",
         help="List benchmark frameworks",
@@ -1438,9 +1356,7 @@ def _main(argv: list[str] | None = None) -> int:
         "--endpoint",
         help="OpenAI-compatible endpoint for external benchmark frameworks",
     )
-    benchmarks_plan.add_argument(
-        "--spec", help="Custom aiplane benchmark spec path for aiplane-smoke"
-    )
+    benchmarks_plan.add_argument("--spec", help="Custom aiplane benchmark spec path for aiplane-smoke")
 
     add_models_parser(
         subparsers,
@@ -1456,9 +1372,7 @@ def _main(argv: list[str] | None = None) -> int:
         "Use a configured model for small code tasks. Use --dry-run to inspect prompts before calling a runtime.",
         "Examples:\n  aiplane code analyze --model MODEL_ALIAS src/aiplane/cli.py --dry-run\n  aiplane code complete --model MODEL_ALIAS --line 20 src/app.py\n  aiplane code write --model MODEL_ALIAS --task 'add email validation' --dry-run",
     )
-    code_sub = code_cmd.add_subparsers(
-        dest="code_command", required=True, metavar="command"
-    )
+    code_sub = code_cmd.add_subparsers(dest="code_command", required=True, metavar="command")
     code_analyze = code_sub.add_parser(
         "analyze",
         help="Analyze a code file",
@@ -1486,9 +1400,7 @@ def _main(argv: list[str] | None = None) -> int:
     )
     _profile_arg(code_complete)
     code_complete.add_argument("--model", required=True, help="Model alias to use")
-    code_complete.add_argument(
-        "--line", type=int, required=True, help="1-based cursor line number"
-    )
+    code_complete.add_argument("--line", type=int, required=True, help="1-based cursor line number")
     code_complete.add_argument(
         "--dry-run",
         action="store_true",
@@ -1508,9 +1420,7 @@ def _main(argv: list[str] | None = None) -> int:
     )
     _profile_arg(code_write)
     code_write.add_argument("--model", required=True, help="Model alias to use")
-    code_write.add_argument(
-        "--task", required=True, help="Code-writing task description"
-    )
+    code_write.add_argument("--task", required=True, help="Code-writing task description")
     code_write.add_argument(
         "--dry-run",
         action="store_true",
@@ -1537,9 +1447,7 @@ def _main(argv: list[str] | None = None) -> int:
         "Create non-mutating plans and scaffold files for small agent applications that use configured aiplane model endpoints.",
         "Examples:\n  aiplane agents templates\n  aiplane agents plan repo-helper --framework langgraph --model MODEL_ALIAS\n  aiplane agents export repo-helper --framework langgraph --model MODEL_ALIAS --file agent.py",
     )
-    agents_sub = agents_cmd.add_subparsers(
-        dest="agents_command", required=True, metavar="command"
-    )
+    agents_sub = agents_cmd.add_subparsers(dest="agents_command", required=True, metavar="command")
     agents_templates = agents_sub.add_parser(
         "templates",
         help="List starter agent frameworks",
@@ -1565,19 +1473,11 @@ def _main(argv: list[str] | None = None) -> int:
         "--model",
         help="Model alias to use; if omitted, aiplane selects the best enabled chat model",
     )
-    agents_plan.add_argument(
-        "--runtime", help="Runtime constraint, such as ollama or vllm"
-    )
-    agents_plan.add_argument(
-        "--provider", help="Provider/source constraint, such as openai or ollama"
-    )
+    agents_plan.add_argument("--runtime", help="Runtime constraint, such as ollama or vllm")
+    agents_plan.add_argument("--provider", help="Provider/source constraint, such as openai or ollama")
     agents_plan.add_argument("--endpoint", help="Endpoint/base URL override")
-    agents_plan.add_argument(
-        "--api-key-env", help="API-key environment variable override"
-    )
-    agents_plan.add_argument(
-        "--instruction", help="System instruction embedded in the scaffold"
-    )
+    agents_plan.add_argument("--api-key-env", help="API-key environment variable override")
+    agents_plan.add_argument("--instruction", help="System instruction embedded in the scaffold")
     agents_plan.add_argument(
         "--output-dir",
         help="Agent artifact root. Defaults to AIPLANE_AGENT_ARTIFACTS_DIR, local config agent_artifacts_dir, or .aiplane/agents",
@@ -1589,9 +1489,7 @@ def _main(argv: list[str] | None = None) -> int:
         formatter_class=HelpFormatter,
     )
     _profile_arg(agents_export)
-    agents_export.add_argument(
-        "name", help="Agent application name, such as repo-helper"
-    )
+    agents_export.add_argument("name", help="Agent application name, such as repo-helper")
     agents_export.add_argument(
         "--framework",
         choices=["langgraph", "simple-openai"],
@@ -1602,19 +1500,11 @@ def _main(argv: list[str] | None = None) -> int:
         "--model",
         help="Model alias to use; if omitted, aiplane selects the best enabled chat model",
     )
-    agents_export.add_argument(
-        "--runtime", help="Runtime constraint, such as ollama or vllm"
-    )
-    agents_export.add_argument(
-        "--provider", help="Provider/source constraint, such as openai or ollama"
-    )
+    agents_export.add_argument("--runtime", help="Runtime constraint, such as ollama or vllm")
+    agents_export.add_argument("--provider", help="Provider/source constraint, such as openai or ollama")
     agents_export.add_argument("--endpoint", help="Endpoint/base URL override")
-    agents_export.add_argument(
-        "--api-key-env", help="API-key environment variable override"
-    )
-    agents_export.add_argument(
-        "--instruction", help="System instruction embedded in the scaffold"
-    )
+    agents_export.add_argument("--api-key-env", help="API-key environment variable override")
+    agents_export.add_argument("--instruction", help="System instruction embedded in the scaffold")
     agents_export.add_argument(
         "--output-dir",
         help="Agent artifact root. Defaults to AIPLANE_AGENT_ARTIFACTS_DIR, local config agent_artifacts_dir, or .aiplane/agents",
@@ -1670,9 +1560,7 @@ def _main(argv: list[str] | None = None) -> int:
         "Work with configured cloud/shared deployment targets. Apply is guarded and intentionally narrow.",
         "Examples:\n  aiplane deploy list\n  aiplane deploy workflow-plan --target azure_gpu_vm\n  aiplane deploy plan --target aks_gpu_pool\n  aiplane deploy doctor --target aks_gpu_pool\n  aiplane deploy apply --target aks_gpu_pool --yes",
     )
-    deploy_sub = deploy_cmd.add_subparsers(
-        dest="deploy_command", required=True, metavar="command"
-    )
+    deploy_sub = deploy_cmd.add_subparsers(dest="deploy_command", required=True, metavar="command")
     deploy_list = deploy_sub.add_parser(
         "list",
         help="List deployment targets",
@@ -1695,9 +1583,7 @@ def _main(argv: list[str] | None = None) -> int:
         formatter_class=HelpFormatter,
     )
     _profile_arg(deploy_workflow)
-    deploy_workflow.add_argument(
-        "--target", help="Target name; defaults to profile target default"
-    )
+    deploy_workflow.add_argument("--target", help="Target name; defaults to profile target default")
     deploy_plan = deploy_sub.add_parser(
         "plan",
         help="Render deployment plan",
@@ -1705,9 +1591,7 @@ def _main(argv: list[str] | None = None) -> int:
         formatter_class=HelpFormatter,
     )
     _profile_arg(deploy_plan)
-    deploy_plan.add_argument(
-        "--target", help="Target name; defaults to profile target default"
-    )
+    deploy_plan.add_argument("--target", help="Target name; defaults to profile target default")
     deploy_doctor = deploy_sub.add_parser(
         "doctor",
         help="Check target prerequisites",
@@ -1715,9 +1599,7 @@ def _main(argv: list[str] | None = None) -> int:
         formatter_class=HelpFormatter,
     )
     _profile_arg(deploy_doctor)
-    deploy_doctor.add_argument(
-        "--target", help="Target name; defaults to profile target default"
-    )
+    deploy_doctor.add_argument("--target", help="Target name; defaults to profile target default")
     deploy_apply = deploy_sub.add_parser(
         "apply",
         help="Apply guarded bootstrap steps",
@@ -1725,9 +1607,7 @@ def _main(argv: list[str] | None = None) -> int:
         formatter_class=HelpFormatter,
     )
     _profile_arg(deploy_apply)
-    deploy_apply.add_argument(
-        "--target", help="Target name; defaults to profile target default"
-    )
+    deploy_apply.add_argument("--target", help="Target name; defaults to profile target default")
     deploy_apply.add_argument(
         "--yes",
         action="store_true",
@@ -1741,18 +1621,14 @@ def _main(argv: list[str] | None = None) -> int:
         "Render remote access commands such as SSH local port forwards for shared/cloud endpoints.",
         "Example:\n  aiplane remote tunnel plan --target gpu_workstation_ssh",
     )
-    remote_sub = remote_cmd.add_subparsers(
-        dest="remote_command", required=True, metavar="command"
-    )
+    remote_sub = remote_cmd.add_subparsers(dest="remote_command", required=True, metavar="command")
     remote_tunnel = remote_sub.add_parser(
         "tunnel",
         help="SSH tunnel planning",
         description="Work with SSH tunnel targets.",
         formatter_class=HelpFormatter,
     )
-    tunnel_sub = remote_tunnel.add_subparsers(
-        dest="tunnel_command", required=True, metavar="command"
-    )
+    tunnel_sub = remote_tunnel.add_subparsers(dest="tunnel_command", required=True, metavar="command")
     tunnel_plan = tunnel_sub.add_parser(
         "plan",
         help="Render ssh -L command",
@@ -1760,9 +1636,7 @@ def _main(argv: list[str] | None = None) -> int:
         formatter_class=HelpFormatter,
     )
     _profile_arg(tunnel_plan)
-    tunnel_plan.add_argument(
-        "--target", required=True, help="ssh_tunnel target name from targets.yaml"
-    )
+    tunnel_plan.add_argument("--target", required=True, help="ssh_tunnel target name from targets.yaml")
     tunnel_status = tunnel_sub.add_parser(
         "status",
         help="Show tunnel process status",
@@ -1770,9 +1644,7 @@ def _main(argv: list[str] | None = None) -> int:
         formatter_class=HelpFormatter,
     )
     _profile_arg(tunnel_status)
-    tunnel_status.add_argument(
-        "--target", required=True, help="ssh_tunnel target name from targets.yaml"
-    )
+    tunnel_status.add_argument("--target", required=True, help="ssh_tunnel target name from targets.yaml")
     tunnel_start = tunnel_sub.add_parser(
         "start",
         help="Start an SSH tunnel",
@@ -1780,9 +1652,7 @@ def _main(argv: list[str] | None = None) -> int:
         formatter_class=HelpFormatter,
     )
     _profile_arg(tunnel_start)
-    tunnel_start.add_argument(
-        "--target", required=True, help="ssh_tunnel target name from targets.yaml"
-    )
+    tunnel_start.add_argument("--target", required=True, help="ssh_tunnel target name from targets.yaml")
     tunnel_stop = tunnel_sub.add_parser(
         "stop",
         help="Stop a helper-started SSH tunnel",
@@ -1790,9 +1660,7 @@ def _main(argv: list[str] | None = None) -> int:
         formatter_class=HelpFormatter,
     )
     _profile_arg(tunnel_stop)
-    tunnel_stop.add_argument(
-        "--target", required=True, help="ssh_tunnel target name from targets.yaml"
-    )
+    tunnel_stop.add_argument("--target", required=True, help="ssh_tunnel target name from targets.yaml")
 
     providers_cmd = _command(
         subparsers,
@@ -1801,9 +1669,7 @@ def _main(argv: list[str] | None = None) -> int:
         "Providers are source catalogs such as Ollama library, Hugging Face, GGUF repositories, or local files. Runtimes are handled by aiplane runtimes.",
         "Examples:\n  aiplane providers list\n  aiplane providers list --status disabled\n  aiplane providers list --runtime ollama\n  aiplane providers list --runtime vllm --group-by runtime\n  aiplane providers list --group-by ownership\n  aiplane providers show ollama\n  aiplane providers models ollama",
     )
-    providers_sub = providers_cmd.add_subparsers(
-        dest="providers_command", required=True, metavar="command"
-    )
+    providers_sub = providers_cmd.add_subparsers(dest="providers_command", required=True, metavar="command")
     providers_list = providers_sub.add_parser(
         "list",
         help="List model catalog providers",
@@ -1836,9 +1702,7 @@ def _main(argv: list[str] | None = None) -> int:
         formatter_class=HelpFormatter,
     )
     _profile_arg(providers_show)
-    providers_show.add_argument(
-        "name", help="Provider name, such as ollama, huggingface, or huggingface_gguf"
-    )
+    providers_show.add_argument("name", help="Provider name, such as ollama, huggingface, or huggingface_gguf")
     providers_endpoint_types = providers_sub.add_parser(
         "endpoint-types",
         help="List supported provider API families and catalog adapters",
@@ -1864,12 +1728,8 @@ def _main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Query the provider's online catalog API when aiplane has an adapter for it",
     )
-    providers_models.add_argument(
-        "--query", help="Optional search query for online/catalog model lookup"
-    )
-    providers_models.add_argument(
-        "--limit", type=int, default=500, help="Maximum model ids to return"
-    )
+    providers_models.add_argument("--query", help="Optional search query for online/catalog model lookup")
+    providers_models.add_argument("--limit", type=int, default=500, help="Maximum model ids to return")
     providers_enable = providers_sub.add_parser(
         "enable",
         help="Enable a model provider",
@@ -1893,9 +1753,7 @@ def _main(argv: list[str] | None = None) -> int:
         formatter_class=HelpFormatter,
     )
     _profile_arg(providers_remove)
-    providers_remove.add_argument(
-        "name", help="Provider name to hide/remove from provider discovery"
-    )
+    providers_remove.add_argument("name", help="Provider name to hide/remove from provider discovery")
     providers_add = providers_sub.add_parser(
         "add",
         help="Add a profile model provider",
@@ -1904,9 +1762,7 @@ def _main(argv: list[str] | None = None) -> int:
     )
     _profile_arg(providers_add)
     providers_add.add_argument("name", help="Provider name to add")
-    providers_add.add_argument(
-        "--description", default="", help="Human-readable provider description"
-    )
+    providers_add.add_argument("--description", default="", help="Human-readable provider description")
     providers_add.add_argument(
         "--ownership",
         choices=["self_managed", "managed_service"],
@@ -1929,15 +1785,9 @@ def _main(argv: list[str] | None = None) -> int:
         default="profile_catalog",
         help="Catalog discovery adapter/API shape to reuse. Use profile_catalog when the catalog is manually curated.",
     )
-    providers_add.add_argument(
-        "--endpoint", help="Default endpoint URL for this provider, when applicable"
-    )
-    providers_add.add_argument(
-        "--credential-ref", help="Default credential ref, such as openai.personal"
-    )
-    providers_add.add_argument(
-        "--api-key-env", help="Environment variable that provides the API key/token"
-    )
+    providers_add.add_argument("--endpoint", help="Default endpoint URL for this provider, when applicable")
+    providers_add.add_argument("--credential-ref", help="Default credential ref, such as openai.personal")
+    providers_add.add_argument("--api-key-env", help="Environment variable that provides the API key/token")
     providers_add.add_argument(
         "--auth-method",
         choices=["none", "api_key", "bearer", "oauth2", "custom"],
@@ -1949,9 +1799,7 @@ def _main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Mark this provider/catalog as requiring credentials even if the auth method is custom or configured elsewhere",
     )
-    providers_add.add_argument(
-        "--disabled", action="store_true", help="Add the provider disabled"
-    )
+    providers_add.add_argument("--disabled", action="store_true", help="Add the provider disabled")
     providers_init = providers_sub.add_parser(
         "init-defaults",
         help="Write built-in provider defaults",
@@ -2030,9 +1878,7 @@ def _main(argv: list[str] | None = None) -> int:
             "  aiplane runtimes repull ollama --dry-run"
         ),
     )
-    runtimes_sub = runtimes_cmd.add_subparsers(
-        dest="runtimes_command", required=True, metavar="command"
-    )
+    runtimes_sub = runtimes_cmd.add_subparsers(dest="runtimes_command", required=True, metavar="command")
     runtimes_map = runtimes_sub.add_parser(
         "map",
         help="Show catalog-to-runtime diagram",
@@ -2175,11 +2021,7 @@ def _main(argv: list[str] | None = None) -> int:
         "clear",
         "runtime-list",
     ]:
-        command_name = (
-            "list-runtime-models"
-            if lifecycle_action == "runtime-list"
-            else lifecycle_action
-        )
+        command_name = "list-runtime-models" if lifecycle_action == "runtime-list" else lifecycle_action
         lifecycle = runtimes_sub.add_parser(
             command_name,
             help=f"Run provider helper {lifecycle_action.replace('-', ' ')}",
@@ -2219,9 +2061,7 @@ def _main(argv: list[str] | None = None) -> int:
         "Inspect and install the small external toolchain aiplane can use for cloud, container, Kubernetes, and remote operations.",
         "Examples:\n  aiplane tools doctor\n  aiplane tools matrix\n  aiplane tools doctor azure-cli\n  aiplane tools plan vagrant\n  aiplane tools export opentofu\n  aiplane tools install opentofu --dry-run\n  aiplane tools install azure-cli",
     )
-    tools_sub = tools_cmd.add_subparsers(
-        dest="tools_command", required=True, metavar="command"
-    )
+    tools_sub = tools_cmd.add_subparsers(dest="tools_command", required=True, metavar="command")
     tools_list = tools_sub.add_parser(
         "list",
         help="List known prerequisite tools",
@@ -2294,9 +2134,7 @@ def _main(argv: list[str] | None = None) -> int:
         "List or show redacted credential accounts from the ignored local credentials file. This never prints raw secrets.",
         "Examples:\n  aiplane credentials list\n  aiplane credentials show openai.personal",
     )
-    credentials_sub = credentials_cmd.add_subparsers(
-        dest="credentials_command", required=True, metavar="command"
-    )
+    credentials_sub = credentials_cmd.add_subparsers(dest="credentials_command", required=True, metavar="command")
     credentials_list = credentials_sub.add_parser(
         "list",
         help="List configured credential refs",
@@ -2313,9 +2151,7 @@ def _main(argv: list[str] | None = None) -> int:
         description="Show one credential account without printing raw secret values.",
         formatter_class=HelpFormatter,
     )
-    credentials_show.add_argument(
-        "ref", help="Credential ref, such as openai.personal or openai/personal"
-    )
+    credentials_show.add_argument("ref", help="Credential ref, such as openai.personal or openai/personal")
     credentials_show.add_argument("--path", help="Optional credentials YAML path")
 
     mcp_cmd = _command(
@@ -2325,9 +2161,7 @@ def _main(argv: list[str] | None = None) -> int:
         "Run or inspect the MCP adapter so IDEs/agents can query aiplane configuration and use guarded write tools.",
         "Examples:\n  aiplane mcp manifest\n  aiplane mcp serve",
     )
-    mcp_sub = mcp_cmd.add_subparsers(
-        dest="mcp_command", required=True, metavar="command"
-    )
+    mcp_sub = mcp_cmd.add_subparsers(dest="mcp_command", required=True, metavar="command")
     mcp_sub.add_parser(
         "manifest",
         help="Print MCP tool manifest",
@@ -2349,9 +2183,7 @@ def _main(argv: list[str] | None = None) -> int:
         "Inspect JSONL audit events written under the workspace .aiplane directory.",
         "Example:\n  aiplane audit tail --limit 50",
     )
-    audit_sub = audit.add_subparsers(
-        dest="audit_command", required=True, metavar="command"
-    )
+    audit_sub = audit.add_subparsers(dest="audit_command", required=True, metavar="command")
     tail = audit_sub.add_parser(
         "tail",
         help="Show recent audit events",
@@ -2368,9 +2200,7 @@ def _main(argv: list[str] | None = None) -> int:
         "Explain how the active profile treats a named action.",
         "Example:\n  aiplane policy explain --action cloud_escalation",
     )
-    policy_sub = policy.add_subparsers(
-        dest="policy_command", required=True, metavar="command"
-    )
+    policy_sub = policy.add_subparsers(dest="policy_command", required=True, metavar="command")
     explain = policy_sub.add_parser(
         "explain",
         help="Explain one action",
@@ -2386,9 +2216,7 @@ def _main(argv: list[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
     workspace = Path(args.workspace).resolve()
-    profiles_dir = (
-        Path(args.profiles_dir).expanduser().resolve() if args.profiles_dir else None
-    )
+    profiles_dir = Path(args.profiles_dir).expanduser().resolve() if args.profiles_dir else None
     requested_profile = getattr(args, "profile", None)
 
     if args.command == "config":
@@ -2396,9 +2224,7 @@ def _main(argv: list[str] | None = None) -> int:
             print("\n".join(list_config_templates()))
             return 0
         if args.config_command == "init":
-            path = init_local_config(
-                template=args.template, path=args.path, overwrite=args.overwrite
-            )
+            path = init_local_config(template=args.template, path=args.path, overwrite=args.overwrite)
             print(
                 _json(
                     {"created": str(path), "template": args.template},
@@ -2443,9 +2269,7 @@ def _main(argv: list[str] | None = None) -> int:
             )
             return 0
         if args.config_command == "set":
-            path = set_local_config_value(
-                args.key, _parse_setting_value(args.value), path=args.path
-            )
+            path = set_local_config_value(args.key, _parse_setting_value(args.value), path=args.path)
             print(
                 _json(
                     {
@@ -2471,7 +2295,9 @@ def _main(argv: list[str] | None = None) -> int:
         elif len(available_profiles) == 1:
             current_profile = available_profiles[0]
         elif not available_profiles:
-            current_profile_error = "no aiplane profiles found. Create one with: aiplane profiles create local-dev --template local-dev"
+            current_profile_error = (
+                "no aiplane profiles found. Create one with: aiplane profiles create local-dev --template local-dev"
+            )
         else:
             current_profile_error = (
                 "no valid default profile is configured. Set one with: "
@@ -2484,9 +2310,7 @@ def _main(argv: list[str] | None = None) -> int:
             "default_profile": configured_default_profile,
             "default_profile_path": str(profile_root / configured_default_profile),
             "current_profile": current_profile,
-            "current_profile_path": (
-                str(profile_root / current_profile) if current_profile else None
-            ),
+            "current_profile_path": (str(profile_root / current_profile) if current_profile else None),
         }
         if current_profile_error:
             profile_paths["current_profile_error"] = current_profile_error
@@ -2508,12 +2332,8 @@ def _main(argv: list[str] | None = None) -> int:
                         "default_profile": configured_default_profile,
                         "current_profile": current_profile,
                         "profiles_dir": str(profile_root),
-                        "agent_artifacts_dir": str(
-                            agent_artifacts_root(config_path=config_path)
-                        ),
-                        "credentials_path": str(
-                            credentials_path(config_path=config_path)
-                        ),
+                        "agent_artifacts_dir": str(agent_artifacts_root(config_path=config_path)),
+                        "credentials_path": str(credentials_path(config_path=config_path)),
                     },
                 },
                 indent=2,
@@ -2525,10 +2345,7 @@ def _main(argv: list[str] | None = None) -> int:
     if args.command == "profiles":
         if args.profile_command == "list":
             default = resolve_profile_name(None, profiles_dir=profiles_dir)
-            rows = [
-                name + (" *" if name == default else "")
-                for name in list_profiles(profiles_dir)
-            ]
+            rows = [name + (" *" if name == default else "") for name in list_profiles(profiles_dir)]
             print("\n".join(rows))
             return 0
         if args.profile_command == "templates":
@@ -2554,9 +2371,7 @@ def _main(argv: list[str] | None = None) -> int:
             )
             return 0
         if args.profile_command == "repair":
-            profile_name = args.name or resolve_profile_name(
-                requested_profile, profiles_dir=profiles_dir
-            )
+            profile_name = args.name or resolve_profile_name(requested_profile, profiles_dir=profiles_dir)
             result = repair_profile(
                 profile_name,
                 template=args.template,
@@ -2579,15 +2394,9 @@ def _main(argv: list[str] | None = None) -> int:
         if args.profile_command == "bootstrap-local":
             result = _bootstrap_local_profile(args, workspace, profiles_dir)
             print(_json(result, indent=2, sort_keys=True))
-            validation = (
-                result.get("validation")
-                if isinstance(result.get("validation"), dict)
-                else None
-            )
+            validation = result.get("validation") if isinstance(result.get("validation"), dict) else None
             return 0 if validation is None or validation.get("ok", False) else 1
-        effective_profile = resolve_profile_name(
-            requested_profile, profiles_dir=profiles_dir
-        )
+        effective_profile = resolve_profile_name(requested_profile, profiles_dir=profiles_dir)
         profile_name = args.name or effective_profile
         profile = load_profile(profile_name, workspace, profiles_dir=profiles_dir)
         if args.profile_command == "validate":
@@ -2610,15 +2419,11 @@ def _main(argv: list[str] | None = None) -> int:
             else:
                 print(_json(result, indent=2, sort_keys=True))
             validation = (
-                result.get("bootstrap", {}).get("validation")
-                if isinstance(result.get("bootstrap"), dict)
-                else None
+                result.get("bootstrap", {}).get("validation") if isinstance(result.get("bootstrap"), dict) else None
             )
             return 0 if validation is None or validation.get("ok", False) else 1
 
-    effective_profile = resolve_profile_name(
-        requested_profile, profiles_dir=profiles_dir
-    )
+    effective_profile = resolve_profile_name(requested_profile, profiles_dir=profiles_dir)
 
     if args.command == "doctor":
         profile = load_profile(effective_profile, workspace, profiles_dir=profiles_dir)
@@ -2643,9 +2448,7 @@ def _main(argv: list[str] | None = None) -> int:
 
     if args.command == "tool":
         profile = load_profile(effective_profile, workspace, profiles_dir=profiles_dir)
-        output = ToolExecutor(profile, AuditLogger(profile), ApprovalHandler(True)).run(
-            args.tool_name, args.tool_args
-        )
+        output = ToolExecutor(profile, AuditLogger(profile), ApprovalHandler(True)).run(args.tool_name, args.tool_args)
         print(output)
         return 0
 
@@ -2694,9 +2497,7 @@ def _main(argv: list[str] | None = None) -> int:
             return 0
         print(
             _json(
-                manager.plan(
-                    args.name, model=args.model, endpoint=args.endpoint, spec=args.spec
-                ),
+                manager.plan(args.name, model=args.model, endpoint=args.endpoint, spec=args.spec),
                 indent=2,
             )
         )
@@ -2737,9 +2538,7 @@ def _main(argv: list[str] | None = None) -> int:
             return 0
         if args.hardware_command == "discover":
             result = (
-                manager.select_closest_discovered(dry_run=args.dry_run)
-                if args.select_closest
-                else manager.discover()
+                manager.select_closest_discovered(dry_run=args.dry_run) if args.select_closest else manager.discover()
             )
             print(_json(result, indent=2, sort_keys=True))
             return 0
@@ -2755,9 +2554,7 @@ def _main(argv: list[str] | None = None) -> int:
         if args.hardware_command == "recommend":
             print(
                 _json(
-                    manager.recommend(
-                        include_not_recommended=args.include_not_recommended
-                    ),
+                    manager.recommend(include_not_recommended=args.include_not_recommended),
                     indent=2,
                 )
             )
@@ -2798,9 +2595,7 @@ def _main(argv: list[str] | None = None) -> int:
         if args.machines_command == "azure-status":
             print(
                 _json(
-                    manager.azure_status(
-                        region=args.region, run_sku_probe=args.sku_query
-                    ),
+                    manager.azure_status(region=args.region, run_sku_probe=args.sku_query),
                     indent=2,
                 )
             )
@@ -2860,9 +2655,7 @@ def _main(argv: list[str] | None = None) -> int:
         if args.machines_command == "profile-remote-plan":
             print(
                 _json(
-                    manager.profile_remote_plan(
-                        args.name, args.host, user=args.user, port=args.port
-                    ),
+                    manager.profile_remote_plan(args.name, args.host, user=args.user, port=args.port),
                     indent=2,
                 )
             )
@@ -2942,10 +2735,7 @@ def _main(argv: list[str] | None = None) -> int:
                         },
                         limits=_parse_settings(args.limit),
                         tools=_parse_settings(args.tool),
-                        roles={
-                            key: str(value)
-                            for key, value in _parse_settings(args.role).items()
-                        },
+                        roles={key: str(value) for key, value in _parse_settings(args.role).items()},
                         approval_mode=args.approval_mode,
                         audit_label=args.audit_label,
                         dry_run=args.dry_run,
@@ -3140,12 +2930,8 @@ def _main(argv: list[str] | None = None) -> int:
         if not sys.stdin.isatty():
             prompt = sys.stdin.read()
             if not prompt.strip():
-                raise ValueError(
-                    "endpoint chat requires a prompt; pass --prompt, --stdin, or use --native-ollama"
-                )
-            output = manager.run_chat(
-                args.model, prompt=prompt, timeout_seconds=args.timeout_seconds
-            )
+                raise ValueError("endpoint chat requires a prompt; pass --prompt, --stdin, or use --native-ollama")
+            output = manager.run_chat(args.model, prompt=prompt, timeout_seconds=args.timeout_seconds)
             if output:
                 print(output)
             return 0
@@ -3159,9 +2945,7 @@ def _main(argv: list[str] | None = None) -> int:
                 break
             if not prompt.strip():
                 continue
-            output = manager.run_chat(
-                args.model, prompt=prompt, timeout_seconds=args.timeout_seconds
-            )
+            output = manager.run_chat(args.model, prompt=prompt, timeout_seconds=args.timeout_seconds)
             if output:
                 print(output)
         return 0
@@ -3185,11 +2969,7 @@ def _main(argv: list[str] | None = None) -> int:
             print(_json(manager.doctor(args.target), indent=2, sort_keys=True))
             return 0
         if args.deploy_command == "apply":
-            print(
-                _json(
-                    manager.apply(args.target, yes=args.yes), indent=2, sort_keys=True
-                )
-            )
+            print(_json(manager.apply(args.target, yes=args.yes), indent=2, sort_keys=True))
             return 0
         raise ValueError(f"unknown deploy command: {args.deploy_command}")
 
@@ -3232,25 +3012,15 @@ def _main(argv: list[str] | None = None) -> int:
             print(_json(registry.endpoint_families(), indent=2, sort_keys=True))
             return 0
         if args.providers_command == "models":
-            result = registry.models(
-                args.name, query=args.query, limit=args.limit, online=args.online
-            )
+            result = registry.models(args.name, query=args.query, limit=args.limit, online=args.online)
             print(_json(result.__dict__, indent=2, sort_keys=True))
             return 0
         if args.providers_command == "enable":
-            result = (
-                registry.set_all_enabled(True)
-                if args.name == "all"
-                else registry.set_enabled(args.name, True)
-            )
+            result = registry.set_all_enabled(True) if args.name == "all" else registry.set_enabled(args.name, True)
             print(_json(result, indent=2))
             return 0
         if args.providers_command == "disable":
-            result = (
-                registry.set_all_enabled(False)
-                if args.name == "all"
-                else registry.set_enabled(args.name, False)
-            )
+            result = registry.set_all_enabled(False) if args.name == "all" else registry.set_enabled(args.name, False)
             print(_json(result, indent=2))
             return 0
         if args.providers_command == "remove":
@@ -3287,9 +3057,7 @@ def _main(argv: list[str] | None = None) -> int:
             print(_json(registry.clear_config(args.scope), indent=2))
             return 0
         if args.providers_command == "test":
-            payload = registry.test_connection(
-                args.name, credential_ref=args.credential_ref, timeout=args.timeout
-            )
+            payload = registry.test_connection(args.name, credential_ref=args.credential_ref, timeout=args.timeout)
             print(_json(payload, indent=2, sort_keys=True))
             return 0 if payload.get("ok") else 2
         print(
@@ -3316,9 +3084,7 @@ def _main(argv: list[str] | None = None) -> int:
         if args.runtimes_command == "models":
             print(
                 _json(
-                    catalog.models_by_runtime(
-                        args.runtime, include_gui=args.include_gui
-                    ),
+                    catalog.models_by_runtime(args.runtime, include_gui=args.include_gui),
                     indent=2,
                 )
             )
@@ -3332,14 +3098,10 @@ def _main(argv: list[str] | None = None) -> int:
             )
             return 0
         if args.runtimes_command == "use":
-            print(
-                _json(catalog.set_preferred_runtime(args.name, args.runtime), indent=2)
-            )
+            print(_json(catalog.set_preferred_runtime(args.name, args.runtime), indent=2))
             return 0
         if args.runtimes_command == "bundle":
-            plan = catalog.bundle_plan(
-                args.runtime, model_name=args.model, mode=args.mode
-            )
+            plan = catalog.bundle_plan(args.runtime, model_name=args.model, mode=args.mode)
             if args.format == "dockerfile":
                 print(plan["files"]["Dockerfile"], end="")
             elif args.format == "conda-yaml":
@@ -3395,21 +3157,11 @@ def _main(argv: list[str] | None = None) -> int:
                     "supported_helper_runtimes": sorted(helper_runtimes),
                 }
                 if not row:
-                    payload["reason"] = (
-                        "unknown runtime; use aiplane runtimes list --include-gui to see known runtimes"
-                    )
+                    payload["reason"] = "unknown runtime; use aiplane runtimes list --include-gui to see known runtimes"
                 print(_json(payload, indent=2))
                 return 2
-            helper_action = (
-                "list"
-                if args.runtimes_command == "list-runtime-models"
-                else args.runtimes_command
-            )
-            if (
-                args.runtimes_command in {"remove", "clear"}
-                and not args.dry_run
-                and not args.yes
-            ):
+            helper_action = "list" if args.runtimes_command == "list-runtime-models" else args.runtimes_command
+            if args.runtimes_command in {"remove", "clear"} and not args.dry_run and not args.yes:
                 print(
                     _json(
                         {
@@ -3443,14 +3195,8 @@ def _main(argv: list[str] | None = None) -> int:
             if completed.stderr:
                 print(completed.stderr, end="", file=sys.stderr)
             return completed.returncode
-        runtimes = (
-            [args.runtime] if args.runtime else [row["name"] for row in catalog.list()]
-        )
-        print(
-            _json(
-                [catalog.runtime_available(runtime) for runtime in runtimes], indent=2
-            )
-        )
+        runtimes = [args.runtime] if args.runtime else [row["name"] for row in catalog.list()]
+        print(_json([catalog.runtime_available(runtime) for runtime in runtimes], indent=2))
         return 0
 
     if args.command == "mcp":
@@ -3459,9 +3205,7 @@ def _main(argv: list[str] | None = None) -> int:
             return 0
         if args.mcp_command == "serve":
             load_profile(effective_profile, workspace, profiles_dir=profiles_dir)
-            return serve_stdio(
-                workspace, default_profile=effective_profile, profiles_dir=profiles_dir
-            )
+            return serve_stdio(workspace, default_profile=effective_profile, profiles_dir=profiles_dir)
 
     if args.command == "audit":
         profile = load_profile(effective_profile, workspace, profiles_dir=profiles_dir)
@@ -3478,21 +3222,11 @@ def _main(argv: list[str] | None = None) -> int:
     return 1
 
 
-def _runtime_helper_substrate(
-    profile: object, runtime: str, override: str | None = None
-) -> str:
+def _runtime_helper_substrate(profile: object, runtime: str, override: str | None = None) -> str:
     if override:
         return override
-    provider = (
-        ModelCatalog(profile).providers().get(runtime, {})
-        if hasattr(profile, "models")
-        else {}
-    )
-    substrate = (
-        str(provider.get("substrate") or "native")
-        if isinstance(provider, dict)
-        else "native"
-    )
+    provider = ModelCatalog(profile).providers().get(runtime, {}) if hasattr(profile, "models") else {}
+    substrate = str(provider.get("substrate") or "native") if isinstance(provider, dict) else "native"
     return "docker" if substrate == "docker" else "native"
 
 
@@ -3557,26 +3291,16 @@ def _profile_summary(profile, default_name: str | None = None) -> dict[str, obje
 
 def _profile_selected(profile, default_name: str | None = None) -> dict[str, object]:
     providers = ModelCatalog(profile).providers()
-    models = (
-        profile.models.get("models", {}) if isinstance(profile.models, dict) else {}
-    )
-    targets = (
-        profile.targets.get("targets", {}) if isinstance(profile.targets, dict) else {}
-    )
-    hardware_selected = (
-        profile.hardware.get("selected", {})
-        if isinstance(profile.hardware, dict)
-        else {}
-    )
+    models = profile.models.get("models", {}) if isinstance(profile.models, dict) else {}
+    targets = profile.targets.get("targets", {}) if isinstance(profile.targets, dict) else {}
+    hardware_selected = profile.hardware.get("selected", {}) if isinstance(profile.hardware, dict) else {}
     return {
         "name": profile.name,
         "default": profile.name == default_name,
         "root": str(profile.root),
         "environment": {
             "active": profile.environment.get("active"),
-            "config": _dict_value(profile.environment.get("modes", {})).get(
-                str(profile.environment.get("active")), {}
-            ),
+            "config": _dict_value(profile.environment.get("modes", {})).get(str(profile.environment.get("active")), {}),
         },
         "hardware": {
             "origin": hardware_selected.get("origin"),
@@ -3588,22 +3312,12 @@ def _profile_selected(profile, default_name: str | None = None) -> dict[str, obj
             for name, provider in _dict_value(providers).items()
             if bool(provider.get("enabled", True))
         ],
-        "model_defaults": (
-            profile.models.get("defaults", {})
-            if isinstance(profile.models, dict)
-            else {}
-        ),
+        "model_defaults": (profile.models.get("defaults", {}) if isinstance(profile.models, dict) else {}),
         "models": [
-            {"name": name, **model}
-            for name, model in _dict_value(models).items()
-            if bool(model.get("enabled", True))
+            {"name": name, **model} for name, model in _dict_value(models).items() if bool(model.get("enabled", True))
         ],
         "targets": {
-            "default": (
-                profile.targets.get("default")
-                if isinstance(profile.targets, dict)
-                else None
-            ),
+            "default": (profile.targets.get("default") if isinstance(profile.targets, dict) else None),
             "config": (
                 _dict_value(targets).get(str(profile.targets.get("default")), {})
                 if isinstance(profile.targets, dict)
@@ -3628,20 +3342,10 @@ def _validate_profile(profile) -> dict[str, object]:
         "orchestrators.yaml",
     ]:
         path = profile.root / filename
-        checks.append(
-            {"name": f"file:{filename}", "ok": path.exists(), "detail": str(path)}
-        )
+        checks.append({"name": f"file:{filename}", "ok": path.exists(), "detail": str(path)})
 
-    active_env = (
-        profile.environment.get("active")
-        if isinstance(profile.environment, dict)
-        else None
-    )
-    modes = (
-        _dict_value(profile.environment.get("modes", {}))
-        if isinstance(profile.environment, dict)
-        else {}
-    )
+    active_env = profile.environment.get("active") if isinstance(profile.environment, dict) else None
+    modes = _dict_value(profile.environment.get("modes", {})) if isinstance(profile.environment, dict) else {}
     checks.append(
         {
             "name": "environment:active_mode",
@@ -3651,16 +3355,8 @@ def _validate_profile(profile) -> dict[str, object]:
     )
 
     providers = ModelCatalog(profile).providers()
-    models = (
-        _dict_value(profile.models.get("models", {}))
-        if isinstance(profile.models, dict)
-        else {}
-    )
-    defaults = (
-        _dict_value(profile.models.get("defaults", {}))
-        if isinstance(profile.models, dict)
-        else {}
-    )
+    models = _dict_value(profile.models.get("models", {})) if isinstance(profile.models, dict) else {}
+    defaults = _dict_value(profile.models.get("defaults", {})) if isinstance(profile.models, dict) else {}
     for role, name in defaults.items():
         model = models.get(str(name))
         checks.append(
@@ -3702,14 +3398,8 @@ def _validate_profile(profile) -> dict[str, object]:
                 }
             )
 
-    targets = (
-        _dict_value(profile.targets.get("targets", {}))
-        if isinstance(profile.targets, dict)
-        else {}
-    )
-    default_target = (
-        profile.targets.get("default") if isinstance(profile.targets, dict) else None
-    )
+    targets = _dict_value(profile.targets.get("targets", {})) if isinstance(profile.targets, dict) else {}
+    default_target = profile.targets.get("default") if isinstance(profile.targets, dict) else None
     checks.append(
         {
             "name": "target:default",
@@ -3745,9 +3435,7 @@ def _stderr_line_progress():
 
 
 def _environment_doctor_text(payload: dict[str, object]) -> str:
-    summary = (
-        payload.get("summary", {}) if isinstance(payload.get("summary"), dict) else {}
-    )
+    summary = payload.get("summary", {}) if isinstance(payload.get("summary"), dict) else {}
     rows: list[dict[str, str]] = []
     tool_rows: list[dict[str, str]] = []
     for section in [
@@ -3789,25 +3477,15 @@ def _environment_doctor_text(payload: dict[str, object]) -> str:
         if not isinstance(item, dict):
             continue
         purpose = item.get("purpose", [])
-        why = (
-            ", ".join(str(value) for value in purpose[:2])
-            if isinstance(purpose, list)
-            else str(purpose or "")
-        )
+        why = ", ".join(str(value) for value in purpose[:2]) if isinstance(purpose, list) else str(purpose or "")
         missing_required = item.get("missing_required", [])
-        missing_count = (
-            len(missing_required) if isinstance(missing_required, list) else 0
-        )
+        missing_count = len(missing_required) if isinstance(missing_required, list) else 0
         rows.append(
             {
                 "name": str(item.get("runtime") or ""),
                 "kind": "runtime",
                 "status": (
-                    "ready"
-                    if item.get("ok")
-                    else (
-                        f"missing {missing_count}" if missing_count else "needs setup"
-                    )
+                    "ready" if item.get("ok") else (f"missing {missing_count}" if missing_count else "needs setup")
                 ),
                 "required": "optional",
                 "why": why,
@@ -3837,9 +3515,7 @@ def _environment_doctor_text(payload: dict[str, object]) -> str:
         "  ".join(headers[key].ljust(widths[key]) for key in keys),
     ]
     for row in rows:
-        lines.append(
-            "  ".join(clipped(row[key], widths[key]).ljust(widths[key]) for key in keys)
-        )
+        lines.append("  ".join(clipped(row[key], widths[key]).ljust(widths[key]) for key in keys))
     notes = payload.get("notes", [])
     if isinstance(notes, list) and notes:
         lines.append("")
@@ -3848,9 +3524,7 @@ def _environment_doctor_text(payload: dict[str, object]) -> str:
     return "\n".join(lines)
 
 
-def _bootstrap_local_profile(
-    args, workspace: Path, profiles_dir: Path | None
-) -> dict[str, object]:
+def _bootstrap_local_profile(args, workspace: Path, profiles_dir: Path | None) -> dict[str, object]:
     root = profiles_root(profiles_dir)
     profile_path = root / args.name
     created = False
@@ -3929,15 +3603,11 @@ def _bootstrap_local_profile(
         "hardware_discovery_requested": not args.no_hardware_discovery,
         "hardware": hardware,
         "validation": validation,
-        "next_steps": _profile_bootstrap_next_steps(
-            args.name, not args.no_discovery, args.dry_run
-        ),
+        "next_steps": _profile_bootstrap_next_steps(args.name, not args.no_discovery, args.dry_run),
     }
 
 
-def _quickstart_local_coding(
-    args, workspace: Path, profiles_dir: Path | None
-) -> dict[str, object]:
+def _quickstart_local_coding(args, workspace: Path, profiles_dir: Path | None) -> dict[str, object]:
     bootstrap = _bootstrap_local_profile(args, workspace, profiles_dir)
     doctor_payload = None
     pull = None
@@ -3972,15 +3642,10 @@ def _quickstart_local_coding(
         "aiplane mcp manifest",
     ]
     if args.pull_model:
-        pull_runtime = (
-            (pull.get("runtime") if isinstance(pull, dict) else None)
-            or args.pull_runtime
-            or "RUNTIME"
-        )
+        pull_runtime = (pull.get("runtime") if isinstance(pull, dict) else None) or args.pull_runtime or "RUNTIME"
         commands.insert(
             1,
-            f"aiplane runtimes pull {pull_runtime} --model {args.pull_model}"
-            + (" --dry-run" if args.dry_run else ""),
+            f"aiplane runtimes pull {pull_runtime} --model {args.pull_model}" + (" --dry-run" if args.dry_run else ""),
         )
     if args.dry_run and not profile_path.exists():
         commands.insert(0, f"aiplane quickstart local-coding --name {args.name}")
@@ -4012,10 +3677,7 @@ def _quickstart_pull_model(
     catalog = ModelCatalog(profile)
     model = catalog.get(model_name)
     provider = catalog.providers().get(str(model.get("provider") or ""), {})
-    if (
-        str(model.get("ownership") or provider.get("ownership") or "")
-        == "managed_service"
-    ):
+    if str(model.get("ownership") or provider.get("ownership") or "") == "managed_service":
         return {
             "name": "quickstart_model_pull",
             "model": model_name,
@@ -4024,9 +3686,7 @@ def _quickstart_pull_model(
             "ok": False,
             "reason": "managed-service model aliases are endpoint-backed and do not use local runtime model pulls",
         }
-    selected_runtime = runtime or RuntimeCatalog(profile).select_runtime(
-        model_name
-    ).get("selected")
+    selected_runtime = runtime or RuntimeCatalog(profile).select_runtime(model_name).get("selected")
     if not selected_runtime:
         return {
             "name": "quickstart_model_pull",
@@ -4036,9 +3696,7 @@ def _quickstart_pull_model(
             "ok": False,
             "reason": "no supported runtime is configured for this model alias",
         }
-    resolved_substrate = _runtime_helper_substrate(
-        profile, str(selected_runtime), substrate
-    )
+    resolved_substrate = _runtime_helper_substrate(profile, str(selected_runtime), substrate)
     completed = _run_provider_helper(
         str(selected_runtime),
         "pull",
@@ -4063,24 +3721,16 @@ def _quickstart_pull_model(
 
 
 def _quickstart_local_coding_text(payload: dict[str, object]) -> str:
-    bootstrap = (
-        payload.get("bootstrap") if isinstance(payload.get("bootstrap"), dict) else {}
-    )
+    bootstrap = payload.get("bootstrap") if isinstance(payload.get("bootstrap"), dict) else {}
     doctor = payload.get("doctor") if isinstance(payload.get("doctor"), dict) else None
     lines = [
         f"local coding quickstart for profile {payload.get('profile', 'unknown')}",
         f"profile path: {bootstrap.get('path', '')}",
         f"created: {bootstrap.get('created', False)}; dry_run: {payload.get('dry_run', False)}",
     ]
-    validation = (
-        bootstrap.get("validation")
-        if isinstance(bootstrap.get("validation"), dict)
-        else None
-    )
+    validation = bootstrap.get("validation") if isinstance(bootstrap.get("validation"), dict) else None
     if validation is not None:
-        lines.append(
-            f"profile validation: {'ok' if validation.get('ok') else 'needs attention'}"
-        )
+        lines.append(f"profile validation: {'ok' if validation.get('ok') else 'needs attention'}")
     pull = payload.get("pull") if isinstance(payload.get("pull"), dict) else None
     if pull is not None:
         lines.append(
@@ -4088,9 +3738,7 @@ def _quickstart_local_coding_text(payload: dict[str, object]) -> str:
             f"model: {pull.get('model')}; runtime: {pull.get('runtime', 'n/a')}"
         )
     if doctor is not None:
-        summary = (
-            doctor.get("summary") if isinstance(doctor.get("summary"), dict) else {}
-        )
+        summary = doctor.get("summary") if isinstance(doctor.get("summary"), dict) else {}
         lines.append(
             f"doctor: {'ok' if doctor.get('ok') else 'needs attention'}; "
             f"blocking: {summary.get('blocking', 0)}; warnings: {summary.get('warnings', 0)}"
@@ -4103,9 +3751,7 @@ def _quickstart_local_coding_text(payload: dict[str, object]) -> str:
     return "\n".join(lines).rstrip()
 
 
-def _profile_bootstrap_next_steps(
-    profile: str, discovery_requested: bool, dry_run: bool
-) -> list[str]:
+def _profile_bootstrap_next_steps(profile: str, discovery_requested: bool, dry_run: bool) -> list[str]:
     if dry_run:
         steps = [
             f"Rerun aiplane profiles bootstrap-local --name {profile} without --dry-run to create or refresh the profile."
@@ -4113,9 +3759,7 @@ def _profile_bootstrap_next_steps(
     else:
         steps = [f"Run aiplane profiles validate {profile} after local edits."]
     if discovery_requested:
-        steps.append(
-            f"Review discovered candidates with aiplane models list --profile {profile} --group-by runtime."
-        )
+        steps.append(f"Review discovered candidates with aiplane models list --profile {profile} --group-by runtime.")
         steps.append(
             "Promote a reviewed discovered entry or add a profile-owned entry before setting defaults or exporting IDE config."
         )

@@ -6,24 +6,18 @@ from .runtime_catalog import RuntimeCatalog
 from .models import Profile
 
 
-def group_rows(
-    rows: list[dict[str, object]], key: str
-) -> dict[str, list[dict[str, object]]]:
+def group_rows(rows: list[dict[str, object]], key: str) -> dict[str, list[dict[str, object]]]:
     grouped: dict[str, list[dict[str, object]]] = {}
     for row in rows:
         value = row.get(key) or "unknown"
         grouped.setdefault(str(value), []).append(row)
     return {
-        name: sorted(
-            items, key=lambda item: str(item.get("name") or item.get("role") or "")
-        )
+        name: sorted(items, key=lambda item: str(item.get("name") or item.get("role") or ""))
         for name, items in sorted(grouped.items())
     }
 
 
-def group_model_rows(
-    profile: Profile, rows: list[dict[str, Any]], group_by: str
-) -> dict[str, object]:
+def group_model_rows(profile: Profile, rows: list[dict[str, Any]], group_by: str) -> dict[str, object]:
     runtime_catalog = RuntimeCatalog(profile)
     models = runtime_catalog._models()
     grouped: dict[str, object] = {}
@@ -52,9 +46,7 @@ def group_model_rows(
             "group_by": group_by,
             "groups": {
                 ownership: {
-                    provider: sorted(
-                        items, key=lambda item: str(item.get("name") or "")
-                    )
+                    provider: sorted(items, key=lambda item: str(item.get("name") or ""))
                     for provider, items in sorted(providers.items())
                     if isinstance(items, list)
                 }

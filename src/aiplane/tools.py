@@ -86,9 +86,7 @@ class ToolExecutor:
     def _tool_docker_exec(self, args: list[str]) -> str:
         if not args:
             raise ValueError("docker_exec requires docker arguments")
-        return self._command(
-            ["docker", *args], allow_failure=True, use_environment=False
-        )
+        return self._command(["docker", *args], allow_failure=True, use_environment=False)
 
     def _tool_git_commit(self, args: list[str]) -> str:
         message = " ".join(args).strip()
@@ -127,9 +125,7 @@ class ToolExecutor:
         return output
 
     def _audit(self, action: str, decision: str, details: dict[str, object]) -> None:
-        self.audit.record(
-            AuditEvent("tool", self.profile.name, action, decision, details)
-        )
+        self.audit.record(AuditEvent("tool", self.profile.name, action, decision, details))
 
 
 CORE_TOOLCHAIN = ["docker", "openssh-client"]
@@ -230,9 +226,7 @@ TOOLCHAIN: dict[str, dict[str, object]] = {
             "debian": [
                 "follow https://developer.hashicorp.com/vagrant/install for the current signed apt repository setup"
             ],
-            "fedora": [
-                "follow https://developer.hashicorp.com/vagrant/install for the current rpm repository setup"
-            ],
+            "fedora": ["follow https://developer.hashicorp.com/vagrant/install for the current rpm repository setup"],
             "macos": [
                 "brew tap hashicorp/tap",
                 "brew install hashicorp/tap/hashicorp-vagrant",
@@ -255,9 +249,7 @@ TOOLCHAIN: dict[str, dict[str, object]] = {
             "debian": [
                 "follow https://developer.hashicorp.com/packer/install for the current signed apt repository setup"
             ],
-            "fedora": [
-                "follow https://developer.hashicorp.com/packer/install for the current rpm repository setup"
-            ],
+            "fedora": ["follow https://developer.hashicorp.com/packer/install for the current rpm repository setup"],
             "macos": ["brew tap hashicorp/tap", "brew install hashicorp/tap/packer"],
         },
     },
@@ -297,9 +289,7 @@ TOOLCHAIN: dict[str, dict[str, object]] = {
             "fedora": [
                 "follow https://docs.docker.com/engine/install/fedora/ for the current Docker dnf repository setup"
             ],
-            "macos": [
-                "install Docker Desktop from https://docs.docker.com/desktop/setup/install/mac-install/"
-            ],
+            "macos": ["install Docker Desktop from https://docs.docker.com/desktop/setup/install/mac-install/"],
         },
     },
     "docker-compose": {
@@ -329,9 +319,7 @@ TOOLCHAIN: dict[str, dict[str, object]] = {
         ],
         "install": {
             "ubuntu": ["sudo snap install kubectl --classic"],
-            "debian": [
-                "follow https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/"
-            ],
+            "debian": ["follow https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/"],
             "fedora": ["sudo dnf install -y kubernetes-client"],
             "macos": ["brew install kubectl"],
         },
@@ -346,12 +334,8 @@ TOOLCHAIN: dict[str, dict[str, object]] = {
             "chart-based deployment workflows",
         ],
         "install": {
-            "ubuntu": [
-                "curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash"
-            ],
-            "debian": [
-                "curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash"
-            ],
+            "ubuntu": ["curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash"],
+            "debian": ["curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash"],
             "fedora": ["sudo dnf install -y helm"],
             "macos": ["brew install helm"],
         },
@@ -448,9 +432,7 @@ TOOLCHAIN: dict[str, dict[str, object]] = {
             "debian": ["python -m pip install vllm"],
             "fedora": ["python -m pip install vllm"],
             "linux": ["python -m pip install vllm"],
-            "macos": [
-                "vLLM generally needs Linux/GPU-compatible setup; use a Linux GPU host or container"
-            ],
+            "macos": ["vLLM generally needs Linux/GPU-compatible setup; use a Linux GPU host or container"],
         },
     },
     "locust": {
@@ -504,9 +486,7 @@ TOOL_WORKFLOWS: dict[str, dict[str, object]] = {
             "packer build aiplane.pkr.hcl",
         ],
         "artifacts": ["aiplane.pkr.hcl"],
-        "next_steps": [
-            "Use the resulting box/image from Vagrant, OpenTofu/Terraform, Pulumi, or a cloud CLI."
-        ],
+        "next_steps": ["Use the resulting box/image from Vagrant, OpenTofu/Terraform, Pulumi, or a cloud CLI."],
     },
     "opentofu": {
         "task": "provider-agnostic infrastructure provisioning",
@@ -548,9 +528,7 @@ TOOL_WORKFLOWS: dict[str, dict[str, object]] = {
         ],
         "commands": ["pulumi stack init dev", "pulumi preview", "pulumi up"],
         "artifacts": ["Pulumi.yaml", "__main__.py"],
-        "next_steps": [
-            "Choose Pulumi when the team wants normal programming-language abstractions for IaC."
-        ],
+        "next_steps": ["Choose Pulumi when the team wants normal programming-language abstractions for IaC."],
     },
     "devcontainer-cli": {
         "task": "containerized development shell",
@@ -561,9 +539,7 @@ TOOL_WORKFLOWS: dict[str, dict[str, object]] = {
             "devcontainer exec --workspace-folder . bash",
         ],
         "artifacts": [".devcontainer/devcontainer.json"],
-        "next_steps": [
-            "Use this for local dependency isolation; use Docker/Compose for runtime services."
-        ],
+        "next_steps": ["Use this for local dependency isolation; use Docker/Compose for runtime services."],
     },
     "ansible": {
         "task": "remote host configuration",
@@ -575,9 +551,7 @@ TOOL_WORKFLOWS: dict[str, dict[str, object]] = {
             "ansible-playbook -i inventory.ini playbook.yml",
         ],
         "artifacts": ["inventory.ini", "playbook.yml"],
-        "next_steps": [
-            "Use Ansible after Vagrant/cloud provisioning when shell bootstrap steps become too large."
-        ],
+        "next_steps": ["Use Ansible after Vagrant/cloud provisioning when shell bootstrap steps become too large."],
     },
 }
 
@@ -610,26 +584,14 @@ class ToolchainManager:
             )
         categories = []
         workflows = []
-        for category in sorted(
-            {str(row.get("category") or "uncategorized") for row in rows}
-        ):
-            tools = [
-                row
-                for row in rows
-                if str(row.get("category") or "uncategorized") == category
-            ]
+        for category in sorted({str(row.get("category") or "uncategorized") for row in rows}):
+            tools = [row for row in rows if str(row.get("category") or "uncategorized") == category]
             categories.append({"name": category, "tools": tools})
             installed = [row for row in tools if row.get("installed")]
             missing = [row for row in tools if not row.get("installed")]
-            missing_installable = [
-                row for row in missing if row.get("installable_by_aiplane")
-            ]
-            missing_manual = [
-                row for row in missing if not row.get("installable_by_aiplane")
-            ]
-            readiness = (
-                "complete" if not missing else "partial" if installed else "needs_setup"
-            )
+            missing_installable = [row for row in missing if row.get("installable_by_aiplane")]
+            missing_manual = [row for row in missing if not row.get("installable_by_aiplane")]
+            readiness = "complete" if not missing else "partial" if installed else "needs_setup"
             workflows.append(
                 {
                     "name": category,
@@ -637,23 +599,13 @@ class ToolchainManager:
                     "tools": len(tools),
                     "installed": len(installed),
                     "missing": len(missing),
-                    "mandatory": sum(
-                        1 for row in tools if row.get("requirement") == "mandatory"
-                    ),
-                    "optional": sum(
-                        1 for row in tools if row.get("requirement") == "optional"
-                    ),
+                    "mandatory": sum(1 for row in tools if row.get("requirement") == "mandatory"),
+                    "optional": sum(1 for row in tools if row.get("requirement") == "optional"),
                     "missing_installable_by_aiplane": len(missing_installable),
                     "missing_manual_or_platform_specific": len(missing_manual),
-                    "plans_available": sum(
-                        1 for row in tools if row.get("plan_available")
-                    ),
-                    "exports_available": sum(
-                        1 for row in tools if row.get("export_available")
-                    ),
-                    "primary_tasks": sorted(
-                        {str(row.get("task")) for row in tools if row.get("task")}
-                    ),
+                    "plans_available": sum(1 for row in tools if row.get("plan_available")),
+                    "exports_available": sum(1 for row in tools if row.get("export_available")),
+                    "primary_tasks": sorted({str(row.get("task")) for row in tools if row.get("task")}),
                     "missing_tools": [str(row["name"]) for row in missing],
                 }
             )
@@ -662,28 +614,14 @@ class ToolchainManager:
             "profile": self.profile.name,
             "summary": {
                 "tools": len(rows),
-                "mandatory": sum(
-                    1 for row in rows if row.get("requirement") == "mandatory"
-                ),
-                "optional": sum(
-                    1 for row in rows if row.get("requirement") == "optional"
-                ),
-                "installable_by_aiplane": sum(
-                    1 for row in rows if row.get("installable_by_aiplane")
-                ),
-                "exports_available": sum(
-                    1 for row in rows if row.get("export_available")
-                ),
+                "mandatory": sum(1 for row in rows if row.get("requirement") == "mandatory"),
+                "optional": sum(1 for row in rows if row.get("requirement") == "optional"),
+                "installable_by_aiplane": sum(1 for row in rows if row.get("installable_by_aiplane")),
+                "exports_available": sum(1 for row in rows if row.get("export_available")),
                 "workflows": len(workflows),
-                "workflows_complete": sum(
-                    1 for row in workflows if row.get("readiness") == "complete"
-                ),
-                "workflows_partial": sum(
-                    1 for row in workflows if row.get("readiness") == "partial"
-                ),
-                "workflows_needing_setup": sum(
-                    1 for row in workflows if row.get("readiness") == "needs_setup"
-                ),
+                "workflows_complete": sum(1 for row in workflows if row.get("readiness") == "complete"),
+                "workflows_partial": sum(1 for row in workflows if row.get("readiness") == "partial"),
+                "workflows_needing_setup": sum(1 for row in workflows if row.get("readiness") == "needs_setup"),
             },
             "workflows": workflows,
             "categories": categories,
@@ -708,22 +646,10 @@ class ToolchainManager:
             include_optional=include_optional,
             progress=progress,
         )
-        installable_missing = [
-            row
-            for row in rows
-            if not row["installed"] and row.get("install_mode") == "automated"
-        ]
-        manual_missing = [
-            row
-            for row in rows
-            if not row["installed"] and row.get("install_mode") != "automated"
-        ]
+        installable_missing = [row for row in rows if not row["installed"] and row.get("install_mode") == "automated"]
+        manual_missing = [row for row in rows if not row["installed"] and row.get("install_mode") != "automated"]
         installed = [row for row in rows if row["installed"]]
-        runtime_missing = [
-            row
-            for row in runtime_rows
-            if row.get("known_runtime") and not row.get("ok")
-        ]
+        runtime_missing = [row for row in runtime_rows if row.get("known_runtime") and not row.get("ok")]
         return {
             "name": "environment_doctor",
             "profile": self.profile.name,
@@ -756,9 +682,7 @@ class ToolchainManager:
         return {
             "name": "tools_doctor",
             "platform": _platform_info(),
-            "ok": all(
-                bool(row["installed"]) for row in rows if row.get("required", True)
-            ),
+            "ok": all(bool(row["installed"]) for row in rows if row.get("required", True)),
             "tools": rows,
             "notes": [
                 "Doctor checks whether prerequisite CLIs are installed and whether selected services are reachable.",
@@ -766,9 +690,7 @@ class ToolchainManager:
             ],
         }
 
-    def install(
-        self, name: str, dry_run: bool = True, yes: bool = False
-    ) -> dict[str, object]:
+    def install(self, name: str, dry_run: bool = True, yes: bool = False) -> dict[str, object]:
         if name not in TOOLCHAIN:
             raise ValueError(f"unknown tool: {name}")
         row = self._tool_row(name)
@@ -780,9 +702,7 @@ class ToolchainManager:
             "dry_run": dry_run or not yes,
             "commands": commands,
             "results": [],
-            "notes": [
-                "Commands are predefined for this tool/platform. Review --dry-run output before installing."
-            ],
+            "notes": ["Commands are predefined for this tool/platform. Review --dry-run output before installing."],
         }
         if dry_run or not yes:
             return payload
@@ -910,15 +830,11 @@ class ToolchainManager:
         if not installed:
             return {"ok": False, "reason": "command not found"}
         if name == "azure-cli":
-            completed = _checked_command(
-                [command, "account", "show"], self.profile.workspace
-            )
+            completed = _checked_command([command, "account", "show"], self.profile.workspace)
             return {
                 "ok": completed.get("returncode") == 0,
                 "reason": (
-                    "logged in"
-                    if completed.get("returncode") == 0
-                    else "not logged in or account query failed"
+                    "logged in" if completed.get("returncode") == 0 else "not logged in or account query failed"
                 ),
             }
         if name == "docker":
@@ -932,9 +848,7 @@ class ToolchainManager:
                 ),
             }
         if name == "docker-compose":
-            completed = _checked_command(
-                [command, "compose", "version"], self.profile.workspace
-            )
+            completed = _checked_command([command, "compose", "version"], self.profile.workspace)
             return {
                 "ok": completed.get("returncode") == 0,
                 "reason": (
@@ -1099,11 +1013,7 @@ def _runtime_prerequisite_rows(
     progress: Callable[[str], None] | None = None,
 ) -> list[dict[str, object]]:
     catalog = RuntimeCatalog(profile)
-    runtimes = (
-        ["ollama", "vllm", "tgi", "transformers", "localai"]
-        if include_optional
-        else ["ollama", "vllm"]
-    )
+    runtimes = ["ollama", "vllm", "tgi", "transformers", "localai"] if include_optional else ["ollama", "vllm"]
     runtimes = [
         *runtimes,
         *_default_model_runtimes(profile, include_gui=include_optional),
@@ -1114,11 +1024,7 @@ def _runtime_prerequisite_rows(
             progress(f"checking runtime prerequisite {runtime}")
         payload = catalog.prerequisites(runtime)
         ok = bool(payload.get("ok"))
-        notes = (
-            list(payload.get("notes", []))
-            if isinstance(payload.get("notes"), list)
-            else []
-        )
+        notes = list(payload.get("notes", [])) if isinstance(payload.get("notes"), list) else []
         availability = None
         if runtime == "azure_speech":
             availability = catalog.runtime_available(runtime)
@@ -1132,9 +1038,7 @@ def _runtime_prerequisite_rows(
                 "known_runtime": payload.get("known_runtime"),
                 "ok": ok,
                 "helper_management": payload.get("helper_management"),
-                "install_supported_by_helper": payload.get(
-                    "install_supported_by_helper"
-                ),
+                "install_supported_by_helper": payload.get("install_supported_by_helper"),
                 "purpose": RUNTIME_PURPOSES.get(runtime, []),
                 "missing_required": payload.get("missing_required", []),
                 "missing_optional": payload.get("missing_optional", []),
@@ -1149,22 +1053,14 @@ def _runtime_prerequisite_rows(
 
 def _default_model_runtimes(profile: Profile, include_gui: bool) -> list[str]:
     catalog = RuntimeCatalog(profile)
-    defaults = (
-        profile.models.get("defaults", {}) if isinstance(profile.models, dict) else {}
-    )
-    models = (
-        profile.models.get("models", {}) if isinstance(profile.models, dict) else {}
-    )
+    defaults = profile.models.get("defaults", {}) if isinstance(profile.models, dict) else {}
+    models = profile.models.get("models", {}) if isinstance(profile.models, dict) else {}
     runtimes: list[str] = []
     if isinstance(defaults, dict) and isinstance(models, dict):
         for name in defaults.values():
             model = models.get(str(name))
             if isinstance(model, dict):
-                runtimes.extend(
-                    catalog.compatible_runtimes_for_entry(
-                        model, include_gui=include_gui
-                    )
-                )
+                runtimes.extend(catalog.compatible_runtimes_for_entry(model, include_gui=include_gui))
     return runtimes
 
 
@@ -1244,9 +1140,7 @@ def _runtime_setup_commands(runtime: str, payload: dict[str, object]) -> list[st
 
 def _checked_command(command: list[str], cwd: Path) -> dict[str, object]:
     try:
-        completed = subprocess.run(
-            command, cwd=cwd, text=True, capture_output=True, check=False, timeout=15
-        )
+        completed = subprocess.run(command, cwd=cwd, text=True, capture_output=True, check=False, timeout=15)
     except subprocess.TimeoutExpired:
         return {"returncode": None, "stdout": "", "stderr": "timeout"}
     except OSError as exc:
@@ -1298,9 +1192,7 @@ def _command_version(command: str) -> str | None:
     candidates = [[command, "--version"], [command, "version"]]
     for candidate in candidates:
         try:
-            completed = subprocess.run(
-                candidate, text=True, capture_output=True, check=False, timeout=8
-            )
+            completed = subprocess.run(candidate, text=True, capture_output=True, check=False, timeout=8)
         except Exception:
             continue
         output = (completed.stdout or completed.stderr).strip().splitlines()

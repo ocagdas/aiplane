@@ -39,9 +39,7 @@ class RuntimeExecutionTests(unittest.TestCase):
     def test_router_run_dry_run_selects_enabled_local_model(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             profile = load_profile("local-dev", Path(tmp))
-            result = Router(profile, AuditLogger(profile)).route(
-                "explain setup", dry_run=True
-            )
+            result = Router(profile, AuditLogger(profile)).route("explain setup", dry_run=True)
             self.assertEqual(result.backend, "dry_run")
             self.assertFalse(result.escalated)
             self.assertIn("fixture-analysis-small", result.text)
@@ -51,9 +49,7 @@ class RuntimeExecutionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             profile = load_profile("local-dev", Path(tmp))
             profile.models["defaults"]["self_managed_model"] = "fixture-code-small"
-            result = Router(profile, AuditLogger(profile)).route(
-                "explain setup", dry_run=True
-            )
+            result = Router(profile, AuditLogger(profile)).route("explain setup", dry_run=True)
             self.assertIn("fixture-code-small", result.text)
 
     def test_router_run_dry_run_can_use_explicit_model(self) -> None:
@@ -80,9 +76,7 @@ class RuntimeExecutionTests(unittest.TestCase):
             }
             router = Router(profile, AuditLogger(profile))
             with self.assertRaisesRegex(RuntimeError, "hardware requirements"):
-                router.route(
-                    "explain setup", model_name="too-large-local", dry_run=True
-                )
+                router.route("explain setup", model_name="too-large-local", dry_run=True)
             result = router.route(
                 "explain setup",
                 model_name="too-large-local",
@@ -111,9 +105,7 @@ class RuntimeExecutionTests(unittest.TestCase):
                 "enabled": True,
             }
             with self.assertRaises(PermissionError):
-                Router(profile, AuditLogger(profile)).route(
-                    "explain setup", model_name="openai-main", dry_run=True
-                )
+                Router(profile, AuditLogger(profile)).route("explain setup", model_name="openai-main", dry_run=True)
 
     def test_code_analyze_dry_run_includes_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -215,15 +207,11 @@ class RuntimeExecutionTests(unittest.TestCase):
     def test_ollama_backend_timeout_message_points_to_runtime_commands(self) -> None:
         backend = OllamaBackend(timeout_seconds=3)
         with patch("aiplane.backends.urlopen", side_effect=TimeoutError("timed out")):
-            with self.assertRaisesRegex(
-                RuntimeError, "Ollama request timed out"
-            ) as raised:
+            with self.assertRaisesRegex(RuntimeError, "Ollama request timed out") as raised:
                 backend.chat("hf.co/Example/Chat-GGUF", "hello")
         message = str(raised.exception)
         self.assertIn("aiplane runtimes status ollama", message)
-        self.assertIn(
-            "aiplane runtimes pull ollama --model hf.co/Example/Chat-GGUF", message
-        )
+        self.assertIn("aiplane runtimes pull ollama --model hf.co/Example/Chat-GGUF", message)
         self.assertNotIn("ollama serve", message)
 
     def test_code_write_cli_passes_timeout_override(self) -> None:
@@ -232,9 +220,7 @@ class RuntimeExecutionTests(unittest.TestCase):
             patch.object(
                 CodeTaskRunner,
                 "write",
-                return_value=CodeTaskResult(
-                    "write", "fixture-analysis-small", "prompt", "ok", False
-                ),
+                return_value=CodeTaskResult("write", "fixture-analysis-small", "prompt", "ok", False),
             ) as write,
             redirect_stdout(stdout),
         ):
@@ -262,9 +248,7 @@ class RuntimeExecutionTests(unittest.TestCase):
             outside.write_text("print('x')", encoding="utf-8")
             profile = load_profile("local-dev", workspace)
             with self.assertRaises(PermissionError):
-                CodeTaskRunner(profile, AuditLogger(profile)).analyze(
-                    "fixture-analysis-small", outside, dry_run=True
-                )
+                CodeTaskRunner(profile, AuditLogger(profile)).analyze("fixture-analysis-small", outside, dry_run=True)
 
     def test_code_task_rejects_non_task_capable_model_even_on_dry_run(self) -> None:
         profile = load_profile("local-dev", Path.cwd())
@@ -299,9 +283,7 @@ class RuntimeExecutionTests(unittest.TestCase):
                 return False
 
             def read(self):
-                return json.dumps(
-                    {"choices": [{"message": {"content": "openai ok"}}]}
-                ).encode("utf-8")
+                return json.dumps({"choices": [{"message": {"content": "openai ok"}}]}).encode("utf-8")
 
         with (
             patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}),
@@ -311,9 +293,7 @@ class RuntimeExecutionTests(unittest.TestCase):
         self.assertEqual(result.backend, "openai_compatible")
         self.assertEqual(result.text, "openai ok")
         request = opened.call_args.args[0]
-        self.assertEqual(
-            request.full_url, "https://api.example.test/v1/chat/completions"
-        )
+        self.assertEqual(request.full_url, "https://api.example.test/v1/chat/completions")
         self.assertEqual(request.headers.get("Authorization"), "Bearer test-key")
 
     def test_model_complete_supports_anthropic_messages_backend(self) -> None:
@@ -342,9 +322,7 @@ class RuntimeExecutionTests(unittest.TestCase):
                 return False
 
             def read(self):
-                return json.dumps(
-                    {"content": [{"type": "text", "text": "anthropic ok"}]}
-                ).encode("utf-8")
+                return json.dumps({"content": [{"type": "text", "text": "anthropic ok"}]}).encode("utf-8")
 
         with (
             patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}),
@@ -385,9 +363,7 @@ class RuntimeExecutionTests(unittest.TestCase):
                 return False
 
             def read(self):
-                return json.dumps(
-                    {"choices": [{"message": {"content": "azure ok"}}]}
-                ).encode("utf-8")
+                return json.dumps({"choices": [{"message": {"content": "azure ok"}}]}).encode("utf-8")
 
         with (
             patch.dict(os.environ, {"AZURE_OPENAI_API_KEY": "test-key"}),
@@ -435,9 +411,7 @@ class RuntimeExecutionTests(unittest.TestCase):
 
     def test_runtime_bundle_plan_renders_dockerfile_and_conda_yaml(self) -> None:
         profile = load_profile("local-dev", Path.cwd())
-        plan = RuntimeCatalog(profile).bundle_plan(
-            "vllm", model_name="provider-code-large-vllm", mode="docker"
-        )
+        plan = RuntimeCatalog(profile).bundle_plan("vllm", model_name="provider-code-large-vllm", mode="docker")
         self.assertEqual(plan["name"], "vllm-provider-code-large-vllm-docker")
         self.assertEqual(plan["selected_file"], "Dockerfile")
         self.assertIn("FROM python:3.13-slim", plan["files"]["Dockerfile"])
@@ -462,9 +436,7 @@ class RuntimeExecutionTests(unittest.TestCase):
                 models=json.loads(json.dumps(source.models)),
                 targets=source.targets,
             )
-            changed = RuntimeCatalog(profile).set_preferred_runtime(
-                "provider-code-large-vllm", "tgi"
-            )
+            changed = RuntimeCatalog(profile).set_preferred_runtime("provider-code-large-vllm", "tgi")
             self.assertEqual(changed["preferred_runtime"], "tgi")
             self.assertIn(
                 "preferred_runtime: tgi",
@@ -571,9 +543,7 @@ class RuntimeExecutionTests(unittest.TestCase):
         doctor = "python -m aiplane profiles list"
         self.assertIn(bootstrap, completed.stdout)
         self.assertIn(doctor, completed.stdout)
-        self.assertLess(
-            completed.stdout.index(bootstrap), completed.stdout.index(doctor)
-        )
+        self.assertLess(completed.stdout.index(bootstrap), completed.stdout.index(doctor))
 
     def test_setup_env_conda_install_repairs_existing_env_without_python(self) -> None:
         root = Path.cwd()
@@ -811,9 +781,7 @@ exit 0
         self.assertEqual(ollama_remove.returncode, 0, ollama_remove.stderr)
         self.assertIn("ollama rm hf.co/Example/Chat-GGUF", ollama_remove.stdout)
         self.assertEqual(ollama_discovered.returncode, 0, ollama_discovered.stderr)
-        self.assertIn(
-            "ollama pull hf.co/Example/Discovered-GGUF", ollama_discovered.stdout
-        )
+        self.assertIn("ollama pull hf.co/Example/Discovered-GGUF", ollama_discovered.stdout)
         self.assertEqual(ollama_clear.returncode, 0, ollama_clear.stderr)
         self.assertIn("ollama list | awk", ollama_clear.stdout)
         self.assertIn("xargs -r -n1 ollama rm", ollama_clear.stdout)
@@ -835,9 +803,7 @@ exit 0
                     ),
                     0,
                 )
-            completed = subprocess.CompletedProcess(
-                args=["provider_helper"], returncode=0, stdout="", stderr=""
-            )
+            completed = subprocess.CompletedProcess(args=["provider_helper"], returncode=0, stdout="", stderr="")
             with patch("aiplane.cli.subprocess.run", return_value=completed) as run:
                 code = cli_main(
                     [
@@ -854,9 +820,7 @@ exit 0
                     ]
                 )
             self.assertEqual(code, 0)
-            self.assertEqual(
-                run.call_args.kwargs["env"]["AIPLANE_PROFILES_DIR"], str(profiles_dir)
-            )
+            self.assertEqual(run.call_args.kwargs["env"]["AIPLANE_PROFILES_DIR"], str(profiles_dir))
 
     def test_runtime_lifecycle_reports_unavailable_helper_for_planned_runtime(
         self,
@@ -898,9 +862,7 @@ exit 0
     def test_runtime_remove_and_clear_require_confirmation(self) -> None:
         stdout = StringIO()
         with redirect_stdout(stdout):
-            code = cli_main(
-                ["runtimes", "remove", "ollama", "--model", "fixture-chat-small"]
-            )
+            code = cli_main(["runtimes", "remove", "ollama", "--model", "fixture-chat-small"])
         self.assertEqual(code, 2)
         payload = json.loads(stdout.getvalue())
         self.assertEqual(payload["name"], "runtime_destructive_confirmation_required")
@@ -950,9 +912,7 @@ exit 0
         output = stdout.getvalue()
         self.assertIn("Updating helper-managed runtimes", output)
         self.assertIn("pip install --upgrade vllm", output)
-        self.assertIn(
-            "docker pull ghcr.io/huggingface/text-generation-inference", output
-        )
+        self.assertIn("docker pull ghcr.io/huggingface/text-generation-inference", output)
 
         stdout = StringIO()
         with redirect_stdout(stdout):
@@ -996,9 +956,7 @@ exit 0
             patch("aiplane.cli.load_profile", return_value=profile),
             redirect_stdout(stdout),
         ):
-            code = cli_main(
-                ["runtimes", "start", "--profile", "local-dev", "ollama", "--dry-run"]
-            )
+            code = cli_main(["runtimes", "start", "--profile", "local-dev", "ollama", "--dry-run"])
         self.assertEqual(code, 0)
         self.assertIn("docker run", stdout.getvalue())
 

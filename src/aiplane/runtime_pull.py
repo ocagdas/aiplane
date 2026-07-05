@@ -43,9 +43,7 @@ def runtime_pull_support(runtime: str, selected: dict[str, Any]) -> dict[str, An
     source = str(selected.get("source") or provider)
     runtime_model = str(selected.get("model") or "")
     if runtime == "llamacpp":
-        if runtime_model.startswith(
-            ("http://", "https://")
-        ) and runtime_model.lower().endswith(".gguf"):
+        if runtime_model.startswith(("http://", "https://")) and runtime_model.lower().endswith(".gguf"):
             return {"supported": True, "supported_sources": ["direct_gguf_url"]}
         return {
             "supported": False,

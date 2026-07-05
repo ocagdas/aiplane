@@ -34,9 +34,7 @@ def add_integrations_parser(
         "  aiplane integrations export continue\n"
         "  aiplane integrations export openai-compatible --model MODEL_ALIAS --endpoint http://localhost:8000/v1",
     )
-    integrations_sub = integrations_cmd.add_subparsers(
-        dest="integrations_command", required=True, metavar="command"
-    )
+    integrations_sub = integrations_cmd.add_subparsers(dest="integrations_command", required=True, metavar="command")
     integrations_list = integrations_sub.add_parser(
         "list",
         help="List supported export targets",
@@ -53,9 +51,7 @@ def add_integrations_parser(
         epilog="Examples:\n  aiplane integrations roles continue\n  aiplane integrations roles cline",
     )
     profile_arg(integrations_roles)
-    integrations_roles.add_argument(
-        "tool", choices=ALL_INTEGRATION_TOOLS, help="Integration target to inspect"
-    )
+    integrations_roles.add_argument("tool", choices=ALL_INTEGRATION_TOOLS, help="Integration target to inspect")
     integrations_roles.add_argument(
         "--groups",
         action="store_true",
@@ -75,15 +71,9 @@ def add_integrations_parser(
         "--model",
         help="Single model alias for one-model targets such as Cline, Zed, Aider, or openai-compatible",
     )
-    integrations_plan.add_argument(
-        "--endpoint", help="Endpoint override passed through to the plan"
-    )
-    integrations_plan.add_argument(
-        "--api-key-env", help="API key env var override passed through to the plan"
-    )
-    integrations_plan.add_argument(
-        "tool", choices=ALL_INTEGRATION_TOOLS, help="Integration target to plan"
-    )
+    integrations_plan.add_argument("--endpoint", help="Endpoint override passed through to the plan")
+    integrations_plan.add_argument("--api-key-env", help="API key env var override passed through to the plan")
+    integrations_plan.add_argument("tool", choices=ALL_INTEGRATION_TOOLS, help="Integration target to plan")
 
     integrations_setup = integrations_sub.add_parser(
         "setup",
@@ -98,20 +88,14 @@ def add_integrations_parser(
         "--model",
         help="Single model alias for one-model targets such as Cline, Zed, Aider, or openai-compatible",
     )
-    integrations_setup.add_argument(
-        "--endpoint", help="Endpoint override passed through to the plan"
-    )
-    integrations_setup.add_argument(
-        "--api-key-env", help="API key env var override passed through to the plan"
-    )
+    integrations_setup.add_argument("--endpoint", help="Endpoint override passed through to the plan")
+    integrations_setup.add_argument("--api-key-env", help="API key env var override passed through to the plan")
     integrations_setup.add_argument(
         "--dry-run",
         action="store_true",
         help="Preview runtime start/pull actions without executing them",
     )
-    integrations_setup.add_argument(
-        "tool", choices=SETUP_INTEGRATION_TOOLS, help="Integration target to prepare"
-    )
+    integrations_setup.add_argument("tool", choices=SETUP_INTEGRATION_TOOLS, help="Integration target to prepare")
 
     integrations_export = integrations_sub.add_parser(
         "export",
@@ -138,14 +122,10 @@ def add_integrations_parser(
         "--api-key-env",
         help="Environment variable name the target tool should read for an API key",
     )
-    integrations_export.add_argument(
-        "tool", choices=ALL_INTEGRATION_TOOLS, help="Export format to print"
-    )
+    integrations_export.add_argument("tool", choices=ALL_INTEGRATION_TOOLS, help="Export format to print")
 
 
-def handle_integrations_command(
-    args: argparse.Namespace, profile: Profile, json_dumps: JsonDumps
-) -> int:
+def handle_integrations_command(args: argparse.Namespace, profile: Profile, json_dumps: JsonDumps) -> int:
     manager = IntegrationManager(profile)
     if args.integrations_command == "list":
         print(json_dumps(manager.list(), indent=2, sort_keys=True))

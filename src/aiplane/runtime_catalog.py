@@ -37,9 +37,7 @@ class RuntimeCatalog:
                     "gui_required": bool(runtime.get("gui_required", False)),
                     "managed_by_helper": runtime.get("managed_by_helper", False),
                     "configured": name in self._profile_provider_overrides(),
-                    "enabled": (
-                        bool(provider.get("enabled", True)) if provider else False
-                    ),
+                    "enabled": (bool(provider.get("enabled", True)) if provider else False),
                     "endpoint": provider.get("endpoint"),
                     "protocol": runtime.get("protocol"),
                     "model_sources": runtime.get("model_sources", []),
@@ -50,24 +48,15 @@ class RuntimeCatalog:
         return sorted(rows, key=lambda row: row["name"])
 
     def sources(self) -> list[dict[str, Any]]:
-        return [
-            {"name": name, **value}
-            for name, value in sorted(SOURCE_DEFINITIONS.items())
-        ]
+        return [{"name": name, **value} for name, value in sorted(SOURCE_DEFINITIONS.items())]
 
     def prerequisites(self, runtime: str) -> dict[str, Any]:
         if runtime == "all":
-            rows = [
-                self.prerequisites(row["name"]) for row in self.list(include_gui=True)
-            ]
+            rows = [self.prerequisites(row["name"]) for row in self.list(include_gui=True)]
             return {
                 "name": "runtime_prerequisites",
                 "runtime": "all",
-                "ok": all(
-                    bool(row.get("ok"))
-                    for row in rows
-                    if row.get("supported_by_aiplane_helper")
-                ),
+                "ok": all(bool(row.get("ok")) for row in rows if row.get("supported_by_aiplane_helper")),
                 "runtimes": rows,
             }
         definition = RUNTIME_DEFINITIONS.get(runtime)
@@ -80,21 +69,11 @@ class RuntimeCatalog:
                 "ok": False,
                 "missing_required": [],
                 "missing_optional": [],
-                "notes": [
-                    "Unknown runtime. Use `aiplane runtimes list --include-gui` to inspect known runtimes."
-                ],
+                "notes": ["Unknown runtime. Use `aiplane runtimes list --include-gui` to inspect known runtimes."],
             }
         required, optional, packages, notes = _runtime_prerequisite_spec(runtime)
-        missing_required = [
-            _tool_row(name, packages.get(name))
-            for name in required
-            if shutil.which(name) is None
-        ]
-        missing_optional = [
-            _tool_row(name, packages.get(name))
-            for name in optional
-            if shutil.which(name) is None
-        ]
+        missing_required = [_tool_row(name, packages.get(name)) for name in required if shutil.which(name) is None]
+        missing_optional = [_tool_row(name, packages.get(name)) for name in optional if shutil.which(name) is None]
         managed = definition.get("managed_by_helper")
         install_supported = runtime in {
             "ollama",
@@ -122,22 +101,14 @@ class RuntimeCatalog:
             "os": _os_summary(),
             "ok": not missing_required,
             "required_tools": [
-                _tool_row(
-                    name, packages.get(name), installed=shutil.which(name) is not None
-                )
-                for name in required
+                _tool_row(name, packages.get(name), installed=shutil.which(name) is not None) for name in required
             ],
             "optional_tools": [
-                _tool_row(
-                    name, packages.get(name), installed=shutil.which(name) is not None
-                )
-                for name in optional
+                _tool_row(name, packages.get(name), installed=shutil.which(name) is not None) for name in optional
             ],
             "missing_required": missing_required,
             "missing_optional": missing_optional,
-            "ubuntu_install_hint": _ubuntu_install_hint(
-                missing_required + missing_optional
-            ),
+            "ubuntu_install_hint": _ubuntu_install_hint(missing_required + missing_optional),
             "runtime_install_hint": definition.get("install_hint"),
             "notes": notes,
         }
@@ -154,38 +125,25 @@ class RuntimeCatalog:
             ],
         }
 
-    def models_by_runtime(
-        self, runtime: str | None = None, include_gui: bool = False
-    ) -> dict[str, Any]:
+    def models_by_runtime(self, runtime: str | None = None, include_gui: bool = False) -> dict[str, Any]:
         rows: dict[str, list[dict[str, Any]]] = {}
         for model_name, model in self._models().items():
-            for runtime_name in self.supported_runtimes(
-                model_name, include_gui=include_gui
-            ):
+            for runtime_name in self.supported_runtimes(model_name, include_gui=include_gui):
                 if runtime and runtime_name != runtime:
                     continue
-                rows.setdefault(runtime_name, []).append(
-                    self._model_row(model_name, model)
-                )
+                rows.setdefault(runtime_name, []).append(self._model_row(model_name, model))
         if runtime and runtime not in rows:
             rows[runtime] = []
         return {
             "runtime": runtime,
-            "models": {
-                key: sorted(value, key=lambda row: row["name"])
-                for key, value in sorted(rows.items())
-            },
+            "models": {key: sorted(value, key=lambda row: row["name"]) for key, value in sorted(rows.items())},
         }
 
-    def runtimes_by_model(
-        self, model_name: str, include_gui: bool = False
-    ) -> dict[str, Any]:
+    def runtimes_by_model(self, model_name: str, include_gui: bool = False) -> dict[str, Any]:
         model = self._model(model_name)
         preferred = str(model.get("preferred_runtime") or model.get("provider") or "")
         runtimes = []
-        for runtime_name in self.supported_runtimes(
-            model_name, include_gui=include_gui
-        ):
+        for runtime_name in self.supported_runtimes(model_name, include_gui=include_gui):
             runtimes.append(
                 {
                     "name": runtime_name,
@@ -203,16 +161,10 @@ class RuntimeCatalog:
             "runtimes": runtimes,
         }
 
-    def supported_runtimes(
-        self, model_name: str, include_gui: bool = False
-    ) -> list[str]:
-        return self.compatible_runtimes_for_entry(
-            self._model(model_name), include_gui=include_gui
-        )
+    def supported_runtimes(self, model_name: str, include_gui: bool = False) -> list[str]:
+        return self.compatible_runtimes_for_entry(self._model(model_name), include_gui=include_gui)
 
-    def compatible_runtimes_for_entry(
-        self, model: dict[str, Any], include_gui: bool = False
-    ) -> list[str]:
+    def compatible_runtimes_for_entry(self, model: dict[str, Any], include_gui: bool = False) -> list[str]:
         provider = self._providers().get(str(model.get("provider") or ""), {})
         ownership = str(model.get("ownership") or provider.get("ownership") or "")
         if ownership == "managed_service":
@@ -226,20 +178,14 @@ class RuntimeCatalog:
         if preferred:
             runtimes = [preferred, *runtimes]
         if not include_gui:
-            runtimes = [
-                name
-                for name in runtimes
-                if not RUNTIME_DEFINITIONS.get(name, {}).get("gui_required")
-            ]
+            runtimes = [name for name in runtimes if not RUNTIME_DEFINITIONS.get(name, {}).get("gui_required")]
         return [name for name in dict.fromkeys(runtimes) if name in RUNTIME_DEFINITIONS]
 
     def select_runtime(self, model_name: str) -> dict[str, Any]:
         model = self._model(model_name)
         supported = self.supported_runtimes(model_name)
         preferred = str(model.get("preferred_runtime") or model.get("provider") or "")
-        ordered = ([preferred] if preferred in supported else []) + [
-            name for name in supported if name != preferred
-        ]
+        ordered = ([preferred] if preferred in supported else []) + [name for name in supported if name != preferred]
         statuses = [self.runtime_available(name) for name in ordered]
         for status in statuses:
             if status["available"]:
@@ -272,9 +218,7 @@ class RuntimeCatalog:
         path.write_text(dump_yaml(self.models_config), encoding="utf-8")
         return {"name": model_name, "preferred_runtime": runtime, "path": str(path)}
 
-    def bundle_plan(
-        self, runtime: str, model_name: str, mode: str = "docker"
-    ) -> dict[str, Any]:
+    def bundle_plan(self, runtime: str, model_name: str, mode: str = "docker") -> dict[str, Any]:
         if runtime not in RUNTIME_DEFINITIONS:
             raise ValueError(f"unknown runtime: {runtime}")
         if mode not in {"docker", "conda"}:
@@ -316,9 +260,7 @@ class RuntimeCatalog:
         definition = RUNTIME_DEFINITIONS.get(runtime, {})
         if runtime == "ollama":
             endpoint = str(provider.get("endpoint", "http://localhost:11434"))
-            reachable, reason = OllamaBackend(
-                endpoint, int(provider.get("timeout_seconds", 5))
-            ).is_reachable()
+            reachable, reason = OllamaBackend(endpoint, int(provider.get("timeout_seconds", 5))).is_reachable()
             payload = {
                 "name": runtime,
                 "available": reachable,
@@ -373,9 +315,7 @@ class RuntimeCatalog:
             key_env = str(provider.get("api_key_env") or "AZURE_SPEECH_KEY")
             region_env = str(provider.get("region_env") or "AZURE_SPEECH_REGION")
             enabled = bool(provider.get("enabled", True))
-            key_present = bool(
-                os.environ.get(key_env) or provider.get("credential_ref")
-            )
+            key_present = bool(os.environ.get(key_env) or provider.get("credential_ref"))
             region_present = bool(os.environ.get(region_env) or provider.get("region"))
             available = enabled and key_present and region_present
             missing = []
@@ -408,9 +348,7 @@ class RuntimeCatalog:
             }
             return {
                 **payload,
-                "suggested_actions": _runtime_suggestions(
-                    runtime, "install" if not installed else "library"
-                ),
+                "suggested_actions": _runtime_suggestions(runtime, "install" if not installed else "library"),
             }
         return {
             "name": runtime,
@@ -447,8 +385,7 @@ class RuntimeCatalog:
             "name": name,
             "model": model.get("model"),
             "provider": model.get("provider"),
-            "preferred_runtime": model.get("preferred_runtime")
-            or model.get("provider"),
+            "preferred_runtime": model.get("preferred_runtime") or model.get("provider"),
             "source": self.source_for_model(model),
             "enabled": bool(model.get("enabled", True)),
             "roles": model.get("roles", []),
@@ -459,9 +396,7 @@ class RuntimeCatalog:
         return providers if isinstance(providers, dict) else {}
 
     def _providers(self) -> dict[str, dict[str, Any]]:
-        providers = {
-            name: dict(value) for name, value in PROVIDER_ENDPOINT_DEFAULTS.items()
-        }
+        providers = {name: dict(value) for name, value in PROVIDER_ENDPOINT_DEFAULTS.items()}
         for name, value in self._profile_provider_overrides().items():
             if isinstance(value, dict):
                 providers[name] = {
@@ -499,11 +434,7 @@ class RuntimeCatalog:
         if provider.get("ownership"):
             return str(provider.get("ownership"))
         provider_name = str(model.get("provider") or "")
-        return (
-            "managed_service"
-            if provider_name in PROVIDER_ENDPOINT_DEFAULTS
-            else "self_managed"
-        )
+        return "managed_service" if provider_name in PROVIDER_ENDPOINT_DEFAULTS else "self_managed"
 
 
 def _dockerfile_for_runtime(runtime: str, model_id: str) -> str:
@@ -579,9 +510,7 @@ def _pip_packages_for_runtime(runtime: str) -> list[str]:
     return packages.get(runtime, [])
 
 
-def _bundle_commands(
-    runtime: str, model_name: str, mode: str, selected_file: str
-) -> list[str]:
+def _bundle_commands(runtime: str, model_name: str, mode: str, selected_file: str) -> list[str]:
     if mode == "docker":
         tag = f"aiplane-{runtime}-{model_name}:local"
         return [
@@ -637,9 +566,7 @@ def _os_summary() -> dict[str, Any]:
             os_release[key] = value.strip().strip('"')
     except OSError:
         pass
-    ids = " ".join(
-        filter(None, [os_release.get("ID", ""), os_release.get("ID_LIKE", "")])
-    )
+    ids = " ".join(filter(None, [os_release.get("ID", ""), os_release.get("ID_LIKE", "")]))
     return {
         "system": platform.system(),
         "machine": platform.machine(),
@@ -650,9 +577,7 @@ def _os_summary() -> dict[str, Any]:
     }
 
 
-def _tool_row(
-    name: str, ubuntu_package: str | None = None, installed: bool | None = None
-) -> dict[str, Any]:
+def _tool_row(name: str, ubuntu_package: str | None = None, installed: bool | None = None) -> dict[str, Any]:
     path = shutil.which(name)
     return {
         "name": name,
@@ -663,13 +588,7 @@ def _tool_row(
 
 
 def _ubuntu_install_hint(rows: list[dict[str, Any]]) -> str | None:
-    packages = sorted(
-        {
-            str(row.get("ubuntu_package") or row.get("name"))
-            for row in rows
-            if row.get("ubuntu_package")
-        }
-    )
+    packages = sorted({str(row.get("ubuntu_package") or row.get("name")) for row in rows if row.get("ubuntu_package")})
     if not packages:
         return None
     return "sudo apt-get update && sudo apt-get install -y " + " ".join(packages)
@@ -692,27 +611,21 @@ def _runtime_prerequisite_spec(
             ["curl", "sh"],
             [],
             packages,
-            [
-                "The helper delegates install/update to Ollama's official Linux install script."
-            ],
+            ["The helper delegates install/update to Ollama's official Linux install script."],
         )
     if runtime == "vllm":
         return (
             ["python", "pip"],
             ["nvidia-smi"],
             packages,
-            [
-                "The helper installs vLLM with pip. GPU/CUDA compatibility is still a runtime-native concern."
-            ],
+            ["The helper installs vLLM with pip. GPU/CUDA compatibility is still a runtime-native concern."],
         )
     if runtime == "transformers":
         return (
             ["python", "pip"],
             ["nvidia-smi"],
             packages,
-            [
-                "Transformers is a Python library path, not a serving endpoint by default."
-            ],
+            ["Transformers is a Python library path, not a serving endpoint by default."],
         )
     if runtime in {"tgi", "localai"}:
         return (
@@ -728,9 +641,7 @@ def _runtime_prerequisite_spec(
             ["llama-server"],
             ["curl"],
             packages,
-            [
-                "Install/build llama.cpp for your CPU/GPU target and put llama-server on PATH."
-            ],
+            ["Install/build llama.cpp for your CPU/GPU target and put llama-server on PATH."],
         )
     if runtime == "azure_speech":
         return (
@@ -746,9 +657,7 @@ def _runtime_prerequisite_spec(
             [],
             [],
             packages,
-            [
-                "LM Studio is GUI-managed. Install it manually and enable the local server from the app."
-            ],
+            ["LM Studio is GUI-managed. Install it manually and enable the local server from the app."],
         )
     return (
         [],

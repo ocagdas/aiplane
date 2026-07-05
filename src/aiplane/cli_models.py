@@ -38,9 +38,7 @@ def add_models_parser(
         "Work with the approved model catalog in the selected profile.",
         "Examples:\n  aiplane models list\n  aiplane models show MODEL_ALIAS\n  aiplane models test --dry-run MODEL_ALIAS\n  aiplane models benchmark --task all MODEL_ALIAS\n  aiplane models defaults\n  aiplane models use self_managed_model MODEL_ALIAS",
     )
-    models_sub = models_cmd.add_subparsers(
-        dest="models_command", required=True, metavar="command"
-    )
+    models_sub = models_cmd.add_subparsers(dest="models_command", required=True, metavar="command")
     models_defaults = models_sub.add_parser(
         "defaults",
         help="Show configured default model aliases",
@@ -66,9 +64,7 @@ def add_models_parser(
         "role",
         help="Default role name, such as chat_model, autocomplete_model, embedding_model, code_model, self_managed_model, completion_model, or reasoning_model",
     )
-    models_use.add_argument(
-        "name", help="Existing model alias to set as the default for ROLE"
-    )
+    models_use.add_argument("name", help="Existing model alias to set as the default for ROLE")
     models_add = models_sub.add_parser(
         "add",
         help="Add a model as a profile-owned entry in models.yaml",
@@ -101,9 +97,7 @@ def add_models_parser(
         dest="model_id",
         help="Provider/source-native model id or managed deployment name",
     )
-    models_add.add_argument(
-        "--role", action="append", default=[], help="Usage role; can be repeated"
-    )
+    models_add.add_argument("--role", action="append", default=[], help="Usage role; can be repeated")
     models_add.add_argument(
         "--runtime",
         action="append",
@@ -123,9 +117,7 @@ def add_models_parser(
         default=[],
         help="Extra model metadata as key=value, such as min_ram_gb=16 or min_vram_gb=0; can be repeated",
     )
-    models_add.add_argument(
-        "--disable", action="store_true", help="Create the entry disabled"
-    )
+    models_add.add_argument("--disable", action="store_true", help="Create the entry disabled")
     models_add.add_argument(
         "--overwrite",
         action="store_true",
@@ -144,9 +136,7 @@ def add_models_parser(
         epilog="Examples:\n  aiplane models clone local_chat local_fast_draft --role completion --notes 'Fast draft model for local coding tasks'\n  aiplane models clone DISCOVERED_ENTRY_NAME local_chat --role chat --runtime ollama --dry-run",
     )
     profile_arg(models_clone)
-    models_clone.add_argument(
-        "source", help="Existing discovered or profile-owned model entry name"
-    )
+    models_clone.add_argument("source", help="Existing discovered or profile-owned model entry name")
     models_clone.add_argument("target", help="New profile model entry name")
     models_clone.add_argument(
         "--role",
@@ -161,9 +151,7 @@ def add_models_parser(
         dest="supported_runtimes",
         help="Replacement supported runtime; can be repeated",
     )
-    models_clone.add_argument(
-        "--preferred-runtime", help="Replacement preferred runtime"
-    )
+    models_clone.add_argument("--preferred-runtime", help="Replacement preferred runtime")
     models_clone.add_argument("--notes", help="Replacement human notes")
     models_clone.add_argument(
         "--set",
@@ -173,12 +161,8 @@ def add_models_parser(
         help="Extra model metadata override as key=value; can be repeated",
     )
     clone_enabled = models_clone.add_mutually_exclusive_group()
-    clone_enabled.add_argument(
-        "--enable", action="store_true", help="Mark the cloned entry enabled"
-    )
-    clone_enabled.add_argument(
-        "--disable", action="store_true", help="Mark the cloned entry disabled"
-    )
+    clone_enabled.add_argument("--enable", action="store_true", help="Mark the cloned entry enabled")
+    clone_enabled.add_argument("--disable", action="store_true", help="Mark the cloned entry disabled")
     models_clone.add_argument(
         "--overwrite",
         action="store_true",
@@ -198,9 +182,7 @@ def add_models_parser(
     )
     profile_arg(models_remove)
     models_remove.add_argument("name", help="Profile-owned model alias to remove")
-    models_remove.add_argument(
-        "--dry-run", action="store_true", help="Preview without writing files"
-    )
+    models_remove.add_argument("--dry-run", action="store_true", help="Preview without writing files")
     models_enable = models_sub.add_parser(
         "enable",
         help="Enable one model alias",
@@ -296,9 +278,7 @@ def add_models_parser(
         type=float,
         help="Require a minimum provider catalog downloads count when source metadata includes downloads",
     )
-    models_list.add_argument(
-        "--enabled-only", action="store_true", help="Show only enabled profile models"
-    )
+    models_list.add_argument("--enabled-only", action="store_true", help="Show only enabled profile models")
     models_list.add_argument(
         "--self-managed-only",
         action="store_true",
@@ -381,9 +361,7 @@ def add_models_parser(
         formatter_class=formatter_class,
     )
     profile_arg(models_show)
-    models_show.add_argument(
-        "name", help="Model alias from models.yaml, for example MODEL_ALIAS"
-    )
+    models_show.add_argument("name", help="Model alias from models.yaml, for example MODEL_ALIAS")
     models_doctor = models_sub.add_parser(
         "doctor",
         help="Check model/provider readiness",
@@ -415,9 +393,7 @@ def add_models_parser(
         "--for-runtime",
         help="Runtime compatibility intent, such as vllm, tgi, transformers, or llamacpp",
     )
-    models_pull.add_argument(
-        "--file", help="Optional file inside a source repo, useful for GGUF downloads"
-    )
+    models_pull.add_argument("--file", help="Optional file inside a source repo, useful for GGUF downloads")
     models_pull.add_argument(
         "--dry-run",
         action="store_true",
@@ -531,9 +507,7 @@ def add_models_parser(
         ),
     )
     profile_arg(models_promote)
-    models_promote.add_argument(
-        "name", help="Discovered model entry from models.discovered.yaml"
-    )
+    models_promote.add_argument("name", help="Discovered model entry from models.discovered.yaml")
     models_promote.add_argument(
         "--as",
         dest="new_name",
@@ -602,9 +576,7 @@ def add_models_parser(
         choices=["system", "venv", "conda", "docker"],
         help="Environment mode used for custom evaluator commands; defaults to the active profile environment",
     )
-    models_benchmark.add_argument(
-        "--timeout-seconds", type=int, help="Timeout for each custom evaluator command"
-    )
+    models_benchmark.add_argument("--timeout-seconds", type=int, help="Timeout for each custom evaluator command")
     models_benchmark.add_argument(
         "--dry-run",
         action="store_true",
@@ -618,9 +590,7 @@ def add_models_parser(
     models_benchmark.add_argument("name", help="Model alias to benchmark")
 
 
-def handle_models_command(
-    args: argparse.Namespace, *, profile: Profile, json_dumps: JsonDumps
-) -> int:
+def handle_models_command(args: argparse.Namespace, *, profile: Profile, json_dumps: JsonDumps) -> int:
     catalog = ModelCatalog(profile)
     if args.models_command == "defaults":
         summary = catalog.default_summary()
@@ -676,11 +646,7 @@ def handle_models_command(
         )
         return 0
     if args.models_command == "remove":
-        print(
-            json_dumps(
-                catalog.remove_model(args.name, write=not args.dry_run), indent=2
-            )
-        )
+        print(json_dumps(catalog.remove_model(args.name, write=not args.dry_run), indent=2))
         return 0
     if args.models_command == "enable":
         print(json_dumps(catalog.set_enabled(args.name, True), indent=2))
@@ -728,13 +694,7 @@ def handle_models_command(
         )
         return 0
     if args.models_command == "pull":
-        if (
-            args.source
-            or args.model_id
-            or args.dry_run
-            or args.for_runtime
-            or args.file
-        ):
+        if args.source or args.model_id or args.dry_run or args.for_runtime or args.file:
             plan = catalog.pull_plan(
                 args.name,
                 source=args.source,
@@ -909,9 +869,7 @@ def refresh_cli_payload(result: dict[str, object], verbose: bool) -> dict[str, o
                     "ownership": row.get("ownership"),
                     "source_contacted": row.get("source_contacted"),
                     "source_models_returned": row.get("source_models_returned"),
-                    "source_models_already_profiled": row.get(
-                        "source_models_already_profiled"
-                    ),
+                    "source_models_already_profiled": row.get("source_models_already_profiled"),
                     "source_models_to_import": row.get("source_models_to_import"),
                     "source_models_to_update": row.get("source_models_to_update"),
                     "model_changes_count": row.get("model_changes_count"),
@@ -926,9 +884,7 @@ def refresh_cli_payload(result: dict[str, object], verbose: bool) -> dict[str, o
 
 def active_hardware_model_filters(profile: Profile) -> dict[str, object]:
     machine = HardwareManager(profile).machine()
-    memory = (
-        machine.get("memory", {}) if isinstance(machine.get("memory"), dict) else {}
-    )
+    memory = machine.get("memory", {}) if isinstance(machine.get("memory"), dict) else {}
     gpu = machine.get("gpu", {}) if isinstance(machine.get("gpu"), dict) else {}
     filters: dict[str, object] = {}
     ram = memory.get("ram_gb") or memory.get("unified_memory_gb")
