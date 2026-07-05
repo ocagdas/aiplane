@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from .support import (
     DeployManager,
+    _isolated_profiles_dir,
     Path,
     Profile,
     RemoteManager,
@@ -39,18 +40,18 @@ class DeployRemoteTests(unittest.TestCase):
 
     def test_deploy_workflow_plan_cli_is_non_mutating(self) -> None:
         stdout = StringIO()
-        profiles_dir = Path(__file__).resolve().parents[1] / "profiles"
-        with redirect_stdout(stdout):
-            code = cli_main(
-                [
-                    "--profiles-dir",
-                    str(profiles_dir),
-                    "deploy",
-                    "workflow-plan",
-                    "--target",
-                    "azure_gpu_vm",
-                ]
-            )
+        with _isolated_profiles_dir() as profiles_dir:
+            with redirect_stdout(stdout):
+                code = cli_main(
+                    [
+                        "--profiles-dir",
+                        str(profiles_dir),
+                        "deploy",
+                        "workflow-plan",
+                        "--target",
+                        "azure_gpu_vm",
+                    ]
+                )
         self.assertEqual(code, 0)
         payload = json.loads(stdout.getvalue())
         self.assertEqual(payload["workflow"], "cloud_vm")
@@ -97,22 +98,22 @@ class DeployRemoteTests(unittest.TestCase):
     def test_deploy_apply_cli_requires_explicit_yes(self) -> None:
         stdout = StringIO()
         stderr = StringIO()
-        profiles_dir = Path(__file__).resolve().parents[1] / "profiles"
-        with (
-            patch("aiplane.deploy.subprocess.run") as run,
-            redirect_stdout(stdout),
-            redirect_stderr(stderr),
-        ):
-            code = cli_main(
-                [
-                    "--profiles-dir",
-                    str(profiles_dir),
-                    "deploy",
-                    "apply",
-                    "--target",
-                    "azure_gpu_vm",
-                ]
-            )
+        with _isolated_profiles_dir() as profiles_dir:
+            with (
+                patch("aiplane.deploy.subprocess.run") as run,
+                redirect_stdout(stdout),
+                redirect_stderr(stderr),
+            ):
+                code = cli_main(
+                    [
+                        "--profiles-dir",
+                        str(profiles_dir),
+                        "deploy",
+                        "apply",
+                        "--target",
+                        "azure_gpu_vm",
+                    ]
+                )
         self.assertEqual(code, 1)
         self.assertIn("deploy apply is mutating", stderr.getvalue())
         self.assertEqual(stdout.getvalue(), "")
@@ -121,22 +122,22 @@ class DeployRemoteTests(unittest.TestCase):
     def test_deploy_apply_cli_runs_only_with_yes(self) -> None:
         completed = subprocess.CompletedProcess(["az"], 0, "ok", "")
         stdout = StringIO()
-        profiles_dir = Path(__file__).resolve().parents[1] / "profiles"
-        with (
-            patch("aiplane.deploy.subprocess.run", return_value=completed) as run,
-            redirect_stdout(stdout),
-        ):
-            code = cli_main(
-                [
-                    "--profiles-dir",
-                    str(profiles_dir),
-                    "deploy",
-                    "apply",
-                    "--target",
-                    "azure_gpu_vm",
-                    "--yes",
-                ]
-            )
+        with _isolated_profiles_dir() as profiles_dir:
+            with (
+                patch("aiplane.deploy.subprocess.run", return_value=completed) as run,
+                redirect_stdout(stdout),
+            ):
+                code = cli_main(
+                    [
+                        "--profiles-dir",
+                        str(profiles_dir),
+                        "deploy",
+                        "apply",
+                        "--target",
+                        "azure_gpu_vm",
+                        "--yes",
+                    ]
+                )
         self.assertEqual(code, 0)
         payload = json.loads(stdout.getvalue())
         self.assertEqual(payload["target"], "azure_gpu_vm")
