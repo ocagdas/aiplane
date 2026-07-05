@@ -15,6 +15,7 @@ from .support import (
     subprocess,
     tempfile,
     unittest,
+    _isolated_profiles_dir,
 )
 
 
