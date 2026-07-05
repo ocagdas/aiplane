@@ -786,6 +786,42 @@ exit 0
         self.assertIn("ollama list | awk", ollama_clear.stdout)
         self.assertIn("xargs -r -n1 ollama rm", ollama_clear.stdout)
 
+    def test_runtime_helper_receives_custom_profiles_dir(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            profiles_dir = Path(tmp) / "profiles"
+            with redirect_stdout(StringIO()):
+                self.assertEqual(
+                    cli_main(
+                        [
+                            "--profiles-dir",
+                            str(profiles_dir),
+                            "quickstart",
+                            "local-coding",
+                            "--no-discovery",
+                            "--no-hardware-discovery",
+                        ]
+                    ),
+                    0,
+                )
+            completed = subprocess.CompletedProcess(args=["provider_helper"], returncode=0, stdout="", stderr="")
+            with patch("aiplane.cli.subprocess.run", return_value=completed) as run:
+                code = cli_main(
+                    [
+                        "--profiles-dir",
+                        str(profiles_dir),
+                        "runtimes",
+                        "start",
+                        "vllm",
+                        "--profile",
+                        "local-dev",
+                        "--model",
+                        "provider-code-large-vllm",
+                        "--dry-run",
+                    ]
+                )
+            self.assertEqual(code, 0)
+            self.assertEqual(run.call_args.kwargs["env"]["AIPLANE_PROFILES_DIR"], str(profiles_dir))
+
     def test_runtime_lifecycle_reports_unavailable_helper_for_planned_runtime(
         self,
     ) -> None:

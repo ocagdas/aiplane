@@ -105,7 +105,7 @@ aiplane models list --group-by ownership
 aiplane models clear-cache --dry-run
 ```
 
-Plan a local runtime/model setup before changing the machine. Replace `MODEL_ALIAS` with an alias discovered into `models.generated.yaml` or deliberately promoted into local `models.yaml`:
+Plan a local runtime/model setup before changing the machine. Replace `MODEL_ALIAS` with an alias discovered into `models.discovered.yaml` or deliberately promoted into local `models.yaml`:
 
 ```bash
 aiplane runtimes install ollama --dry-run

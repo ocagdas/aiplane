@@ -304,6 +304,7 @@ class ProfileConfigTests(unittest.TestCase):
             self.assertFalse(payload["pull"]["dry_run"])
             helper.assert_called_once()
             self.assertFalse(helper.call_args.kwargs["dry_run"])
+            self.assertEqual(helper.call_args.kwargs["profiles_dir"], profiles_dir)
             self.assertIn("aiplane runtimes pull ollama --model fixture-chat-small", payload["commands"])
             self.assertNotIn("aiplane runtimes pull ollama --model fixture-chat-small --dry-run", payload["commands"])
 
@@ -354,6 +355,7 @@ class ProfileConfigTests(unittest.TestCase):
             self.assertTrue(payload["pull"]["dry_run"])
             helper.assert_called_once()
             self.assertTrue(helper.call_args.kwargs["dry_run"])
+            self.assertEqual(helper.call_args.kwargs["profiles_dir"], profiles_dir)
             self.assertIn("aiplane runtimes pull ollama --model fixture-chat-small --dry-run", payload["commands"])
 
     def test_profiles_bootstrap_local_includes_hardware_discovery(self) -> None:

@@ -27,11 +27,12 @@ Use a three-part demo rather than two overloaded videos.
 
 2. **Section 2: Model To Runtime To Runner** - target 2:45-3:00.
    - Preserve the `mvp_0.2` live path: discover/filter a local Ollama-capable model, add/promote a reviewed alias, preview setup/pull, execute pull when prepared, then run `chat`, `run`, and code-task smoke checks.
+   - Add a second runtime track with a vLLM/OpenAI-compatible endpoint: plan/bundle/start dry-run, export endpoint config, and run dry-run chat/task checks; run live only if the endpoint is already prepared.
    - Explain the runner boundary precisely: `aiplane` can route single prompts and task prompts through configured endpoints or delegated runtime helpers; it is not a full chat UI, model server, or autonomous coding agent.
    - Export Continue/Aider/OpenAI-compatible config only after aliases/defaults exist.
 
-3. **Section 3: Portability, MCP, And Roadmap** - target 2:45-3:00.
-   - Show profile/machine/stack repeatability, remote endpoint/tunnel planning, MCP manifest/config export, orchestrator metadata, and tool/deploy planning.
+3. **Section 3: Portability, MCP, Skills, And Roadmap** - target 2:45-3:00.
+   - Show profile/machine/stack repeatability, remote endpoint/tunnel planning, MCP manifest/config export, the `skills/aiplane` assistant guidance package, orchestrator metadata, and tool/deploy planning.
    - Keep Azure/media/orchestrator items as planning/readiness demos unless a prepared sanitized environment exists.
    - Close with the scope anchor: control plane plus thin runner smoke checks, not a runtime/platform replacement.
 
@@ -92,9 +93,22 @@ aiplane --profiles-dir /tmp/aiplane-demo-profiles code write --profile demo --mo
 aiplane --profiles-dir /tmp/aiplane-demo-profiles integrations export continue --profile demo --chat "$CHAT_ALIAS"
 aiplane --profiles-dir /tmp/aiplane-demo-profiles integrations export aider --profile demo --chat "$CHAT_ALIAS"
 
-# Section 3: MCP and repeatability surfaces.
+# Second runtime track: vLLM/OpenAI-compatible endpoint planning and runner dry-runs.
+VLLM_ALIAS="vllm_demo_chat"
+aiplane --profiles-dir /tmp/aiplane-demo-profiles models add "$VLLM_ALIAS" --profile demo --provider local_file --model /models/TinyLlama-1.1B-Chat-v1.0 --role chat --runtime vllm --preferred-runtime vllm --set min_ram_gb=16 --set min_vram_gb=8 --dry-run
+aiplane --profiles-dir /tmp/aiplane-demo-profiles models add "$VLLM_ALIAS" --profile demo --provider local_file --model /models/TinyLlama-1.1B-Chat-v1.0 --role chat --runtime vllm --preferred-runtime vllm --set min_ram_gb=16 --set min_vram_gb=8 --overwrite
+aiplane --profiles-dir /tmp/aiplane-demo-profiles models show --profile demo "$VLLM_ALIAS"
+aiplane --profiles-dir /tmp/aiplane-demo-profiles runtimes prerequisites vllm
+aiplane --profiles-dir /tmp/aiplane-demo-profiles runtimes bundle vllm --profile demo --model "$VLLM_ALIAS" --mode docker --format dockerfile
+aiplane --profiles-dir /tmp/aiplane-demo-profiles runtimes start vllm --profile demo --model "$VLLM_ALIAS" --dry-run
+aiplane --profiles-dir /tmp/aiplane-demo-profiles integrations export openai-compatible --profile demo --model "$VLLM_ALIAS" --endpoint http://localhost:8000/v1
+aiplane --profiles-dir /tmp/aiplane-demo-profiles chat --profile demo --model "$VLLM_ALIAS" --prompt "Say hello from the vLLM endpoint" --dry-run
+
+# Section 3: MCP, skills, and repeatability surfaces.
 aiplane --profiles-dir /tmp/aiplane-demo-profiles integrations export vscode-mcp --profile demo
+aiplane --profiles-dir /tmp/aiplane-demo-profiles integrations export continue-mcp --profile demo
 aiplane mcp manifest
+sed -n '1,90p' skills/aiplane/SKILL.md
 aiplane --profiles-dir /tmp/aiplane-demo-profiles hardware discover --profile demo --dry-run
 aiplane --profiles-dir /tmp/aiplane-demo-profiles hardware recommend --profile demo
 aiplane --profiles-dir /tmp/aiplane-demo-profiles stacks setup --profile demo cpu_chat --runtime ollama --model "$CHAT_ALIAS" --access same_host --dry-run
@@ -106,7 +120,8 @@ Key points to say explicitly:
 
 - `aiplane` is a control plane with thin runner/smoke-test surfaces; it is not a model runtime, full chat UI, IDE extension, autonomous coding agent, or cloud platform.
 - The narrow public wedge is local/hybrid AI coding stack readiness from one profile.
-- Providers, models, runtimes, machines, stacks, credentials, integrations, and runner commands are separate concepts.
+- Providers, models, runtimes, machines, stacks, credentials, integrations, MCP tools, assistant skills, and runner commands are separate concepts.
+- Ollama is the easiest local live demo path; vLLM/OpenAI-compatible is the second runtime path for endpoint planning, export, and dry-run runner checks unless a prepared endpoint is available.
 - Generated discovery entries are review buffers; profile-owned model entries are deliberate configuration.
 - Doctors, dry-runs, plans, and exports come before mutation.
 - Model pulls are opt-in: `--pull-model` executes, and `--dry-run --pull-model` previews.
@@ -261,7 +276,8 @@ aiplane credentials list
 aiplane credentials show openai.personal
 aiplane providers list --group-by ownership
 aiplane credentials list
-aiplane providers test openai --credential-ref openai.personal
+# Optional when a sanitized credential ref is configured:
+# aiplane providers test openai --credential-ref openai.personal
 aiplane providers test azure_openai --credential-ref azure_openai.business_a
 ```
 
@@ -307,7 +323,27 @@ Voiceover:
 
 Recording note: `aiplane chat` resolves the model entry and uses the configured endpoint path by default. Only run mutating setup live if the machine is prepared. Otherwise keep this as a dry-run and show `status` from an already-running runtime. Use `--native-ollama` only to demonstrate Ollama's native CLI path.
 
-### 0:35-1:15 - Continue Config
+### 0:35-1:05 - Second Runtime: vLLM/OpenAI-Compatible Endpoint
+
+Use vLLM as the second runtime story. Keep it dry-run unless the recording machine or a remote GPU box already has a reachable OpenAI-compatible endpoint.
+
+```bash
+VLLM_ALIAS="vllm_demo_chat"
+aiplane --profiles-dir /tmp/aiplane-demo-profiles models add "$VLLM_ALIAS" --profile demo --provider local_file --model /models/TinyLlama-1.1B-Chat-v1.0 --role chat --runtime vllm --preferred-runtime vllm --set min_ram_gb=16 --set min_vram_gb=8 --dry-run
+aiplane --profiles-dir /tmp/aiplane-demo-profiles models add "$VLLM_ALIAS" --profile demo --provider local_file --model /models/TinyLlama-1.1B-Chat-v1.0 --role chat --runtime vllm --preferred-runtime vllm --set min_ram_gb=16 --set min_vram_gb=8 --overwrite
+aiplane --profiles-dir /tmp/aiplane-demo-profiles models show --profile demo "$VLLM_ALIAS"
+aiplane --profiles-dir /tmp/aiplane-demo-profiles runtimes prerequisites vllm
+aiplane --profiles-dir /tmp/aiplane-demo-profiles runtimes bundle vllm --profile demo --model "$VLLM_ALIAS" --mode docker --format dockerfile
+aiplane --profiles-dir /tmp/aiplane-demo-profiles runtimes start vllm --profile demo --model "$VLLM_ALIAS" --dry-run
+aiplane --profiles-dir /tmp/aiplane-demo-profiles integrations export openai-compatible --profile demo --model "$VLLM_ALIAS" --endpoint http://localhost:8000/v1
+aiplane --profiles-dir /tmp/aiplane-demo-profiles chat --profile demo --model "$VLLM_ALIAS" --prompt "Say hello from the vLLM endpoint" --dry-run
+```
+
+Voiceover:
+
+> Ollama is the easiest local live path, but it should not be the only runtime story. vLLM shows the OpenAI-compatible endpoint path: aiplane can declare a reviewed local or remote artifact path, render runtime packaging/start plans, export endpoint config, and route dry-run chat/task checks against that runtime. Live vLLM execution is a prepared GPU endpoint demo, not a required laptop demo.
+
+### 1:05-1:35 - Continue Config
 
 Plan and export Continue config from the selected model entries:
 
@@ -321,16 +357,18 @@ Voiceover:
 
 > aiplane does not edit Continue automatically. It resolves the model and endpoint choices, then prints config that can be reviewed and pasted into Continue or another compatible tool.
 
-### 1:15-1:45 - MCP
+### 1:35-2:15 - MCP And Skills
 
-Show MCP manifest and VS Code config export:
+Show MCP manifest, client config exports, and the assistant skill package:
 
 ```bash
 aiplane mcp manifest
 aiplane integrations export vscode-mcp
+aiplane integrations export continue-mcp
+sed -n '1,90p' skills/aiplane/SKILL.md
 ```
 
-Optional live server shot:
+Optional live server shot, only in a separate terminal because it stays attached to stdio:
 
 ```bash
 aiplane mcp serve
@@ -338,15 +376,15 @@ aiplane mcp serve
 
 Voiceover:
 
-> MCP exposes structured aiplane inspection to compatible tools. Read tools cover profiles, providers, models, hardware, recommendations, integrations, and runtime status. Writes are narrow and guarded. Broad shell execution, secret writes, and cloud apply are intentionally not exposed.
+> MCP exposes structured aiplane inspection to compatible tools. Read tools cover profiles, providers, models, hardware, recommendations, integrations, and runtime status. Writes are narrow and guarded. The aiplane skill is different: it is assistant guidance for working safely in this repository and preserving the product boundary. Broad shell execution, runtime installs, model pulls, secret writes, and cloud apply are intentionally not exposed through MCP.
 
-### 1:45-3:00 - Runner Boundary And Close
+### 2:15-3:00 - Runner Boundary And Close
 
 Voiceover:
 
 > That is the local loop: inspect, discover, filter, set up the runtime, pull deliberately, run small chat/task checks, and export tool configuration. Next, we can take the same profile-shaped setup to remote machines and cloud-adjacent targets.
 
-## Section 3: Portability, MCP, And Roadmap
+## Section 3: Portability, MCP, Skills, And Roadmap
 
 ### 0:00-0:30 - Repeatable Architecture
 
@@ -467,7 +505,7 @@ Voiceover after audio:
 
 ## Structured Repeatability Beats
 
-Use these phrases across both videos:
+Use these phrases across all three sections:
 
 - A profile captures policy, model entries, local overrides, tools, machines, targets, and orchestrators; provider discovery and runtime endpoint defaults stay explicit and inspectable.
 - Discovered model data is reviewable before it becomes profile-owned configuration.
@@ -482,7 +520,8 @@ Use these phrases across both videos:
 aiplane profiles validate local-dev
 aiplane environment doctor --required-only
 aiplane tools matrix
-aiplane providers test openai --credential-ref openai.personal
+# Optional when a sanitized credential ref is configured:
+# aiplane providers test openai --credential-ref openai.personal
 aiplane --profiles-dir /tmp/aiplane-demo-profiles profiles validate demo
 aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider ollama --query chat --dry-run --limit 5
 aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider ollama --query chat --limit 10
@@ -492,8 +531,14 @@ aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --p
 aiplane --profiles-dir /tmp/aiplane-demo-profiles integrations plan continue --profile demo --chat "$CHAT_ALIAS" --autocomplete "$AUTOCOMPLETE_ALIAS" --embedding "$EMBEDDING_ALIAS"
 aiplane --profiles-dir /tmp/aiplane-demo-profiles integrations export continue --profile demo --chat "$CHAT_ALIAS" --autocomplete "$AUTOCOMPLETE_ALIAS" --embedding "$EMBEDDING_ALIAS"
 aiplane integrations export vscode-mcp
+aiplane integrations export continue-mcp
 aiplane mcp manifest
-aiplane --profiles-dir /tmp/aiplane-demo-profiles machines discover azure --profile demo --region uksouth --workload inference_small --runtime ollama --limit 5
+sed -n '1,90p' skills/aiplane/SKILL.md
+VLLM_ALIAS="vllm_demo_chat"
+aiplane --profiles-dir /tmp/aiplane-demo-profiles models add "$VLLM_ALIAS" --profile demo --provider local_file --model /models/TinyLlama-1.1B-Chat-v1.0 --role chat --runtime vllm --preferred-runtime vllm --set min_ram_gb=16 --set min_vram_gb=8 --dry-run
+aiplane --profiles-dir /tmp/aiplane-demo-profiles models add "$VLLM_ALIAS" --profile demo --provider local_file --model /models/TinyLlama-1.1B-Chat-v1.0 --role chat --runtime vllm --preferred-runtime vllm --set min_ram_gb=16 --set min_vram_gb=8 --overwrite
+aiplane --profiles-dir /tmp/aiplane-demo-profiles runtimes bundle vllm --profile demo --model "$VLLM_ALIAS" --mode docker --format dockerfile
+aiplane --profiles-dir /tmp/aiplane-demo-profiles machines discover azure --profile demo --region uksouth --workload inference_small --runtime vllm --limit 5
 ```
 
 ## Quick Local-Dev Runner Checklist
@@ -544,6 +589,6 @@ The demo is ready to record when:
 - CI format, lint, and test checks are green;
 - all commands in the dry-run list and disposable-profile setup pass on the recording machine;
 - Azure output has been reviewed on screen and any account-identifying UI/output is redacted or replaced by a sanitized fixture;
-- VS Code/Continue and MCP screenshots are rehearsed once;
-- the media segment shows online-discovered AI audio, image, and video candidates and has a prepared, playable final clip generated from the selected media path;
+- VS Code/Continue, MCP config/manifest, and the `skills/aiplane` guidance package screenshots are rehearsed once;
+- the media/planning segment is either rehearsed with sanitized provider output or omitted from the short cut; do not imply built-in media job running is complete;
 - the voiceover states that the project is under active development and commands may evolve.

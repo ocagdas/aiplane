@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -3098,6 +3099,7 @@ def _main(argv: list[str] | None = None) -> int:
                 args.model,
                 substrate=substrate,
                 dry_run=args.dry_run,
+                profiles_dir=profiles_dir,
             )
             if completed.stdout:
                 print(completed.stdout, end="")
@@ -3146,6 +3148,7 @@ def _run_provider_helper(
     model: str,
     substrate: str = "native",
     dry_run: bool = False,
+    profiles_dir: Path | str | None = None,
 ) -> subprocess.CompletedProcess[str]:
     helper = Path(__file__).resolve().parents[2] / "scripts" / "provider_helper.sh"
     if not helper.exists():
@@ -3165,7 +3168,11 @@ def _run_provider_helper(
     ]
     if dry_run:
         command.append("--dry-run")
-    return subprocess.run(command, cwd=helper.parents[1], text=True, capture_output=True, check=False)
+    env = None
+    if profiles_dir is not None:
+        env = os.environ.copy()
+        env["AIPLANE_PROFILES_DIR"] = str(profiles_dir)
+    return subprocess.run(command, cwd=helper.parents[1], env=env, text=True, capture_output=True, check=False)
 
 
 def _profile_summary(profile, default_name: str | None = None) -> dict[str, object]:
@@ -3520,6 +3527,7 @@ def _quickstart_local_coding(args, workspace: Path, profiles_dir: Path | None) -
                 runtime=args.pull_runtime,
                 substrate=args.pull_substrate,
                 execute=not args.dry_run,
+                profiles_dir=profiles_dir,
             )
         doctor_payload = local_coding_doctor(profile, include_optional=False)
     elif args.pull_model:
@@ -3568,6 +3576,7 @@ def _quickstart_pull_model(
     runtime: str | None = None,
     substrate: str | None = None,
     execute: bool = False,
+    profiles_dir: Path | str | None = None,
 ) -> dict[str, object]:
     catalog = ModelCatalog(profile)
     model = catalog.get(model_name)
@@ -3599,6 +3608,7 @@ def _quickstart_pull_model(
         model_name,
         substrate=resolved_substrate,
         dry_run=not execute,
+        profiles_dir=profiles_dir,
     )
     return {
         "name": "quickstart_model_pull",
