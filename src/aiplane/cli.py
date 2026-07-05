@@ -86,6 +86,16 @@ def _profile_arg(parser) -> None:
     )
 
 
+def _profiles_dir_from_env() -> Path | None:
+    test_path = os.environ.get("AIPLANE_TEST_PROFILES_DIR")
+    if test_path:
+        return Path(test_path).expanduser().resolve()
+    env_path = os.environ.get("AIPLANE_PROFILES_DIR")
+    if env_path:
+        return Path(env_path).expanduser().resolve()
+    return None
+
+
 def _integration_selection_args(parser) -> None:
     parser.add_argument(
         "--provider",
@@ -2216,7 +2226,9 @@ def _main(argv: list[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
     workspace = Path(args.workspace).resolve()
-    profiles_dir = Path(args.profiles_dir).expanduser().resolve() if args.profiles_dir else None
+    profiles_dir = (
+        Path(args.profiles_dir).expanduser().resolve() if args.profiles_dir else _profiles_dir_from_env()
+    )
     requested_profile = getattr(args, "profile", None)
 
     if args.command == "config":
