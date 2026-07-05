@@ -453,16 +453,16 @@ activation_hint() {
 test_mode() {
   case "$MODE" in
     local)
-      run_shell "PYTHONDONTWRITEBYTECODE=1 '$PYTHON_BIN' -m unittest discover -s tests"
+      run_shell "PYTHONDONTWRITEBYTECODE=1 '$PYTHON_BIN' -m pytest -q"
       ;;
     venv)
-      run_shell "PYTHONDONTWRITEBYTECODE=1 '$VENV_PATH/bin/python' -m unittest discover -s tests"
+      run_shell "PYTHONDONTWRITEBYTECODE=1 '$VENV_PATH/bin/python' -m pytest -q"
       ;;
     conda)
-      run conda run -n "$CONDA_ENV" env PYTHONDONTWRITEBYTECODE=1 python -m unittest discover -s tests
+      run conda run -n "$CONDA_ENV" env PYTHONDONTWRITEBYTECODE=1 python -m pytest -q
       ;;
     docker)
-      docker_run_shell "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src python -m unittest discover -s tests"
+      docker_run_shell "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src python -m pytest -q"
       ;;
   esac
 }

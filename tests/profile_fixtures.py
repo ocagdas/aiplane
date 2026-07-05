@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import shutil
 import tempfile
 from contextlib import contextmanager
@@ -59,6 +60,10 @@ def _isolated_test_profile(name: str = "local-dev", workspace: Path | None = Non
 def _load_profile_with_test_models(
     name: str, workspace: Path | None = None, profiles_dir: Path | str | None = None
 ) -> Profile:
+    if profiles_dir is None:
+        env_profiles_dir = os.environ.get("AIPLANE_TEST_PROFILES_DIR")
+        if env_profiles_dir:
+            profiles_dir = Path(env_profiles_dir)
     _ensure_repo_test_profile(name, profiles_dir=profiles_dir)
     profile = _REAL_LOAD_PROFILE(name, workspace, profiles_dir=profiles_dir)
     models = profile.models.get("models") if isinstance(profile.models, dict) else None

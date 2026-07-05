@@ -24,11 +24,5 @@ jobs:
       - name: Install dev dependencies
         run: python -m pip install -e ".[dev]"
 
-      - name: Format check
-        run: bash scripts/format.sh check
-
-      - name: Lint check
-        run: python -m ruff check src tests
-
-      - name: Test suite
-        run: PYTHONPATH=src python -m pytest -q
+      - name: Quality gate
+        run: make check
