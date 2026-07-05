@@ -6,9 +6,12 @@ from .config import CONFIG_FILES
 from .hardware import HardwareManager
 from .integration_contracts import required_roles
 from .model_catalog import ModelCatalog, ownership_for_model
+from .policy import PolicyEngine
 from .models import Profile
 from .mcp import mcp_manifest
 from .tools import ToolchainManager
+from .remote import RemoteManager
+from .stacks import StackManager
 
 LOCAL_CODING_DEFAULT_ROLES = {
     "chat": "chat_model",
@@ -44,6 +47,8 @@ def local_coding_doctor(profile: Profile, include_optional: bool = False) -> dic
         _endpoint_section(models, defaults, model_statuses, providers),
         _hardware_section(profile, models, defaults),
         _provider_section(providers),
+        _policy_section(profile, defaults, models),
+        _remote_section(profile),
         _integration_section(defaults, models),
         _mcp_section(),
     ]
@@ -339,6 +344,159 @@ def _integration_section(defaults: dict[str, Any], models: dict[str, dict[str, A
         )
     return {
         "name": "integrations",
+        "ok": all(check["ok"] for check in checks),
+        "checks": checks,
+    }
+
+
+def _policy_section(profile: Profile, defaults: dict[str, Any], models: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    policy = PolicyEngine(profile)
+    checks = []
+    checks.append(
+        {
+            "name": "repository_classification",
+            "ok": isinstance(profile.repository, dict),
+            "detail": str(profile.repository.get("classification", "private")),
+        }
+    )
+    checks.append(
+        {
+            "name": "cloud_backends",
+            "ok": policy.cloud_decision().allowed,
+            "detail": policy.cloud_decision().reason,
+            "decision": "allowed" if policy.cloud_decision().allowed else "blocked",
+        }
+    )
+
+    allowed_providers = profile.repository.get("allowed_providers")
+    checks.append(
+        {
+            "name": "allowed_providers",
+            "ok": True,
+            "detail": _provider_list_detail(allowed_providers),
+            "allowed_providers": allowed_providers if isinstance(allowed_providers, list) else None,
+        }
+    )
+
+    default_aliases = {
+        name: alias for name, alias in defaults.items() if name.endswith("_model") and isinstance(alias, str) and alias
+    }
+    checked_aliases = sorted({str(alias) for alias in default_aliases.values() if alias})
+    for alias in checked_aliases:
+        model = models.get(alias)
+        if not isinstance(model, dict):
+            checks.append(
+                {
+                    "name": f"model_policy:{alias}",
+                    "ok": False,
+                    "detail": f"model alias missing: {alias}",
+                }
+            )
+            continue
+        decision = policy.model_decision(alias)
+        checks.append(
+            {
+                "name": f"model_policy:{alias}",
+                "ok": decision.allowed,
+                "detail": decision.reason,
+                "provider": str(model.get("provider") or ""),
+                "model": str(model.get("model") or ""),
+                "needs_approval": decision.requires_approval,
+            }
+        )
+
+    return {
+        "name": "policy",
+        "ok": all(check["ok"] for check in checks),
+        "checks": checks,
+    }
+
+
+def _provider_list_detail(allowed_providers: object) -> str:
+    if not isinstance(allowed_providers, list):
+        return "all providers"
+    values = sorted({str(value).strip() for value in allowed_providers if str(value).strip()})
+    if not values:
+        return "no providers configured (default allow all)"
+    return "allowed providers: " + ", ".join(values)
+
+
+def _remote_section(profile: Profile) -> dict[str, Any]:
+    checks: list[dict[str, Any]] = []
+    remote_manager = RemoteManager(profile)
+    stack_manager = StackManager(profile)
+
+    targets = profile.targets.get("targets", {})
+    remote_targets = {
+        name: target
+        for name, target in (targets or {}).items()
+        if isinstance(target, dict) and str(target.get("type") or "") == "ssh_tunnel"
+    }
+    checks.append(
+        {
+            "name": "remote_targets_configured",
+            "ok": True,
+            "detail": f"{len(remote_targets)} configured ssh_tunnel targets",
+        }
+    )
+
+    for name in sorted(remote_targets.keys()):
+        try:
+            plan = remote_manager.tunnel_plan(name)
+        except (ValueError, TypeError) as exc:
+            checks.append(
+                {
+                    "name": f"remote_target:{name}",
+                    "ok": False,
+                    "detail": str(exc),
+                    "warning": False,
+                }
+            )
+            continue
+        checks.append(
+            {
+                "name": f"remote_target:{name}",
+                "ok": True,
+                "warning": not bool(plan.get("tool_available")),
+                "detail": f"endpoint={plan['endpoint']} command={plan.get('command')}",
+                "required_tools": ["ssh"],
+                "tool_available": bool(plan.get("tool_available")),
+            }
+        )
+
+    remote_stacks = [row["name"] for row in stack_manager.list() if str(row.get("access") or "") == "ssh_tunnel"]
+    checks.append(
+        {
+            "name": "remote_stacks_configured",
+            "ok": True,
+            "detail": f"{len(remote_stacks)} stacks using ssh_tunnel access",
+        }
+    )
+
+    for stack_name in remote_stacks:
+        try:
+            doctor = stack_manager.doctor(stack_name)
+            stack_ok = bool(all(check.get("ok") for check in doctor.get("checks", [])))
+            checks.append(
+                {
+                    "name": f"stack_doctor:{stack_name}",
+                    "ok": stack_ok,
+                    "detail": doctor.get("plan_summary", {}).get("endpoint"),
+                    "reason": ("stack checks passed" if stack_ok else "stack readiness has blocking issues"),
+                }
+            )
+        except ValueError as exc:
+            checks.append(
+                {
+                    "name": f"stack_doctor:{stack_name}",
+                    "ok": False,
+                    "detail": str(exc),
+                    "reason": "stack readiness check failed",
+                }
+            )
+
+    return {
+        "name": "remote",
         "ok": all(check["ok"] for check in checks),
         "checks": checks,
     }

@@ -64,17 +64,17 @@ Recommended public roadmap:
 
 Advanced cloud, Kubernetes, broad provisioning, custom IDEs, general agent execution, and full session products should not lead the public story. They remain later or explicit-change-course work.
 
-## Current Milestone: Local AI Coding Stack Doctor
+## Current Milestone: Team Policy and Governance
 
-Goal: make the first public local/hybrid AI coding flow useful, inspectable, and narrow before adding broad new execution scope.
+Goal: make policy and governance outcomes explicit and enforceable before adding broader workflow breadth.
 
 Required outcomes:
 
-1. Keep `aiplane doctor` focused on read-only readiness: profile files, required environment tools, runtime prerequisites, model defaults, endpoint readiness, hardware fit, Continue/Aider readiness, provider state, MCP manifest/read-surface readiness, and next safe commands.
-2. Keep role-default checks practical: selected aliases must exist, be enabled, match the expected task capability, expose provider/endpoint details, and report endpoint/model status clearly.
-3. Keep the public CLI, docs, command coverage, MCP surface, planned/implemented skills, and tests aligned as doctor behavior tightens.
-4. Preserve the control-plane boundary: do not turn the doctor into a chat UI, model runtime, installer, IDE mutator, broad cloud deployer, or agent runner.
-5. Treat the test split as structurally complete; only refine test modules or fixtures when new behavior exposes real duplication, unclear ownership, or fragility.
+1. Finalize profile policy surface in docs + UX: allowed-providers policy, repo classification, cloud escalation controls, and policy explain output.
+2. Add focused tests for `policy explain`, policy-readiness blocks in doctor, and policy-aware behavior on stack role/tool-policy risk checks.
+3. Close `local-doctor`/`tools matrix` alignment for policy readiness signals and missing-config risk surfacing.
+4. Update demo/onboarding narrative to show where policy blocks, warns, and what approval/override actions are needed.
+5. Keep remote workflow artifacts stable by moving to read-only demo/coverage checks; no regression in existing remote milestone.
 
 ## Implemented
 

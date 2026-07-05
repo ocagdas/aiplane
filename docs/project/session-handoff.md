@@ -4,11 +4,16 @@ This file is the short resume point for future `aiplane` development sessions. U
 
 ## Current Milestone
 
-**Local AI coding stack doctor** is now the active milestone. The test split is structurally complete for now, so the next work should sharpen the public wedge before adding broad new scope: a reproducible, inspectable, policy-aware local/hybrid AI coding stack doctor for profiles, providers, model aliases, runtimes/endpoints, hardware fit, Continue/Aider exports, MCP inspection, and audit.
+**Team Policy and Governance** is now the active milestone.
 
-The test split milestone is now at a reasonable structural baseline: `tests/test_mvp.py` is a legacy pointer, MVP coverage lives in focused modules, imports are explicit, and shared setup is split between `tests/support.py`, `tests/profile_fixtures.py`, and `tests/http_fixtures.py`. Synthetic test model aliases are intentionally named `fixture-*` and injected from `tests/fixtures/local-model-cache.yaml`; shipped profile templates remain structural and do not include those synthetic aliases. Further test cleanup should be incremental and tied to real changes, not broad churn. Product work should continue to serve the narrow public story: a reproducible, inspectable, policy-aware local/hybrid AI coding stack doctor for profiles, providers, model aliases, runtimes/endpoints, hardware fit, Continue/Aider exports, MCP inspection, and audit.
+Policy is the focus this cycle.
+- `policy explain` and doctor surfaces now define what is allowed, what is blocked, and what operator action is required.
+- Policy readiness is aligned with stack role/tool-policy checks, and risky tool permissions are explicit.
+- Scope remains bounded: aiplane stays a control plane and never becomes a coding runtime/chat UI/agent executor.
+- Remote workflow behavior stays stable while policy and escalation visibility is hardened for the next milestone.
 
-Scope anchor: `aiplane` remains the control plane, not the coding agent, full chat UI, model runtime, general proxy, cloud platform, IDE extension, or infrastructure-tool replacement. Changing that direction is allowed only if the strategy and roadmap explicitly say the project is changing course.
+Scope anchor: `aiplane` remains the control plane, not the coding agent, full chat UI, model runtime, general proxy, cloud platform, IDE extension, or infrastructure-tool replacement. Changing that direction is allowed only if the strategy and roadmap explicitly authorize a course change.
+
 
 ## Product Boundary
 
@@ -131,8 +136,7 @@ Orchestrator support now has stack role metadata over reviewed model aliases and
 
 ## Next Useful Work
 
-1. Continue the local coding doctor wedge by tightening only details that directly help the first public flow: real smoke usage around Continue/Aider exports, endpoint readiness wording, and demo polish.
-2. Treat the test split as structurally complete for now; only refine test modules or fixtures when new behavior work exposes duplication, unclear ownership, or slow/fragile setup.
-3. Keep shared helpers explicit: isolated profiles, fixture model catalogs, mock HTTP endpoints, subprocess/runtime helper fakes, and CLI stdout/stderr capture should stay reusable without reintroducing wildcard imports or duplicated setup.
-4. Preserve the local/hybrid AI coding stack doctor as the public wedge while doing cleanup; do not use test restructuring as a reason to broaden agent, chat UI, runtime, cloud apply, or IDE scope.
-5. After the doctor wedge is cohesive, resume Docker-aware stack lifecycle and framework-specific starter template hardening only where stable official APIs justify it.
+1. Finish the remote-workstation onboarding documentation pass and align it with the public demo plan sequence.
+2. Keep policy/risk behavior regressions visible: add/refresh tests for blocked cloud policy and disallowed provider usage paths in doctor and stack/tool policy surfaces.
+3. Keep docs/tests/command-coverage synchronized before the feature-freeze gate.
+

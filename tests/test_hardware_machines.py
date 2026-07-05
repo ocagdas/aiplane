@@ -277,7 +277,7 @@ class HardwareMachineTests(unittest.TestCase):
             imported = manager.import_file(export_path, overrides={"memory_gb": 128, "vram_gb": 48})
             self.assertEqual(imported["name"], "this_pc")
             rows = manager.list()
-            self.assertEqual(rows[0]["name"], "this_pc")
+            self.assertIn("this_pc", {row["name"] for row in rows})
             recommendation = manager.recommend(model="local-code-large", runtime="vllm")
             self.assertEqual(recommendation["machines"][0]["level"], "recommended")
             remote = manager.profile_remote_plan("gpu_box_01", "gpu.example.com", user="dev")

@@ -157,6 +157,67 @@ class DeployRemoteTests(unittest.TestCase):
         self.assertEqual(plan["connection"]["ide_endpoint"], "http://localhost:11434/v1")
         self.assertIn("remote_service", plan["connection"])
 
+    def test_remote_tunnel_cli_plan_is_json_and_references_endpoint(self) -> None:
+        with _isolated_profiles_dir() as profiles_dir:
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = cli_main(
+                    [
+                        "--profiles-dir",
+                        str(profiles_dir),
+                        "remote",
+                        "tunnel",
+                        "plan",
+                        "--profile",
+                        "local-dev",
+                        "--target",
+                        "gpu_workstation_ssh",
+                    ]
+                )
+        self.assertEqual(code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["target"], "gpu_workstation_ssh")
+        self.assertEqual(payload["type"], "ssh_tunnel")
+        self.assertEqual(payload["endpoint"], "http://localhost:11434/v1")
+        self.assertEqual(payload["command"][0], "ssh")
+        self.assertIn("-L", payload["command"])
+        self.assertEqual(payload["required_tools"], ["ssh"])
+
+    def test_machines_profile_remote_plan_cli(self) -> None:
+        with _isolated_profiles_dir() as profiles_dir:
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = cli_main(
+                    [
+                        "--profiles-dir",
+                        str(profiles_dir),
+                        "machines",
+                        "profile-remote-plan",
+                        "--profile",
+                        "local-dev",
+                        "--name",
+                        "gpu_workstation_copy",
+                        "--host",
+                        "gpu-workstation.example.internal",
+                        "--user",
+                        "dev",
+                        "--port",
+                        "2200",
+                    ]
+                )
+        self.assertEqual(code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["name"], "gpu_workstation_copy")
+        self.assertEqual(payload["mode"], "ssh_remote_profile")
+        self.assertEqual(len(payload["steps"]), 3)
+        self.assertEqual(payload["steps"][0]["command"][0], "ssh")
+        self.assertEqual(payload["steps"][0]["command"][1], "-p")
+        self.assertEqual(payload["steps"][0]["command"][2], "2200")
+        self.assertEqual(payload["steps"][1]["command"][0], "ssh")
+        self.assertEqual(payload["steps"][1]["command"][1], "-p")
+        self.assertEqual(payload["steps"][1]["command"][3], "dev@gpu-workstation.example.internal")
+        self.assertIn("export machine profile", payload["steps"][1]["name"])
+
     def test_remote_tunnel_lifecycle_is_guarded_and_status_uses_pid_file(self) -> None:
         source = load_profile("local-dev", Path.cwd())
         with tempfile.TemporaryDirectory() as tmp:

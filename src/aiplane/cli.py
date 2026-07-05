@@ -2221,7 +2221,7 @@ def _main(argv: list[str] | None = None) -> int:
     explain.add_argument(
         "--action",
         required=True,
-        help="Action name to explain, such as cloud_escalation or write_file",
+        help="Action name to explain, such as backend:cloud, provider:ollama, model:fixture-chat-small, or write_file",
     )
 
     args = parser.parse_args(argv)

@@ -672,6 +672,39 @@ class ProfileConfigTests(unittest.TestCase):
         self.assertFalse(policy.tool_decision("read_file").requires_approval)
         self.assertTrue(policy.tool_decision("write_file").requires_approval)
 
+    def test_policy_explain_supports_new_policy_actions(self) -> None:
+        profile = load_profile("local-dev", Path.cwd())
+        profile.repository["allowed_providers"] = ["ollama", "openai"]
+        profile.models.setdefault("models", {})["policy-demo"] = {
+            "provider": "ollama",
+            "local": True,
+            "enabled": True,
+            "roles": ["chat"],
+        }
+
+        policy = PolicyEngine(profile)
+        self.assertTrue(policy.explain("provider:ollama").allowed)
+        self.assertTrue(policy.explain("backend:cloud").allowed)
+        self.assertTrue(policy.explain("model:policy-demo").allowed)
+        self.assertFalse(policy.explain("provider:forbidden").allowed)
+        self.assertFalse(policy.explain("model:missing-model").allowed)
+
+    def test_policy_explain_cli_reports_allow_and_deny_decisions(self) -> None:
+        stdout_allow = StringIO()
+        with redirect_stdout(stdout_allow):
+            code = cli_main(["policy", "explain", "--action", "provider:ollama", "--profile", "local-dev"])
+        self.assertEqual(code, 0)
+        payload = json.loads(stdout_allow.getvalue())
+        self.assertTrue(payload["allowed"])
+        self.assertEqual(payload["matched_rule"], "repository.allowed_providers")
+
+        stdout_deny = StringIO()
+        with redirect_stdout(stdout_deny):
+            code = cli_main(["policy", "explain", "--action", "model:missing-model", "--profile", "local-dev"])
+        payload = json.loads(stdout_deny.getvalue())
+        self.assertFalse(payload["allowed"])
+        self.assertIn(payload["reason"], {"unknown model 'missing-model'", "model not allowed: missing-model"})
+
     def test_workspace_boundary_blocks_parent_escape(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             profile = load_profile("local-dev", Path(tmp))

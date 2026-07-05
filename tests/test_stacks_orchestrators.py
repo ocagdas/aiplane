@@ -675,6 +675,39 @@ class StackOrchestratorTests(unittest.TestCase):
         self.assertEqual(result["steps_executed"], 1)
         self.assertEqual(result["failed_step"]["returncode"], 7)
 
+    def test_stack_doctor_reports_missing_remote_tunnel_target(self) -> None:
+        source = load_profile("local-dev", Path.cwd())
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "hardware.yaml").write_text("", encoding="utf-8")
+            profile = Profile(
+                name="tmp",
+                root=root,
+                workspace=Path.cwd(),
+                hardware=json.loads(json.dumps(source.hardware)),
+                backends=source.backends,
+                repository=source.repository,
+                tools=source.tools,
+                approvals=source.approvals,
+                environment=source.environment,
+                models=source.models,
+                targets=source.targets,
+            )
+            MachineManager(profile).import_azure_sku("Standard_NC40ads_H100_v5", "uksouth", name="azure_h100_test")
+            stacks = StackManager(profile)
+            stacks.setup(
+                "remote_stack_no_target",
+                orchestrator=None,
+                runtime="vllm",
+                model="local-code-large",
+                machine="azure_h100_test",
+                access="ssh_tunnel",
+            )
+            doctor = stacks.doctor("remote_stack_no_target")
+            remote_check = next(check for check in doctor["checks"] if check["name"] == "remote_tunnel_target")
+            self.assertFalse(remote_check["ok"])
+            self.assertIn("unknown remote target", str(remote_check["detail"]))
+
     def test_stack_lifecycle_does_not_execute_remote_stack(self) -> None:
         source = load_profile("local-dev", Path.cwd())
         with tempfile.TemporaryDirectory() as tmp:

@@ -16,11 +16,55 @@ class PolicyEngine:
     def explain(self, action: str) -> Decision:
         if action.startswith("tool:"):
             return self.tool_decision(action.split(":", 1)[1])
+        if action.startswith("provider:"):
+            return self.provider_decision(action.split(":", 1)[1])
+        if action.startswith("model:"):
+            return self.model_decision(action.split(":", 1)[1])
         if action == "backend:cloud":
+            return self.cloud_decision()
+        if action == "cloud_escalation":
             return self.cloud_decision()
         if action == "backend:local":
             return Decision(True, False, "local backends are allowed by default", "backend.local")
         return Decision(False, False, f"unknown action {action!r}", "unknown")
+
+    def model_decision(self, model_name: str) -> Decision:
+        models = self.profile.models.get("models", {}) if isinstance(self.profile.models, dict) else {}
+        model = models.get(str(model_name)) if isinstance(models, dict) else None
+        if not isinstance(model, dict):
+            return Decision(False, False, f"unknown model {model_name!r}", "models.catalog")
+
+        if not bool(model.get("enabled", True)):
+            return Decision(False, False, f"model {model_name!r} is disabled", "model.enabled")
+
+        provider_name = str(model.get("provider") or "")
+        if not provider_name:
+            return Decision(False, False, f"model {model_name!r} is missing provider", "model.provider")
+
+        provider_decision = self.provider_decision(provider_name)
+        if not provider_decision.allowed:
+            return Decision(False, False, provider_decision.reason, provider_decision.matched_rule)
+
+        local = bool(model.get("local", False))
+        if local:
+            return Decision(True, False, f"model {model_name!r} is allowed", "model.provider")
+
+        cloud_decision = self.cloud_decision()
+        if not cloud_decision.allowed:
+            return Decision(False, False, cloud_decision.reason, cloud_decision.matched_rule)
+
+        return Decision(True, False, f"model {model_name!r} is allowed", "model.provider")
+
+    def provider_decision(self, provider_name: str) -> Decision:
+        allowed_providers = self._allowed_providers()
+        if allowed_providers is not None and str(provider_name) not in allowed_providers:
+            return Decision(
+                False,
+                False,
+                f"provider {provider_name!r} is not allowed by repository policy",
+                "repository.allowed_providers",
+            )
+        return Decision(True, False, f"provider {provider_name!r} is allowed", "repository.allowed_providers")
 
     def cloud_decision(self) -> Decision:
         repo_class = self.profile.repository.get("classification", "private")
@@ -68,6 +112,13 @@ class PolicyEngine:
             f"tool is allowed with {risk} risk",
             "tools.allowed",
         )
+
+    def _allowed_providers(self) -> set[str] | None:
+        allowed_raw = self.profile.repository.get("allowed_providers")
+        if not isinstance(allowed_raw, list):
+            return None
+        trimmed = [str(value).strip() for value in allowed_raw if str(value).strip()]
+        return {value for value in trimmed}
 
     def path_decision(self, path: Path) -> Decision:
         resolved = path.resolve()

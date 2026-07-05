@@ -107,6 +107,56 @@ class RuntimeExecutionTests(unittest.TestCase):
             with self.assertRaises(PermissionError):
                 Router(profile, AuditLogger(profile)).route("explain setup", model_name="openai-main", dry_run=True)
 
+    def test_router_run_blocks_model_when_provider_disallowed_by_repository_policy(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            profile = load_profile("local-dev", Path(tmp))
+            profile.repository["allowed_providers"] = ["ollama"]
+            profile.models.setdefault("providers", {})["enterprise"] = {
+                "ownership": "managed_service",
+                "runtime": "openai_api",
+                "protocol": "openai_compatible",
+                "endpoint": "https://api.openai.com/v1",
+                "enabled": True,
+                "api_key_env": "OPENAI_API_KEY",
+            }
+            profile.models.setdefault("models", {})["managed-chat"] = {
+                "provider": "enterprise",
+                "model": "gpt-4.1",
+                "roles": ["chat"],
+                "local": False,
+                "enabled": True,
+            }
+            with self.assertRaises(PermissionError):
+                Router(profile, AuditLogger(profile)).route("explain setup", model_name="managed-chat", dry_run=True)
+
+    def test_router_allows_model_when_provider_allowed_by_repository_policy(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            profile = load_profile("local-dev", Path(tmp))
+            profile.repository["allowed_providers"] = ["enterprise"]
+            profile.models.setdefault("providers", {})["enterprise"] = {
+                "ownership": "managed_service",
+                "runtime": "openai_api",
+                "protocol": "openai_compatible",
+                "endpoint": "https://api.openai.com/v1",
+                "enabled": True,
+                "api_key_env": "OPENAI_API_KEY",
+            }
+            profile.models.setdefault("models", {})["managed-chat"] = {
+                "provider": "enterprise",
+                "model": "gpt-4.1",
+                "roles": ["chat"],
+                "local": False,
+                "enabled": True,
+            }
+            result = Router(profile, AuditLogger(profile)).route(
+                "explain setup",
+                model_name="managed-chat",
+                dry_run=True,
+                prefer_escalation=True,
+            )
+            self.assertEqual(result.backend, "dry_run")
+            self.assertTrue(result.escalated)
+
     def test_code_analyze_dry_run_includes_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             workspace = Path(tmp)

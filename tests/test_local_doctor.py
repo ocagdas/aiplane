@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from .support import (
     IntegrationManager,
+    MachineManager,
+    StackManager,
     Path,
     StringIO,
     TestHttpServer,
@@ -31,6 +33,8 @@ class LocalDoctorTests(unittest.TestCase):
                 "endpoints",
                 "hardware",
                 "providers",
+                "policy",
+                "remote",
                 "integrations",
                 "mcp",
             },
@@ -54,6 +58,45 @@ class LocalDoctorTests(unittest.TestCase):
         self.assertIn("aiplane.runtimes.status", required_tools)
         self.assertIn("aiplane.models.use", mcp_checks["mcp_guarded_write_surface"]["tools"])
         self.assertTrue(any("mcp manifest" in step.lower() for step in payload["next_steps"]))
+
+        remote = next(section for section in payload["sections"] if section["name"] == "remote")
+        remote_checks = {check["name"]: check for check in remote["checks"]}
+        self.assertIn("remote_targets_configured", remote_checks)
+        self.assertIn("remote_stacks_configured", remote_checks)
+        self.assertGreaterEqual(remote_checks["remote_targets_configured"]["detail"].count("configured"), 1)
+
+    def test_local_coding_doctor_includes_remote_tunnel_readiness(self) -> None:
+        profile = load_profile("local-dev", Path.cwd())
+        payload = local_coding_doctor(profile)
+
+        remote = next(section for section in payload["sections"] if section["name"] == "remote")
+        remote_checks = {check["name"]: check for check in remote["checks"]}
+        self.assertIn("remote_target:gpu_workstation_ssh", remote_checks)
+        target_check = remote_checks["remote_target:gpu_workstation_ssh"]
+        self.assertIn("tool_available", target_check)
+
+    def test_local_coding_doctor_includes_remote_stack_doctor_checks(self) -> None:
+        profile = load_profile("local-dev", Path.cwd())
+        machine_mgr = MachineManager(profile)
+        machine_mgr.import_azure_sku("Standard_NC40ads_H100_v5", "uksouth", name="azure_h100_remote")
+
+        stacks = StackManager(profile)
+        stacks.setup(
+            "remote_stack",
+            orchestrator=None,
+            runtime="ollama",
+            model="fixture-chat-small",
+            machine="azure_h100_remote",
+            access="ssh_tunnel",
+        )
+
+        payload = local_coding_doctor(profile)
+        remote = next(section for section in payload["sections"] if section["name"] == "remote")
+        remote_checks = {check["name"]: check for check in remote["checks"]}
+        self.assertIn("remote_stacks_configured", remote_checks)
+        self.assertIn("stack_doctor:remote_stack", remote_checks)
+        remote_stack_check = remote_checks["stack_doctor:remote_stack"]
+        self.assertIn("reason", remote_stack_check)
 
     def test_local_coding_doctor_text_is_human_readable(self) -> None:
         profile = load_profile("local-dev", Path.cwd())
@@ -141,3 +184,21 @@ class LocalDoctorTests(unittest.TestCase):
         plan = IntegrationManager(profile).plan("continue")
         self.assertTrue(continue_check["ok"])
         self.assertEqual(plan["selection"]["chat"]["name"], "fixture-chat-small")
+
+    def test_doctor_policy_section_flags_disallowed_default_provider(self) -> None:
+        profile = load_profile("local-dev", Path.cwd())
+        profile.repository["allowed_providers"] = ["openai"]
+        payload = local_coding_doctor(profile)
+        policy = next(section for section in payload["sections"] if section["name"] == "policy")
+        model_policy = next(check for check in policy["checks"] if check["name"] == "model_policy:fixture-chat-small")
+        self.assertFalse(model_policy["ok"])
+        self.assertIn("not allowed", model_policy["detail"])
+
+    def test_doctor_policy_section_flags_blocked_cloud_backends(self) -> None:
+        profile = load_profile("local-dev", Path.cwd())
+        profile.repository["classification"] = "client_sensitive"
+        payload = local_coding_doctor(profile)
+        policy = next(section for section in payload["sections"] if section["name"] == "policy")
+        cloud_check = next(check for check in policy["checks"] if check["name"] == "cloud_backends")
+        self.assertFalse(cloud_check["ok"])
+        self.assertIn("client-sensitive", cloud_check["detail"])

@@ -15,6 +15,7 @@ from .models import Profile
 from .orchestrators import OrchestratorCatalog
 from .runtime_catalog import RuntimeCatalog
 from .runtime_definitions import PROVIDER_ENDPOINT_DEFAULTS
+from .remote import RemoteManager
 
 
 FRAMEWORK_EXPORT_ARTIFACTS = {
@@ -499,6 +500,37 @@ class StackManager:
                 "suggested_actions": endpoint_security.get("next_steps", []),
             }
         )
+        access = str(stack.get("access") or "")
+        if access == "ssh_tunnel":
+            tunnel_target = str(stack.get("target") or stack.get("machine") or "")
+            if not tunnel_target:
+                checks.append(
+                    {
+                        "name": "remote_tunnel_target",
+                        "ok": False,
+                        "detail": "stack access is ssh_tunnel but no target or machine is configured",
+                    }
+                )
+            else:
+                try:
+                    tunnel_plan = RemoteManager(self.profile).tunnel_plan(tunnel_target)
+                    checks.append(
+                        {
+                            "name": "remote_tunnel_target",
+                            "ok": True,
+                            "detail": f"tunnel target {tunnel_target} is configured",
+                            "warning": not bool(tunnel_plan.get("tool_available")),
+                        }
+                    )
+                except ValueError as exc:
+                    checks.append(
+                        {
+                            "name": "remote_tunnel_target",
+                            "ok": False,
+                            "detail": str(exc),
+                        }
+                    )
+
         if runtime in {"vllm", "tgi", "transformers"} and not (
             os.environ.get("HF_HOME") or os.environ.get("HUGGINGFACE_HUB_CACHE")
         ):
