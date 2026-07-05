@@ -40,7 +40,9 @@ class ModelProviderTests(unittest.TestCase):
         self.assertNotIn("openai-main", names)
         self.assertIn("local-reasoning-xl", names)
         self.assertIn("codelocal-chat-large", names)
-        analysis_model = next(row for row in rows if row["name"] == "fixture-analysis-small")
+        analysis_model = next(
+            row for row in rows if row["name"] == "fixture-analysis-small"
+        )
         self.assertIn("capabilities", analysis_model)
         self.assertEqual(analysis_model["capabilities"]["score_scale"], "0-5")
         self.assertIn("code_generation", analysis_model["capabilities"]["scores"])
@@ -56,7 +58,9 @@ class ModelProviderTests(unittest.TestCase):
             code_base = catalog.show("fixture-code-base")
             self.assertEqual(code_base["model"], "provider-code-base:1.5b")
             self.assertIn("autocomplete", code_base["roles"])
-            self.assertGreaterEqual(code_base["capabilities"]["scores"]["code_completion"], 3)
+            self.assertGreaterEqual(
+                code_base["capabilities"]["scores"]["code_completion"], 3
+            )
 
             embedding_row = catalog.show("fixture-embedding-small")
             self.assertEqual(embedding_row["model"], "fixture-embedding-small:latest")
@@ -64,9 +68,13 @@ class ModelProviderTests(unittest.TestCase):
             self.assertEqual(embedding_row["capabilities"]["scores"]["embedding"], 5)
 
             autocomplete_rows = catalog.filter({"role": "autocomplete"})
-            self.assertIn("fixture-code-base", {row["name"] for row in autocomplete_rows})
+            self.assertIn(
+                "fixture-code-base", {row["name"] for row in autocomplete_rows}
+            )
             embedding_rows = catalog.filter({"role": "embedding"})
-            self.assertIn("fixture-embedding-small", {row["name"] for row in embedding_rows})
+            self.assertIn(
+                "fixture-embedding-small", {row["name"] for row in embedding_rows}
+            )
 
     def test_model_catalog_refresh_imports_provider_discovered_models(self) -> None:
         source = load_profile("local-dev", Path.cwd())
@@ -102,21 +110,37 @@ class ModelProviderTests(unittest.TestCase):
                 reason="test discovery",
             )
             with patch.object(ProviderRegistry, "models", return_value=discovered):
-                preview = ModelCatalog(profile).refresh("ollama", write=False, verbose=True)
+                preview = ModelCatalog(profile).refresh(
+                    "ollama", write=False, verbose=True
+                )
                 self.assertEqual(preview["changes"]["would_import"], 2)
-                self.assertEqual(preview["results"]["ollama"]["source_models_returned"], 3)
-                self.assertEqual(preview["results"]["ollama"]["source_models_already_profiled"], 1)
-                self.assertEqual(preview["results"]["ollama"]["source_models_to_import"], 2)
+                self.assertEqual(
+                    preview["results"]["ollama"]["source_models_returned"], 3
+                )
+                self.assertEqual(
+                    preview["results"]["ollama"]["source_models_already_profiled"], 1
+                )
+                self.assertEqual(
+                    preview["results"]["ollama"]["source_models_to_import"], 2
+                )
                 self.assertEqual(preview["changes"]["would_remove"], 0)
                 self.assertNotIn("catalog", preview)
                 rows = preview["results"]["ollama"]["model_changes"]
-                imported_preview = {row["name"]: row for row in rows if row["refresh_status"] == "would_import"}
+                imported_preview = {
+                    row["name"]: row
+                    for row in rows
+                    if row["refresh_status"] == "would_import"
+                }
                 self.assertEqual(
-                    imported_preview["ollama-new-embed-model-latest"]["suitable_runtimes"],
+                    imported_preview["ollama-new-embed-model-latest"][
+                        "suitable_runtimes"
+                    ],
                     ["ollama"],
                 )
                 self.assertEqual(
-                    imported_preview["ollama-new-embed-model-latest"]["preferred_runtime"],
+                    imported_preview["ollama-new-embed-model-latest"][
+                        "preferred_runtime"
+                    ],
                     "ollama",
                 )
                 self.assertEqual(
@@ -129,7 +153,9 @@ class ModelProviderTests(unittest.TestCase):
                 )
                 self.assertFalse((root / "models.yaml").exists())
 
-                written = ModelCatalog(profile).refresh("ollama", write=True, verbose=True)
+                written = ModelCatalog(profile).refresh(
+                    "ollama", write=True, verbose=True
+                )
 
             self.assertEqual(written["changes"]["imported"], 2)
             self.assertEqual(written["changes"]["removed"], 0)
@@ -143,13 +169,19 @@ class ModelProviderTests(unittest.TestCase):
             names = {row["name"] for row in rows}
             self.assertIn("ollama-new-embed-model-latest", names)
             self.assertIn("ollama-new-coder-1b-base", names)
-            discovered_text = (root / "models.discovered.yaml").read_text(encoding="utf-8")
-            self.assertIn("This file is generated by aiplane model discovery", discovered_text)
+            discovered_text = (root / "models.discovered.yaml").read_text(
+                encoding="utf-8"
+            )
+            self.assertIn(
+                "This file is generated by aiplane model discovery", discovered_text
+            )
             self.assertIn("Do not edit it manually", discovered_text)
             self.assertIn("enabled: true", discovered_text)
 
     def test_models_refresh_default_omits_per_model_changes_until_verbose(self) -> None:
-        discovered = ProviderModelsResult("ollama", "provider_api", ["new-model:1b"], "test discovery")
+        discovered = ProviderModelsResult(
+            "ollama", "provider_api", ["new-model:1b"], "test discovery"
+        )
         with patch.object(ProviderRegistry, "models", return_value=discovered):
             stdout = StringIO()
             with redirect_stdout(stdout):
@@ -169,13 +201,17 @@ class ModelProviderTests(unittest.TestCase):
         self.assertEqual(payload["changes"]["would_import"], 1)
         self.assertNotIn("results", payload)
         self.assertEqual(payload["provider_summary"][0]["provider"], "ollama")
-        self.assertGreaterEqual(payload["provider_summary"][0]["model_changes_count"], 1)
+        self.assertGreaterEqual(
+            payload["provider_summary"][0]["model_changes_count"], 1
+        )
         self.assertEqual(payload["provider_summary"][0]["changes"]["would_import"], 1)
 
     def test_models_refresh_cli_reports_configured_provider_failure_as_json(
         self,
     ) -> None:
-        with patch.dict(os.environ, {"AZURE_OPENAI_ENDPOINT": "", "AZURE_OPENAI_API_KEY": ""}):
+        with patch.dict(
+            os.environ, {"AZURE_OPENAI_ENDPOINT": "", "AZURE_OPENAI_API_KEY": ""}
+        ):
             stdout = StringIO()
             with redirect_stdout(stdout):
                 code = cli_main(
@@ -200,7 +236,9 @@ class ModelProviderTests(unittest.TestCase):
         self.assertIn("providers show azure_openai", payload["next_steps"][0])
 
     def test_models_refresh_cli_previews_with_mocked_provider(self) -> None:
-        discovered = ProviderModelsResult("ollama", "provider_api", ["new-model:1b"], "test discovery")
+        discovered = ProviderModelsResult(
+            "ollama", "provider_api", ["new-model:1b"], "test discovery"
+        )
         with patch.object(ProviderRegistry, "models", return_value=discovered):
             stdout = StringIO()
             with redirect_stdout(stdout):
@@ -229,7 +267,9 @@ class ModelProviderTests(unittest.TestCase):
     def test_models_refresh_cli_can_disable_new_imports_and_groups_provider_results(
         self,
     ) -> None:
-        discovered = ProviderModelsResult("ollama", "provider_api", ["new-model:1b"], "test discovery")
+        discovered = ProviderModelsResult(
+            "ollama", "provider_api", ["new-model:1b"], "test discovery"
+        )
         with patch.object(ProviderRegistry, "models", return_value=discovered):
             stdout = StringIO()
             with redirect_stdout(stdout):
@@ -251,7 +291,9 @@ class ModelProviderTests(unittest.TestCase):
         self.assertFalse(payload["write"])
         self.assertFalse(payload["new_entries_enabled"])
         imported = [
-            row for row in payload["results"]["ollama"]["model_changes"] if row["refresh_status"] == "would_import"
+            row
+            for row in payload["results"]["ollama"]["model_changes"]
+            if row["refresh_status"] == "would_import"
         ]
         self.assertEqual(imported[0]["enabled"], False)
 
@@ -284,7 +326,9 @@ class ModelProviderTests(unittest.TestCase):
 
             def fake_models(provider: str, **kwargs) -> ProviderModelsResult:
                 if provider == "ollama":
-                    return ProviderModelsResult("ollama", "provider_api", ["fresh:1b"], "mock ok")
+                    return ProviderModelsResult(
+                        "ollama", "provider_api", ["fresh:1b"], "mock ok"
+                    )
                 if provider == "huggingface":
                     raise RuntimeError("mock failure")
                 return ProviderModelsResult(provider, "profile_catalog", [], "empty")
@@ -304,7 +348,9 @@ class ModelProviderTests(unittest.TestCase):
     ) -> None:
         source = load_profile("local-dev", Path.cwd())
         models_config = json.loads(json.dumps(source.models))
-        models_config["models"] = {"curated": {"provider": "ollama", "model": "curated:1b", "enabled": True}}
+        models_config["models"] = {
+            "curated": {"provider": "ollama", "model": "curated:1b", "enabled": True}
+        }
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             shutil.copytree(source.root, root / "local-dev")
@@ -312,7 +358,9 @@ class ModelProviderTests(unittest.TestCase):
             profile.models["models"] = models_config["models"]
             catalog = ModelCatalog(profile)
             catalog.clear_imported(write=False, include_curated=True)
-            discovered = ProviderModelsResult("ollama", "source_api", ["fresh:1b"], "mock ok")
+            discovered = ProviderModelsResult(
+                "ollama", "source_api", ["fresh:1b"], "mock ok"
+            )
 
             def fake_models(provider: str, **kwargs) -> ProviderModelsResult:
                 if provider == "ollama":
@@ -322,7 +370,9 @@ class ModelProviderTests(unittest.TestCase):
             with patch.object(ProviderRegistry, "models", side_effect=fake_models):
                 result = catalog.refresh_all(write=False)
         self.assertIn("ollama", result["results"])
-        self.assertEqual(result["results"]["ollama"]["source_discovery_method"], "source_api")
+        self.assertEqual(
+            result["results"]["ollama"]["source_discovery_method"], "source_api"
+        )
         self.assertEqual(result["results"]["ollama"]["source_models_to_import"], 1)
 
     def test_models_enable_disable_rejects_discovered_cache_entry(self) -> None:
@@ -341,8 +391,12 @@ class ModelProviderTests(unittest.TestCase):
                     }
                 }
             }
-            (root / "models.yaml").write_text(agent_config.dump_yaml(models_config), encoding="utf-8")
-            (root / "models.discovered.yaml").write_text(agent_config.dump_yaml(generated_config), encoding="utf-8")
+            (root / "models.yaml").write_text(
+                agent_config.dump_yaml(models_config), encoding="utf-8"
+            )
+            (root / "models.discovered.yaml").write_text(
+                agent_config.dump_yaml(generated_config), encoding="utf-8"
+            )
             profile = Profile(
                 name="tmp",
                 root=root,
@@ -357,9 +411,13 @@ class ModelProviderTests(unittest.TestCase):
                 targets=source.targets,
                 orchestrators=source.orchestrators,
             )
-            with self.assertRaisesRegex(ValueError, "discovered model entry is cache state"):
+            with self.assertRaisesRegex(
+                ValueError, "discovered model entry is cache state"
+            ):
                 ModelCatalog(profile).set_enabled("discovered_local", False)
-            discovered_text = (root / "models.discovered.yaml").read_text(encoding="utf-8")
+            discovered_text = (root / "models.discovered.yaml").read_text(
+                encoding="utf-8"
+            )
         self.assertIn("enabled: true", discovered_text)
 
     def test_models_refresh_reset_cache_previews_clear_before_refresh(self) -> None:
@@ -384,7 +442,9 @@ class ModelProviderTests(unittest.TestCase):
                 agent_config.dump_yaml(discovered_config),
                 encoding="utf-8",
             )
-            discovered = ProviderModelsResult("ollama", "provider_api", ["fresh:1b"], "mock ok")
+            discovered = ProviderModelsResult(
+                "ollama", "provider_api", ["fresh:1b"], "mock ok"
+            )
             with patch.object(ProviderRegistry, "models", return_value=discovered):
                 stdout = StringIO()
                 with redirect_stdout(stdout):
@@ -417,7 +477,9 @@ class ModelProviderTests(unittest.TestCase):
     def test_model_catalog_clear_cache_removes_only_refresh_imports(self) -> None:
         source = load_profile("local-dev", Path.cwd())
         models_config = json.loads(json.dumps(source.models))
-        models_config["models"] = {"curated": {"provider": "ollama", "model": "curated:1b", "enabled": True}}
+        models_config["models"] = {
+            "curated": {"provider": "ollama", "model": "curated:1b", "enabled": True}
+        }
         for index in range(55):
             models_config["models"][f"imported-{index:02d}"] = {
                 "provider": "vllm",
@@ -428,7 +490,9 @@ class ModelProviderTests(unittest.TestCase):
             }
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            (root / "models.yaml").write_text(agent_config.dump_yaml(models_config), encoding="utf-8")
+            (root / "models.yaml").write_text(
+                agent_config.dump_yaml(models_config), encoding="utf-8"
+            )
             profile = Profile(
                 name="tmp",
                 root=root,
@@ -449,19 +513,29 @@ class ModelProviderTests(unittest.TestCase):
                 preview["provider_counts"],
                 [{"name": "huggingface", "count": 55}, {"name": "ollama", "count": 1}],
             )
-            self.assertEqual(preview["curated_provider_counts"], [{"name": "ollama", "count": 1}])
+            self.assertEqual(
+                preview["curated_provider_counts"], [{"name": "ollama", "count": 1}]
+            )
             self.assertTrue(preview["include_curated"])
             self.assertNotIn("model_changes", preview)
 
-            keep_curated = ModelCatalog(profile).clear_imported(write=False, include_curated=False)
+            keep_curated = ModelCatalog(profile).clear_imported(
+                write=False, include_curated=False
+            )
             self.assertEqual(keep_curated["would_remove"], 55)
-            self.assertEqual(keep_curated["provider_counts"], [{"name": "huggingface", "count": 55}])
+            self.assertEqual(
+                keep_curated["provider_counts"], [{"name": "huggingface", "count": 55}]
+            )
             self.assertEqual(keep_curated["curated_provider_counts"], [])
             self.assertFalse(keep_curated["include_curated"])
 
-            written = ModelCatalog(profile).clear_imported(write=True, include_curated=False)
+            written = ModelCatalog(profile).clear_imported(
+                write=True, include_curated=False
+            )
             self.assertEqual(written["removed"], 55)
-            self.assertEqual(written["provider_counts"], [{"name": "huggingface", "count": 55}])
+            self.assertEqual(
+                written["provider_counts"], [{"name": "huggingface", "count": 55}]
+            )
             self.assertEqual(written["curated_provider_counts"], [])
             written_text = (root / "models.yaml").read_text(encoding="utf-8")
             self.assertIn("curated:", written_text)
@@ -490,13 +564,17 @@ class ModelProviderTests(unittest.TestCase):
         ]
         for metadata, role, runtime, min_vram in cases:
             with self.subTest(role=role):
-                entry = _discovered_model_entry("huggingface", f"org/{role}", enable=False, source_metadata=metadata)
+                entry = _discovered_model_entry(
+                    "huggingface", f"org/{role}", enable=False, source_metadata=metadata
+                )
                 self.assertEqual(entry["roles"], [role])
                 self.assertEqual(entry["source"], "huggingface")
                 self.assertEqual(entry["provider"], runtime)
                 self.assertEqual(entry["preferred_runtime"], runtime)
                 if role == "image_generation" or role == "video_generation":
-                    self.assertEqual(entry["supported_runtimes"], ["diffusers", "comfyui"])
+                    self.assertEqual(
+                        entry["supported_runtimes"], ["diffusers", "comfyui"]
+                    )
                 if role == "text_to_speech":
                     self.assertEqual(entry["supported_runtimes"], ["transformers"])
                 self.assertEqual(entry["min_vram_gb"], min_vram)
@@ -523,8 +601,12 @@ class ModelProviderTests(unittest.TestCase):
                     }
                 }
             }
-            (root / "models.yaml").write_text(agent_config.dump_yaml(models_config), encoding="utf-8")
-            (root / "models.discovered.yaml").write_text(agent_config.dump_yaml(generated_config), encoding="utf-8")
+            (root / "models.yaml").write_text(
+                agent_config.dump_yaml(models_config), encoding="utf-8"
+            )
+            (root / "models.discovered.yaml").write_text(
+                agent_config.dump_yaml(generated_config), encoding="utf-8"
+            )
             profile = Profile(
                 "tmp",
                 root,
@@ -560,7 +642,9 @@ class ModelProviderTests(unittest.TestCase):
             self.assertIn("next_steps", written)
             self.assertIn("models.yaml", written["next_steps"][0])
             curated_text = (root / "models.yaml").read_text(encoding="utf-8")
-            generated_text = (root / "models.discovered.yaml").read_text(encoding="utf-8")
+            generated_text = (root / "models.discovered.yaml").read_text(
+                encoding="utf-8"
+            )
             self.assertIn("reviewed-provider-chat:", curated_text)
             self.assertIn("promoted_from: generated-provider-chat", curated_text)
             self.assertIn("discovered_entry: generated-provider-chat", curated_text)
@@ -594,8 +678,12 @@ class ModelProviderTests(unittest.TestCase):
                     }
                 }
             }
-            (root / "models.yaml").write_text(agent_config.dump_yaml(models_config), encoding="utf-8")
-            (root / "models.discovered.yaml").write_text(agent_config.dump_yaml(generated_config), encoding="utf-8")
+            (root / "models.yaml").write_text(
+                agent_config.dump_yaml(models_config), encoding="utf-8"
+            )
+            (root / "models.discovered.yaml").write_text(
+                agent_config.dump_yaml(generated_config), encoding="utf-8"
+            )
             profile = Profile(
                 "tmp",
                 root,
@@ -612,9 +700,13 @@ class ModelProviderTests(unittest.TestCase):
             )
 
             with self.assertRaises(ValueError):
-                ModelCatalog(profile).promote_generated("generated-provider-chat", write=False)
+                ModelCatalog(profile).promote_generated(
+                    "generated-provider-chat", write=False
+                )
 
-            preview = ModelCatalog(profile).promote_generated("generated-provider-chat", write=False, overwrite=True)
+            preview = ModelCatalog(profile).promote_generated(
+                "generated-provider-chat", write=False, overwrite=True
+            )
             self.assertTrue(preview["target_exists"])
             self.assertTrue(preview["overwrite"])
 
@@ -626,7 +718,9 @@ class ModelProviderTests(unittest.TestCase):
                 "providers": {"ollama": {"runtime": "ollama"}},
                 "models": {},
             }
-            (root / "models.yaml").write_text(agent_config.dump_yaml(models_config), encoding="utf-8")
+            (root / "models.yaml").write_text(
+                agent_config.dump_yaml(models_config), encoding="utf-8"
+            )
             (root / "models.discovered.yaml").write_text(
                 agent_config.dump_yaml(
                     {
@@ -680,7 +774,9 @@ class ModelProviderTests(unittest.TestCase):
             self.assertEqual(result["model"]["model"], "llama3.2:3b")
             self.assertEqual(result["model"]["discovered_entry"], "ollama-llama3-2-3b")
             self.assertEqual(result["model"]["capability_scores"]["general_chat"], 4)
-            self.assertEqual(result["model"]["capability_score_source"], "catalog_heuristic")
+            self.assertEqual(
+                result["model"]["capability_score_source"], "catalog_heuristic"
+            )
             written = (root / "models.yaml").read_text(encoding="utf-8")
             self.assertIn("local_chat:", written)
             self.assertIn("discovered_entry: ollama-llama3-2-3b", written)
@@ -692,7 +788,9 @@ class ModelProviderTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             models_config = {"providers": {}, "models": {}}
-            (root / "models.yaml").write_text(agent_config.dump_yaml(models_config), encoding="utf-8")
+            (root / "models.yaml").write_text(
+                agent_config.dump_yaml(models_config), encoding="utf-8"
+            )
             profile = Profile(
                 "tmp",
                 root,
@@ -736,7 +834,9 @@ class ModelProviderTests(unittest.TestCase):
                 "providers": {"ollama": {"runtime": "ollama"}},
                 "models": {},
             }
-            (root / "models.yaml").write_text(agent_config.dump_yaml(models_config), encoding="utf-8")
+            (root / "models.yaml").write_text(
+                agent_config.dump_yaml(models_config), encoding="utf-8"
+            )
             (root / "models.discovered.yaml").write_text(
                 agent_config.dump_yaml(
                     {
@@ -778,9 +878,13 @@ class ModelProviderTests(unittest.TestCase):
             self.assertEqual(result["model"]["discovered_entry"], "ollama-llama3-2-3b")
 
             with self.assertRaisesRegex(ValueError, "discovered model entry not found"):
-                ModelCatalog(profile).add_model("missing", provider="ollama", model_id="missing:1b", write=False)
+                ModelCatalog(profile).add_model(
+                    "missing", provider="ollama", model_id="missing:1b", write=False
+                )
             with self.assertRaisesRegex(ValueError, "discovered model entry not found"):
-                ModelCatalog(profile).add_model("missing", discovered_name="ollama-missing", write=False)
+                ModelCatalog(profile).add_model(
+                    "missing", discovered_name="ollama-missing", write=False
+                )
 
     def test_models_remove_deletes_profile_owned_alias_by_name(self) -> None:
         source = load_profile("local-dev", Path.cwd())
@@ -806,8 +910,12 @@ class ModelProviderTests(unittest.TestCase):
                     }
                 }
             }
-            (root / "models.yaml").write_text(agent_config.dump_yaml(models_config), encoding="utf-8")
-            (root / "models.discovered.yaml").write_text(agent_config.dump_yaml(generated_config), encoding="utf-8")
+            (root / "models.yaml").write_text(
+                agent_config.dump_yaml(models_config), encoding="utf-8"
+            )
+            (root / "models.discovered.yaml").write_text(
+                agent_config.dump_yaml(generated_config), encoding="utf-8"
+            )
             profile = Profile(
                 "tmp",
                 root,
@@ -829,7 +937,9 @@ class ModelProviderTests(unittest.TestCase):
             self.assertTrue(removed["removed_curated"])
             self.assertEqual(removed["removed_defaults"], ["chat_model"])
             curated_text = (root / "models.yaml").read_text(encoding="utf-8")
-            discovered_text = (root / "models.discovered.yaml").read_text(encoding="utf-8")
+            discovered_text = (root / "models.discovered.yaml").read_text(
+                encoding="utf-8"
+            )
         self.assertNotIn("curated_local:", curated_text)
         self.assertNotIn("chat_model:", curated_text)
         self.assertIn("discovered_local:", discovered_text)
@@ -851,7 +961,9 @@ class ModelProviderTests(unittest.TestCase):
                 "targets.yaml": source.targets,
                 "orchestrators.yaml": source.orchestrators,
             }.items():
-                (profile_root / name).write_text(agent_config.dump_yaml(data), encoding="utf-8")
+                (profile_root / name).write_text(
+                    agent_config.dump_yaml(data), encoding="utf-8"
+                )
             (profile_root / "models.yaml").write_text(
                 agent_config.dump_yaml(
                     {
@@ -905,7 +1017,9 @@ class ModelProviderTests(unittest.TestCase):
                 "targets.yaml": source.targets,
                 "orchestrators.yaml": source.orchestrators,
             }.items():
-                (profile_root / name).write_text(agent_config.dump_yaml(data), encoding="utf-8")
+                (profile_root / name).write_text(
+                    agent_config.dump_yaml(data), encoding="utf-8"
+                )
             (profile_root / "models.yaml").write_text(
                 agent_config.dump_yaml({"defaults": {}, "models": {}}), encoding="utf-8"
             )
@@ -953,7 +1067,9 @@ class ModelProviderTests(unittest.TestCase):
                     }
                 },
             }
-            (root / "models.yaml").write_text(agent_config.dump_yaml(models_config), encoding="utf-8")
+            (root / "models.yaml").write_text(
+                agent_config.dump_yaml(models_config), encoding="utf-8"
+            )
             profile = Profile(
                 "tmp",
                 root,
@@ -1002,9 +1118,13 @@ class ModelProviderTests(unittest.TestCase):
                 "targets.yaml": source.targets,
                 "orchestrators.yaml": source.orchestrators,
             }.items():
-                (profile_root / name).write_text(agent_config.dump_yaml(data), encoding="utf-8")
+                (profile_root / name).write_text(
+                    agent_config.dump_yaml(data), encoding="utf-8"
+                )
             (profile_root / "models.yaml").write_text(
-                agent_config.dump_yaml({"providers": {"ollama": {"runtime": "ollama"}}, "models": {}}),
+                agent_config.dump_yaml(
+                    {"providers": {"ollama": {"runtime": "ollama"}}, "models": {}}
+                ),
                 encoding="utf-8",
             )
             (profile_root / "models.discovered.yaml").write_text(
@@ -1079,9 +1199,13 @@ class ModelProviderTests(unittest.TestCase):
                 "targets.yaml": source.targets,
                 "orchestrators.yaml": source.orchestrators,
             }.items():
-                (profile_root / name).write_text(agent_config.dump_yaml(data), encoding="utf-8")
+                (profile_root / name).write_text(
+                    agent_config.dump_yaml(data), encoding="utf-8"
+                )
             (profile_root / "models.yaml").write_text(
-                agent_config.dump_yaml({"providers": {"ollama": {"runtime": "ollama"}}, "models": {}}),
+                agent_config.dump_yaml(
+                    {"providers": {"ollama": {"runtime": "ollama"}}, "models": {}}
+                ),
                 encoding="utf-8",
             )
             (profile_root / "models.discovered.yaml").write_text(
@@ -1160,7 +1284,9 @@ class ModelProviderTests(unittest.TestCase):
             {"Provider/speech-to-text-large": {"downloads": 3}},
         )
         with patch.object(ProviderRegistry, "models", return_value=discovered):
-            result = ModelCatalog(profile).refresh("huggingface", write=False, verbose=True)
+            result = ModelCatalog(profile).refresh(
+                "huggingface", write=False, verbose=True
+            )
         row = result["results"]["huggingface"]["model_changes"][0]
         self.assertNotIn("provider", row)
         self.assertEqual(
@@ -1192,7 +1318,9 @@ class ModelProviderTests(unittest.TestCase):
         }
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            (root / "models.yaml").write_text(agent_config.dump_yaml(models_config), encoding="utf-8")
+            (root / "models.yaml").write_text(
+                agent_config.dump_yaml(models_config), encoding="utf-8"
+            )
             profile = Profile(
                 name="tmp",
                 root=root,
@@ -1220,23 +1348,33 @@ class ModelProviderTests(unittest.TestCase):
                 },
             )
             with patch.object(ProviderRegistry, "models", return_value=discovered):
-                preview = ModelCatalog(profile).refresh("huggingface", write=False, verbose=True)
+                preview = ModelCatalog(profile).refresh(
+                    "huggingface", write=False, verbose=True
+                )
                 self.assertEqual(preview["changes"]["would_update"], 1)
                 self.assertIn("next_steps", preview)
                 self.assertIn(
                     "aiplane models refresh --provider huggingface",
                     preview["next_steps"][0],
                 )
-                self.assertEqual(preview["results"]["huggingface"]["source_models_to_update"], 1)
                 self.assertEqual(
-                    preview["results"]["huggingface"]["profile_curated_models_before_refresh"],
+                    preview["results"]["huggingface"]["source_models_to_update"], 1
+                )
+                self.assertEqual(
+                    preview["results"]["huggingface"][
+                        "profile_curated_models_before_refresh"
+                    ],
                     1,
                 )
                 self.assertEqual(
-                    preview["results"]["huggingface"]["profile_refresh_imported_models_before_refresh"],
+                    preview["results"]["huggingface"][
+                        "profile_refresh_imported_models_before_refresh"
+                    ],
                     0,
                 )
-                written = ModelCatalog(profile).refresh("huggingface", write=True, verbose=True)
+                written = ModelCatalog(profile).refresh(
+                    "huggingface", write=True, verbose=True
+                )
 
             self.assertEqual(written["changes"]["updated"], 1)
             model = profile.models["models"]["curated-provider-chat"]
@@ -1290,11 +1428,15 @@ class ModelProviderTests(unittest.TestCase):
                 {"org/old-embed": {"downloads": 2}},
             )
             with patch.object(ProviderRegistry, "models", return_value=discovered):
-                written = ModelCatalog(profile).refresh("huggingface", write=True, verbose=True)
+                written = ModelCatalog(profile).refresh(
+                    "huggingface", write=True, verbose=True
+                )
             self.assertEqual(written["changes"]["updated"], 1)
             generated_models = ModelCatalog(profile).generated_config["models"]
             self.assertEqual(generated_models["hf-old"]["roles"], ["embedding"])
-            self.assertEqual(generated_models["hf-old"]["source_metadata"], {"downloads": 2})
+            self.assertEqual(
+                generated_models["hf-old"]["source_metadata"], {"downloads": 2}
+            )
 
     def test_model_catalog_refresh_prunes_live_discovery_but_not_fallback(self) -> None:
         source = load_profile("local-dev", Path.cwd())
@@ -1311,7 +1453,9 @@ class ModelProviderTests(unittest.TestCase):
         }
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            (root / "models.yaml").write_text(agent_config.dump_yaml(models_config), encoding="utf-8")
+            (root / "models.yaml").write_text(
+                agent_config.dump_yaml(models_config), encoding="utf-8"
+            )
             profile = Profile(
                 name="tmp",
                 root=root,
@@ -1333,7 +1477,9 @@ class ModelProviderTests(unittest.TestCase):
                 "live runtime inventory",
             )
             with patch.object(ProviderRegistry, "models", return_value=live):
-                preview = ModelCatalog(profile).refresh("ollama", write=False, verbose=True)
+                preview = ModelCatalog(profile).refresh(
+                    "ollama", write=False, verbose=True
+                )
                 self.assertEqual(preview["changes"]["would_remove"], 0)
                 self.assertTrue(preview["results"]["ollama"]["prune_enabled"])
                 self.assertIn(
@@ -1341,7 +1487,9 @@ class ModelProviderTests(unittest.TestCase):
                     (root / "models.yaml").read_text(encoding="utf-8"),
                 )
 
-                written = ModelCatalog(profile).refresh("ollama", write=True, verbose=True)
+                written = ModelCatalog(profile).refresh(
+                    "ollama", write=True, verbose=True
+                )
 
             self.assertEqual(written["changes"]["removed"], 0)
             written_text = (root / "models.yaml").read_text(encoding="utf-8")
@@ -1369,7 +1517,9 @@ class ModelProviderTests(unittest.TestCase):
                 "offline fallback",
             )
             with patch.object(ProviderRegistry, "models", return_value=fallback):
-                fallback_result = ModelCatalog(fallback_profile).refresh("ollama", write=True)
+                fallback_result = ModelCatalog(fallback_profile).refresh(
+                    "ollama", write=True
+                )
             self.assertFalse(fallback_result["results"]["ollama"]["prune_enabled"])
             self.assertEqual(fallback_result["changes"]["removed"], 0)
 
@@ -1572,13 +1722,22 @@ class ModelProviderTests(unittest.TestCase):
             profiles_arg = ["--profiles-dir", str(profiles_dir)]
             stdout = StringIO()
             with redirect_stdout(stdout):
-                code = cli_main(profiles_arg + ["models", "list", "--profile", "local-dev", "--fits-hardware"])
+                code = cli_main(
+                    profiles_arg
+                    + ["models", "list", "--profile", "local-dev", "--fits-hardware"]
+                )
             self.assertEqual(code, 0)
             rows = json.loads(stdout.getvalue())
             self.assertTrue(rows)
-            machine = HardwareManager(load_profile("local-dev", Path.cwd(), profiles_dir=profiles_dir)).machine()
-            memory = machine["memory"]["ram_gb"] or machine["memory"].get("unified_memory_gb")
-            self.assertTrue(all(float(row.get("min_ram_gb") or 0) <= float(memory) for row in rows))
+            machine = HardwareManager(
+                load_profile("local-dev", Path.cwd(), profiles_dir=profiles_dir)
+            ).machine()
+            memory = machine["memory"]["ram_gb"] or machine["memory"].get(
+                "unified_memory_gb"
+            )
+            self.assertTrue(
+                all(float(row.get("min_ram_gb") or 0) <= float(memory) for row in rows)
+            )
 
     def test_models_list_can_filter_by_named_machine_and_machine_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1623,7 +1782,9 @@ class ModelProviderTests(unittest.TestCase):
                     },
                 }
             }
-            (profile_root / "models.yaml").write_text(agent_config.dump_yaml(models_config), encoding="utf-8")
+            (profile_root / "models.yaml").write_text(
+                agent_config.dump_yaml(models_config), encoding="utf-8"
+            )
             profile = load_profile("tmp", Path.cwd(), profiles_dir=profiles_dir)
             imported = MachineManager(profile).import_azure_sku(
                 "Standard_NC4as_T4_v3",
@@ -1652,7 +1813,9 @@ class ModelProviderTests(unittest.TestCase):
                     ]
                 )
             self.assertEqual(code, 0)
-            self.assertEqual([row["name"] for row in json.loads(stdout.getvalue())], ["fits_t4"])
+            self.assertEqual(
+                [row["name"] for row in json.loads(stdout.getvalue())], ["fits_t4"]
+            )
 
             machine_path = root / "azure_t4_test.machine.json"
             machine_path.write_text(json.dumps(imported), encoding="utf-8")
@@ -1677,7 +1840,9 @@ class ModelProviderTests(unittest.TestCase):
                     ]
                 )
             self.assertEqual(code, 0)
-            self.assertEqual([row["name"] for row in json.loads(stdout.getvalue())], ["fits_t4"])
+            self.assertEqual(
+                [row["name"] for row in json.loads(stdout.getvalue())], ["fits_t4"]
+            )
 
     def test_models_list_name_only_supports_cli_alias_selection(self) -> None:
         with _isolated_profiles_dir() as profiles_dir:
@@ -1700,9 +1865,13 @@ class ModelProviderTests(unittest.TestCase):
                     ]
                 )
             self.assertEqual(code, 0)
-            names = [line.strip() for line in stdout.getvalue().splitlines() if line.strip()]
+            names = [
+                line.strip() for line in stdout.getvalue().splitlines() if line.strip()
+            ]
             self.assertGreaterEqual(len(names), 1)
-            self.assertTrue(all(line and "{" not in line and "}" not in line for line in names))
+            self.assertTrue(
+                all(line and "{" not in line and "}" not in line for line in names)
+            )
 
     def test_models_list_name_only_cannot_use_group_by(self) -> None:
         stdout = StringIO()
@@ -1758,8 +1927,12 @@ class ModelProviderTests(unittest.TestCase):
                     },
                 }
             }
-            (root / "models.yaml").write_text(agent_config.dump_yaml(models_config), encoding="utf-8")
-            (root / "models.discovered.yaml").write_text(agent_config.dump_yaml(discovered_config), encoding="utf-8")
+            (root / "models.yaml").write_text(
+                agent_config.dump_yaml(models_config), encoding="utf-8"
+            )
+            (root / "models.discovered.yaml").write_text(
+                agent_config.dump_yaml(discovered_config), encoding="utf-8"
+            )
             profile = Profile(
                 "tmp",
                 root,
@@ -1776,11 +1949,15 @@ class ModelProviderTests(unittest.TestCase):
             )
 
             catalog = ModelCatalog(profile)
-            rows = catalog.sort_rows(catalog.filter({"roles": ["chat"], "min_likes": 10}), sort_by="likes")
+            rows = catalog.sort_rows(
+                catalog.filter({"roles": ["chat"], "min_likes": 10}), sort_by="likes"
+            )
             self.assertEqual([row["name"] for row in rows], ["hf-high"])
             self.assertEqual(rows[0]["likes"], 50)
 
-            rows = catalog.sort_rows(catalog.filter({"source": "huggingface"}), sort_by="downloads")
+            rows = catalog.sort_rows(
+                catalog.filter({"source": "huggingface"}), sort_by="downloads"
+            )
             self.assertEqual(rows[0]["name"], "hf-downloads")
             self.assertEqual(rows[0]["downloads"], 2500)
 
@@ -1814,7 +1991,9 @@ class ModelProviderTests(unittest.TestCase):
             target = workspace / "sample.py"
             target.write_text("def add(a, b):\n    return a + b\n", encoding="utf-8")
             profile = load_profile("local-dev", workspace)
-            result = ModelCatalog(profile).test_prompt("fixture-analysis-small", "analysis", target, dry_run=True)
+            result = ModelCatalog(profile).test_prompt(
+                "fixture-analysis-small", "analysis", target, dry_run=True
+            )
             self.assertEqual(result.backend, "dry_run")
             self.assertIn("Explain what this code does", result.text)
             self.assertIn("def add", result.text)
@@ -1822,7 +2001,9 @@ class ModelProviderTests(unittest.TestCase):
     def test_model_benchmark_dry_run_reports_tasks_without_saving(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             profile = load_profile("local-dev", Path(tmp))
-            result = BenchmarkRunner(profile).run("fixture-analysis-small", task="all", dry_run=True, save=False)
+            result = BenchmarkRunner(profile).run(
+                "fixture-analysis-small", task="all", dry_run=True, save=False
+            )
             self.assertTrue(result["dry_run"])
             self.assertEqual(result["summary"]["previewed"], 4)
             self.assertEqual(result["summary"]["average_score"], 0)
@@ -1873,8 +2054,12 @@ class ModelProviderTests(unittest.TestCase):
 
     def test_managed_service_models_do_not_mix_into_runtime_groups(self) -> None:
         with _isolated_test_profile() as profile:
-            profile.models["models"]["managed-chat-small"]["preferred_runtime"] = "ollama"
-            profile.models["models"]["managed-chat-small"]["supported_runtimes"] = ["ollama"]
+            profile.models["models"]["managed-chat-small"][
+                "preferred_runtime"
+            ] = "ollama"
+            profile.models["models"]["managed-chat-small"]["supported_runtimes"] = [
+                "ollama"
+            ]
             catalog = ModelCatalog(profile)
             managed = catalog.show("managed-chat-small")
             self.assertEqual(managed["provider"], "openai")
@@ -1883,7 +2068,9 @@ class ModelProviderTests(unittest.TestCase):
             self.assertIsNone(managed["runtime_endpoint"])
             self.assertEqual(managed["supported_runtimes"], [])
             self.assertFalse(catalog.filter({"runtime": "openai"}))
-            ollama_matches = {row["name"] for row in catalog.filter({"runtime": "ollama"})}
+            ollama_matches = {
+                row["name"] for row in catalog.filter({"runtime": "ollama"})
+            }
             self.assertNotIn("managed-chat-small", ollama_matches)
 
             stdout = StringIO()
@@ -1904,14 +2091,28 @@ class ModelProviderTests(unittest.TestCase):
             self.assertEqual(code, 0)
             payload = json.loads(stdout.getvalue())
             self.assertIn("no_runtime", payload["groups"])
-            self.assertTrue(any(row["name"] == "managed-chat-small" for row in payload["groups"]["no_runtime"]))
-            self.assertFalse(any(row["name"] == "managed-chat-small" for row in payload["groups"].get("ollama", [])))
+            self.assertTrue(
+                any(
+                    row["name"] == "managed-chat-small"
+                    for row in payload["groups"]["no_runtime"]
+                )
+            )
+            self.assertFalse(
+                any(
+                    row["name"] == "managed-chat-small"
+                    for row in payload["groups"].get("ollama", [])
+                )
+            )
 
             with self.assertRaisesRegex(ValueError, "managed-service model"):
-                RuntimeCatalog(profile).set_preferred_runtime("managed-chat-small", "ollama")
+                RuntimeCatalog(profile).set_preferred_runtime(
+                    "managed-chat-small", "ollama"
+                )
             with self.assertRaisesRegex(ValueError, "cannot be bundled"):
                 RuntimeCatalog(profile).bundle_plan("ollama", "managed-chat-small")
-            with self.assertRaisesRegex(ValueError, "cannot define local runtime fields"):
+            with self.assertRaisesRegex(
+                ValueError, "cannot define local runtime fields"
+            ):
                 catalog.complete("managed-chat-small", "hello")
 
     def test_model_show_includes_provider_config(self) -> None:
@@ -1936,9 +2137,15 @@ class ModelProviderTests(unittest.TestCase):
             old = os.environ.get("AIPLANE_CREDENTIALS")
             os.environ["AIPLANE_CREDENTIALS"] = str(cred_path)
             profile = load_profile("local-dev", Path.cwd())
-            profile.models["providers"]["azure_openai"]["endpoint"] = "https://example.openai.azure.com"
-            profile.models["providers"]["azure_openai"]["credential_ref"] = "azure_openai.business_a"
-            payload = {"data": [{"id": "news-deployment", "model": "managed-chat-model"}]}
+            profile.models["providers"]["azure_openai"][
+                "endpoint"
+            ] = "https://example.openai.azure.com"
+            profile.models["providers"]["azure_openai"][
+                "credential_ref"
+            ] = "azure_openai.business_a"
+            payload = {
+                "data": [{"id": "news-deployment", "model": "managed-chat-model"}]
+            }
 
             class FakeResponse:
                 def __enter__(self):
@@ -1951,8 +2158,12 @@ class ModelProviderTests(unittest.TestCase):
                     return json.dumps(payload).encode("utf-8")
 
             try:
-                with patch("aiplane.providers.urlopen", return_value=FakeResponse()) as opened:
-                    result = ProviderRegistry(profile).models("azure_openai", online=True, limit=5)
+                with patch(
+                    "aiplane.providers.urlopen", return_value=FakeResponse()
+                ) as opened:
+                    result = ProviderRegistry(profile).models(
+                        "azure_openai", online=True, limit=5
+                    )
                 self.assertEqual(result.models, ["news-deployment"])
                 self.assertEqual(
                     opened.call_args.args[0].headers.get("Api-key"),
@@ -1967,7 +2178,9 @@ class ModelProviderTests(unittest.TestCase):
     def test_models_list_can_rank_and_limit_by_repeated_roles(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             profiles_dir = Path(tmp) / "profiles"
-            shutil.copytree(Path("profile-templates") / "local-dev", profiles_dir / "local-dev")
+            shutil.copytree(
+                Path("profile-templates") / "local-dev", profiles_dir / "local-dev"
+            )
             stdout = StringIO()
             with redirect_stdout(stdout):
                 code = cli_main(
@@ -1998,7 +2211,9 @@ class ModelProviderTests(unittest.TestCase):
     def test_models_enable_disable_cli_updates_profile_copy(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             profiles_dir = Path(tmp) / "profiles"
-            shutil.copytree(Path("profile-templates") / "local-dev", profiles_dir / "local-dev")
+            shutil.copytree(
+                Path("profile-templates") / "local-dev", profiles_dir / "local-dev"
+            )
             stdout = StringIO()
             with redirect_stdout(stdout):
                 code = cli_main(
@@ -2014,7 +2229,9 @@ class ModelProviderTests(unittest.TestCase):
             payload = json.loads(stdout.getvalue())
             self.assertFalse(payload["enabled"])
             profile = load_profile("local-dev", Path.cwd(), profiles_dir=profiles_dir)
-            self.assertFalse(ModelCatalog(profile).show("fixture-analysis-small")["enabled"])
+            self.assertFalse(
+                ModelCatalog(profile).show("fixture-analysis-small")["enabled"]
+            )
 
             stdout = StringIO()
             with redirect_stdout(stdout):
@@ -2029,7 +2246,9 @@ class ModelProviderTests(unittest.TestCase):
                 )
             self.assertEqual(code, 0)
             profile = load_profile("local-dev", Path.cwd(), profiles_dir=profiles_dir)
-            self.assertTrue(ModelCatalog(profile).show("fixture-analysis-small")["enabled"])
+            self.assertTrue(
+                ModelCatalog(profile).show("fixture-analysis-small")["enabled"]
+            )
 
     def test_disabled_general_candidate_is_configured(self) -> None:
         profile = load_profile("local-dev", Path.cwd())
@@ -2050,13 +2269,19 @@ class ModelProviderTests(unittest.TestCase):
         self.assertEqual(by_name["openai"]["catalog_adapter"], "openai")
         self.assertEqual(by_name["openai"]["endpoint_family"], "openai")
         self.assertEqual(by_name["openai"]["typical_runtimes"], [])
-        self.assertEqual(by_name["openai"]["auth"], {"required": True, "method": "bearer"})
+        self.assertEqual(
+            by_name["openai"]["auth"], {"required": True, "method": "bearer"}
+        )
         self.assertEqual(by_name["nvidia"]["ownership"], "self_managed")
         ollama = by_name["ollama"]
         self.assertIn("ollama", ollama["typical_runtimes"])
 
-        enabled_names = {row["name"] for row in ProviderRegistry(profile).list(status="enabled")}
-        disabled_names = {row["name"] for row in ProviderRegistry(profile).list(status="disabled")}
+        enabled_names = {
+            row["name"] for row in ProviderRegistry(profile).list(status="enabled")
+        }
+        disabled_names = {
+            row["name"] for row in ProviderRegistry(profile).list(status="disabled")
+        }
         self.assertIn("ollama", enabled_names)
         self.assertNotIn("local_file", enabled_names)
         self.assertIn("local_file", disabled_names)
@@ -2069,11 +2294,17 @@ class ModelProviderTests(unittest.TestCase):
         self.assertEqual(code, 0)
         payload = json.loads(stdout.getvalue())
         self.assertEqual(payload["group_by"], "ownership")
-        self.assertEqual(list(payload["groups"])[:2], ["self_managed", "managed_service"])
+        self.assertEqual(
+            list(payload["groups"])[:2], ["self_managed", "managed_service"]
+        )
         self.assertIn("self_managed", payload["groups"])
         self.assertIn("managed_service", payload["groups"])
-        self.assertTrue(any(row["name"] == "nvidia" for row in payload["groups"]["self_managed"]))
-        self.assertTrue(any(row["name"] == "openai" for row in payload["groups"]["managed_service"]))
+        self.assertTrue(
+            any(row["name"] == "nvidia" for row in payload["groups"]["self_managed"])
+        )
+        self.assertTrue(
+            any(row["name"] == "openai" for row in payload["groups"]["managed_service"])
+        )
 
     def test_provider_list_cli_filters_by_status(self) -> None:
         stdout = StringIO()
@@ -2084,7 +2315,9 @@ class ModelProviderTests(unittest.TestCase):
         names = {row["name"] for row in rows}
         self.assertIn("local_file", names)
         self.assertTrue(all(not row["enabled"] for row in rows))
-        self.assertTrue(all(row["ownership"] in {"self_managed", "managed_service"} for row in rows))
+        self.assertTrue(
+            all(row["ownership"] in {"self_managed", "managed_service"} for row in rows)
+        )
 
     def test_provider_endpoint_types_cli_lists_supported_api_shapes(self) -> None:
         stdout = StringIO()
@@ -2104,7 +2337,9 @@ class ModelProviderTests(unittest.TestCase):
     def test_provider_add_cli_rejects_unsupported_api_family(self) -> None:
         stderr = StringIO()
         with redirect_stderr(stderr), self.assertRaises(SystemExit):
-            cli_main(["providers", "add", "bad_gateway", "--endpoint-family", "not_real_api"])
+            cli_main(
+                ["providers", "add", "bad_gateway", "--endpoint-family", "not_real_api"]
+            )
         self.assertIn("invalid choice", stderr.getvalue())
 
     def test_provider_enable_disable_cli_updates_user_provider_config(self) -> None:
@@ -2116,17 +2351,25 @@ class ModelProviderTests(unittest.TestCase):
             self.assertFalse(disabled["enabled"])
             user_config = profile.root / "model-providers.user.yaml"
             self.assertTrue(user_config.exists())
-            self.assertFalse(ProviderRegistry(profile).model_providers(include_removed=True)["ollama"]["enabled"])
+            self.assertFalse(
+                ProviderRegistry(profile).model_providers(include_removed=True)[
+                    "ollama"
+                ]["enabled"]
+            )
             enabled = ProviderRegistry(profile).set_all_enabled(True)
             self.assertIn("ollama", enabled["providers"])
-            self.assertTrue(ProviderRegistry(profile).model_providers()["ollama"]["enabled"])
+            self.assertTrue(
+                ProviderRegistry(profile).model_providers()["ollama"]["enabled"]
+            )
 
     def test_provider_defaults_can_be_initialized_and_cleared(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             profile_root = root / "local-dev"
             profile_root.mkdir()
-            profile = Profile("local-dev", profile_root, root, {}, {}, {}, {}, {}, {}, {}, {}, {})
+            profile = Profile(
+                "local-dev", profile_root, root, {}, {}, {}, {}, {}, {}, {}, {}, {}
+            )
             registry = ProviderRegistry(profile)
             initialized = registry.init_defaults()
             self.assertIn("ollama", initialized["providers"])
@@ -2141,7 +2384,9 @@ class ModelProviderTests(unittest.TestCase):
             nvidia = registry.model_providers()["nvidia"]
             self.assertEqual(nvidia["catalog_adapter"], "huggingface")
             self.assertEqual(nvidia["huggingface_author"], "nvidia")
-            self.assertEqual(nvidia["typical_runtimes"], ["vllm", "tgi", "transformers"])
+            self.assertEqual(
+                nvidia["typical_runtimes"], ["vllm", "tgi", "transformers"]
+            )
 
     def test_provider_update_defaults_preserves_enabled_flags(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -2161,7 +2406,9 @@ class ModelProviderTests(unittest.TestCase):
                 "  enabled: true\n",
                 encoding="utf-8",
             )
-            profile = Profile("local-dev", profile_root, root, {}, {}, {}, {}, {}, {}, {}, {}, {})
+            profile = Profile(
+                "local-dev", profile_root, root, {}, {}, {}, {}, {}, {}, {}, {}, {}
+            )
             result = ProviderRegistry(profile).update_defaults()
             providers = ProviderRegistry(profile).model_providers(include_removed=True)
         self.assertEqual(result["name"], "model_provider_defaults_update")
@@ -2181,13 +2428,17 @@ class ModelProviderTests(unittest.TestCase):
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            shutil.copytree(Path.cwd() / "profile-templates" / "local-dev", root / "local-dev")
+            shutil.copytree(
+                Path.cwd() / "profile-templates" / "local-dev", root / "local-dev"
+            )
             profile = load_profile("local-dev", Path.cwd(), profiles_dir=root)
             registry = ProviderRegistry(profile)
             registry.set_enabled("nvidia", False)
             result = registry.update_defaults()
             providers = ProviderRegistry(profile).model_providers(include_removed=True)
-            user_config = parse_yaml((profile.root / "model-providers.user.yaml").read_text(encoding="utf-8"))
+            user_config = parse_yaml(
+                (profile.root / "model-providers.user.yaml").read_text(encoding="utf-8")
+            )
         self.assertIn("nvidia", result["updated"])
         self.assertFalse(providers["nvidia"]["enabled"])
         self.assertFalse(user_config["nvidia"]["enabled"])
@@ -2195,7 +2446,9 @@ class ModelProviderTests(unittest.TestCase):
     def test_provider_update_defaults_cli(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            shutil.copytree(Path.cwd() / "profile-templates" / "local-dev", root / "local-dev")
+            shutil.copytree(
+                Path.cwd() / "profile-templates" / "local-dev", root / "local-dev"
+            )
             stdout = StringIO()
             with redirect_stdout(stdout):
                 code = cli_main(
@@ -2344,7 +2597,9 @@ class ModelProviderTests(unittest.TestCase):
                 return html.encode("utf-8")
 
         with patch("aiplane.providers.urlopen", return_value=FakeResponse()):
-            result = ProviderRegistry(profile).models("ollama", online=True, query="code", limit=5)
+            result = ProviderRegistry(profile).models(
+                "ollama", online=True, query="code", limit=5
+            )
         self.assertEqual(result.source, "source_api")
         self.assertEqual(result.models, ["provider-code"])
 
@@ -2363,7 +2618,9 @@ class ModelProviderTests(unittest.TestCase):
                 return json.dumps(payload).encode("utf-8")
 
         with patch("aiplane.providers.urlopen", return_value=FakeResponse()):
-            result = ProviderRegistry(profile).models("huggingface", online=True, query="code", limit=1)
+            result = ProviderRegistry(profile).models(
+                "huggingface", online=True, query="code", limit=1
+            )
         self.assertEqual(result.source, "source_api")
         self.assertEqual(result.models, ["Provider/Test-Coder"])
 
@@ -2389,7 +2646,9 @@ class ModelProviderTests(unittest.TestCase):
             return FakeResponse()
 
         with patch("aiplane.providers.urlopen", side_effect=fake_urlopen):
-            result = ProviderRegistry(profile).models("nvidia", online=True, query="Nemotron", limit=1)
+            result = ProviderRegistry(profile).models(
+                "nvidia", online=True, query="Nemotron", limit=1
+            )
         self.assertEqual(result.provider, "nvidia")
         self.assertEqual(result.source, "source_api")
         self.assertEqual(result.models, ["nvidia/Nemotron-Test"])
@@ -2428,7 +2687,9 @@ class ModelProviderTests(unittest.TestCase):
             patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}),
             patch("aiplane.providers.urlopen", return_value=FakeResponse()) as opened,
         ):
-            result = ProviderRegistry(profile).models("openai", online=True, query="coding", limit=5)
+            result = ProviderRegistry(profile).models(
+                "openai", online=True, query="coding", limit=5
+            )
         self.assertEqual(result.source, "provider_api")
         self.assertEqual(result.models, ["coding-chat"])
         self.assertEqual(result.model_metadata["coding-chat"]["owned_by"], "provider")
@@ -2440,7 +2701,9 @@ class ModelProviderTests(unittest.TestCase):
         self,
     ) -> None:
         profile = load_profile("local-dev", Path.cwd())
-        profile.models["providers"]["azure_openai"]["endpoint"] = "https://example.openai.azure.com"
+        profile.models["providers"]["azure_openai"][
+            "endpoint"
+        ] = "https://example.openai.azure.com"
         payload = {"data": [{"id": "coding-chat", "model": "managed-chat-model"}]}
 
         class FakeResponse:
@@ -2457,7 +2720,9 @@ class ModelProviderTests(unittest.TestCase):
             patch.dict(os.environ, {"AZURE_OPENAI_API_KEY": "test-key"}),
             patch("aiplane.providers.urlopen", return_value=FakeResponse()) as opened,
         ):
-            result = ProviderRegistry(profile).models("azure_openai", online=True, query="coding", limit=5)
+            result = ProviderRegistry(profile).models(
+                "azure_openai", online=True, query="coding", limit=5
+            )
         self.assertEqual(result.source, "provider_api")
         self.assertEqual(result.models, ["coding-chat"])
         request = opened.call_args.args[0]
@@ -2468,7 +2733,11 @@ class ModelProviderTests(unittest.TestCase):
         profile = load_profile("local-dev", Path.cwd())
         profile.models["providers"]["elevenlabs"]["enabled"] = True
         profile.models.setdefault("models", {})
-        payload = {"voices": [{"voice_id": "voice-alpha", "name": "Demo Voice", "category": "premade"}]}
+        payload = {
+            "voices": [
+                {"voice_id": "voice-alpha", "name": "Demo Voice", "category": "premade"}
+            ]
+        }
 
         class FakeResponse:
             def __enter__(self):
@@ -2484,10 +2753,14 @@ class ModelProviderTests(unittest.TestCase):
             patch.dict(os.environ, {"ELEVENLABS_API_KEY": "test-key"}),
             patch("aiplane.providers.urlopen", return_value=FakeResponse()) as opened,
         ):
-            result = ProviderRegistry(profile).models("elevenlabs", online=True, query="demo", limit=5)
+            result = ProviderRegistry(profile).models(
+                "elevenlabs", online=True, query="demo", limit=5
+            )
         self.assertEqual(result.source, "provider_api")
         self.assertEqual(result.models, ["voice-alpha"])
-        self.assertEqual(result.model_metadata["voice-alpha"]["pipeline_tag"], "text-to-speech")
+        self.assertEqual(
+            result.model_metadata["voice-alpha"]["pipeline_tag"], "text-to-speech"
+        )
         request = opened.call_args.args[0]
         self.assertIn("/voices", request.full_url)
         self.assertEqual(request.headers.get("Xi-api-key"), "test-key")
@@ -2586,7 +2859,9 @@ class ModelProviderTests(unittest.TestCase):
             {"voice-alpha": {"pipeline_tag": "text-to-speech", "name": "Demo Voice"}},
         )
         with patch.object(ProviderRegistry, "models", return_value=discovered):
-            result = ModelCatalog(profile).refresh("elevenlabs", write=False, enable=True, online=True, verbose=True)
+            result = ModelCatalog(profile).refresh(
+                "elevenlabs", write=False, enable=True, online=True, verbose=True
+            )
         rows = result["results"]["elevenlabs"]["model_changes"]
         entry = next(row for row in rows if row["name"] == "elevenlabs-voice-alpha")
         self.assertEqual(entry["model"]["source"], "elevenlabs")
@@ -2602,7 +2877,9 @@ class ModelProviderTests(unittest.TestCase):
             "roles": ["text_to_speech"],
             "local": False,
         }
-        self.assertEqual(RuntimeCatalog(profile).compatible_runtimes_for_entry(direct_entry), [])
+        self.assertEqual(
+            RuntimeCatalog(profile).compatible_runtimes_for_entry(direct_entry), []
+        )
 
     def test_models_list_rows_include_resource_requirements(self) -> None:
         source = load_profile("local-dev", Path.cwd())
@@ -2625,7 +2902,9 @@ class ModelProviderTests(unittest.TestCase):
                     }
                 }
             }
-            (root / "models.yaml").write_text(agent_config.dump_yaml(models_config), encoding="utf-8")
+            (root / "models.yaml").write_text(
+                agent_config.dump_yaml(models_config), encoding="utf-8"
+            )
             profile = Profile(
                 name="tmp",
                 root=root,
@@ -2640,7 +2919,9 @@ class ModelProviderTests(unittest.TestCase):
                 targets=source.targets,
                 orchestrators=source.orchestrators,
             )
-            rows = ModelCatalog(profile).filter({"gpu_vendor": "nvidia", "accelerator_api": "cuda"})
+            rows = ModelCatalog(profile).filter(
+                {"gpu_vendor": "nvidia", "accelerator_api": "cuda"}
+            )
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["min_ram_gb"], 16.0)
         self.assertEqual(rows[0]["recommended_ram_gb"], 32.0)
@@ -2660,8 +2941,12 @@ class ModelProviderTests(unittest.TestCase):
             root = Path(tmp)
             models_config = {"models": {}}
             generated_config = {"models": {"ollama-example-model-7b": entry}}
-            (root / "models.yaml").write_text(agent_config.dump_yaml(models_config), encoding="utf-8")
-            (root / "models.discovered.yaml").write_text(agent_config.dump_yaml(generated_config), encoding="utf-8")
+            (root / "models.yaml").write_text(
+                agent_config.dump_yaml(models_config), encoding="utf-8"
+            )
+            (root / "models.discovered.yaml").write_text(
+                agent_config.dump_yaml(generated_config), encoding="utf-8"
+            )
             profile = Profile(
                 name="tmp",
                 root=root,
@@ -2676,7 +2961,9 @@ class ModelProviderTests(unittest.TestCase):
                 targets=source.targets,
                 orchestrators=source.orchestrators,
             )
-            rows = ModelCatalog(profile).filter({"max_min_ram_gb": 64, "max_min_vram_gb": 64})
+            rows = ModelCatalog(profile).filter(
+                {"max_min_ram_gb": 64, "max_min_vram_gb": 64}
+            )
         self.assertEqual(
             rows[0]["resource_estimate_source"],
             "catalog_heuristic:parameter_size_and_role",
@@ -2717,7 +3004,9 @@ class ModelProviderTests(unittest.TestCase):
                     },
                 }
             }
-            (root / "models.yaml").write_text(agent_config.dump_yaml(models_config), encoding="utf-8")
+            (root / "models.yaml").write_text(
+                agent_config.dump_yaml(models_config), encoding="utf-8"
+            )
             profile = Profile(
                 name="tmp",
                 root=root,
@@ -2744,7 +3033,9 @@ class ModelProviderTests(unittest.TestCase):
             root = workspace / ".aiplane" / "benchmarks"
             root.mkdir(parents=True)
             (root / "20260101T000000Z-fixture-analysis-small.json").write_text(
-                json.dumps({"summary": {"average_score": 91, "passed": 1, "failed": 0}}),
+                json.dumps(
+                    {"summary": {"average_score": 91, "passed": 1, "failed": 0}}
+                ),
                 encoding="utf-8",
             )
             profile = load_profile("local-dev", workspace)

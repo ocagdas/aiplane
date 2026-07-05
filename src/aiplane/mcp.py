@@ -14,7 +14,11 @@ from .machine_model_filters import merge_machine_model_filters
 from .model_catalog import ModelCatalog
 from .runtime_catalog import RuntimeCatalog
 from .stacks import StackManager
-from .model_filters import MODEL_FILTER_SCHEMA_PROPERTIES, MODEL_SORT_CHOICES, model_filter_args
+from .model_filters import (
+    MODEL_FILTER_SCHEMA_PROPERTIES,
+    MODEL_SORT_CHOICES,
+    model_filter_args,
+)
 from .output import json_dumps
 from .orchestrators import OrchestratorCatalog
 from .providers import ProviderRegistry
@@ -227,7 +231,11 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
         "properties": {
             "profile": {"type": "string"},
             **MODEL_FILTER_SCHEMA_PROPERTIES,
-            "sort_by": {"type": "string", "enum": MODEL_SORT_CHOICES, "default": "name"},
+            "sort_by": {
+                "type": "string",
+                "enum": MODEL_SORT_CHOICES,
+                "default": "name",
+            },
             "limit": {"type": "integer"},
         },
         "additionalProperties": False,
@@ -509,7 +517,9 @@ def mcp_manifest() -> dict[str, Any]:
 
 
 class AiplaneMcpServer:
-    def __init__(self, workspace, default_profile: str | None = None, profiles_dir=None):
+    def __init__(
+        self, workspace, default_profile: str | None = None, profiles_dir=None
+    ):
         self.workspace = workspace
         self.default_profile = default_profile
         self.profiles_dir = profiles_dir
@@ -530,11 +540,15 @@ class AiplaneMcpServer:
                 params = _dict(message.get("params"))
                 name = str(params.get("name") or "")
                 arguments = _dict(params.get("arguments"))
-                return _result(request_id, _tool_content(self.call_tool(name, arguments)))
+                return _result(
+                    request_id, _tool_content(self.call_tool(name, arguments))
+                )
             if request_id is None:
                 return None
             return _error(request_id, -32601, f"method not found: {method}")
-        except Exception as exc:  # noqa: BLE001 - JSON-RPC errors should be returned to the client.
+        except (
+            Exception
+        ) as exc:  # noqa: BLE001 - JSON-RPC errors should be returned to the client.
             if request_id is None:
                 return None
             return _error(request_id, -32000, str(exc))
@@ -547,20 +561,26 @@ class AiplaneMcpServer:
             str(arguments.get("profile") or self.default_profile or "") or None,
             profiles_dir=self.profiles_dir,
         )
-        profile = load_profile(profile_name, self.workspace, profiles_dir=self.profiles_dir)
+        profile = load_profile(
+            profile_name, self.workspace, profiles_dir=self.profiles_dir
+        )
 
         mutates = name in MUTATING_TOOL_NAMES
         try:
             result = self._call_profile_tool(name, arguments, profile)
         except Exception as exc:
             if mutates:
-                self._audit(profile, name, "failed", {"arguments": arguments, "error": str(exc)})
+                self._audit(
+                    profile, name, "failed", {"arguments": arguments, "error": str(exc)}
+                )
             raise
         if mutates:
             self._audit(profile, name, "allowed", {"arguments": arguments})
         return result
 
-    def _call_profile_tool(self, name: str, arguments: dict[str, Any], profile: Profile) -> Any:
+    def _call_profile_tool(
+        self, name: str, arguments: dict[str, Any], profile: Profile
+    ) -> Any:
         if name == "aiplane.providers.list":
             return ProviderRegistry(profile).list(
                 runtimes=_string_list(arguments.get("runtime")),
@@ -568,7 +588,9 @@ class AiplaneMcpServer:
                 status=str(arguments.get("status") or "all"),
             )
         if name == "aiplane.providers.models":
-            result = ProviderRegistry(profile).models(str(arguments.get("provider") or ""))
+            result = ProviderRegistry(profile).models(
+                str(arguments.get("provider") or "")
+            )
             return result.__dict__
         if name == "aiplane.models.defaults":
             return ModelCatalog(profile).default_summary()
@@ -595,7 +617,9 @@ class AiplaneMcpServer:
             return HardwareManager(profile).discover()
         if name == "aiplane.hardware.recommend":
             return HardwareManager(profile).recommend(
-                include_not_recommended=bool(arguments.get("include_not_recommended", False))
+                include_not_recommended=bool(
+                    arguments.get("include_not_recommended", False)
+                )
             )
         if name == "aiplane.machines.list":
             return MachineManager(profile).list()
@@ -606,7 +630,11 @@ class AiplaneMcpServer:
                 model=str(arguments.get("model") or "") or None,
                 runtime=str(arguments.get("runtime") or "") or None,
                 workload=str(arguments.get("workload") or "") or None,
-                limit=int(arguments["limit"]) if arguments.get("limit") is not None else None,
+                limit=(
+                    int(arguments["limit"])
+                    if arguments.get("limit") is not None
+                    else None
+                ),
             )
         if name == "aiplane.stacks.list":
             return StackManager(profile).list()
@@ -667,7 +695,9 @@ class AiplaneMcpServer:
         if name == "aiplane.runtimes.status":
             catalog = RuntimeCatalog(profile)
             runtime = arguments.get("runtime")
-            runtimes = [str(runtime)] if runtime else [row["name"] for row in catalog.list()]
+            runtimes = (
+                [str(runtime)] if runtime else [row["name"] for row in catalog.list()]
+            )
             return [catalog.runtime_available(item) for item in runtimes]
         if name == "aiplane.remote.tunnel.plan":
             target = str(arguments.get("target") or "")
@@ -681,7 +711,9 @@ class AiplaneMcpServer:
                 return catalog.refresh_all(
                     write=write,
                     enable=enable_new,
-                    include_empty_providers=bool(arguments.get("include_empty_providers", False)),
+                    include_empty_providers=bool(
+                        arguments.get("include_empty_providers", False)
+                    ),
                     verbose=bool(arguments.get("verbose", False)),
                 )
             return catalog.refresh(
@@ -696,22 +728,34 @@ class AiplaneMcpServer:
             )
         if name == "aiplane.hardware.use":
             overrides = _dict(arguments.get("set"))
-            return HardwareManager(profile).use_template(str(arguments.get("template") or ""), overrides)
+            return HardwareManager(profile).use_template(
+                str(arguments.get("template") or ""), overrides
+            )
         if name == "aiplane.runtimes.use":
             return RuntimeCatalog(profile).set_preferred_runtime(
                 str(arguments.get("model") or ""), str(arguments.get("runtime") or "")
             )
         if name == "aiplane.remote.tunnel.status":
-            return RemoteManager(profile).tunnel_status(str(arguments.get("target") or ""))
+            return RemoteManager(profile).tunnel_status(
+                str(arguments.get("target") or "")
+            )
         if name == "aiplane.remote.tunnel.start":
-            return RemoteManager(profile).tunnel_start(str(arguments.get("target") or ""), yes=True)
+            return RemoteManager(profile).tunnel_start(
+                str(arguments.get("target") or ""), yes=True
+            )
         if name == "aiplane.remote.tunnel.stop":
-            return RemoteManager(profile).tunnel_stop(str(arguments.get("target") or ""), yes=True)
+            return RemoteManager(profile).tunnel_stop(
+                str(arguments.get("target") or ""), yes=True
+            )
 
         raise ValueError(f"unknown MCP tool: {name}")
 
-    def _audit(self, profile: Profile, name: str, decision: str, details: dict[str, Any]) -> None:
-        AuditLogger(profile).record(AuditEvent("mcp", profile.name, name, decision, details))
+    def _audit(
+        self, profile: Profile, name: str, decision: str, details: dict[str, Any]
+    ) -> None:
+        AuditLogger(profile).record(
+            AuditEvent("mcp", profile.name, name, decision, details)
+        )
 
     def _initialize_result(self) -> dict[str, Any]:
         return {
@@ -731,8 +775,12 @@ class AiplaneMcpServer:
         ]
 
 
-def serve_stdio(workspace, default_profile: str | None = None, profiles_dir=None) -> int:
-    server = AiplaneMcpServer(workspace, default_profile=default_profile, profiles_dir=profiles_dir)
+def serve_stdio(
+    workspace, default_profile: str | None = None, profiles_dir=None
+) -> int:
+    server = AiplaneMcpServer(
+        workspace, default_profile=default_profile, profiles_dir=profiles_dir
+    )
     while True:
         message = _read_message(sys.stdin.buffer)
         if message is None:

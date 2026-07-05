@@ -20,7 +20,9 @@ def _test_model_fixture() -> dict[str, object]:
     return agent_config.parse_yaml(fixture_path.read_text(encoding="utf-8"))
 
 
-def _ensure_repo_test_profile(name: str, profiles_dir: Path | str | None = None) -> None:
+def _ensure_repo_test_profile(
+    name: str, profiles_dir: Path | str | None = None
+) -> None:
     if profiles_dir is not None:
         return
     destination = Path.cwd() / "profiles" / name
@@ -53,7 +55,9 @@ def _isolated_profiles_dir(name: str = "local-dev"):
 @contextmanager
 def _isolated_test_profile(name: str = "local-dev", workspace: Path | None = None):
     with _isolated_profiles_dir(name) as profiles_dir:
-        yield _load_profile_with_test_models(name, workspace or Path.cwd(), profiles_dir=profiles_dir)
+        yield _load_profile_with_test_models(
+            name, workspace or Path.cwd(), profiles_dir=profiles_dir
+        )
 
 
 def _load_profile_with_test_models(

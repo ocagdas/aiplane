@@ -104,26 +104,40 @@ class IntegrationManager:
                 api_key_env=api_key_env,
             )
             model_name = str(plan["selection"]["primary"]["name"])
-        model_name = model_name or self._default_model_name("chat_model", "code_model", "self_managed_model")
+        model_name = model_name or self._default_model_name(
+            "chat_model", "code_model", "self_managed_model"
+        )
         model = self.catalog.get(model_name)
         provider_name = str(model.get("provider"))
         endpoint_value = endpoint or self._endpoint_for_provider(provider_name)
         api_key_value = api_key_env or self._api_key_env_for(model, provider_name)
         if tool == "continue":
-            return self._continue_export(model_name, model, provider_name, endpoint_value, api_key_value)
+            return self._continue_export(
+                model_name, model, provider_name, endpoint_value, api_key_value
+            )
         if tool == "cline":
-            return self._cline_export(model_name, model, provider_name, endpoint_value, api_key_value)
+            return self._cline_export(
+                model_name, model, provider_name, endpoint_value, api_key_value
+            )
         if tool == "zed":
-            return self._zed_export(model_name, model, provider_name, endpoint_value, api_key_value)
+            return self._zed_export(
+                model_name, model, provider_name, endpoint_value, api_key_value
+            )
         if tool == "aider":
-            return self._aider_export(model_name, model, provider_name, endpoint_value, api_key_value)
+            return self._aider_export(
+                model_name, model, provider_name, endpoint_value, api_key_value
+            )
         if tool == "openai-compatible":
-            return self._openai_compatible_export(model_name, model, provider_name, endpoint_value, api_key_value)
+            return self._openai_compatible_export(
+                model_name, model, provider_name, endpoint_value, api_key_value
+            )
         raise ValueError(f"unknown integration: {tool}")
 
     def export_from_plan(self, plan: Any) -> IntegrationExport:
         if not isinstance(plan, dict):
-            raise ValueError("saved plan must be a JSON object produced by integrations plan")
+            raise ValueError(
+                "saved plan must be a JSON object produced by integrations plan"
+            )
         tool = str(plan.get("tool") or "")
         if tool == "continue":
             return self._continue_export_from_plan(plan)
@@ -131,8 +145,14 @@ class IntegrationManager:
             return self._mcp_export(tool)
         if tool not in ONE_MODEL_TOOLS:
             raise ValueError(f"unknown integration in plan: {tool}")
-        selection = plan.get("selection") if isinstance(plan.get("selection"), dict) else {}
-        row = selection.get("primary") if isinstance(selection.get("primary"), dict) else None
+        selection = (
+            plan.get("selection") if isinstance(plan.get("selection"), dict) else {}
+        )
+        row = (
+            selection.get("primary")
+            if isinstance(selection.get("primary"), dict)
+            else None
+        )
         if not row:
             raise ValueError("saved plan does not contain a primary selection")
         model_name = str(row.get("name") or "selected-model")
@@ -141,12 +161,20 @@ class IntegrationManager:
         endpoint = str(row.get("endpoint") or "")
         api_key_env = str(row.get("api_key_env") or "")
         if tool == "cline":
-            return self._cline_export(model_name, model, provider_name, endpoint, api_key_env)
+            return self._cline_export(
+                model_name, model, provider_name, endpoint, api_key_env
+            )
         if tool == "zed":
-            return self._zed_export(model_name, model, provider_name, endpoint, api_key_env)
+            return self._zed_export(
+                model_name, model, provider_name, endpoint, api_key_env
+            )
         if tool == "aider":
-            return self._aider_export(model_name, model, provider_name, endpoint, api_key_env)
-        return self._openai_compatible_export(model_name, model, provider_name, endpoint, api_key_env)
+            return self._aider_export(
+                model_name, model, provider_name, endpoint, api_key_env
+            )
+        return self._openai_compatible_export(
+            model_name, model, provider_name, endpoint, api_key_env
+        )
 
     def plan(
         self,
@@ -196,7 +224,9 @@ class IntegrationManager:
                         runtime_constraint=runtime,
                     )
                 elif select_best or provider or runtime or capabilities:
-                    row = self._best_model_for_role(role, constraints, endpoint=endpoint, api_key_env=api_key_env)
+                    row = self._best_model_for_role(
+                        role, constraints, endpoint=endpoint, api_key_env=api_key_env
+                    )
                 else:
                     default_role = f"{role}_model"
                     fallback = {
@@ -218,7 +248,9 @@ class IntegrationManager:
             if tool not in ONE_MODEL_TOOLS:
                 raise ValueError(f"unknown integration: {tool}")
             if any(overrides.values()):
-                raise ValueError("--chat, --autocomplete, and --embedding are only meaningful for Continue planning")
+                raise ValueError(
+                    "--chat, --autocomplete, and --embedding are only meaningful for Continue planning"
+                )
             if model_name:
                 row = self._selection_row(
                     "chat",
@@ -229,9 +261,13 @@ class IntegrationManager:
                     runtime_constraint=runtime,
                 )
             elif select_best or provider or runtime or capabilities:
-                row = self._best_model_for_role("chat", constraints, endpoint=endpoint, api_key_env=api_key_env)
+                row = self._best_model_for_role(
+                    "chat", constraints, endpoint=endpoint, api_key_env=api_key_env
+                )
             else:
-                alias = self._default_model_name("chat_model", "code_model", "self_managed_model")
+                alias = self._default_model_name(
+                    "chat_model", "code_model", "self_managed_model"
+                )
                 row = self._selection_row(
                     "chat",
                     alias,
@@ -302,8 +338,14 @@ class IntegrationManager:
                 if runtime_name
                 else {"available": False, "reason": "no runtime selected"}
             )
-            if runtime_name and runtime_name not in seen_start and not bool(status.get("available")):
-                if runtime_name not in seen_install and self._runtime_install_needed(runtime_name):
+            if (
+                runtime_name
+                and runtime_name not in seen_start
+                and not bool(status.get("available"))
+            ):
+                if runtime_name not in seen_install and self._runtime_install_needed(
+                    runtime_name
+                ):
                     actions.append(
                         self._setup_action(
                             runtime_name,
@@ -355,7 +397,9 @@ class IntegrationManager:
                                 "provider": selected.get("provider"),
                                 "source": selected.get("source"),
                                 "runtime_model": selected.get("model"),
-                                "supported_pull_sources": pull_check["supported_sources"],
+                                "supported_pull_sources": pull_check[
+                                    "supported_sources"
+                                ],
                             }
                         )
                     seen_pull.add(pull_key)
@@ -431,7 +475,9 @@ class IntegrationManager:
             rows = self.catalog.filter(filters)
         if not rows:
             raise ValueError(f"no enabled model matches role {role!r} and constraints")
-        selected = max(rows, key=lambda row: (self._role_score(role, row), row.get("name", "")))
+        selected = max(
+            rows, key=lambda row: (self._role_score(role, row), row.get("name", ""))
+        )
         return self._selection_row(
             role,
             str(selected["name"]),
@@ -462,7 +508,10 @@ class IntegrationManager:
         else:
             selected_runtime = runtime_catalog.select_runtime(model_name)
             runtime_name = str(
-                selected_runtime.get("selected") or model.get("preferred_runtime") or model.get("provider") or ""
+                selected_runtime.get("selected")
+                or model.get("preferred_runtime")
+                or model.get("provider")
+                or ""
             )
         provider_name = str(model.get("provider") or "")
         endpoint_value = endpoint or self._endpoint_for_provider(
@@ -490,7 +539,10 @@ class IntegrationManager:
     def _role_score(self, role: str, row: dict[str, Any]) -> int:
         profile = row.get("capabilities", {}) if isinstance(row, dict) else {}
         scores = profile.get("scores", {}) if isinstance(profile, dict) else {}
-        return sum(int(scores.get(capability, 0)) for capability in ROLE_CAPABILITY_MAP.get(role, []))
+        return sum(
+            int(scores.get(capability, 0))
+            for capability in ROLE_CAPABILITY_MAP.get(role, [])
+        )
 
     def _model_presence(self, model_name: str) -> dict[str, Any]:
         statuses = {status.name: status for status in self.catalog.doctor()}
@@ -508,7 +560,9 @@ class IntegrationManager:
             return shutil.which("ollama") is None
         return False
 
-    def _runtime_pull_support(self, runtime: str, selected: dict[str, Any]) -> dict[str, Any]:
+    def _runtime_pull_support(
+        self, runtime: str, selected: dict[str, Any]
+    ) -> dict[str, Any]:
         return runtime_pull_support(runtime, selected)
 
     def _setup_action(
@@ -623,7 +677,9 @@ class IntegrationManager:
         sys.stderr.flush()
         stdout = buffers["stdout"].decode(errors="replace")
         stderr = buffers["stderr"].decode(errors="replace")
-        return subprocess.CompletedProcess(command, int(returncode or 0), stdout, stderr)
+        return subprocess.CompletedProcess(
+            command, int(returncode or 0), stdout, stderr
+        )
 
     @staticmethod
     def _output_tail(value: str, limit: int = 12) -> list[str]:
@@ -655,7 +711,9 @@ class IntegrationManager:
             )
         return ["ollama", "run", ollama_model_id]
 
-    def chat_plan(self, model_name: str | None = None, prompt: str | None = None) -> dict[str, Any]:
+    def chat_plan(
+        self, model_name: str | None = None, prompt: str | None = None
+    ) -> dict[str, Any]:
         model_name = self._chat_model_name(model_name)
         model = self.catalog.get(model_name)
         self.catalog.require_execution_capability(model_name, model, "chat")
@@ -665,9 +723,15 @@ class IntegrationManager:
         runtime = (
             provider_name
             if provider.get("ownership") == "managed_service"
-            else str(model.get("preferred_runtime") or (supported[0] if supported else provider_name))
+            else str(
+                model.get("preferred_runtime")
+                or (supported[0] if supported else provider_name)
+            )
         )
-        protocol = str(provider.get("protocol") or ("ollama_api" if runtime == "ollama" else "openai_compatible"))
+        protocol = str(
+            provider.get("protocol")
+            or ("ollama_api" if runtime == "ollama" else "openai_compatible")
+        )
         return {
             "name": "chat_plan",
             "profile": self.profile.name,
@@ -684,7 +748,9 @@ class IntegrationManager:
         }
 
     def _chat_model_name(self, model_name: str | None = None) -> str:
-        return model_name or self._default_model_name("chat_model", "self_managed_model", "code_model")
+        return model_name or self._default_model_name(
+            "chat_model", "self_managed_model", "code_model"
+        )
 
     def _ollama_model_id(self, model: dict[str, Any]) -> str:
         return ollama_model_id(self.profile, model)
@@ -706,15 +772,23 @@ class IntegrationManager:
 
         model_name = self._chat_model_name(model_name)
         if dry_run:
-            return json_dumps(self.chat_plan(model_name, prompt), indent=2, sort_keys=True)
+            return json_dumps(
+                self.chat_plan(model_name, prompt), indent=2, sort_keys=True
+            )
         if prompt is None or not prompt.strip():
-            raise ValueError("endpoint chat requires a prompt; pass --prompt, --stdin, or run from an interactive TTY")
-        result = self.catalog.complete(model_name, prompt, timeout_seconds=timeout_seconds, purpose="chat")
+            raise ValueError(
+                "endpoint chat requires a prompt; pass --prompt, --stdin, or run from an interactive TTY"
+            )
+        result = self.catalog.complete(
+            model_name, prompt, timeout_seconds=timeout_seconds, purpose="chat"
+        )
         return result.text
 
     def _api_key_env_for(self, model: dict[str, Any], provider_name: str) -> str:
         provider = self.catalog.providers().get(provider_name, {})
-        credential_ref = str(model.get("credential_ref") or provider.get("credential_ref") or "")
+        credential_ref = str(
+            model.get("credential_ref") or provider.get("credential_ref") or ""
+        )
         if credential_ref:
             env_name = self.credentials.api_key_env(credential_ref)
             if env_name:
@@ -724,11 +798,17 @@ class IntegrationManager:
     def _endpoint_for_provider(self, provider_name: str) -> str:
         provider = self.catalog.providers().get(provider_name, {})
         credential_ref = str(provider.get("credential_ref") or "")
-        credential_endpoint = self.credentials.endpoint(credential_ref) if credential_ref else None
+        credential_endpoint = (
+            self.credentials.endpoint(credential_ref) if credential_ref else None
+        )
         endpoint = str(provider.get("endpoint") or credential_endpoint or "")
         if provider_name in {"ollama", "ollama_cloud"}:
             if not endpoint:
-                endpoint = "http://localhost:11434" if provider_name == "ollama" else "https://ollama.com"
+                endpoint = (
+                    "http://localhost:11434"
+                    if provider_name == "ollama"
+                    else "https://ollama.com"
+                )
             return endpoint.rstrip("/") + "/v1"
         if provider_name == "openai":
             return (endpoint or "https://api.openai.com/v1").rstrip("/")
@@ -747,7 +827,9 @@ class IntegrationManager:
         def api_key(row: dict[str, Any]) -> str:
             key_env = str(row.get("api_key_env") or "")
             return (
-                "ollama" if row.get("provider") == "ollama" and not key_env else "${" + key_env + "}" if key_env else ""
+                "ollama"
+                if row.get("provider") == "ollama" and not key_env
+                else "${" + key_env + "}" if key_env else ""
             )
 
         chat = selection["chat"]
@@ -787,11 +869,15 @@ class IntegrationManager:
             "Run integrations plan continue with the same constraints to inspect the decision.",
             "For Ollama, make sure the service is running and the selected models are pulled, or run integrations setup continue --dry-run.",
         ]
-        return IntegrationExport("continue", "profile-defaults", "mixed", "planned endpoints", yaml, notes)
+        return IntegrationExport(
+            "continue", "profile-defaults", "mixed", "planned endpoints", yaml, notes
+        )
 
-    def _continue_bundle_export(self, endpoint: str | None = None, api_key_env: str | None = None) -> IntegrationExport:
-        chat_name, chat_model, chat_provider, chat_endpoint, chat_key_env = self._model_ref_for_role(
-            "chat_model", ("code_model", "self_managed_model")
+    def _continue_bundle_export(
+        self, endpoint: str | None = None, api_key_env: str | None = None
+    ) -> IntegrationExport:
+        chat_name, chat_model, chat_provider, chat_endpoint, chat_key_env = (
+            self._model_ref_for_role("chat_model", ("code_model", "self_managed_model"))
         )
         (
             completion_name,
@@ -799,7 +885,9 @@ class IntegrationManager:
             completion_provider,
             completion_endpoint,
             completion_key_env,
-        ) = self._model_ref_for_role("autocomplete_model", ("completion_model", "code_model"))
+        ) = self._model_ref_for_role(
+            "autocomplete_model", ("completion_model", "code_model")
+        )
         (
             embedding_name,
             embedding_model,
@@ -813,7 +901,11 @@ class IntegrationManager:
             chat_key_env = completion_key_env = embedding_key_env = api_key_env
 
         def api_key(provider_name: str, key_env: str) -> str:
-            return "ollama" if provider_name == "ollama" and not key_env else "${" + key_env + "}" if key_env else ""
+            return (
+                "ollama"
+                if provider_name == "ollama" and not key_env
+                else "${" + key_env + "}" if key_env else ""
+            )
 
         yaml = (
             "name: aiplane\n"
@@ -869,9 +961,7 @@ class IntegrationManager:
         api_key = (
             "ollama"
             if provider_name == "ollama" and not api_key_env
-            else "${" + api_key_env + "}"
-            if api_key_env
-            else ""
+            else "${" + api_key_env + "}" if api_key_env else ""
         )
         yaml = (
             "models:\n"
@@ -887,9 +977,17 @@ class IntegrationManager:
             "Paste this into the relevant Continue config file for your installation.",
             "The provider is set to openai because Ollama and many gateways expose OpenAI-compatible endpoints.",
         ]
-        if endpoint.startswith("http://") and "localhost" not in endpoint and "127.0.0.1" not in endpoint:
-            notes.append("Remote HTTP endpoints should normally be protected with TLS/auth before team use.")
-        return IntegrationExport("continue", model_name, provider_name, endpoint, yaml, notes)
+        if (
+            endpoint.startswith("http://")
+            and "localhost" not in endpoint
+            and "127.0.0.1" not in endpoint
+        ):
+            notes.append(
+                "Remote HTTP endpoints should normally be protected with TLS/auth before team use."
+            )
+        return IntegrationExport(
+            "continue", model_name, provider_name, endpoint, yaml, notes
+        )
 
     def _mcp_export(self, tool: str) -> IntegrationExport:
         args = ["mcp", "serve"]
@@ -933,13 +1031,19 @@ class IntegrationManager:
                 }
             }
             content = json_dumps(payload, indent=2)
-            notes = ["Use this with MCP clients that accept the common mcpServers JSON shape."]
+            notes = [
+                "Use this with MCP clients that accept the common mcpServers JSON shape."
+            ]
             if tool == "cline-mcp":
-                notes.append("Cline versions differ; map this into the MCP server settings for your installed version.")
+                notes.append(
+                    "Cline versions differ; map this into the MCP server settings for your installed version."
+                )
         notes.append(
             "The MCP server lets clients query aiplane configuration and guarded tools; it is not the model inference endpoint."
         )
-        notes.append("Profile selection uses the normal aiplane default rules unless you add --profile to the args.")
+        notes.append(
+            "Profile selection uses the normal aiplane default rules unless you add --profile to the args."
+        )
         return IntegrationExport(tool, "mcp", "aiplane", "stdio", content, notes)
 
     def _cline_export(
@@ -1020,7 +1124,9 @@ class IntegrationManager:
             "Aider is CLI-first; this export prints environment variables and a launch command.",
             "For local Ollama/OpenAI-compatible endpoints, a dummy API key is often accepted by the local server.",
         ]
-        return IntegrationExport("aider", model_name, provider_name, endpoint, content, notes)
+        return IntegrationExport(
+            "aider", model_name, provider_name, endpoint, content, notes
+        )
 
     def _openai_compatible_export(
         self,

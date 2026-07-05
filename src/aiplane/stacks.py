@@ -114,7 +114,9 @@ class StackManager:
         machines = {row["name"] for row in MachineManager(self.profile).list()}
         if machine not in machines:
             raise ValueError(f"unknown machine: {machine}")
-        if runtime not in {row["name"] for row in RuntimeCatalog(self.profile).list(include_gui=True)}:
+        if runtime not in {
+            row["name"] for row in RuntimeCatalog(self.profile).list(include_gui=True)
+        }:
             raise ValueError(f"unknown runtime: {runtime}")
         normalized_roles = self._normalize_roles(
             roles or {},
@@ -173,7 +175,9 @@ class StackManager:
         runtime_catalog = RuntimeCatalog(self.profile)
         runtime_status = runtime_catalog.runtime_available(runtime)
         endpoint = stack.get("endpoint") or _default_endpoint(runtime)
-        preflight = self._preflight(stack, runtime, model_name, endpoint, runtime_catalog)
+        preflight = self._preflight(
+            stack, runtime, model_name, endpoint, runtime_catalog
+        )
         steps = [
             {
                 "name": "check machine fit",
@@ -265,11 +269,17 @@ class StackManager:
             "access": stack.get("access"),
             "endpoint_policy": stack.get("endpoint_policy"),
             "endpoint": endpoint,
-            "fit": MachineManager(self.profile).recommend(model=model_name, runtime=runtime, limit=None),
+            "fit": MachineManager(self.profile).recommend(
+                model=model_name, runtime=runtime, limit=None
+            ),
             "model_config": model,
             "machine_config": machine,
             "runtime_status": runtime_status,
-            "orchestrator_status": OrchestratorCatalog(self.profile).doctor(orchestrator) if orchestrator else None,
+            "orchestrator_status": (
+                OrchestratorCatalog(self.profile).doctor(orchestrator)
+                if orchestrator
+                else None
+            ),
             "preflight": preflight,
             "endpoint_security": self.endpoint_plan(name),
             "limits": stack.get("limits", {}),
@@ -285,7 +295,9 @@ class StackManager:
 
     def doctor(self, name: str) -> dict[str, Any]:
         plan = self.plan(name)
-        machine_rows = [row for row in plan["fit"]["machines"] if row["name"] == plan["machine"]]
+        machine_rows = [
+            row for row in plan["fit"]["machines"] if row["name"] == plan["machine"]
+        ]
         checks = [
             {
                 "name": "machine_exists",
@@ -294,8 +306,12 @@ class StackManager:
             },
             {
                 "name": "machine_fit",
-                "ok": bool(machine_rows and machine_rows[0]["level"] != "not_recommended"),
-                "detail": machine_rows[0]["reason"] if machine_rows else "machine missing",
+                "ok": bool(
+                    machine_rows and machine_rows[0]["level"] != "not_recommended"
+                ),
+                "detail": (
+                    machine_rows[0]["reason"] if machine_rows else "machine missing"
+                ),
             },
             {
                 "name": "runtime_known",
@@ -343,7 +359,9 @@ class StackManager:
         orchestrator = str(stack.get("orchestrator") or "")
         endpoint = str(stack.get("endpoint") or _default_endpoint(runtime))
         if artifact in {"continue", "openai-compatible"}:
-            exported = IntegrationManager(self.profile).export(artifact, model, endpoint=endpoint)
+            exported = IntegrationManager(self.profile).export(
+                artifact, model, endpoint=endpoint
+            )
             return {
                 "name": name,
                 "artifact": artifact,
@@ -356,12 +374,18 @@ class StackManager:
             }
         if artifact in {"dockerfile", "conda-yaml"}:
             mode = "docker" if artifact == "dockerfile" else "conda"
-            runtime_plan = RuntimeCatalog(self.profile).bundle_plan(runtime, model_name=model, mode=mode)
+            runtime_plan = RuntimeCatalog(self.profile).bundle_plan(
+                runtime, model_name=model, mode=mode
+            )
             orchestrator_plan = (
-                OrchestratorCatalog(self.profile).bundle_plan(orchestrator, mode=mode) if orchestrator else None
+                OrchestratorCatalog(self.profile).bundle_plan(orchestrator, mode=mode)
+                if orchestrator
+                else None
             )
             metadata = self._export_metadata(name, stack, endpoint)
-            content = _merge_bundle_content(artifact, runtime_plan, orchestrator_plan, metadata)
+            content = _merge_bundle_content(
+                artifact, runtime_plan, orchestrator_plan, metadata
+            )
             return {
                 "name": name,
                 "artifact": artifact,
@@ -436,12 +460,18 @@ class StackManager:
             "machine": stack.get("machine"),
             "limits": stack.get("limits", {}),
             "tools": stack.get("tools", {}),
-            "roles": self._role_plan(stack, stack.get("endpoint") or _default_endpoint(runtime)),
+            "roles": self._role_plan(
+                stack, stack.get("endpoint") or _default_endpoint(runtime)
+            ),
             "endpoint_security": self.endpoint_plan(name),
             "approval_mode": stack.get("approval_mode"),
             "audit_label": stack.get("audit_label"),
             "runtime_status": RuntimeCatalog(self.profile).runtime_available(runtime),
-            "orchestrator_status": OrchestratorCatalog(self.profile).doctor(orchestrator) if orchestrator else None,
+            "orchestrator_status": (
+                OrchestratorCatalog(self.profile).doctor(orchestrator)
+                if orchestrator
+                else None
+            ),
         }
 
     def endpoint_plan(self, name: str) -> dict[str, Any]:
@@ -465,9 +495,11 @@ class StackManager:
             {
                 "name": "runtime_prerequisites",
                 "ok": bool(prerequisites.get("ok")),
-                "detail": "ok"
-                if prerequisites.get("ok")
-                else f"missing required tools: {', '.join(str(row.get('name')) for row in missing_required if isinstance(row, dict))}",
+                "detail": (
+                    "ok"
+                    if prerequisites.get("ok")
+                    else f"missing required tools: {', '.join(str(row.get('name')) for row in missing_required if isinstance(row, dict))}"
+                ),
                 "suggested_actions": [f"aiplane runtimes prerequisites {runtime}"],
             }
         )
@@ -478,9 +510,11 @@ class StackManager:
                     "name": f"port_available:{port}",
                     "ok": available,
                     "warning": not available,
-                    "detail": "available"
-                    if available
-                    else f"localhost:{port} is already accepting connections; confirm this is the intended runtime",
+                    "detail": (
+                        "available"
+                        if available
+                        else f"localhost:{port} is already accepting connections; confirm this is the intended runtime"
+                    ),
                 }
             )
         endpoint_text = str(endpoint or "")
@@ -518,19 +552,29 @@ class StackManager:
             "runtime": runtime,
             "model": model,
             "endpoint": endpoint_text,
-            "ok": all(bool(check.get("ok")) for check in checks if not check.get("warning")),
+            "ok": all(
+                bool(check.get("ok")) for check in checks if not check.get("warning")
+            ),
             "checks": checks,
         }
 
-    def _export_metadata(self, name: str, stack: dict[str, Any], endpoint: str) -> dict[str, Any]:
+    def _export_metadata(
+        self, name: str, stack: dict[str, Any], endpoint: str
+    ) -> dict[str, Any]:
         machine_name = str(stack.get("machine") or "")
         machine = MachineManager(self.profile).show(machine_name)["machine"]
         env = EnvironmentManager(self.profile).show()
         docker_resources = {}
-        resource_controls = self.config.get("resource_controls", {}) if isinstance(self.config, dict) else {}
+        resource_controls = (
+            self.config.get("resource_controls", {})
+            if isinstance(self.config, dict)
+            else {}
+        )
         if isinstance(resource_controls, dict):
             docker_resources = (
-                resource_controls.get("docker", {}) if isinstance(resource_controls.get("docker", {}), dict) else {}
+                resource_controls.get("docker", {})
+                if isinstance(resource_controls.get("docker", {}), dict)
+                else {}
             )
         return {
             "name": name,
@@ -587,16 +631,26 @@ class StackManager:
             if not alias:
                 raise ValueError(f"role {role_name!r} model alias is empty")
             model_config = catalog.show(alias)
-            provider_name = str(model_config.get("provider") or model_config.get("source") or "")
+            provider_name = str(
+                model_config.get("provider") or model_config.get("source") or ""
+            )
             if model_config.get("ownership") == "managed_service":
                 role_runtime = provider_name
                 provider_config = (
-                    model_config.get("provider_config") if isinstance(model_config.get("provider_config"), dict) else {}
+                    model_config.get("provider_config")
+                    if isinstance(model_config.get("provider_config"), dict)
+                    else {}
                 )
-                role_endpoint = endpoint or provider_config.get("endpoint") or _default_endpoint(provider_name)
+                role_endpoint = (
+                    endpoint
+                    or provider_config.get("endpoint")
+                    or _default_endpoint(provider_name)
+                )
             else:
                 role_runtime = model_config.get("runtime") or primary_runtime
-                role_endpoint = endpoint or _default_endpoint(str(role_runtime or primary_runtime))
+                role_endpoint = endpoint or _default_endpoint(
+                    str(role_runtime or primary_runtime)
+                )
             normalized[role_name] = {
                 "model": alias,
                 "provider": provider_name,
@@ -637,7 +691,9 @@ class StackManager:
         checks: list[dict[str, Any]] = []
         role_map = roles if isinstance(roles, dict) else {}
         catalog = ModelCatalog(self.profile)
-        known_runtimes = {row["name"] for row in RuntimeCatalog(self.profile).list(include_gui=True)}
+        known_runtimes = {
+            row["name"] for row in RuntimeCatalog(self.profile).list(include_gui=True)
+        }
         known_endpoint_families = {
             name
             for name, provider in PROVIDER_ENDPOINT_DEFAULTS.items()
@@ -674,14 +730,21 @@ class StackManager:
                     {
                         "name": f"role_model_enabled:{role}",
                         "ok": bool(model_config.get("enabled", True)),
-                        "detail": "enabled" if model_config.get("enabled", True) else "disabled",
+                        "detail": (
+                            "enabled"
+                            if model_config.get("enabled", True)
+                            else "disabled"
+                        ),
                     }
                 )
             runtime = str(binding.get("runtime") or "")
-            ownership = str(binding.get("ownership") or model_config.get("ownership") or "")
+            ownership = str(
+                binding.get("ownership") or model_config.get("ownership") or ""
+            )
             if runtime:
                 runtime_known = runtime in known_runtimes or (
-                    ownership == "managed_service" and runtime in known_endpoint_families
+                    ownership == "managed_service"
+                    and runtime in known_endpoint_families
                 )
                 checks.append(
                     {
@@ -702,17 +765,37 @@ class StackManager:
             checks.extend(self._role_tool_policy_checks(str(role), binding))
         return checks
 
-    def _role_tool_policy_checks(self, role: str, binding: dict[str, Any]) -> list[dict[str, Any]]:
+    def _role_tool_policy_checks(
+        self, role: str, binding: dict[str, Any]
+    ) -> list[dict[str, Any]]:
         tools = binding.get("tools") if isinstance(binding.get("tools"), dict) else {}
         approval_mode = str(binding.get("approval_mode") or "ask").lower()
         risky_approval = approval_mode in {"auto", "none", "silent", "unattended"}
-        risky_tools = {"shell", "exec", "command", "filesystem", "network", "browser", "code_execution"}
-        open_policies = {"allow", "allowed", "always", "auto", "none", "unrestricted", "write"}
+        risky_tools = {
+            "shell",
+            "exec",
+            "command",
+            "filesystem",
+            "network",
+            "browser",
+            "code_execution",
+        }
+        open_policies = {
+            "allow",
+            "allowed",
+            "always",
+            "auto",
+            "none",
+            "unrestricted",
+            "write",
+        }
         checks: list[dict[str, Any]] = []
         for tool, policy in sorted(tools.items()):
             tool_name = str(tool).lower()
             policy_name = str(policy).lower()
-            risky = tool_name in risky_tools and (policy_name in open_policies or risky_approval)
+            risky = tool_name in risky_tools and (
+                policy_name in open_policies or risky_approval
+            )
             checks.append(
                 {
                     "name": f"role_tool_policy:{role}:{tool}",
@@ -727,7 +810,9 @@ class StackManager:
             )
         return checks
 
-    def _lifecycle(self, name: str, action: str, dry_run: bool = False) -> dict[str, Any]:
+    def _lifecycle(
+        self, name: str, action: str, dry_run: bool = False
+    ) -> dict[str, Any]:
         stack = self._stack(name)
         runtime = str(stack.get("runtime") or "")
         model = str(stack.get("model") or "")
@@ -770,7 +855,11 @@ class StackManager:
                 break
         finished_at = time.time()
         runtime_status_after = RuntimeCatalog(self.profile).runtime_available(runtime)
-        outcome = "completed" if failed_step is None and len(results) == len(commands) else "failed"
+        outcome = (
+            "completed"
+            if failed_step is None and len(results) == len(commands)
+            else "failed"
+        )
         return {
             "name": name,
             "action": action,
@@ -797,11 +886,17 @@ class StackManager:
     ) -> list[dict[str, Any]]:
         if action == "prepare":
             commands = [
-                self._runtime_helper_command("install runtime", runtime, "install", model),
+                self._runtime_helper_command(
+                    "install runtime", runtime, "install", model
+                ),
                 self._runtime_helper_command("pull model", runtime, "pull", model),
             ]
             if orchestrator:
-                packages = OrchestratorCatalog(self.profile).show(orchestrator).get("packages", [])
+                packages = (
+                    OrchestratorCatalog(self.profile)
+                    .show(orchestrator)
+                    .get("packages", [])
+                )
                 if packages:
                     plan = EnvironmentManager(self.profile).plan(
                         [
@@ -822,10 +917,16 @@ class StackManager:
                     )
             return commands
         if action in {"start", "stop", "restart"}:
-            return [self._runtime_helper_command(f"{action} runtime", runtime, action, model)]
+            return [
+                self._runtime_helper_command(
+                    f"{action} runtime", runtime, action, model
+                )
+            ]
         raise ValueError(f"unknown stack lifecycle action: {action}")
 
-    def _runtime_helper_command(self, name: str, runtime: str, action: str, model: str) -> dict[str, Any]:
+    def _runtime_helper_command(
+        self, name: str, runtime: str, action: str, model: str
+    ) -> dict[str, Any]:
         helper = project_root() / "scripts" / "provider_helper.sh"
         return {
             "name": name,
@@ -850,7 +951,9 @@ class StackManager:
             machine = MachineManager(self.profile).show(machine_name)["machine"]
         except Exception as exc:  # noqa: BLE001 - report as lifecycle planning reason.
             return False, f"machine lookup failed: {exc}"
-        placement = str(machine.get("placement") or "") if isinstance(machine, dict) else ""
+        placement = (
+            str(machine.get("placement") or "") if isinstance(machine, dict) else ""
+        )
         if access in {"same_host", "local"} or placement == "same_host":
             return True, None
         return (
@@ -860,11 +963,15 @@ class StackManager:
 
     def deploy(self, name: str, yes: bool = False) -> dict[str, Any]:
         if not yes:
-            raise PermissionError("stack deploy is mutating; run stacks plan and stacks doctor first")
+            raise PermissionError(
+                "stack deploy is mutating; run stacks plan and stacks doctor first"
+            )
         plan = self.plan(name)
         access = str(plan.get("access") or "")
         machine = plan.get("machine_config", {})
-        placement = str(machine.get("placement") or "") if isinstance(machine, dict) else ""
+        placement = (
+            str(machine.get("placement") or "") if isinstance(machine, dict) else ""
+        )
         if access not in {"same_host", "local"} and placement != "same_host":
             return {
                 "name": name,
@@ -877,7 +984,9 @@ class StackManager:
             command = step.get("command") if isinstance(step, dict) else None
             if not command or not step.get("mutates"):
                 continue
-            completed = subprocess.run(command, text=True, capture_output=True, check=False)
+            completed = subprocess.run(
+                command, text=True, capture_output=True, check=False
+            )
             results.append(
                 {
                     "name": step.get("name"),
@@ -910,7 +1019,16 @@ def _normalize_endpoint_auth(endpoint_auth: dict[str, object]) -> dict[str, Any]
     normalized: dict[str, Any] = {}
     method = str(endpoint_auth.get("method") or "").strip()
     if method:
-        if method not in {"none", "bearer", "api_key", "basic", "oauth2", "oidc", "mtls", "gateway"}:
+        if method not in {
+            "none",
+            "bearer",
+            "api_key",
+            "basic",
+            "oauth2",
+            "oidc",
+            "mtls",
+            "gateway",
+        }:
             raise ValueError(
                 "endpoint auth method must be none, bearer, api_key, basic, oauth2, oidc, mtls, or gateway"
             )
@@ -918,7 +1036,9 @@ def _normalize_endpoint_auth(endpoint_auth: dict[str, object]) -> dict[str, Any]
     tls = str(endpoint_auth.get("tls") or "").strip()
     if tls:
         if tls not in {"required", "terminated", "not_configured", "not_required"}:
-            raise ValueError("endpoint TLS mode must be required, terminated, not_configured, or not_required")
+            raise ValueError(
+                "endpoint TLS mode must be required, terminated, not_configured, or not_required"
+            )
         normalized["tls"] = tls
     api_key_env = str(endpoint_auth.get("api_key_env") or "").strip()
     if api_key_env:
@@ -929,10 +1049,16 @@ def _normalize_endpoint_auth(endpoint_auth: dict[str, object]) -> dict[str, Any]
     return normalized
 
 
-def _endpoint_security_plan(name: str, stack: dict[str, Any], endpoint: str) -> dict[str, Any]:
+def _endpoint_security_plan(
+    name: str, stack: dict[str, Any], endpoint: str
+) -> dict[str, Any]:
     policy = str(stack.get("endpoint_policy") or "private")
     access = str(stack.get("access") or "")
-    auth = stack.get("endpoint_auth") if isinstance(stack.get("endpoint_auth"), dict) else {}
+    auth = (
+        stack.get("endpoint_auth")
+        if isinstance(stack.get("endpoint_auth"), dict)
+        else {}
+    )
     auth_method = str(auth.get("method") or "none")
     tls_mode = str(auth.get("tls") or "not_configured")
     gateway = str(auth.get("gateway") or "")
@@ -940,14 +1066,25 @@ def _endpoint_security_plan(name: str, stack: dict[str, Any], endpoint: str) -> 
     endpoint_text = str(endpoint or "")
     https_endpoint = endpoint_text.startswith("https://")
     local_endpoint = _is_local_endpoint(endpoint_text)
-    shared_policy = policy in {"public", "shared", "gateway"} or access in {"lan_http", "gateway"}
+    shared_policy = policy in {"public", "shared", "gateway"} or access in {
+        "lan_http",
+        "gateway",
+    }
     vpn_policy = policy == "vpn"
-    tls_ok = True if not shared_policy else (https_endpoint or tls_mode in {"required", "terminated"})
+    tls_ok = (
+        True
+        if not shared_policy
+        else (https_endpoint or tls_mode in {"required", "terminated"})
+    )
     auth_ok = auth_method not in {"", "none"}
     if auth_method in {"bearer", "api_key"} and not api_key_env:
         auth_ok = False
     gateway_ok = bool(gateway) if shared_policy else True
-    private_ok = bool(local_endpoint or policy in {"private", "vpn"}) if not shared_policy else True
+    private_ok = (
+        bool(local_endpoint or policy in {"private", "vpn"})
+        if not shared_policy
+        else True
+    )
     checks = [
         {
             "name": "endpoint_policy_known",
@@ -958,7 +1095,11 @@ def _endpoint_security_plan(name: str, stack: dict[str, Any], endpoint: str) -> 
             "name": "endpoint_tls",
             "ok": tls_ok,
             "warning": not tls_ok,
-            "detail": "configured" if tls_ok else "shared/public endpoints should use HTTPS or TLS termination",
+            "detail": (
+                "configured"
+                if tls_ok
+                else "shared/public endpoints should use HTTPS or TLS termination"
+            ),
         },
         {
             "name": "endpoint_auth",
@@ -970,15 +1111,22 @@ def _endpoint_security_plan(name: str, stack: dict[str, Any], endpoint: str) -> 
             "name": "endpoint_gateway",
             "ok": gateway_ok,
             "warning": shared_policy and not gateway_ok,
-            "detail": gateway or ("gateway/reverse-proxy not configured" if shared_policy else "not required"),
+            "detail": gateway
+            or (
+                "gateway/reverse-proxy not configured"
+                if shared_policy
+                else "not required"
+            ),
         },
         {
             "name": "endpoint_private_binding",
             "ok": private_ok,
             "warning": not private_ok,
-            "detail": "local/private endpoint"
-            if private_ok
-            else "non-local endpoint should declare shared/gateway controls",
+            "detail": (
+                "local/private endpoint"
+                if private_ok
+                else "non-local endpoint should declare shared/gateway controls"
+            ),
         },
     ]
     if vpn_policy:
@@ -994,7 +1142,13 @@ def _endpoint_security_plan(name: str, stack: dict[str, Any], endpoint: str) -> 
         bool(check.get("ok"))
         for check in checks
         if check["name"]
-        in {"endpoint_policy_known", "endpoint_tls", "endpoint_auth", "endpoint_gateway", "endpoint_private_binding"}
+        in {
+            "endpoint_policy_known",
+            "endpoint_tls",
+            "endpoint_auth",
+            "endpoint_gateway",
+            "endpoint_private_binding",
+        }
     )
     return {
         "name": name,
@@ -1007,10 +1161,14 @@ def _endpoint_security_plan(name: str, stack: dict[str, Any], endpoint: str) -> 
         "tls": tls_mode,
         "gateway": gateway or None,
         "checks": checks,
-        "next_steps": _endpoint_next_steps(shared_policy, auth_method, api_key_env, tls_ok, gateway_ok),
-        "summary": "endpoint controls look configured"
-        if ready
-        else "endpoint controls need review before shared/public use",
+        "next_steps": _endpoint_next_steps(
+            shared_policy, auth_method, api_key_env, tls_ok, gateway_ok
+        ),
+        "summary": (
+            "endpoint controls look configured"
+            if ready
+            else "endpoint controls need review before shared/public use"
+        ),
         "notes": [
             "This is a non-mutating endpoint plan; configure reverse proxy, gateway, TLS, auth, quotas, and audit in the chosen platform.",
             "Do not expose raw runtime ports to teams or the internet without these controls.",
@@ -1018,16 +1176,26 @@ def _endpoint_security_plan(name: str, stack: dict[str, Any], endpoint: str) -> 
     }
 
 
-def _endpoint_auth_detail(auth_method: str, api_key_env: str, shared_policy: bool) -> str:
+def _endpoint_auth_detail(
+    auth_method: str, api_key_env: str, shared_policy: bool
+) -> str:
     if auth_method in {"", "none"}:
-        return "not required for private endpoint" if not shared_policy else "shared/public endpoints need auth"
+        return (
+            "not required for private endpoint"
+            if not shared_policy
+            else "shared/public endpoints need auth"
+        )
     if auth_method in {"bearer", "api_key"} and not api_key_env:
         return f"{auth_method} auth needs an api key env var name"
     return auth_method
 
 
 def _endpoint_next_steps(
-    shared_policy: bool, auth_method: str, api_key_env: str, tls_ok: bool, gateway_ok: bool
+    shared_policy: bool,
+    auth_method: str,
+    api_key_env: str,
+    tls_ok: bool,
+    gateway_ok: bool,
 ) -> list[str]:
     steps = []
     if shared_policy and not gateway_ok:
@@ -1039,9 +1207,13 @@ def _endpoint_next_steps(
     if shared_policy and auth_method in {"", "none"}:
         steps.append("Choose bearer/api_key/oauth2/oidc/mtls auth before shared use.")
     if auth_method in {"bearer", "api_key"} and not api_key_env:
-        steps.append("Set --endpoint-auth-env to the environment variable that will hold the gateway credential.")
+        steps.append(
+            "Set --endpoint-auth-env to the environment variable that will hold the gateway credential."
+        )
     if shared_policy:
-        steps.append("Add quota/rate-limit and audit/logging controls in the gateway platform.")
+        steps.append(
+            "Add quota/rate-limit and audit/logging controls in the gateway platform."
+        )
     return steps
 
 
@@ -1088,7 +1260,9 @@ def _merge_bundle_content(
         runtime_file = str(runtime_plan["files"]["Dockerfile"])
         env_lines = _docker_env_lines(metadata)
         if orchestrator_plan:
-            orch_packages = " ".join(str(package) for package in orchestrator_plan.get("packages", []))
+            orch_packages = " ".join(
+                str(package) for package in orchestrator_plan.get("packages", [])
+            )
             extra = (
                 f"\n# Orchestrator packages\nRUN python -m pip install {orch_packages}\n"
                 if orch_packages
@@ -1098,17 +1272,28 @@ def _merge_bundle_content(
             extra = ""
         return header + runtime_file.rstrip() + "\n" + env_lines + extra
     runtime_file = str(runtime_plan["files"]["environment.yaml"])
-    packages = [str(package) for package in orchestrator_plan.get("packages", [])] if orchestrator_plan else []
+    packages = (
+        [str(package) for package in orchestrator_plan.get("packages", [])]
+        if orchestrator_plan
+        else []
+    )
     extra = ""
     if packages:
-        extra = "\n# Orchestrator pip packages to add if not already present:\n" + "".join(
-            f"#   - {package}\n" for package in packages
+        extra = (
+            "\n# Orchestrator pip packages to add if not already present:\n"
+            + "".join(f"#   - {package}\n" for package in packages)
         )
     return header + runtime_file.rstrip() + extra
 
 
-def _compose_yaml(name: str, runtime: str, model: str, endpoint: str, metadata: dict[str, Any]) -> str:
-    docker = metadata.get("docker_resources", {}) if isinstance(metadata.get("docker_resources"), dict) else {}
+def _compose_yaml(
+    name: str, runtime: str, model: str, endpoint: str, metadata: dict[str, Any]
+) -> str:
+    docker = (
+        metadata.get("docker_resources", {})
+        if isinstance(metadata.get("docker_resources"), dict)
+        else {}
+    )
     env = {
         "AIPLANE_STACK": name,
         "AIPLANE_PROFILE": str(metadata.get("profile") or ""),
@@ -1228,7 +1413,9 @@ def _compact_json(value: object) -> str:
 
 def _default_endpoint(runtime: str) -> str:
     provider_default = PROVIDER_ENDPOINT_DEFAULTS.get(runtime, {})
-    if provider_default.get("ownership") == "managed_service" and provider_default.get("endpoint"):
+    if provider_default.get("ownership") == "managed_service" and provider_default.get(
+        "endpoint"
+    ):
         return str(provider_default.get("endpoint"))
     if runtime == "ollama":
         return "http://localhost:11434/v1"

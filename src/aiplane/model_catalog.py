@@ -56,7 +56,9 @@ class ModelCatalog:
     def providers(self) -> dict[str, dict[str, Any]]:
         from .runtime_catalog import PROVIDER_ENDPOINT_DEFAULTS
 
-        providers = {name: dict(value) for name, value in PROVIDER_ENDPOINT_DEFAULTS.items()}
+        providers = {
+            name: dict(value) for name, value in PROVIDER_ENDPOINT_DEFAULTS.items()
+        }
         for name, value in _dict_of_dicts(self.config.get("providers", {})).items():
             providers[name] = {**providers.get(name, {}), **value, "origin": "profile"}
         return providers
@@ -70,7 +72,9 @@ class ModelCatalog:
         defaults = self.config.get("defaults", {})
         return defaults if isinstance(defaults, dict) else {}
 
-    def default_model(self, role: str, require_enabled: bool = True) -> dict[str, Any] | None:
+    def default_model(
+        self, role: str, require_enabled: bool = True
+    ) -> dict[str, Any] | None:
         name = self.defaults().get(role)
         models = self.models()
         if not name or str(name) not in models:
@@ -90,8 +94,14 @@ class ModelCatalog:
                     "role": role,
                     "name": name,
                     "exists": isinstance(model, dict),
-                    "enabled": bool(model.get("enabled", True)) if isinstance(model, dict) else False,
-                    "provider": model.get("provider") if isinstance(model, dict) else None,
+                    "enabled": (
+                        bool(model.get("enabled", True))
+                        if isinstance(model, dict)
+                        else False
+                    ),
+                    "provider": (
+                        model.get("provider") if isinstance(model, dict) else None
+                    ),
                     "model": model.get("model") if isinstance(model, dict) else None,
                 }
             )
@@ -130,7 +140,9 @@ class ModelCatalog:
         overwrite: bool = False,
     ) -> dict[str, Any]:
         _validate_model_entry_name(name, "model entry name")
-        direct_local_file = provider == "local_file" and model_id and not discovered_name
+        direct_local_file = (
+            provider == "local_file" and model_id and not discovered_name
+        )
         curated_models = _dict_of_dicts(self.config.get("models", {}))
         generated_models = _dict_of_dicts(self.generated_config.get("models", {}))
         target_exists = name in curated_models
@@ -156,7 +168,9 @@ class ModelCatalog:
                 model_id=model_id,
                 discovered_name=discovered_name,
             )
-            generated_name_collision = name in generated_models and name != discovered_key
+            generated_name_collision = (
+                name in generated_models and name != discovered_key
+            )
             if (target_exists or generated_name_collision) and not overwrite:
                 raise ValueError(
                     f"model entry already exists: {name}; use --overwrite after reviewing the existing entry"
@@ -351,7 +365,8 @@ class ModelCatalog:
         matches = [
             (name, entry)
             for name, entry in generated_models.items()
-            if model_source(entry) == provider and str(entry.get("model") or "") == model_id
+            if model_source(entry) == provider
+            and str(entry.get("model") or "") == model_id
         ]
         if not matches:
             raise ValueError(
@@ -359,7 +374,9 @@ class ModelCatalog:
             )
         if len(matches) > 1:
             names = ", ".join(name for name, _entry in matches)
-            raise ValueError(f"multiple discovered entries match provider/model; use --alias. Matches: {names}")
+            raise ValueError(
+                f"multiple discovered entries match provider/model; use --alias. Matches: {names}"
+            )
         name, entry = matches[0]
         return name, dict(entry)
 
@@ -384,23 +401,39 @@ class ModelCatalog:
             capabilities = capability_profile(model)
 
             latest_benchmark = latest_benchmark_summary(self.profile, name)
-            supported_runtimes = runtime_catalog.compatible_runtimes_for_entry(model, include_gui=True)
+            supported_runtimes = runtime_catalog.compatible_runtimes_for_entry(
+                model, include_gui=True
+            )
             ownership = ownership_for_model(model, provider)
-            runtime_endpoint = None if ownership == "managed_service" else serving_provider
-            configured_runtime_endpoints = [runtime for runtime in supported_runtimes if runtime in self.providers()]
+            runtime_endpoint = (
+                None if ownership == "managed_service" else serving_provider
+            )
+            configured_runtime_endpoints = [
+                runtime for runtime in supported_runtimes if runtime in self.providers()
+            ]
             runtime_value = (
                 None
                 if ownership == "managed_service"
-                else (model.get("preferred_runtime") or provider.get("runtime") or runtime_endpoint)
+                else (
+                    model.get("preferred_runtime")
+                    or provider.get("runtime")
+                    or runtime_endpoint
+                )
             )
-            source_metadata = model.get("source_metadata") if isinstance(model.get("source_metadata"), dict) else {}
+            source_metadata = (
+                model.get("source_metadata")
+                if isinstance(model.get("source_metadata"), dict)
+                else {}
+            )
             rows.append(
                 {
                     "name": name,
                     "provider": source_provider,
                     "source": source_provider,
                     "model": model.get("model"),
-                    "parameter_count_b": _parameter_billions(str(model.get("model") or "")),
+                    "parameter_count_b": _parameter_billions(
+                        str(model.get("model") or "")
+                    ),
                     "capability_avg_score": _capability_average(capabilities),
                     "latest_benchmark": latest_benchmark,
                     "ownership": ownership,
@@ -411,12 +444,18 @@ class ModelCatalog:
                     "roles": model.get("roles", []),
                     "enabled": bool(model.get("enabled", True)),
                     "min_ram_gb": _number_or_none(model.get("min_ram_gb")),
-                    "recommended_ram_gb": _number_or_none(model.get("recommended_ram_gb")),
+                    "recommended_ram_gb": _number_or_none(
+                        model.get("recommended_ram_gb")
+                    ),
                     "min_vram_gb": _number_or_none(model.get("min_vram_gb")),
-                    "recommended_vram_gb": _number_or_none(model.get("recommended_vram_gb")),
+                    "recommended_vram_gb": _number_or_none(
+                        model.get("recommended_vram_gb")
+                    ),
                     "resource_estimate_source": _resource_estimate_source(model),
                     "gpu_vendor_requirement": _gpu_vendor_requirement(model),
-                    "accelerator_api_requirements": _accelerator_api_requirements(model),
+                    "accelerator_api_requirements": _accelerator_api_requirements(
+                        model
+                    ),
                     "likes": _metadata_number(source_metadata, "likes"),
                     "downloads": _metadata_number(source_metadata, "downloads"),
                     "source_metadata": source_metadata,
@@ -440,38 +479,61 @@ class ModelCatalog:
                 continue
             if filters.get("source") and row.get("source") != filters["source"]:
                 continue
-            if filters.get("runtime") and filters["runtime"] not in runtime_catalog.supported_runtimes(
-                str(row["name"])
-            ):
+            if filters.get("runtime") and filters[
+                "runtime"
+            ] not in runtime_catalog.supported_runtimes(str(row["name"])):
                 continue
             roles_filter = _string_list(filters.get("roles") or filters.get("role"))
-            if roles_filter and not any(role in row.get("roles", []) for role in roles_filter):
+            if roles_filter and not any(
+                role in row.get("roles", []) for role in roles_filter
+            ):
                 continue
             if filters.get("enabled_only") and not row.get("enabled"):
                 continue
-            if filters.get("ownership") and row.get("ownership") != filters["ownership"]:
+            if (
+                filters.get("ownership")
+                and row.get("ownership") != filters["ownership"]
+            ):
                 continue
             score_source = filters.get("score_source")
-            if score_source and row.get("capabilities", {}).get("score_source") != score_source:
+            if (
+                score_source
+                and row.get("capabilities", {}).get("score_source") != score_source
+            ):
                 continue
             min_capability_avg = filters.get("min_capability_avg_score")
-            if min_capability_avg is not None and float(row.get("capability_avg_score", 0)) < float(min_capability_avg):
+            if min_capability_avg is not None and float(
+                row.get("capability_avg_score", 0)
+            ) < float(min_capability_avg):
                 continue
-            benchmark = row.get("latest_benchmark") if isinstance(row.get("latest_benchmark"), dict) else None
+            benchmark = (
+                row.get("latest_benchmark")
+                if isinstance(row.get("latest_benchmark"), dict)
+                else None
+            )
             min_benchmark = filters.get("min_benchmark_score")
             if min_benchmark is not None:
-                if not benchmark or float(benchmark.get("average_score", 0)) < float(min_benchmark):
+                if not benchmark or float(benchmark.get("average_score", 0)) < float(
+                    min_benchmark
+                ):
                     continue
             if filters.get("require_benchmark") and not benchmark:
                 continue
             min_likes = filters.get("min_likes")
-            if min_likes is not None and float(row.get("likes") or 0) < float(min_likes):
+            if min_likes is not None and float(row.get("likes") or 0) < float(
+                min_likes
+            ):
                 continue
             min_downloads = filters.get("min_downloads")
-            if min_downloads is not None and float(row.get("downloads") or 0) < float(min_downloads):
+            if min_downloads is not None and float(row.get("downloads") or 0) < float(
+                min_downloads
+            ):
                 continue
             scores = row["capabilities"]["scores"]
-            if any(int(scores.get(name, 0)) < minimum for name, minimum in capability_filters.items()):
+            if any(
+                int(scores.get(name, 0)) < minimum
+                for name, minimum in capability_filters.items()
+            ):
                 continue
             min_ram = filters.get("max_min_ram_gb")
             if (
@@ -492,13 +554,19 @@ class ModelCatalog:
             if min_parameters is not None and parameters < float(min_parameters):
                 continue
             max_parameters = filters.get("max_parameters_b")
-            if max_parameters is not None and (parameters <= 0 or parameters > float(max_parameters)):
+            if max_parameters is not None and (
+                parameters <= 0 or parameters > float(max_parameters)
+            ):
                 continue
             gpu_vendor = filters.get("gpu_vendor")
-            if gpu_vendor and not _matches_gpu_vendor_requirement(model, str(gpu_vendor)):
+            if gpu_vendor and not _matches_gpu_vendor_requirement(
+                model, str(gpu_vendor)
+            ):
                 continue
             accelerator_api = filters.get("accelerator_api")
-            if accelerator_api and not _matches_accelerator_api_requirement(model, str(accelerator_api)):
+            if accelerator_api and not _matches_accelerator_api_requirement(
+                model, str(accelerator_api)
+            ):
                 continue
             result.append(row)
         return sorted(result, key=lambda row: str(row["name"]))
@@ -631,8 +699,12 @@ class ModelCatalog:
         if progress:
             progress("connecting", provider_name, "")
         try:
-            discovered = registry.models(provider_name, query=query, limit=limit, online=online)
-        except Exception as exc:  # noqa: BLE001 - refresh should report configured provider failures as data.
+            discovered = registry.models(
+                provider_name, query=query, limit=limit, online=online
+            )
+        except (
+            Exception
+        ) as exc:  # noqa: BLE001 - refresh should report configured provider failures as data.
             if progress:
                 progress("failed", provider_name, str(exc))
             return self._refresh_failure_result(
@@ -667,14 +739,24 @@ class ModelCatalog:
                 },
             )
         if progress:
-            progress("succeeded", provider_name, f"{len(discovered.models)} source model(s)")
+            progress(
+                "succeeded", provider_name, f"{len(discovered.models)} source model(s)"
+            )
         runtime_catalog = RuntimeCatalog(self.profile)
         all_models = self.models()
         curated_models = _dict_of_dicts(self.config.get("models", {}))
         generated_models = _dict_of_dicts(self.generated_config.get("models", {}))
-        provider_models = [model for model in all_models.values() if model_source(model) == provider_name]
-        provider_imported_models = [model for model in provider_models if _is_refresh_imported_model(model)]
-        provider_curated_models = [model for model in provider_models if not _is_refresh_imported_model(model)]
+        provider_models = [
+            model
+            for model in all_models.values()
+            if model_source(model) == provider_name
+        ]
+        provider_imported_models = [
+            model for model in provider_models if _is_refresh_imported_model(model)
+        ]
+        provider_curated_models = [
+            model for model in provider_models if not _is_refresh_imported_model(model)
+        ]
         existing_by_id = {
             str(model.get("model")): name
             for name, model in all_models.items()
@@ -696,7 +778,9 @@ class ModelCatalog:
                 name = existing_by_id[model_id]
                 model = all_models.get(name, {})
                 if source_api_contacted and isinstance(model, dict):
-                    merged = _merge_source_discovered_model(model, provider_name, str(model_id), source_metadata)
+                    merged = _merge_source_discovered_model(
+                        model, provider_name, str(model_id), source_metadata
+                    )
                     if merged != model:
                         status = "updated" if write else "would_update"
                         changed_rows.append(
@@ -711,7 +795,10 @@ class ModelCatalog:
                         )
                         update_count += 1
                         if write:
-                            if name in curated_models and not _is_refresh_imported_model(curated_models[name]):
+                            if (
+                                name in curated_models
+                                and not _is_refresh_imported_model(curated_models[name])
+                            ):
                                 curated_models[name] = merged
                                 curated_dirty = True
                             else:
@@ -722,7 +809,9 @@ class ModelCatalog:
                                 generated_dirty = True
                 continue
             name = _unique_model_alias(all_models, provider_name, model_id)
-            entry = _discovered_model_entry(provider_name, model_id, enable=enable, source_metadata=source_metadata)
+            entry = _discovered_model_entry(
+                provider_name, model_id, enable=enable, source_metadata=source_metadata
+            )
             status = "imported" if write else "would_import"
             changed_rows.append(
                 _refresh_model_row(
@@ -745,7 +834,10 @@ class ModelCatalog:
         prune_enabled = (
             source_api_contacted
             and query is None
-            and (discovered.source == "provider_api" or len(discovered.models) < int(limit))
+            and (
+                discovered.source == "provider_api"
+                or len(discovered.models) < int(limit)
+            )
         )
         remove_count = 0
         discovered_ids = {str(model_id) for model_id in discovered.models}
@@ -811,7 +903,8 @@ class ModelCatalog:
                 provider_config.get("ownership")
                 or (
                     "managed_service"
-                    if provider_name in {"openai", "anthropic", "azure_openai", "ollama_cloud"}
+                    if provider_name
+                    in {"openai", "anthropic", "azure_openai", "ollama_cloud"}
                     else "self_managed"
                 )
             ),
@@ -823,7 +916,9 @@ class ModelCatalog:
             "source_models_returned": len(discovered.models),
             "profile_models_before_refresh": len(provider_models),
             "profile_curated_models_before_refresh": len(provider_curated_models),
-            "profile_refresh_imported_models_before_refresh": len(provider_imported_models),
+            "profile_refresh_imported_models_before_refresh": len(
+                provider_imported_models
+            ),
             "source_models_already_profiled": matched_count,
             "source_models_to_import": new_count,
             "source_models_to_update": update_count,
@@ -844,7 +939,9 @@ class ModelCatalog:
             "discovered_path": str(discovered_path),
             "changes": changes,
             "results": {provider_name: provider_result},
-            "next_steps": _refresh_next_steps(write, changes, provider_name=provider_name),
+            "next_steps": _refresh_next_steps(
+                write, changes, provider_name=provider_name
+            ),
         }
 
     def _refresh_failure_result(
@@ -861,9 +958,17 @@ class ModelCatalog:
         provider_config: dict[str, Any],
     ) -> dict[str, Any]:
         all_models = self.models()
-        provider_models = [model for model in all_models.values() if model_source(model) == provider_name]
-        provider_imported_models = [model for model in provider_models if _is_refresh_imported_model(model)]
-        provider_curated_models = [model for model in provider_models if not _is_refresh_imported_model(model)]
+        provider_models = [
+            model
+            for model in all_models.values()
+            if model_source(model) == provider_name
+        ]
+        provider_imported_models = [
+            model for model in provider_models if _is_refresh_imported_model(model)
+        ]
+        provider_curated_models = [
+            model for model in provider_models if not _is_refresh_imported_model(model)
+        ]
         changes = {
             "imported": 0,
             "would_import": 0,
@@ -877,7 +982,8 @@ class ModelCatalog:
                 provider_config.get("ownership")
                 or (
                     "managed_service"
-                    if provider_name in {"openai", "anthropic", "azure_openai", "ollama_cloud"}
+                    if provider_name
+                    in {"openai", "anthropic", "azure_openai", "ollama_cloud"}
                     else "self_managed"
                 )
             ),
@@ -889,7 +995,9 @@ class ModelCatalog:
             "source_models_returned": 0,
             "profile_models_before_refresh": len(provider_models),
             "profile_curated_models_before_refresh": len(provider_curated_models),
-            "profile_refresh_imported_models_before_refresh": len(provider_imported_models),
+            "profile_refresh_imported_models_before_refresh": len(
+                provider_imported_models
+            ),
             "source_models_already_profiled": 0,
             "source_models_to_import": 0,
             "source_models_to_update": 0,
@@ -959,7 +1067,9 @@ class ModelCatalog:
                 )
                 provider_result = result.get("results", {}).get(provider_name, {})
                 results[provider_name] = provider_result
-            except Exception as exc:  # noqa: BLE001 - all-provider refresh should report provider-specific failures.
+            except (
+                Exception
+            ) as exc:  # noqa: BLE001 - all-provider refresh should report provider-specific failures.
                 results[provider_name] = {
                     "ownership": "self_managed",
                     "status": "failed",
@@ -971,20 +1081,26 @@ class ModelCatalog:
                     "source_discovery_reason": str(exc),
                     "source_models_returned": 0,
                     "profile_models_before_refresh": len(
-                        [model for model in self.models().values() if model_source(model) == provider_name]
+                        [
+                            model
+                            for model in self.models().values()
+                            if model_source(model) == provider_name
+                        ]
                     ),
                     "profile_curated_models_before_refresh": len(
                         [
                             model
                             for model in self.models().values()
-                            if model_source(model) == provider_name and not _is_refresh_imported_model(model)
+                            if model_source(model) == provider_name
+                            and not _is_refresh_imported_model(model)
                         ]
                     ),
                     "profile_refresh_imported_models_before_refresh": len(
                         [
                             model
                             for model in self.models().values()
-                            if model_source(model) == provider_name and _is_refresh_imported_model(model)
+                            if model_source(model) == provider_name
+                            and _is_refresh_imported_model(model)
                         ]
                     ),
                     "source_models_already_profiled": 0,
@@ -1003,12 +1119,24 @@ class ModelCatalog:
                 }
         rows = list(results.values())
         changes = {
-            "imported": sum(int(row.get("changes", {}).get("imported", 0)) for row in rows),
-            "would_import": sum(int(row.get("changes", {}).get("would_import", 0)) for row in rows),
-            "updated": sum(int(row.get("changes", {}).get("updated", 0)) for row in rows),
-            "would_update": sum(int(row.get("changes", {}).get("would_update", 0)) for row in rows),
-            "removed": sum(int(row.get("changes", {}).get("removed", 0)) for row in rows),
-            "would_remove": sum(int(row.get("changes", {}).get("would_remove", 0)) for row in rows),
+            "imported": sum(
+                int(row.get("changes", {}).get("imported", 0)) for row in rows
+            ),
+            "would_import": sum(
+                int(row.get("changes", {}).get("would_import", 0)) for row in rows
+            ),
+            "updated": sum(
+                int(row.get("changes", {}).get("updated", 0)) for row in rows
+            ),
+            "would_update": sum(
+                int(row.get("changes", {}).get("would_update", 0)) for row in rows
+            ),
+            "removed": sum(
+                int(row.get("changes", {}).get("removed", 0)) for row in rows
+            ),
+            "would_remove": sum(
+                int(row.get("changes", {}).get("would_remove", 0)) for row in rows
+            ),
         }
         return {
             "name": "model_catalog_refresh_all",
@@ -1020,8 +1148,12 @@ class ModelCatalog:
             "verbose": verbose,
             "provider_limits": provider_limits or {},
             "providers_total": len(rows),
-            "providers_updated": sum(1 for row in rows if row.get("status") == "updated"),
-            "providers_would_update": sum(1 for row in rows if row.get("status") == "would_update"),
+            "providers_updated": sum(
+                1 for row in rows if row.get("status") == "updated"
+            ),
+            "providers_would_update": sum(
+                1 for row in rows if row.get("status") == "would_update"
+            ),
             "providers_failed": sum(1 for row in rows if row.get("status") == "failed"),
             "providers_skipped_empty": len(skipped_providers),
             "changes": changes,
@@ -1097,7 +1229,9 @@ class ModelCatalog:
         defaults = self.config.get("defaults", {})
         removed_defaults: list[str] = []
         if isinstance(defaults, dict):
-            removed_defaults = sorted(role for role, value in defaults.items() if str(value) == name)
+            removed_defaults = sorted(
+                role for role, value in defaults.items() if str(value) == name
+            )
         if write:
             curated_models.pop(name, None)
             if isinstance(defaults, dict):
@@ -1152,7 +1286,9 @@ class ModelCatalog:
                 continue
             removed_counts[source] = removed_counts.get(source, 0) + 1
             if not is_imported:
-                removed_curated_counts[source] = removed_curated_counts.get(source, 0) + 1
+                removed_curated_counts[source] = (
+                    removed_curated_counts.get(source, 0) + 1
+                )
             if write:
                 curated_models.pop(name, None)
                 curated_dirty = True
@@ -1161,12 +1297,18 @@ class ModelCatalog:
             self.config["models"] = curated_models
             self.generated_config["models"] = generated_models
             if curated_dirty:
-                (self.profile.root / "models.yaml").write_text(dump_yaml(self.config), encoding="utf-8")
+                (self.profile.root / "models.yaml").write_text(
+                    dump_yaml(self.config), encoding="utf-8"
+                )
             if generated_dirty:
                 self._write_generated_config()
-        provider_counts = [{"name": source, "count": count} for source, count in sorted(removed_counts.items())]
+        provider_counts = [
+            {"name": source, "count": count}
+            for source, count in sorted(removed_counts.items())
+        ]
         curated_provider_counts = [
-            {"name": source, "count": count} for source, count in sorted(removed_curated_counts.items())
+            {"name": source, "count": count}
+            for source, count in sorted(removed_curated_counts.items())
         ]
         return {
             "name": "model_catalog_clear_cache",
@@ -1205,7 +1347,10 @@ class ModelCatalog:
         from .config import dump_yaml
 
         path = self._generated_path()
-        path.write_text(DISCOVERED_MODELS_BANNER + dump_yaml(self.generated_config), encoding="utf-8")
+        path.write_text(
+            DISCOVERED_MODELS_BANNER + dump_yaml(self.generated_config),
+            encoding="utf-8",
+        )
         return path
 
     def pull_plan(
@@ -1220,9 +1365,13 @@ class ModelCatalog:
             model = self.get(name)
             source = source or model_source(model)
             model_id = model_id or str(model.get("model") or "")
-            for_runtime = for_runtime or str(model.get("preferred_runtime") or model.get("provider") or "")
+            for_runtime = for_runtime or str(
+                model.get("preferred_runtime") or model.get("provider") or ""
+            )
         if not source or not model_id:
-            raise ValueError("pull planning requires a model alias, or both --source and --model-id")
+            raise ValueError(
+                "pull planning requires a model alias, or both --source and --model-id"
+            )
         command: list[str]
         if source == "ollama":
             command = ["ollama", "pull", model_id]
@@ -1286,14 +1435,22 @@ class ModelCatalog:
         model["ownership"] = ownership_for_model(model, provider)
         from .runtime_catalog import RuntimeCatalog
 
-        supported_runtimes = RuntimeCatalog(self.profile).compatible_runtimes_for_entry(model, include_gui=True)
+        supported_runtimes = RuntimeCatalog(self.profile).compatible_runtimes_for_entry(
+            model, include_gui=True
+        )
         runtime_value = (
             None
             if model["ownership"] == "managed_service"
-            else (model.get("preferred_runtime") or provider.get("runtime") or provider_name)
+            else (
+                model.get("preferred_runtime")
+                or provider.get("runtime")
+                or provider_name
+            )
         )
         model["runtime"] = runtime_value
-        model["runtime_endpoint"] = None if model["ownership"] == "managed_service" else provider_name
+        model["runtime_endpoint"] = (
+            None if model["ownership"] == "managed_service" else provider_name
+        )
         model["supported_runtimes"] = supported_runtimes
         model["provider_config"] = provider
         model["capabilities"] = capability_profile(model)
@@ -1339,34 +1496,38 @@ class ModelCatalog:
         self.require_execution_capability(name, model, purpose)
         provider_name = self._runtime_for_model(name, model)
         if provider_name in {"ollama", "ollama_cloud"}:
-            return self._ollama_backend(provider_name, timeout_seconds=timeout_seconds).chat(
-                self._execution_model_id(provider_name, model), prompt
-            )
+            return self._ollama_backend(
+                provider_name, timeout_seconds=timeout_seconds
+            ).chat(self._execution_model_id(provider_name, model), prompt)
         if self._is_openai_compatible(provider_name):
-            return self._openai_compatible_backend(provider_name, model, timeout_seconds=timeout_seconds).chat(
-                str(model.get("model")), prompt
-            )
+            return self._openai_compatible_backend(
+                provider_name, model, timeout_seconds=timeout_seconds
+            ).chat(str(model.get("model")), prompt)
         if self._is_azure_openai(provider_name):
-            return self._azure_openai_backend(provider_name, model, timeout_seconds=timeout_seconds).chat(
-                str(model.get("model")), prompt
-            )
+            return self._azure_openai_backend(
+                provider_name, model, timeout_seconds=timeout_seconds
+            ).chat(str(model.get("model")), prompt)
         if self._is_anthropic(provider_name):
-            return self._anthropic_backend(provider_name, model, timeout_seconds=timeout_seconds).chat(
-                str(model.get("model")), prompt
-            )
+            return self._anthropic_backend(
+                provider_name, model, timeout_seconds=timeout_seconds
+            ).chat(str(model.get("model")), prompt)
         raise ValueError(
             f"execution is not wired for runtime/provider: {provider_name}; "
             "supported protocols are ollama_api, openai_compatible, azure_openai, and anthropic_api"
         )
 
-    def require_execution_capability(self, name: str, model: dict[str, Any], purpose: str) -> None:
+    def require_execution_capability(
+        self, name: str, model: dict[str, Any], purpose: str
+    ) -> None:
         roles = {str(role) for role in model.get("roles", []) or []}
         scores = model.get("capability_scores")
         if not isinstance(scores, dict):
             capabilities = model.get("capabilities")
             if isinstance(capabilities, dict):
                 scores = capabilities.get("scores")
-        score_names = {key for key, value in (scores or {}).items() if self._positive_score(value)}
+        score_names = {
+            key for key, value in (scores or {}).items() if self._positive_score(value)
+        }
         purpose_roles = {
             "chat": {"chat", "generation"},
             "analysis": {"analysis", "chat"},
@@ -1381,7 +1542,9 @@ class ModelCatalog:
         }
         allowed_roles = purpose_roles.get(purpose, purpose_roles["chat"])
         allowed_scores = purpose_scores.get(purpose, purpose_scores["chat"])
-        if roles.intersection(allowed_roles) or score_names.intersection(allowed_scores):
+        if roles.intersection(allowed_roles) or score_names.intersection(
+            allowed_scores
+        ):
             return
         provider_name = str(model.get("provider") or "unknown")
         model_id = str(model.get("model") or "")
@@ -1408,7 +1571,11 @@ class ModelCatalog:
         provider_name = str(model.get("provider") or "")
         provider = self.providers().get(provider_name, {})
         if ownership_for_model(model, provider) == "managed_service":
-            runtime_fields = [field for field in ["preferred_runtime", "supported_runtimes"] if model.get(field)]
+            runtime_fields = [
+                field
+                for field in ["preferred_runtime", "supported_runtimes"]
+                if model.get(field)
+            ]
             if runtime_fields:
                 raise ValueError(
                     f"managed-service model {name!r} cannot define local runtime fields: {', '.join(runtime_fields)}"
@@ -1423,17 +1590,25 @@ class ModelCatalog:
         if selection["available"] and selection["selected"]:
             return str(selection["selected"])
         supported = ", ".join(selection["supported_runtimes"]) or preferred or "none"
-        details = "; ".join(f"{status['name']}: {status['reason']}" for status in selection["statuses"])
+        details = "; ".join(
+            f"{status['name']}: {status['reason']}" for status in selection["statuses"]
+        )
         raise RuntimeError(
             f"No supported runtime is running for model {name}. Supported runtimes: {supported}. {details}"
         )
 
-    def _ollama_backend(self, provider_name: str, timeout_seconds: int | None = None) -> OllamaBackend:
+    def _ollama_backend(
+        self, provider_name: str, timeout_seconds: int | None = None
+    ) -> OllamaBackend:
         provider = self.providers().get(provider_name, {})
         endpoint = str(
             provider.get(
                 "endpoint",
-                "http://localhost:11434" if provider_name == "ollama" else "https://ollama.com",
+                (
+                    "http://localhost:11434"
+                    if provider_name == "ollama"
+                    else "https://ollama.com"
+                ),
             )
         )
         timeout = int(timeout_seconds or provider.get("timeout_seconds", 60))
@@ -1477,7 +1652,9 @@ class ModelCatalog:
         api_key = self._api_key(provider, model)
         if api_key:
             headers["api-key"] = api_key
-        return AzureOpenAIBackend(endpoint, str(provider.get("api_version") or "2024-02-01"), timeout, headers)
+        return AzureOpenAIBackend(
+            endpoint, str(provider.get("api_version") or "2024-02-01"), timeout, headers
+        )
 
     def _anthropic_backend(
         self,
@@ -1492,18 +1669,26 @@ class ModelCatalog:
         api_key = self._api_key(provider, model)
         if api_key:
             headers["x-api-key"] = api_key
-        return AnthropicMessagesBackend(endpoint, timeout, headers, str(provider.get("api_version") or "2023-06-01"))
+        return AnthropicMessagesBackend(
+            endpoint, timeout, headers, str(provider.get("api_version") or "2023-06-01")
+        )
 
-    def _api_key(self, provider: dict[str, Any], model: dict[str, Any] | None = None) -> str | None:
+    def _api_key(
+        self, provider: dict[str, Any], model: dict[str, Any] | None = None
+    ) -> str | None:
         model = model or {}
-        credential_ref = str(model.get("credential_ref") or provider.get("credential_ref") or "")
+        credential_ref = str(
+            model.get("credential_ref") or provider.get("credential_ref") or ""
+        )
         api_key = CredentialStore().api_key(credential_ref) if credential_ref else None
         key_env = model.get("api_key_env") or provider.get("api_key_env")
         if not api_key and key_env and os.environ.get(str(key_env)):
             api_key = os.environ[str(key_env)]
         return api_key
 
-    def _openai_compatible_endpoint(self, provider_name: str, provider: dict[str, Any] | None = None) -> str:
+    def _openai_compatible_endpoint(
+        self, provider_name: str, provider: dict[str, Any] | None = None
+    ) -> str:
         provider = provider or self.providers().get(provider_name, {})
         endpoint = str(provider.get("endpoint", ""))
         if not endpoint and provider_name == "openai":
@@ -1526,7 +1711,10 @@ class ModelCatalog:
 
     def _is_azure_openai(self, provider_name: str) -> bool:
         provider = self.providers().get(provider_name, {})
-        return provider_name == "azure_openai" or str(provider.get("protocol") or "") == "azure_openai"
+        return (
+            provider_name == "azure_openai"
+            or str(provider.get("protocol") or "") == "azure_openai"
+        )
 
     def _is_anthropic(self, provider_name: str) -> bool:
         provider = self.providers().get(provider_name, {})
@@ -1535,7 +1723,9 @@ class ModelCatalog:
             "anthropic_messages",
         }
 
-    def test_prompt(self, name: str, task: str, target: Path | None = None, dry_run: bool = False) -> BackendResult:
+    def test_prompt(
+        self, name: str, task: str, target: Path | None = None, dry_run: bool = False
+    ) -> BackendResult:
         model = self.get(name)
         prompt = build_smoke_prompt(task, target)
         if dry_run:
@@ -1578,21 +1768,29 @@ class ModelCatalog:
             model_id = str(model.get("model", ""))
             try:
                 pulled = model_id in backend.available_models()
-            except Exception as exc:  # pragma: no cover - defensive after reachability check
+            except (
+                Exception
+            ) as exc:  # pragma: no cover - defensive after reachability check
                 return ModelStatus(name, provider_name, True, False, str(exc))
             return ModelStatus(
                 name,
                 provider_name,
                 True,
                 pulled,
-                "model is pulled" if pulled else f"model is not pulled: ollama pull {model_id}",
+                (
+                    "model is pulled"
+                    if pulled
+                    else f"model is not pulled: ollama pull {model_id}"
+                ),
             )
         if self._is_openai_compatible(provider_name):
             credential_problem = self._credential_problem(model, provider)
             if credential_problem:
                 return ModelStatus(name, provider_name, True, False, credential_problem)
             if not bool(provider.get("enabled", True)):
-                return ModelStatus(name, provider_name, True, False, "provider is disabled")
+                return ModelStatus(
+                    name, provider_name, True, False, "provider is disabled"
+                )
             backend = self._openai_compatible_backend(provider_name, model)
             reachable, reason = backend.is_reachable()
             if not reachable:
@@ -1600,7 +1798,9 @@ class ModelCatalog:
             model_id = str(model.get("model", ""))
             try:
                 available = backend.available_models()
-            except Exception as exc:  # pragma: no cover - defensive after reachability check
+            except (
+                Exception
+            ) as exc:  # pragma: no cover - defensive after reachability check
                 return ModelStatus(name, provider_name, True, False, str(exc))
             usable = not available or model_id in available
             return ModelStatus(
@@ -1608,18 +1808,30 @@ class ModelCatalog:
                 provider_name,
                 True,
                 usable,
-                "model is available" if usable else f"model was not listed by provider: {model_id}",
+                (
+                    "model is available"
+                    if usable
+                    else f"model was not listed by provider: {model_id}"
+                ),
             )
         if self._is_azure_openai(provider_name) or self._is_anthropic(provider_name):
             credential_problem = self._credential_problem(model, provider)
             if credential_problem:
                 return ModelStatus(name, provider_name, True, False, credential_problem)
             if not bool(provider.get("enabled", True)):
-                return ModelStatus(name, provider_name, True, False, "provider is disabled")
+                return ModelStatus(
+                    name, provider_name, True, False, "provider is disabled"
+                )
             if self._is_azure_openai(provider_name) and not provider.get("endpoint"):
-                return ModelStatus(name, provider_name, True, False, "provider is missing endpoint")
-            return ModelStatus(name, provider_name, True, True, "model endpoint is configured")
-        credential_ref = str(model.get("credential_ref") or provider.get("credential_ref") or "")
+                return ModelStatus(
+                    name, provider_name, True, False, "provider is missing endpoint"
+                )
+            return ModelStatus(
+                name, provider_name, True, True, "model endpoint is configured"
+            )
+        credential_ref = str(
+            model.get("credential_ref") or provider.get("credential_ref") or ""
+        )
         if credential_ref:
             present = bool(CredentialStore().api_key(credential_ref))
             return ModelStatus(
@@ -1627,7 +1839,11 @@ class ModelCatalog:
                 provider_name,
                 True,
                 present,
-                f"credential {credential_ref} is present" if present else f"missing credential {credential_ref}",
+                (
+                    f"credential {credential_ref} is present"
+                    if present
+                    else f"missing credential {credential_ref}"
+                ),
             )
         key_env = provider.get("api_key_env")
         if key_env:
@@ -1637,7 +1853,11 @@ class ModelCatalog:
                 provider_name,
                 True,
                 present,
-                f"env var {key_env} is present" if present else f"missing env var {key_env}",
+                (
+                    f"env var {key_env} is present"
+                    if present
+                    else f"missing env var {key_env}"
+                ),
             )
         return ModelStatus(
             name,
@@ -1647,8 +1867,12 @@ class ModelCatalog:
             "provider has no usable local check yet",
         )
 
-    def _credential_problem(self, model: dict[str, Any], provider: dict[str, Any]) -> str | None:
-        credential_ref = str(model.get("credential_ref") or provider.get("credential_ref") or "")
+    def _credential_problem(
+        self, model: dict[str, Any], provider: dict[str, Any]
+    ) -> str | None:
+        credential_ref = str(
+            model.get("credential_ref") or provider.get("credential_ref") or ""
+        )
         key_env = model.get("api_key_env") or provider.get("api_key_env")
         if credential_ref and not CredentialStore().api_key(credential_ref):
             return f"missing credential {credential_ref}"
@@ -1680,7 +1904,9 @@ def _heuristic_capability_scores(model: dict[str, Any]) -> dict[str, int]:
     params = _parameter_billions(model_id)
     is_cloud = not bool(model.get("local", False))
     is_embedding = "embed" in model_id or "embedding" in roles
-    is_code = any(token in model_id for token in ["coder", "code"]) or "completion" in roles
+    is_code = (
+        any(token in model_id for token in ["coder", "code"]) or "completion" in roles
+    )
     is_reasoning = "reason" in model_id or "reasoning" in roles
     is_general = "chat" in roles or "generation" in roles
 
@@ -1755,7 +1981,9 @@ def _heuristic_capability_scores(model: dict[str, Any]) -> dict[str, int]:
     if is_cloud:
         instruction = max(instruction, 4)
 
-    completion = code_base if "completion" in roles or is_code else max(1, code_base - 1)
+    completion = (
+        code_base if "completion" in roles or is_code else max(1, code_base - 1)
+    )
 
     return {
         "code_analysis": _clamp(code_base),
@@ -1777,8 +2005,12 @@ def _heuristic_capability_scores(model: dict[str, Any]) -> dict[str, int]:
 def _benchmark_refs(model: dict[str, Any]) -> list[str]:
     roles = {str(role) for role in model.get("roles", []) if role}
     refs = []
-    if roles.intersection({"completion", "autocomplete", "analysis", "generation", "refactor"}):
-        refs.extend(["HumanEval", "MBPP", "LiveCodeBench", "SWE-bench-style repair tasks"])
+    if roles.intersection(
+        {"completion", "autocomplete", "analysis", "generation", "refactor"}
+    ):
+        refs.extend(
+            ["HumanEval", "MBPP", "LiveCodeBench", "SWE-bench-style repair tasks"]
+        )
     if "reasoning" in roles:
         refs.extend(["MATH", "GPQA", "LiveCodeBench"])
     if "chat" in roles:
@@ -1845,14 +2077,19 @@ def _benchmark_score(row: dict[str, Any]) -> float:
 def _role_score_for_row(row: dict[str, Any], roles: list[str]) -> float:
     if not roles:
         return 0.0
-    scores = row.get("capabilities", {}).get("scores", {}) if isinstance(row.get("capabilities"), dict) else {}
+    scores = (
+        row.get("capabilities", {}).get("scores", {})
+        if isinstance(row.get("capabilities"), dict)
+        else {}
+    )
     role_scores: list[float] = []
     for role in roles:
         capabilities = ROLE_CAPABILITY_MAP.get(role, [])
         if not capabilities:
             continue
         role_scores.append(
-            sum(float(scores.get(capability, 0) or 0) for capability in capabilities) / len(capabilities)
+            sum(float(scores.get(capability, 0) or 0) for capability in capabilities)
+            / len(capabilities)
         )
     if not role_scores:
         return 0.0
@@ -1862,9 +2099,13 @@ def _role_score_for_row(row: dict[str, Any], roles: list[str]) -> float:
 def _recommendation_row(row: dict[str, Any], roles: list[str]) -> dict[str, Any]:
     payload = dict(row)
     if roles:
-        payload["matched_roles"] = [role for role in roles if role in row.get("roles", [])]
+        payload["matched_roles"] = [
+            role for role in roles if role in row.get("roles", [])
+        ]
         payload["role_score"] = _role_score_for_row(row, roles)
-        payload["role_capabilities"] = {role: ROLE_CAPABILITY_MAP.get(role, []) for role in roles}
+        payload["role_capabilities"] = {
+            role: ROLE_CAPABILITY_MAP.get(role, []) for role in roles
+        }
     else:
         payload["role_score"] = None
     return payload
@@ -1901,7 +2142,11 @@ CAPABILITY_ALIASES: dict[str, list[str]] = {
 
 def top_capabilities(profile: dict[str, Any], limit: int = 3) -> list[dict[str, Any]]:
     scores = profile.get("scores", {}) if isinstance(profile, dict) else {}
-    rows = [{"name": name, "score": score} for name, score in scores.items() if isinstance(score, int) and score > 0]
+    rows = [
+        {"name": name, "score": score}
+        for name, score in scores.items()
+        if isinstance(score, int) and score > 0
+    ]
     return sorted(rows, key=lambda row: (-int(row["score"]), str(row["name"])))[:limit]
 
 
@@ -1974,7 +2219,9 @@ def _refresh_failure_next_steps(provider_name: str) -> list[str]:
     ]
 
 
-def _refresh_next_steps(write: bool, changes: dict[str, int], provider_name: str | None = None) -> list[str]:
+def _refresh_next_steps(
+    write: bool, changes: dict[str, int], provider_name: str | None = None
+) -> list[str]:
     provider_flag = f" --provider {provider_name}" if provider_name else ""
     if not write:
         steps = [
@@ -1989,16 +2236,22 @@ def _refresh_next_steps(write: bool, changes: dict[str, int], provider_name: str
             "Use aiplane models promote DISCOVERED_ENTRY_NAME --dry-run to preview promoting one discovered entry."
         )
     if int(changes.get("would_update", 0)) or int(changes.get("updated", 0)):
-        steps.append("Inspect updated source metadata before relying on changed capability or runtime-fit fields.")
+        steps.append(
+            "Inspect updated source metadata before relying on changed capability or runtime-fit fields."
+        )
     if int(changes.get("would_remove", 0)) or int(changes.get("removed", 0)):
         steps.append(
             "Confirm stale discovered entries are safe to prune; profile-owned entries are preserved by normal refresh."
         )
-    steps.append("Use aiplane models clear-cache --dry-run to preview removing discovery refresh/import entries.")
+    steps.append(
+        "Use aiplane models clear-cache --dry-run to preview removing discovery refresh/import entries."
+    )
     return steps
 
 
-def _promote_next_steps(source: str, target: str, write: bool, keep_discovered: bool) -> list[str]:
+def _promote_next_steps(
+    source: str, target: str, write: bool, keep_discovered: bool
+) -> list[str]:
     if not write:
         return [
             f"Review the promoted model payload, then run aiplane models promote {source} --as {target} without --dry-run to write models.yaml.",
@@ -2009,7 +2262,9 @@ def _promote_next_steps(source: str, target: str, write: bool, keep_discovered: 
         "Run aiplane profiles validate local-dev and aiplane integrations plan for the target tool before using the model entry in a workflow.",
     ]
     if keep_discovered:
-        steps.append(f"Discovered entry {source} was kept in models.discovered.yaml for comparison.")
+        steps.append(
+            f"Discovered entry {source} was kept in models.discovered.yaml for comparison."
+        )
     else:
         steps.append(
             f"Discovered entry {source} was removed from models.discovered.yaml so the profile-owned entry is authoritative."
@@ -2018,7 +2273,11 @@ def _promote_next_steps(source: str, target: str, write: bool, keep_discovered: 
 
 
 def _refresh_status(changes: dict[str, int]) -> str:
-    if int(changes.get("imported", 0)) > 0 or int(changes.get("updated", 0)) > 0 or int(changes.get("removed", 0)) > 0:
+    if (
+        int(changes.get("imported", 0)) > 0
+        or int(changes.get("updated", 0)) > 0
+        or int(changes.get("removed", 0)) > 0
+    ):
         return "updated"
     if (
         int(changes.get("would_import", 0)) > 0
@@ -2050,7 +2309,9 @@ def _refresh_model_row(
         "refresh_status": refresh_status,
         "enabled": bool(model.get("enabled", True)),
         "provider_visible": provider_visible,
-        "local_presence": _refresh_local_presence(ownership, provider_name, provider_visible),
+        "local_presence": _refresh_local_presence(
+            ownership, provider_name, provider_visible
+        ),
         "provider_reason": provider_reason,
         "preferred_runtime": preferred,
         "suitable_runtimes": runtime_catalog.compatible_runtimes_for_entry(model),
@@ -2071,7 +2332,9 @@ def _refresh_model_row(
     return row
 
 
-def _refresh_local_presence(ownership: str, provider_name: str, provider_visible: bool | None) -> str:
+def _refresh_local_presence(
+    ownership: str, provider_name: str, provider_visible: bool | None
+) -> str:
     if ownership == "managed_service":
         return "not_applicable_managed_service"
     if provider_visible is True:
@@ -2102,7 +2365,9 @@ def _group_refresh_catalog_rows(
     }
 
 
-def _unique_model_alias(models: dict[str, Any], provider_name: str, model_id: str) -> str:
+def _unique_model_alias(
+    models: dict[str, Any], provider_name: str, model_id: str
+) -> str:
     import re
 
     base = re.sub(r"[^a-z0-9]+", "-", model_id.lower()).strip("-")
@@ -2124,7 +2389,9 @@ def _discovered_model_entry(
 ) -> dict[str, Any]:
     params = _parameter_billions(model_id.lower())
     roles = _roles_for_discovered_model(provider_name, model_id, source_metadata or {})
-    min_ram, recommended_ram, min_vram, recommended_vram = _resource_guess(params, roles)
+    min_ram, recommended_ram, min_vram, recommended_vram = _resource_guess(
+        params, roles
+    )
     preferred_runtime = _preferred_runtime_for_discovered_roles(provider_name, roles)
     managed_sources = {
         "openai",
@@ -2135,7 +2402,9 @@ def _discovered_model_entry(
         "elevenlabs",
     }
     entry: dict[str, Any] = {
-        "provider": provider_name if provider_name in managed_sources else preferred_runtime,
+        "provider": (
+            provider_name if provider_name in managed_sources else preferred_runtime
+        ),
         "model": model_id,
         "roles": roles,
         "local": provider_name not in managed_sources,
@@ -2233,7 +2502,9 @@ def _is_refresh_imported_model(model: dict[str, Any]) -> bool:
     if model.get("imported_by") == "aiplane_refresh":
         return True
     notes = str(model.get("notes") or "")
-    return notes.startswith("Discovered from model provider") or notes.startswith("Discovered from provider")
+    return notes.startswith("Discovered from model provider") or notes.startswith(
+        "Discovered from provider"
+    )
 
 
 def _preferred_runtime_for_source(provider_name: str) -> str:
@@ -2254,7 +2525,9 @@ def _preferred_runtime_for_source(provider_name: str) -> str:
     return provider_name
 
 
-def _preferred_runtime_for_discovered_roles(provider_name: str, roles: list[str]) -> str:
+def _preferred_runtime_for_discovered_roles(
+    provider_name: str, roles: list[str]
+) -> str:
     role_set = set(roles)
     if "video_generation" in role_set or "image_generation" in role_set:
         return "diffusers"
@@ -2278,14 +2551,19 @@ def _supported_runtimes_for_discovered_roles(roles: list[str]) -> list[str]:
     return []
 
 
-def _roles_for_discovered_model(provider_name: str, model_id: str, source_metadata: dict[str, Any]) -> list[str]:
+def _roles_for_discovered_model(
+    provider_name: str, model_id: str, source_metadata: dict[str, Any]
+) -> list[str]:
     pipeline = str(source_metadata.get("pipeline_tag") or "").lower().strip()
     tags = (
         {str(tag).lower() for tag in source_metadata.get("tags", []) if tag}
         if isinstance(source_metadata.get("tags"), list)
         else set()
     )
-    if pipeline in {"feature-extraction", "sentence-similarity"} or "sentence-transformers" in tags:
+    if (
+        pipeline in {"feature-extraction", "sentence-similarity"}
+        or "sentence-transformers" in tags
+    ):
         return ["embedding"]
     if pipeline in {"automatic-speech-recognition", "audio-to-text"}:
         return ["speech_to_text"]
@@ -2331,11 +2609,19 @@ def _roles_for_model_id(model_id: str) -> list[str]:
         return ["speech_to_text"]
     if any(token in value for token in ["tts", "text-to-speech"]):
         return ["text_to_speech"]
-    if any(token in value for token in ["text-to-image", "texttoimage", "image-generation"]):
+    if any(
+        token in value for token in ["text-to-image", "texttoimage", "image-generation"]
+    ):
         return ["image_generation"]
-    if any(token in value for token in ["text-to-video", "texttovideo", "video-generation", "t2v"]):
+    if any(
+        token in value
+        for token in ["text-to-video", "texttovideo", "video-generation", "t2v"]
+    ):
         return ["video_generation"]
-    if any(token in value for token in ["vision", "visual", "image-to-text", "visual-question-answering"]):
+    if any(
+        token in value
+        for token in ["vision", "visual", "image-to-text", "visual-question-answering"]
+    ):
         return ["chat", "analysis", "vision"]
     if "coder" in value or "code" in value:
         if "base" in value:

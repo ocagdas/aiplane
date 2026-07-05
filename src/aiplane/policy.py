@@ -19,7 +19,9 @@ class PolicyEngine:
         if action == "backend:cloud":
             return self.cloud_decision()
         if action == "backend:local":
-            return Decision(True, False, "local backends are allowed by default", "backend.local")
+            return Decision(
+                True, False, "local backends are allowed by default", "backend.local"
+            )
         return Decision(False, False, f"unknown action {action!r}", "unknown")
 
     def cloud_decision(self) -> Decision:
@@ -49,11 +51,15 @@ class PolicyEngine:
     def tool_decision(self, tool_name: str) -> Decision:
         allowed = set(self.profile.tools.get("allowed", []))
         if tool_name not in allowed:
-            return Decision(False, False, f"tool {tool_name!r} is not allowed", "tools.allowed")
+            return Decision(
+                False, False, f"tool {tool_name!r} is not allowed", "tools.allowed"
+            )
 
         mode = self.profile.tools.get("mode", "read_only")
         if mode == "read_only" and tool_name not in READ_ONLY_TOOLS:
-            return Decision(False, False, "read-only tool mode blocks mutating tools", "tools.mode")
+            return Decision(
+                False, False, "read-only tool mode blocks mutating tools", "tools.mode"
+            )
 
         approval_required = False
         risk = "read_only" if tool_name in READ_ONLY_TOOLS else "risky"

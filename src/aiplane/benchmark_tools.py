@@ -64,7 +64,10 @@ class BenchmarkToolManager:
         rows = [self._row(item) for item in names]
         return {
             "name": "benchmark_tools_doctor",
-            "ok": all(bool(row.get("available")) or row.get("install") == "built_in" for row in rows),
+            "ok": all(
+                bool(row.get("available")) or row.get("install") == "built_in"
+                for row in rows
+            ),
             "frameworks": rows,
             "notes": [
                 "aiplane-smoke is built in and uses aiplane models benchmark.",
@@ -82,7 +85,9 @@ class BenchmarkToolManager:
                 "dry_run": dry_run,
                 "installed": True,
                 "results": [],
-                "notes": ["This benchmark framework is built into aiplane; no external install is needed."],
+                "notes": [
+                    "This benchmark framework is built into aiplane; no external install is needed."
+                ],
             }
         return self.tools.install(str(tool_name), dry_run=dry_run, yes=not dry_run)
 
@@ -103,7 +108,9 @@ class BenchmarkToolManager:
                 "name": name,
                 "framework": row,
                 "commands": [{"name": "run", "command": command}],
-                "notes": ["Use --dry-run on aiplane models benchmark to preview prompts/evaluators."],
+                "notes": [
+                    "Use --dry-run on aiplane models benchmark to preview prompts/evaluators."
+                ],
             }
         if name == "lm-evaluation-harness":
             return {
@@ -174,7 +181,9 @@ class BenchmarkToolManager:
                         ],
                     },
                 ],
-                "notes": ["Requires a user-provided Locust file that calls the endpoint shape you want to test."],
+                "notes": [
+                    "Requires a user-provided Locust file that calls the endpoint shape you want to test."
+                ],
             }
         raise ValueError(f"unknown benchmark framework: {name}")
 
@@ -190,7 +199,9 @@ class BenchmarkToolManager:
             "description": spec.get("description"),
             "install": spec.get("install"),
             "tool": tool_name,
-            "available": True if tool_name is None else bool(tool and tool.get("installed")),
+            "available": (
+                True if tool_name is None else bool(tool and tool.get("installed"))
+            ),
             "tool_status": tool,
             "best_for": spec.get("best_for", []),
         }

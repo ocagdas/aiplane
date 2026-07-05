@@ -9,7 +9,9 @@ from typing import Any
 SECRET_PATTERNS = [
     re.compile(r"-----BEGIN (?:RSA |DSA |EC |OPENSSH |)PRIVATE KEY-----"),
     re.compile(r"-----BEGIN CERTIFICATE-----"),
-    re.compile(r"(?i)\b(api[_-]?key|secret|token|password)\b\s*[:=]\s*['\"]?([A-Za-z0-9_\-./+=]{12,})"),
+    re.compile(
+        r"(?i)\b(api[_-]?key|secret|token|password)\b\s*[:=]\s*['\"]?([A-Za-z0-9_\-./+=]{12,})"
+    ),
     re.compile(r"\b(?:sk|pk|ghp|github_pat|xoxb|xoxp)_[A-Za-z0-9_\-]{16,}\b"),
     re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
 ]
@@ -26,7 +28,9 @@ SENSITIVE_KEYS = {
 }
 
 
-def credentials_path(path: Path | str | None = None, config_path: Path | str | None = None) -> Path:
+def credentials_path(
+    path: Path | str | None = None, config_path: Path | str | None = None
+) -> Path:
     if path is not None:
         return Path(path).expanduser().resolve()
     env_path = os.environ.get("AIPLANE_CREDENTIALS")
@@ -50,7 +54,11 @@ def contains_secret(value: Any) -> bool:
 def redact(value: Any) -> Any:
     if isinstance(value, dict):
         return {
-            key: "[REDACTED_SECRET]" if str(key).lower() in SENSITIVE_KEYS and inner else redact(inner)
+            key: (
+                "[REDACTED_SECRET]"
+                if str(key).lower() in SENSITIVE_KEYS and inner
+                else redact(inner)
+            )
             for key, inner in value.items()
         }
     if isinstance(value, list):
@@ -71,10 +79,16 @@ class CredentialStore:
         self.config = self._load()
 
     def list(self) -> dict[str, Any]:
-        providers = self.config.get("providers", {}) if isinstance(self.config, dict) else {}
+        providers = (
+            self.config.get("providers", {}) if isinstance(self.config, dict) else {}
+        )
         rows = []
         for provider, provider_config in sorted(providers.items()):
-            accounts = provider_config.get("accounts", {}) if isinstance(provider_config, dict) else {}
+            accounts = (
+                provider_config.get("accounts", {})
+                if isinstance(provider_config, dict)
+                else {}
+            )
             for account, value in sorted(accounts.items()):
                 if not isinstance(value, dict):
                     continue
@@ -86,7 +100,9 @@ class CredentialStore:
                         "endpoint": value.get("endpoint"),
                         "api_key_env": value.get("api_key_env"),
                         "has_api_key": bool(value.get("api_key")),
-                        "has_token": bool(value.get("token") or value.get("bearer_token")),
+                        "has_token": bool(
+                            value.get("token") or value.get("bearer_token")
+                        ),
                         "notes": value.get("notes"),
                     }
                 )
@@ -139,9 +155,17 @@ class CredentialStore:
         return str(endpoint) if endpoint else None
 
     def _account(self, provider: str, account: str) -> dict[str, Any] | None:
-        providers = self.config.get("providers", {}) if isinstance(self.config, dict) else {}
-        provider_config = providers.get(provider, {}) if isinstance(providers, dict) else {}
-        accounts = provider_config.get("accounts", {}) if isinstance(provider_config, dict) else {}
+        providers = (
+            self.config.get("providers", {}) if isinstance(self.config, dict) else {}
+        )
+        provider_config = (
+            providers.get(provider, {}) if isinstance(providers, dict) else {}
+        )
+        accounts = (
+            provider_config.get("accounts", {})
+            if isinstance(provider_config, dict)
+            else {}
+        )
         value = accounts.get(account) if isinstance(accounts, dict) else None
         return value if isinstance(value, dict) else None
 

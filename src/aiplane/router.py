@@ -49,7 +49,11 @@ class Router:
                         self.profile.name,
                         action,
                         "blocked",
-                        {"provider": provider, "reason": fit.reason, "hardware_fit": False},
+                        {
+                            "provider": provider,
+                            "reason": fit.reason,
+                            "hardware_fit": False,
+                        },
                     )
                 )
                 raise RuntimeError(
@@ -109,7 +113,9 @@ class Router:
         )
         return result
 
-    def _select_model(self, prefer_escalation: bool, model_name: str | None) -> dict[str, object]:
+    def _select_model(
+        self, prefer_escalation: bool, model_name: str | None
+    ) -> dict[str, object]:
         models = self.catalog.models()
         if model_name:
             if model_name not in models:
@@ -119,7 +125,11 @@ class Router:
                 raise ValueError(f"model is disabled: {model_name}")
             return {"name": model_name, "model": model}
 
-        enabled = [(name, model) for name, model in models.items() if bool(model.get("enabled", True))]
+        enabled = [
+            (name, model)
+            for name, model in models.items()
+            if bool(model.get("enabled", True))
+        ]
         if prefer_escalation:
             default = self.catalog.default_model("managed_service_model")
             if default and not bool(default["model"].get("local", False)):
@@ -162,7 +172,9 @@ class Router:
             )
             raise PermissionError(cloud_decision.reason)
 
-    def _dry_run_text(self, task: str, model_name: str, model: dict[str, object]) -> str:
+    def _dry_run_text(
+        self, task: str, model_name: str, model: dict[str, object]
+    ) -> str:
         return (
             f"Would run task with model alias: {model_name}\n"
             f"Provider: {model.get('provider')}\n"

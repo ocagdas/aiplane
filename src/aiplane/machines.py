@@ -124,7 +124,9 @@ class MachineManager:
         self.profile = profile
         self.config = profile.hardware or {}
 
-    def export_machine(self, name: str, origin: str = "local", include_discovery: bool = False) -> dict[str, Any]:
+    def export_machine(
+        self, name: str, origin: str = "local", include_discovery: bool = False
+    ) -> dict[str, Any]:
         hardware = HardwareManager(self.profile)
         discovered = hardware.discover()
         machine = hardware.machine(discovered)
@@ -148,7 +150,8 @@ class MachineManager:
             rows.append(
                 {
                     "name": name,
-                    "provider": (machine.get("stock") or {}).get("provider") or machine.get("provider"),
+                    "provider": (machine.get("stock") or {}).get("provider")
+                    or machine.get("provider"),
                     "origin": machine.get("origin"),
                     "placement": machine.get("placement"),
                     "substrate": machine.get("substrate"),
@@ -240,18 +243,17 @@ class MachineManager:
                 if skus:
                     source = "az_vm_list_skus"
                     method = "live"
-                    status = (
-                        "live Azure CLI discovery succeeded; matching live SKU results override cached/offline results"
-                    )
+                    status = "live Azure CLI discovery succeeded; matching live SKU results override cached/offline results"
                     quota = self.azure_quota(region)
                 else:
-                    status = (
-                        "az CLI SKU query succeeded but returned no supported SKU matches; using built-in SKU hints"
-                    )
+                    status = "az CLI SKU query succeeded but returned no supported SKU matches; using built-in SKU hints"
             else:
                 status = f"az CLI SKU query failed or returned no output (exit {completed.returncode}); using built-in SKU hints"
         if not skus:
-            skus = [self.azure_machine_from_sku(name, region)["machine"] for name in AZURE_SKU_HINTS]
+            skus = [
+                self.azure_machine_from_sku(name, region)["machine"]
+                for name in AZURE_SKU_HINTS
+            ]
         candidates = []
         for machine in skus:
             fit = _machine_fit(machine, criteria)
@@ -274,7 +276,9 @@ class MachineManager:
             "quota": quota,
             "candidates": candidates[:limit],
         }
-        cache = self._record_discovery("azure", region, criteria, result, method, source, command, status)
+        cache = self._record_discovery(
+            "azure", region, criteria, result, method, source, command, status
+        )
         result["discovery"] = {
             "method": method,
             "source": source,
@@ -285,7 +289,9 @@ class MachineManager:
         }
         return result
 
-    def azure_status(self, region: str | None = None, run_sku_probe: bool = False) -> dict[str, Any]:
+    def azure_status(
+        self, region: str | None = None, run_sku_probe: bool = False
+    ) -> dict[str, Any]:
         az_path = shutil.which("az")
         status: dict[str, Any] = {
             "name": "azure_cli",
@@ -352,11 +358,17 @@ class MachineManager:
                     continue
                 limit = _float(item.get("limit"))
                 current = _float(item.get("currentValue"))
-                remaining = None if limit is None or current is None else max(limit - current, 0)
+                remaining = (
+                    None
+                    if limit is None or current is None
+                    else max(limit - current, 0)
+                )
                 name = item.get("name") if isinstance(item.get("name"), dict) else {}
                 items.append(
                     {
-                        "name": name.get("localizedValue") or name.get("value") or item.get("name"),
+                        "name": name.get("localizedValue")
+                        or name.get("value")
+                        or item.get("name"),
                         "current": current,
                         "limit": limit,
                         "remaining": remaining,
@@ -371,7 +383,11 @@ class MachineManager:
         for key, value in sorted(cache.items()):
             if not isinstance(value, dict):
                 continue
-            discovery = value.get("discovery") if isinstance(value.get("discovery"), dict) else {}
+            discovery = (
+                value.get("discovery")
+                if isinstance(value.get("discovery"), dict)
+                else {}
+            )
             rows.append(
                 {
                     "name": key,
@@ -379,9 +395,11 @@ class MachineManager:
                     "region": value.get("region"),
                     "method": discovery.get("method"),
                     "source": discovery.get("source"),
-                    "candidate_count": len(value.get("candidates", []))
-                    if isinstance(value.get("candidates"), list)
-                    else 0,
+                    "candidate_count": (
+                        len(value.get("candidates", []))
+                        if isinstance(value.get("candidates"), list)
+                        else 0
+                    ),
                     "criteria": value.get("criteria", {}),
                 }
             )
@@ -419,7 +437,9 @@ class MachineManager:
             raise ValueError(f"unknown machine: {name}")
         return {"ok": all(row["ok"] for row in rows), "machines": rows}
 
-    def azure_machine_from_sku(self, sku: str, region: str, name: str | None = None) -> dict[str, Any]:
+    def azure_machine_from_sku(
+        self, sku: str, region: str, name: str | None = None
+    ) -> dict[str, Any]:
         hint = AZURE_SKU_HINTS.get(sku, {})
         machine_name = name or _safe_name("azure_" + sku)
         vram = hint.get("vram_gb", 0)
@@ -451,10 +471,14 @@ class MachineManager:
                 "model": hint.get("gpu_model", "unknown"),
                 "count": gpu_count,
                 "vram_gb": vram,
-                "total_vram_gb": hint.get("total_vram_gb", (vram or 0) * (gpu_count or 0)),
+                "total_vram_gb": hint.get(
+                    "total_vram_gb", (vram or 0) * (gpu_count or 0)
+                ),
                 "indices": None,
             },
-            "accelerator_apis": ["cuda"] if hint.get("gpu_vendor") == "nvidia" else ["cpu"],
+            "accelerator_apis": (
+                ["cuda"] if hint.get("gpu_vendor") == "nvidia" else ["cpu"]
+            ),
             "os": "linux",
             "notes": "Imported from Azure SKU hints; verify region availability, quota, and exact GPU memory before provisioning.",
         }
@@ -473,7 +497,9 @@ class MachineManager:
             _set_machine_value(machine, key, value)
         validation = validate_machine(machine)
         if not validation["ok"]:
-            raise ValueError("invalid Azure SKU machine profile: " + "; ".join(validation["errors"]))
+            raise ValueError(
+                "invalid Azure SKU machine profile: " + "; ".join(validation["errors"])
+            )
         self.config.setdefault("self_managed_machines", {})[payload["name"]] = machine
         self._write_config()
         return {
@@ -483,7 +509,9 @@ class MachineManager:
             "machine": machine,
         }
 
-    def profile_remote_plan(self, name: str, host: str, user: str | None = None, port: int = 22) -> dict[str, Any]:
+    def profile_remote_plan(
+        self, name: str, host: str, user: str | None = None, port: int = 22
+    ) -> dict[str, Any]:
         destination = f"{user + '@' if user else ''}{host}"
         remote = f"aiplane hardware export-machine --profile {self.profile.name} --name {name}"
         return {
@@ -522,7 +550,9 @@ class MachineManager:
             ],
         }
 
-    def _criteria(self, model: str | None, runtime: str | None, workload: str | None) -> dict[str, Any]:
+    def _criteria(
+        self, model: str | None, runtime: str | None, workload: str | None
+    ) -> dict[str, Any]:
         criteria = {
             "model": model,
             "runtime": runtime,
@@ -550,7 +580,10 @@ class MachineManager:
             criteria["recommended_vram_gb"] = model_config.get("recommended_vram_gb")
         if runtime:
             # Runtime checks are intentionally lightweight here; detailed runtime availability belongs to RuntimeCatalog.
-            known = {row["name"] for row in RuntimeCatalog(self.profile).list(include_gui=True)}
+            known = {
+                row["name"]
+                for row in RuntimeCatalog(self.profile).list(include_gui=True)
+            }
             if runtime not in known:
                 raise ValueError(f"unknown runtime: {runtime}")
         return criteria
@@ -573,7 +606,9 @@ class MachineManager:
         cache = self._load_discovery_cache()
         key = _discovery_cache_key(provider, region, criteria)
         previous = cache.get(key) if isinstance(cache.get(key), dict) else None
-        previous_method = (previous.get("discovery") or {}).get("method") if previous else None
+        previous_method = (
+            (previous.get("discovery") or {}).get("method") if previous else None
+        )
         should_write = method == "live" or previous_method != "live"
         action = "skipped_offline_because_live_cache_exists"
         if should_write:
@@ -655,13 +690,21 @@ def validate_machine(machine: dict[str, Any]) -> dict[str, Any]:
         errors.append("memory must be a mapping")
     if not isinstance(machine.get("gpu"), dict):
         errors.append("gpu must be a mapping")
-    ram = _float((machine.get("memory") or {}).get("ram_gb")) if isinstance(machine.get("memory"), dict) else None
+    ram = (
+        _float((machine.get("memory") or {}).get("ram_gb"))
+        if isinstance(machine.get("memory"), dict)
+        else None
+    )
     unified = (
         _float((machine.get("memory") or {}).get("unified_memory_gb"))
         if isinstance(machine.get("memory"), dict)
         else None
     )
-    vram = _float((machine.get("gpu") or {}).get("vram_gb")) if isinstance(machine.get("gpu"), dict) else None
+    vram = (
+        _float((machine.get("gpu") or {}).get("vram_gb"))
+        if isinstance(machine.get("gpu"), dict)
+        else None
+    )
     if ram is None and unified is None:
         errors.append("memory.ram_gb or memory.unified_memory_gb is required")
     if vram is None and unified is None:
@@ -680,10 +723,16 @@ def load_machine_profile(
     overrides: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     payload = _read_payload(path)
-    machine = payload.get("machine") if isinstance(payload.get("machine"), dict) else payload
+    machine = (
+        payload.get("machine") if isinstance(payload.get("machine"), dict) else payload
+    )
     if not isinstance(machine, dict):
-        raise ValueError("machine import file must contain a mapping or a top-level machine mapping")
-    machine_name = name or str(payload.get("name") or machine.get("name") or machine.get("machine_tag") or "")
+        raise ValueError(
+            "machine import file must contain a mapping or a top-level machine mapping"
+        )
+    machine_name = name or str(
+        payload.get("name") or machine.get("name") or machine.get("machine_tag") or ""
+    )
     if not machine_name:
         raise ValueError("machine import needs --name or a name in the file")
     machine = _deepcopy_json(machine)
@@ -746,9 +795,11 @@ def _az_command_status(completed: subprocess.CompletedProcess[str]) -> dict[str,
     return {
         "ok": completed.returncode == 0 and bool((completed.stdout or "").strip()),
         "returncode": completed.returncode,
-        "reason": "query succeeded"
-        if completed.returncode == 0 and (completed.stdout or "").strip()
-        else f"query failed or returned no output (exit {completed.returncode})",
+        "reason": (
+            "query succeeded"
+            if completed.returncode == 0 and (completed.stdout or "").strip()
+            else f"query failed or returned no output (exit {completed.returncode})"
+        ),
     }
 
 
@@ -783,7 +834,9 @@ def _read_payload(path: Path) -> dict[str, Any]:
     return loaded
 
 
-def _azure_skus_from_cli(values: list[dict[str, Any]], region: str) -> list[dict[str, Any]]:
+def _azure_skus_from_cli(
+    values: list[dict[str, Any]], region: str
+) -> list[dict[str, Any]]:
     machines = []
     for item in values:
         if not isinstance(item, dict):
@@ -791,7 +844,9 @@ def _azure_skus_from_cli(values: list[dict[str, Any]], region: str) -> list[dict
         name = str(item.get("name") or "")
         if not name or name not in AZURE_SKU_HINTS:
             continue
-        machine = MachineManager.__new__(MachineManager).azure_machine_from_sku(name, region)["machine"]
+        machine = MachineManager.__new__(MachineManager).azure_machine_from_sku(
+            name, region
+        )["machine"]
         machine["restrictions"] = _azure_sku_restrictions(item)
         machine["zones"] = item.get("locationInfo", [])
         machines.append(machine)

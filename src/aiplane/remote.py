@@ -51,7 +51,8 @@ class RemoteManager:
             "connection": {
                 "local_bind": f"{local_host}:{local_port}",
                 "remote_service": f"{remote_host}:{remote_port}",
-                "ide_endpoint": target.get("endpoint") or f"http://localhost:{local_port}/v1",
+                "ide_endpoint": target.get("endpoint")
+                or f"http://localhost:{local_port}/v1",
                 "ssh_destination": destination,
                 "ssh_port": ssh_port,
             },
@@ -112,7 +113,9 @@ class RemoteManager:
 
     def tunnel_stop(self, name: str, yes: bool = False) -> dict[str, Any]:
         if not yes:
-            raise PermissionError("remote tunnel stop is mutating; use the CLI stop command when ready")
+            raise PermissionError(
+                "remote tunnel stop is mutating; use the CLI stop command when ready"
+            )
         pid_file = self._pid_file(name)
         pid = _read_pid(pid_file)
         if pid is None:
@@ -169,4 +172,7 @@ def _pid_running(pid: int | None) -> bool:
 
 
 def _safe_name(value: str) -> str:
-    return "".join(ch.lower() if ch.isalnum() else "_" for ch in value).strip("_") or "tunnel"
+    return (
+        "".join(ch.lower() if ch.isalnum() else "_" for ch in value).strip("_")
+        or "tunnel"
+    )

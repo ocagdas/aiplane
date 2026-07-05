@@ -6,9 +6,36 @@ from typing import Any, Mapping
 from .model_catalog import expand_capability_filters
 
 
-MODEL_SORT_CHOICES = ["name", "avg", "role", "benchmark", "likes", "downloads", "popularity", "parameters"]
-GPU_VENDOR_CHOICES = ["generic", "none", "cpu", "nvidia", "amd", "apple", "intel", "mixed"]
-ACCELERATOR_API_CHOICES = ["any", "generic", "cpu", "cuda", "rocm", "metal", "vulkan", "openvino"]
+MODEL_SORT_CHOICES = [
+    "name",
+    "avg",
+    "role",
+    "benchmark",
+    "likes",
+    "downloads",
+    "popularity",
+    "parameters",
+]
+GPU_VENDOR_CHOICES = [
+    "generic",
+    "none",
+    "cpu",
+    "nvidia",
+    "amd",
+    "apple",
+    "intel",
+    "mixed",
+]
+ACCELERATOR_API_CHOICES = [
+    "any",
+    "generic",
+    "cpu",
+    "cuda",
+    "rocm",
+    "metal",
+    "vulkan",
+    "openvino",
+]
 
 MODEL_FILTER_SCHEMA_PROPERTIES: dict[str, dict[str, Any]] = {
     "capabilities": {
@@ -27,7 +54,10 @@ MODEL_FILTER_SCHEMA_PROPERTIES: dict[str, dict[str, Any]] = {
     "role": {"type": "array", "items": {"type": "string"}},
     "ownership": {"type": "string", "enum": ["self_managed", "managed_service"]},
     "enabled_only": {"type": "boolean", "default": False},
-    "machine": {"type": "string", "description": "Named machine profile to derive model-fit filters from"},
+    "machine": {
+        "type": "string",
+        "description": "Named machine profile to derive model-fit filters from",
+    },
     "current_machine": {"type": "boolean", "default": False},
     "ram_gb": {"type": "number"},
     "vram_gb": {"type": "number"},

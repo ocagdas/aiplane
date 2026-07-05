@@ -18,7 +18,9 @@ class OpenAICompatibleTestHandler(BaseHTTPRequestHandler):
         if self.path == "/v1/chat/completions":
             length = int(self.headers.get("Content-Length", "0"))
             body = json.loads(self.rfile.read(length).decode("utf-8"))
-            self._json({"choices": [{"message": {"content": f"handled {body['model']}"}}]})
+            self._json(
+                {"choices": [{"message": {"content": f"handled {body['model']}"}}]}
+            )
             return
         self.send_error(404)
 

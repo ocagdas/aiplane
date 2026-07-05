@@ -74,5 +74,7 @@ def ordered_json_value(value: Any) -> Any:
     return ordered
 
 
-def json_dumps(value: Any, indent: int | None = None, sort_keys: bool | None = None) -> str:
+def json_dumps(
+    value: Any, indent: int | None = None, sort_keys: bool | None = None
+) -> str:
     return json.dumps(ordered_json_value(value), indent=indent)

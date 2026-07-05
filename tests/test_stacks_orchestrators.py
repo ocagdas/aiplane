@@ -57,7 +57,9 @@ class StackOrchestratorTests(unittest.TestCase):
                 stdout = "ok"
                 stderr = ""
 
-            with patch("aiplane.stacks.subprocess.run", return_value=Completed()) as run:
+            with patch(
+                "aiplane.stacks.subprocess.run", return_value=Completed()
+            ) as run:
                 result = stacks.deploy("local_chat_stack", yes=True)
             self.assertEqual(result["status"], "executed_same_host_steps")
             self.assertEqual(run.call_count, 3)
@@ -80,7 +82,9 @@ class StackOrchestratorTests(unittest.TestCase):
                 models=source.models,
                 targets=source.targets,
             )
-            MachineManager(profile).import_azure_sku("Standard_NC40ads_H100_v5", "uksouth", name="azure_h100_test")
+            MachineManager(profile).import_azure_sku(
+                "Standard_NC40ads_H100_v5", "uksouth", name="azure_h100_test"
+            )
             stacks = StackManager(profile)
             created = stacks.create(
                 "code_on_gpu",
@@ -94,11 +98,28 @@ class StackOrchestratorTests(unittest.TestCase):
             self.assertEqual(plan["machine"], "azure_h100_test")
             self.assertEqual(plan["model"], "local-code-large")
             self.assertIn("preflight", plan)
-            self.assertTrue(any(check["name"] == "runtime_prerequisites" for check in plan["preflight"]["checks"]))
-            self.assertTrue(any(check["name"].startswith("port_available:") for check in plan["preflight"]["checks"]))
+            self.assertTrue(
+                any(
+                    check["name"] == "runtime_prerequisites"
+                    for check in plan["preflight"]["checks"]
+                )
+            )
+            self.assertTrue(
+                any(
+                    check["name"].startswith("port_available:")
+                    for check in plan["preflight"]["checks"]
+                )
+            )
             doctor = stacks.doctor("code_on_gpu")
-            self.assertTrue(any(check["name"] == "machine_fit" for check in doctor["checks"]))
-            self.assertTrue(any(check["name"] == "runtime_prerequisites" for check in doctor["checks"]))
+            self.assertTrue(
+                any(check["name"] == "machine_fit" for check in doctor["checks"])
+            )
+            self.assertTrue(
+                any(
+                    check["name"] == "runtime_prerequisites"
+                    for check in doctor["checks"]
+                )
+            )
             exported = stacks.export("openai-compatible", "code_on_gpu")
             self.assertEqual(exported["endpoint"], "http://localhost:8000/v1")
 
@@ -187,7 +208,9 @@ class StackOrchestratorTests(unittest.TestCase):
             self.assertEqual(code, 0)
             payload = json.loads(stdout.getvalue())
             self.assertFalse(payload["dry_run"])
-            text = (profiles_dir / "local-dev" / "orchestrators.yaml").read_text(encoding="utf-8")
+            text = (profiles_dir / "local-dev" / "orchestrators.yaml").read_text(
+                encoding="utf-8"
+            )
             self.assertIn("langgraph:", text)
             self.assertIn("timeout: 30m", text)
 
@@ -195,7 +218,9 @@ class StackOrchestratorTests(unittest.TestCase):
         source = load_profile("local-dev", Path.cwd())
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            (root / "hardware.yaml").write_text("hardware_profiles:\n", encoding="utf-8")
+            (root / "hardware.yaml").write_text(
+                "hardware_profiles:\n", encoding="utf-8"
+            )
             profile = Profile(
                 name="tmp",
                 root=root,
@@ -217,9 +242,13 @@ class StackOrchestratorTests(unittest.TestCase):
                 dry_run=False,
                 yes=True,
             )
-            orchestrators_text = (root / "orchestrators.yaml").read_text(encoding="utf-8")
+            orchestrators_text = (root / "orchestrators.yaml").read_text(
+                encoding="utf-8"
+            )
             hardware_text = (root / "hardware.yaml").read_text(encoding="utf-8")
-        self.assertEqual(result["results"][-1]["path"], str(root / "orchestrators.yaml"))
+        self.assertEqual(
+            result["results"][-1]["path"], str(root / "orchestrators.yaml")
+        )
         self.assertIn("langgraph:", orchestrators_text)
         self.assertNotIn("langgraph", hardware_text)
 
@@ -266,17 +295,31 @@ class StackOrchestratorTests(unittest.TestCase):
             self.assertEqual(shown["orchestrator"], "langgraph")
             self.assertEqual(shown["limits"]["timeout"], "30m")
             self.assertEqual(shown["tools"]["shell"], "guarded")
-            self.assertEqual(shown["roles"]["planner"]["model"], "fixture-analysis-small")
-            self.assertEqual(shown["roles"]["planner"]["audit_label"], "coding_agents.planner")
+            self.assertEqual(
+                shown["roles"]["planner"]["model"], "fixture-analysis-small"
+            )
+            self.assertEqual(
+                shown["roles"]["planner"]["audit_label"], "coding_agents.planner"
+            )
             self.assertFalse(shown["roles"]["reviewer"]["uses_primary_model"])
             plan = stacks.plan("coding_agents")
             self.assertEqual(plan["roles"]["reviewer"]["model"], "local-code-large")
             doctor = stacks.doctor("coding_agents")
-            self.assertTrue(any(check["name"] == "role_model:planner" and check["ok"] for check in doctor["checks"]))
+            self.assertTrue(
+                any(
+                    check["name"] == "role_model:planner" and check["ok"]
+                    for check in doctor["checks"]
+                )
+            )
             prepared = stacks.prepare("coding_agents", dry_run=True)
             self.assertEqual(prepared["action"], "prepare")
             self.assertTrue(prepared["dry_run"])
-            self.assertTrue(any(item["name"] == "install orchestrator packages" for item in prepared["commands"]))
+            self.assertTrue(
+                any(
+                    item["name"] == "install orchestrator packages"
+                    for item in prepared["commands"]
+                )
+            )
             dockerfile = stacks.export("dockerfile", "coding_agents")
             self.assertIn("langgraph", dockerfile["content"])
             self.assertIn("AIPLANE_LIMITS_JSON", dockerfile["content"])
@@ -344,7 +387,9 @@ class StackOrchestratorTests(unittest.TestCase):
             doctor = stacks.doctor("mixed_agents")
             framework = stacks.export("langgraph", "mixed_agents")
         self.assertEqual(plan["roles"]["planner"]["runtime"], "openai")
-        self.assertEqual(plan["roles"]["planner"]["endpoint"], "https://api.openai.com/v1")
+        self.assertEqual(
+            plan["roles"]["planner"]["endpoint"], "https://api.openai.com/v1"
+        )
         checks = {check["name"]: check for check in doctor["checks"]}
         self.assertTrue(checks["role_runtime_or_endpoint:planner"]["ok"])
         self.assertTrue(checks["role_endpoint:planner"]["ok"])
@@ -365,7 +410,9 @@ class StackOrchestratorTests(unittest.TestCase):
             profile_root = profiles_dir / "tmp"
             profile_root.mkdir(parents=True)
             for key, filename in agent_config.CONFIG_FILES.items():
-                (profile_root / filename).write_text(agent_config.dump_yaml(getattr(source, key)), encoding="utf-8")
+                (profile_root / filename).write_text(
+                    agent_config.dump_yaml(getattr(source, key)), encoding="utf-8"
+                )
             profile = load_profile("tmp", Path.cwd(), profiles_dir=profiles_dir)
             exported = MachineManager(profile).export_machine("local_box")
             machine_path = root / "local_box.json"
@@ -404,8 +451,12 @@ class StackOrchestratorTests(unittest.TestCase):
             payload = json.loads(stdout.getvalue())
             self.assertEqual(payload["stack"]["limits"]["timeout"], "30m")
             self.assertEqual(payload["stack"]["tools"]["shell"], "guarded")
-            self.assertEqual(payload["stack"]["roles"]["planner"]["model"], "fixture-analysis-small")
-            self.assertEqual(payload["stack"]["roles"]["planner"]["approval_mode"], "guarded")
+            self.assertEqual(
+                payload["stack"]["roles"]["planner"]["model"], "fixture-analysis-small"
+            )
+            self.assertEqual(
+                payload["stack"]["roles"]["planner"]["approval_mode"], "guarded"
+            )
 
     def test_stack_endpoint_plan_checks_shared_gateway_controls(self) -> None:
         source = load_profile("local-dev", Path.cwd())
@@ -460,7 +511,9 @@ class StackOrchestratorTests(unittest.TestCase):
             )
             unsafe = stacks.endpoint_plan("unsafe_shared_stack")
         self.assertTrue(ready["ready_for_policy"])
-        self.assertEqual(ready["auth"], {"method": "bearer", "api_key_env": "LLM_GATEWAY_API_KEY"})
+        self.assertEqual(
+            ready["auth"], {"method": "bearer", "api_key_env": "LLM_GATEWAY_API_KEY"}
+        )
         ready_checks = {check["name"]: check for check in ready["checks"]}
         self.assertTrue(ready_checks["endpoint_tls"]["ok"])
         self.assertTrue(ready_checks["endpoint_auth"]["ok"])
@@ -481,7 +534,9 @@ class StackOrchestratorTests(unittest.TestCase):
             profile_root = profiles_dir / "tmp"
             profile_root.mkdir(parents=True)
             for key, filename in agent_config.CONFIG_FILES.items():
-                (profile_root / filename).write_text(agent_config.dump_yaml(getattr(source, key)), encoding="utf-8")
+                (profile_root / filename).write_text(
+                    agent_config.dump_yaml(getattr(source, key)), encoding="utf-8"
+                )
             profile = load_profile("tmp", Path.cwd(), profiles_dir=profiles_dir)
             exported = MachineManager(profile).export_machine("local_box")
             machine_path = root / "local_box.json"
@@ -693,7 +748,9 @@ class StackOrchestratorTests(unittest.TestCase):
                 models=source.models,
                 targets=source.targets,
             )
-            MachineManager(profile).import_azure_sku("Standard_NC40ads_H100_v5", "uksouth", name="azure_h100_test")
+            MachineManager(profile).import_azure_sku(
+                "Standard_NC40ads_H100_v5", "uksouth", name="azure_h100_test"
+            )
             stacks = StackManager(profile)
             stacks.setup(
                 "remote_stack",

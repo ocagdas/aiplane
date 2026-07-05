@@ -56,8 +56,10 @@ class DeployManager:
             "boundaries": {
                 "local_install": workflow == "local_install",
                 "local_vm_provisioning": workflow == "local_vm",
-                "remote_existing_machine_setup": workflow in {"remote_workstation", "remote_vm"},
-                "cloud_resource_provisioning": workflow in {"cloud_vm", "cloud_kubernetes"},
+                "remote_existing_machine_setup": workflow
+                in {"remote_workstation", "remote_vm"},
+                "cloud_resource_provisioning": workflow
+                in {"cloud_vm", "cloud_kubernetes"},
             },
             "mutation_policy": _workflow_mutation_policy(workflow),
             "recommended_tools": _workflow_tools(workflow, target),
@@ -141,7 +143,9 @@ class DeployManager:
             )
 
         if shutil.which("az"):
-            checks.append(_run_check("az:account", ["az", "account", "show", "--output", "json"]))
+            checks.append(
+                _run_check("az:account", ["az", "account", "show", "--output", "json"])
+            )
             resource_group = str(target.get("resource_group") or "")
             cluster = str(target.get("cluster") or "")
             vm_name = str(target.get("name") or "")
@@ -233,10 +237,14 @@ class DeployManager:
         elif target.get("type") == "azure_vm":
             apply_steps = _azure_vm_apply_steps(target)
         else:
-            raise ValueError(f"deploy apply is not implemented for target type: {target.get('type')}")
+            raise ValueError(
+                f"deploy apply is not implemented for target type: {target.get('type')}"
+            )
         results = []
         for step in apply_steps:
-            completed = subprocess.run(step.command, text=True, capture_output=True, check=False)
+            completed = subprocess.run(
+                step.command, text=True, capture_output=True, check=False
+            )
             results.append(
                 {
                     "name": step.name,
@@ -277,7 +285,10 @@ def _workflow_for_target(target_name: str, target: dict[str, Any]) -> str:
         return "local_vm"
     if target_type in {"same_host", "local"}:
         return "local_install"
-    if "vm" in target_name and str((target.get("access") or {}).get("mode") or "") == "ssh_tunnel":
+    if (
+        "vm" in target_name
+        and str((target.get("access") or {}).get("mode") or "") == "ssh_tunnel"
+    ):
         return "remote_vm"
     return "custom_remote"
 
@@ -551,7 +562,9 @@ def _azure_aks_steps(target: dict[str, Any]) -> list[CommandStep]:
             ],
             mutates=True,
         ),
-        CommandStep("check Kubernetes nodes", ["kubectl", "get", "nodes", "-o", "wide"]),
+        CommandStep(
+            "check Kubernetes nodes", ["kubectl", "get", "nodes", "-o", "wide"]
+        ),
         CommandStep(
             "create namespace",
             ["kubectl", "create", "namespace", namespace],
@@ -571,5 +584,9 @@ def _azure_aks_apply_steps(target: dict[str, Any]) -> list[CommandStep]:
 
 def _run_check(name: str, command: list[str]) -> dict[str, Any]:
     completed = subprocess.run(command, text=True, capture_output=True, check=False)
-    detail = completed.stdout.strip() or completed.stderr.strip() or f"exit {completed.returncode}"
+    detail = (
+        completed.stdout.strip()
+        or completed.stderr.strip()
+        or f"exit {completed.returncode}"
+    )
     return {"name": name, "ok": completed.returncode == 0, "detail": detail[-2000:]}

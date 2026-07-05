@@ -79,7 +79,9 @@ class ProviderRegistry:
         rows = []
         catalog_by_provider: dict[str, list[dict[str, Any]]] = {}
         for row in self.catalog.list():
-            catalog_by_provider.setdefault(str(row.get("provider") or ""), []).append(row)
+            catalog_by_provider.setdefault(str(row.get("provider") or ""), []).append(
+                row
+            )
         for name, source in self.model_providers(include_removed=True).items():
             removed = bool(source.get("removed"))
             enabled = bool(source.get("enabled", True)) and not removed
@@ -106,7 +108,9 @@ class ProviderRegistry:
                 "profile_models_count": len(catalog_models),
                 "has_profile_catalog_entries": bool(catalog_models),
             }
-            if runtime_filter and not runtime_filter.intersection(set(row["typical_runtimes"])):
+            if runtime_filter and not runtime_filter.intersection(
+                set(row["typical_runtimes"])
+            ):
                 continue
             rows.append(row)
         rows = sorted(rows, key=lambda row: str(row["name"]))
@@ -118,7 +122,9 @@ class ProviderRegistry:
         providers = self.model_providers()
         if name not in providers or providers[name].get("removed"):
             raise ValueError(f"unknown catalog provider: {name}")
-        catalog_models = [row for row in self.catalog.list() if row.get("provider") == name]
+        catalog_models = [
+            row for row in self.catalog.list() if row.get("provider") == name
+        ]
         provider = providers[name]
         return {
             "name": name,
@@ -131,7 +137,10 @@ class ProviderRegistry:
     def endpoint_families(self) -> dict[str, Any]:
         rows = []
         for name, provider in sorted(PROVIDER_ENDPOINT_DEFAULTS.items()):
-            if provider.get("ownership") != "managed_service" or name not in SUPPORTED_ENDPOINT_FAMILIES:
+            if (
+                provider.get("ownership") != "managed_service"
+                or name not in SUPPORTED_ENDPOINT_FAMILIES
+            ):
                 continue
             rows.append(
                 {
@@ -217,22 +226,35 @@ class ProviderRegistry:
     ) -> dict[str, Any]:
         _validate_provider_name(name)
         runtimes = [str(value) for value in typical_runtimes or [] if value]
-        resolved_ownership = ownership or ("managed_service" if endpoint_family else "self_managed")
+        resolved_ownership = ownership or (
+            "managed_service" if endpoint_family else "self_managed"
+        )
         if resolved_ownership not in {"self_managed", "managed_service"}:
-            raise ValueError("provider ownership must be self_managed or managed_service")
+            raise ValueError(
+                "provider ownership must be self_managed or managed_service"
+            )
         if resolved_ownership == "managed_service" and runtimes:
-            raise ValueError("managed-service providers use --endpoint-family, not --runtime")
+            raise ValueError(
+                "managed-service providers use --endpoint-family, not --runtime"
+            )
         if resolved_ownership == "self_managed" and endpoint_family:
-            raise ValueError("self-managed providers use --runtime, not --endpoint-family")
+            raise ValueError(
+                "self-managed providers use --runtime, not --endpoint-family"
+            )
         if endpoint_family and endpoint_family not in SUPPORTED_ENDPOINT_FAMILIES:
-            raise ValueError("unsupported endpoint family; run providers endpoint-types to see supported API families")
+            raise ValueError(
+                "unsupported endpoint family; run providers endpoint-types to see supported API families"
+            )
         resolved_catalog_adapter = catalog_adapter or "profile_catalog"
         if resolved_catalog_adapter not in SUPPORTED_CATALOG_ADAPTERS:
             raise ValueError(
-                "unsupported catalog adapter; use one of: " + ", ".join(sorted(SUPPORTED_CATALOG_ADAPTERS))
+                "unsupported catalog adapter; use one of: "
+                + ", ".join(sorted(SUPPORTED_CATALOG_ADAPTERS))
             )
         if auth_method not in {"none", "api_key", "bearer", "oauth2", "custom"}:
-            raise ValueError("provider auth method must be none, api_key, bearer, oauth2, or custom")
+            raise ValueError(
+                "provider auth method must be none, api_key, bearer, oauth2, or custom"
+            )
         if auth_method != "none":
             requires_credentials = True
         config = self._user_source_provider_config()
@@ -282,7 +304,11 @@ class ProviderRegistry:
     def update_defaults(self) -> dict[str, Any]:
         path = self.profile.root / DEFAULT_MODEL_PROVIDERS_FILE
         existing = (
-            _provider_mapping(parse_yaml(path.read_text(encoding="utf-8")), origin="default") if path.exists() else {}
+            _provider_mapping(
+                parse_yaml(path.read_text(encoding="utf-8")), origin="default"
+            )
+            if path.exists()
+            else {}
         )
         providers = self.default_model_providers()
         preserved_enabled = []
@@ -342,7 +368,9 @@ class ProviderRegistry:
             "removed": removed,
         }
 
-    def model_providers(self, include_removed: bool = False) -> dict[str, dict[str, Any]]:
+    def model_providers(
+        self, include_removed: bool = False
+    ) -> dict[str, dict[str, Any]]:
         providers = self._default_source_provider_config()
         user = self._user_source_provider_config()
         for name, value in user.items():
@@ -351,13 +379,19 @@ class ProviderRegistry:
             providers[name] = {**providers.get(name, {}), **value, "origin": "user"}
         if include_removed:
             return providers
-        return {name: value for name, value in providers.items() if not value.get("removed")}
+        return {
+            name: value for name, value in providers.items() if not value.get("removed")
+        }
 
     def default_model_providers(self) -> dict[str, dict[str, Any]]:
         from .runtime_catalog import SOURCE_DEFINITIONS
 
         return {
-            name: {**value, "enabled": bool(value.get("enabled", True)), "origin": "default"}
+            name: {
+                **value,
+                "enabled": bool(value.get("enabled", True)),
+                "origin": "default",
+            }
             for name, value in SOURCE_DEFINITIONS.items()
         }
 
@@ -367,9 +401,13 @@ class ProviderRegistry:
         user_path = self.profile.root / USER_MODEL_PROVIDERS_FILE
         legacy_user_path = self.profile.root / LEGACY_USER_SOURCE_PROVIDERS_FILE
         if path.exists():
-            return _provider_mapping(parse_yaml(path.read_text(encoding="utf-8")), origin="default")
+            return _provider_mapping(
+                parse_yaml(path.read_text(encoding="utf-8")), origin="default"
+            )
         if legacy_path.exists():
-            return _provider_mapping(parse_yaml(legacy_path.read_text(encoding="utf-8")), origin="default")
+            return _provider_mapping(
+                parse_yaml(legacy_path.read_text(encoding="utf-8")), origin="default"
+            )
         if not user_path.exists() and not legacy_user_path.exists():
             return self.default_model_providers()
         return {}
@@ -404,7 +442,9 @@ class ProviderRegistry:
         key_filter: set[str] | None = None,
     ) -> dict[str, Any]:
         if group_by not in {"runtime", "ownership"}:
-            raise ValueError("catalog providers can only be grouped by runtime or ownership")
+            raise ValueError(
+                "catalog providers can only be grouped by runtime or ownership"
+            )
         groups: dict[str, list[dict[str, Any]]] = {}
         for row in rows:
             if group_by == "ownership":
@@ -416,14 +456,21 @@ class ProviderRegistry:
             for key in keys:
                 groups.setdefault(key, []).append(row)
         if group_by == "ownership":
-            ordered_keys = [key for key in ["self_managed", "managed_service"] if key in groups]
-            ordered_keys.extend(sorted(key for key in groups if key not in set(ordered_keys)))
+            ordered_keys = [
+                key for key in ["self_managed", "managed_service"] if key in groups
+            ]
+            ordered_keys.extend(
+                sorted(key for key in groups if key not in set(ordered_keys))
+            )
         else:
             ordered_keys = sorted(groups)
         return {
             "name": "providers",
             "group_by": group_by,
-            "groups": {key: sorted(groups[key], key=lambda item: str(item["name"])) for key in ordered_keys},
+            "groups": {
+                key: sorted(groups[key], key=lambda item: str(item["name"]))
+                for key in ordered_keys
+            },
         }
 
     def doctor(self, name: str | None = None) -> list[ModelStatus]:
@@ -432,28 +479,46 @@ class ProviderRegistry:
         providers = self.model_providers(include_removed=True)
         if name not in providers or providers[name].get("removed"):
             raise ValueError(f"unknown catalog provider: {name}")
-        model_names = {alias for alias, model in self.catalog.models().items() if model_source(model) == name}
-        return [status for status in self.catalog.doctor() if status.name in model_names]
+        model_names = {
+            alias
+            for alias, model in self.catalog.models().items()
+            if model_source(model) == name
+        }
+        return [
+            status for status in self.catalog.doctor() if status.name in model_names
+        ]
 
     def test_connection(
         self, name: str, credential_ref: str | None = None, timeout: int | None = None
     ) -> dict[str, Any]:
         providers = self.model_providers(include_removed=True)
-        provider_config = {**providers.get(name, {}), **self.catalog.providers().get(name, {})}
+        provider_config = {
+            **providers.get(name, {}),
+            **self.catalog.providers().get(name, {}),
+        }
         if name not in providers and not provider_config:
             raise ValueError(f"unknown provider: {name}")
         if providers.get(name, {}).get("removed"):
             raise ValueError(f"removed provider: {name}")
 
-        credential_ref = credential_ref or str(provider_config.get("credential_ref") or "") or None
+        credential_ref = (
+            credential_ref or str(provider_config.get("credential_ref") or "") or None
+        )
         credentials = CredentialStore()
         credential = credentials.resolve(credential_ref) if credential_ref else {}
-        endpoint = str(credential.get("endpoint") or provider_config.get("endpoint") or "").rstrip("/")
+        endpoint = str(
+            credential.get("endpoint") or provider_config.get("endpoint") or ""
+        ).rstrip("/")
         key_env = str(
-            credential.get("api_key_env") or credential.get("token_env") or provider_config.get("api_key_env") or ""
+            credential.get("api_key_env")
+            or credential.get("token_env")
+            or provider_config.get("api_key_env")
+            or ""
         )
         api_key = (
-            credentials.api_key(credential_ref) if credential_ref else (os.environ.get(key_env) if key_env else "")
+            credentials.api_key(credential_ref)
+            if credential_ref
+            else (os.environ.get(key_env) if key_env else "")
         )
         timeout_seconds = int(timeout or provider_config.get("timeout_seconds") or 20)
         result = {
@@ -485,8 +550,12 @@ class ProviderRegistry:
                     or "2024-02-01"
                 )
                 base = endpoint[:-7] if endpoint.endswith("/openai") else endpoint
-                url = f"{base}/openai/deployments?" + urlencode({"api-version": api_version})
-                payload = _json_get(url, timeout=timeout_seconds, headers={"api-key": api_key})
+                url = f"{base}/openai/deployments?" + urlencode(
+                    {"api-version": api_version}
+                )
+                payload = _json_get(
+                    url, timeout=timeout_seconds, headers={"api-key": api_key}
+                )
                 items = payload.get("data") if isinstance(payload, dict) else None
                 if items is None and isinstance(payload, dict):
                     items = payload.get("value")
@@ -505,7 +574,9 @@ class ProviderRegistry:
             if name == "elevenlabs":
                 endpoint = endpoint or "https://api.elevenlabs.io/v1"
                 url = f"{endpoint}/voices"
-                payload = _json_get(url, timeout=timeout_seconds, headers={"xi-api-key": api_key})
+                payload = _json_get(
+                    url, timeout=timeout_seconds, headers={"xi-api-key": api_key}
+                )
                 voices = payload.get("voices") if isinstance(payload, dict) else None
                 result.update(
                     {
@@ -521,7 +592,11 @@ class ProviderRegistry:
                 return result
 
             endpoint_family = str(provider_config.get("endpoint_family") or "")
-            protocol = str(provider_config.get("protocol") or providers.get(name, {}).get("protocol") or "")
+            protocol = str(
+                provider_config.get("protocol")
+                or providers.get(name, {}).get("protocol")
+                or ""
+            )
             if (
                 name == "openai"
                 or endpoint_family in {"openai", "custom_openai_compatible"}
@@ -549,9 +624,13 @@ class ProviderRegistry:
                     result["reason"] = "unexpected OpenAI-compatible models response"
                 return result
 
-            result["reason"] = "no live provider connection test adapter is implemented for this provider yet"
+            result["reason"] = (
+                "no live provider connection test adapter is implemented for this provider yet"
+            )
             return result
-        except Exception as exc:  # noqa: BLE001 - connection test should report failures as data.
+        except (
+            Exception
+        ) as exc:  # noqa: BLE001 - connection test should report failures as data.
             result["reason"] = str(exc)
             return result
 
@@ -566,12 +645,16 @@ class ProviderRegistry:
         if name not in providers or providers[name].get("removed"):
             raise ValueError(f"unknown catalog provider: {name}")
         if providers[name].get("enabled") is False:
-            return ProviderModelsResult(name, "disabled", [], "model provider is disabled")
+            return ProviderModelsResult(
+                name, "disabled", [], "model provider is disabled"
+            )
         online_error = None
         if online:
             try:
                 online_result = self._online_models(name, query=query, limit=limit)
-            except Exception as exc:  # noqa: BLE001 - provider catalog adapters should degrade to the local catalog.
+            except (
+                Exception
+            ) as exc:  # noqa: BLE001 - provider catalog adapters should degrade to the local catalog.
                 online_result = None
                 online_error = str(exc)
             if online_result is not None:
@@ -640,7 +723,10 @@ class ProviderRegistry:
         query: str | None = None,
         limit: int = DEFAULT_PROVIDER_MODEL_LIMIT,
     ) -> ProviderModelsResult:
-        provider_config = {**self.model_providers().get(name, {}), **self.catalog.providers().get(name, {})}
+        provider_config = {
+            **self.model_providers().get(name, {}),
+            **self.catalog.providers().get(name, {}),
+        }
         defaults = PROVIDER_ENDPOINT_DEFAULTS.get(name, {})
         endpoint = str(
             provider_config.get("endpoint")
@@ -650,15 +736,29 @@ class ProviderRegistry:
         if not endpoint:
             raise ValueError(f"{name} discovery needs provider endpoint")
         credential_ref = str(provider_config.get("credential_ref") or "")
-        key_env = str(provider_config.get("api_key_env") or defaults.get("api_key_env") or "")
-        api_key = CredentialStore().api_key(credential_ref) if credential_ref else os.environ.get(key_env)
+        key_env = str(
+            provider_config.get("api_key_env") or defaults.get("api_key_env") or ""
+        )
+        api_key = (
+            CredentialStore().api_key(credential_ref)
+            if credential_ref
+            else os.environ.get(key_env)
+        )
         if not api_key:
-            need = f"credential {credential_ref}" if credential_ref else f"env var {key_env or 'provider api_key_env'}"
+            need = (
+                f"credential {credential_ref}"
+                if credential_ref
+                else f"env var {key_env or 'provider api_key_env'}"
+            )
             raise ValueError(f"{name} discovery needs {need}")
         url = f"{endpoint}/models"
         payload = _json_get(
             url,
-            timeout=int(provider_config.get("timeout_seconds") or defaults.get("timeout_seconds") or 20),
+            timeout=int(
+                provider_config.get("timeout_seconds")
+                or defaults.get("timeout_seconds")
+                or 20
+            ),
             headers={"Authorization": f"Bearer {api_key}"},
         )
         items = payload.get("data") if isinstance(payload, dict) else None
@@ -684,7 +784,11 @@ class ProviderRegistry:
             if query and query.lower() not in searchable.lower():
                 continue
             ids.append(model_id)
-            metadata[model_id] = {key: item[key] for key in ["id", "object", "created", "owned_by"] if key in item}
+            metadata[model_id] = {
+                key: item[key]
+                for key in ["id", "object", "created", "owned_by"]
+                if key in item
+            }
             if len(ids) >= max(1, int(limit)):
                 break
         unique_ids = list(dict.fromkeys(ids))[: max(1, int(limit))]
@@ -700,17 +804,33 @@ class ProviderRegistry:
         self, query: str | None = None, limit: int = DEFAULT_PROVIDER_MODEL_LIMIT
     ) -> ProviderModelsResult:
         runtime_provider = self.catalog.providers().get("azure_openai", {})
-        endpoint = str(runtime_provider.get("endpoint") or os.environ.get("AZURE_OPENAI_ENDPOINT") or "").rstrip("/")
+        endpoint = str(
+            runtime_provider.get("endpoint")
+            or os.environ.get("AZURE_OPENAI_ENDPOINT")
+            or ""
+        ).rstrip("/")
         if not endpoint:
-            raise ValueError("Azure OpenAI discovery needs provider endpoint or AZURE_OPENAI_ENDPOINT")
+            raise ValueError(
+                "Azure OpenAI discovery needs provider endpoint or AZURE_OPENAI_ENDPOINT"
+            )
         api_version = str(
-            runtime_provider.get("api_version") or os.environ.get("AZURE_OPENAI_API_VERSION") or "2024-02-01"
+            runtime_provider.get("api_version")
+            or os.environ.get("AZURE_OPENAI_API_VERSION")
+            or "2024-02-01"
         )
         credential_ref = str(runtime_provider.get("credential_ref") or "")
         key_env = str(runtime_provider.get("api_key_env") or "AZURE_OPENAI_API_KEY")
-        api_key = CredentialStore().api_key(credential_ref) if credential_ref else os.environ.get(key_env)
+        api_key = (
+            CredentialStore().api_key(credential_ref)
+            if credential_ref
+            else os.environ.get(key_env)
+        )
         if not api_key:
-            need = f"credential {credential_ref}" if credential_ref else f"env var {key_env}"
+            need = (
+                f"credential {credential_ref}"
+                if credential_ref
+                else f"env var {key_env}"
+            )
             raise ValueError(f"Azure OpenAI discovery needs {need}")
         base = endpoint[:-7] if endpoint.endswith("/openai") else endpoint
         url = f"{base}/openai/deployments?" + urlencode({"api-version": api_version})
@@ -723,7 +843,9 @@ class ProviderRegistry:
         if items is None and isinstance(payload, dict):
             items = payload.get("value")
         if not isinstance(items, list):
-            raise RuntimeError("Azure OpenAI returned an unexpected deployments response")
+            raise RuntimeError(
+                "Azure OpenAI returned an unexpected deployments response"
+            )
         ids: list[str] = []
         metadata: dict[str, dict[str, Any]] = {}
         for item in items:
@@ -734,13 +856,19 @@ class ProviderRegistry:
                 continue
             model_id = str(deployment_id)
             if query and query.lower() not in model_id.lower():
-                properties = item.get("properties") if isinstance(item.get("properties"), dict) else {}
+                properties = (
+                    item.get("properties")
+                    if isinstance(item.get("properties"), dict)
+                    else {}
+                )
                 model_info = item.get("model") or properties.get("model")
                 if query.lower() not in str(model_info or "").lower():
                     continue
             ids.append(model_id)
             metadata[model_id] = {
-                key: item[key] for key in ["id", "name", "model", "created_at", "updated_at", "status"] if key in item
+                key: item[key]
+                for key in ["id", "name", "model", "created_at", "updated_at", "status"]
+                if key in item
             }
             if isinstance(item.get("properties"), dict):
                 metadata[model_id]["properties"] = item["properties"]
@@ -760,13 +888,23 @@ class ProviderRegistry:
     ) -> ProviderModelsResult:
         runtime_provider = self.catalog.providers().get("elevenlabs", {})
         endpoint = str(
-            runtime_provider.get("endpoint") or os.environ.get("ELEVENLABS_ENDPOINT") or "https://api.elevenlabs.io/v1"
+            runtime_provider.get("endpoint")
+            or os.environ.get("ELEVENLABS_ENDPOINT")
+            or "https://api.elevenlabs.io/v1"
         ).rstrip("/")
         credential_ref = str(runtime_provider.get("credential_ref") or "")
         key_env = str(runtime_provider.get("api_key_env") or "ELEVENLABS_API_KEY")
-        api_key = CredentialStore().api_key(credential_ref) if credential_ref else os.environ.get(key_env)
+        api_key = (
+            CredentialStore().api_key(credential_ref)
+            if credential_ref
+            else os.environ.get(key_env)
+        )
         if not api_key:
-            need = f"credential {credential_ref}" if credential_ref else f"env var {key_env}"
+            need = (
+                f"credential {credential_ref}"
+                if credential_ref
+                else f"env var {key_env}"
+            )
             raise ValueError(f"ElevenLabs voice discovery needs {need}")
         url = f"{endpoint}/voices"
         payload = _json_get(
@@ -782,7 +920,9 @@ class ProviderRegistry:
         for item in items:
             if not isinstance(item, dict):
                 continue
-            voice_id = str(item.get("voice_id") or item.get("voiceId") or item.get("id") or "").strip()
+            voice_id = str(
+                item.get("voice_id") or item.get("voiceId") or item.get("id") or ""
+            ).strip()
             name = str(item.get("name") or voice_id).strip()
             if not voice_id:
                 continue
@@ -806,7 +946,9 @@ class ProviderRegistry:
                 "pipeline_tag": "text-to-speech",
                 "category": item.get("category"),
                 "description": item.get("description"),
-                "labels": item.get("labels") if isinstance(item.get("labels"), dict) else {},
+                "labels": (
+                    item.get("labels") if isinstance(item.get("labels"), dict) else {}
+                ),
             }
             if len(ids) >= max(1, int(limit)):
                 break
@@ -844,7 +986,9 @@ class ProviderRegistry:
         url = "https://huggingface.co/api/models?" + urlencode(params)
         payload = _json_get(url, timeout=20)
         if not isinstance(payload, list):
-            raise RuntimeError("Hugging Face returned an unexpected model catalog response")
+            raise RuntimeError(
+                "Hugging Face returned an unexpected model catalog response"
+            )
         ids = []
         metadata = {}
         for item in payload:
@@ -892,8 +1036,12 @@ class ProviderRegistry:
             url = "https://civitai.com/api/v1/models?" + urlencode(params)
             urls.append(url)
             payload = _json_get(url, timeout=20)
-            if not isinstance(payload, dict) or not isinstance(payload.get("items"), list):
-                raise RuntimeError("Civitai returned an unexpected model catalog response")
+            if not isinstance(payload, dict) or not isinstance(
+                payload.get("items"), list
+            ):
+                raise RuntimeError(
+                    "Civitai returned an unexpected model catalog response"
+                )
             items = payload.get("items", [])
             if not items:
                 break
@@ -904,14 +1052,22 @@ class ProviderRegistry:
                 name = str(item.get("name") or "model").lower()
                 slug = "".join(ch if ch.isalnum() else "-" for ch in name).strip("-")
                 if model_id:
-                    source_id = f"civitai:{model_id}:{slug}" if slug else f"civitai:{model_id}"
+                    source_id = (
+                        f"civitai:{model_id}:{slug}" if slug else f"civitai:{model_id}"
+                    )
                     ids.append(source_id)
                     metadata_by_id[source_id] = {
-                        key: item[key] for key in ["id", "name", "type", "nsfw", "stats", "tags"] if key in item
+                        key: item[key]
+                        for key in ["id", "name", "type", "nsfw", "stats", "tags"]
+                        if key in item
                     }
                 if len(ids) >= target:
                     break
-            metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
+            metadata = (
+                payload.get("metadata")
+                if isinstance(payload.get("metadata"), dict)
+                else {}
+            )
             if not metadata.get("nextPage"):
                 break
             page += 1
@@ -920,7 +1076,8 @@ class ProviderRegistry:
             "civitai",
             "source_api",
             unique_ids,
-            f"queried Civitai models API: {urls[0]}" + (f" and {len(urls) - 1} more page(s)" if len(urls) > 1 else ""),
+            f"queried Civitai models API: {urls[0]}"
+            + (f" and {len(urls) - 1} more page(s)" if len(urls) > 1 else ""),
             {model_id: metadata_by_id.get(model_id, {}) for model_id in unique_ids},
         )
 
@@ -930,16 +1087,24 @@ class ProviderRegistry:
         params = {}
         if query:
             params["q"] = query
-        url = "https://ollama.com/library" + (("?" + urlencode(params)) if params else "")
+        url = "https://ollama.com/library" + (
+            ("?" + urlencode(params)) if params else ""
+        )
         html = _text_get(url, timeout=20)
         ids = []
         metadata: dict[str, dict[str, Any]] = {}
-        for match in re.finditer(r'href="/library/([a-zA-Z0-9_.-]+)"[^>]*>\s*([^<]+)', html):
+        for match in re.finditer(
+            r'href="/library/([a-zA-Z0-9_.-]+)"[^>]*>\s*([^<]+)', html
+        ):
             model_id = unescape(match.group(1)).strip()
             label = unescape(match.group(2)).strip()
             if not model_id or model_id in ids:
                 continue
-            if query and query.lower() not in model_id.lower() and query.lower() not in label.lower():
+            if (
+                query
+                and query.lower() not in model_id.lower()
+                and query.lower() not in label.lower()
+            ):
                 continue
             ids.append(model_id)
             metadata[model_id] = {"name": label}
@@ -957,12 +1122,19 @@ class ProviderRegistry:
             "source_api",
             ids[: max(1, int(limit))],
             f"scraped Ollama Library page: {url}",
-            {model_id: metadata.get(model_id, {}) for model_id in ids[: max(1, int(limit))]},
+            {
+                model_id: metadata.get(model_id, {})
+                for model_id in ids[: max(1, int(limit))]
+            },
         )
 
 
-def _json_get(url: str, timeout: int = 20, headers: dict[str, str] | None = None) -> Any:
-    return json.loads(_text_get(url, timeout=timeout, accept="application/json", headers=headers))
+def _json_get(
+    url: str, timeout: int = 20, headers: dict[str, str] | None = None
+) -> Any:
+    return json.loads(
+        _text_get(url, timeout=timeout, accept="application/json", headers=headers)
+    )
 
 
 def _text_get(
@@ -983,8 +1155,17 @@ def _provider_ownership(provider: dict[str, Any]) -> str:
     if provider.get("endpoint_family"):
         return "managed_service"
     runtimes = {str(value) for value in provider.get("typical_runtimes", []) if value}
-    managed = {"openai", "anthropic", "azure_openai", "ollama_cloud", "azure_speech", "elevenlabs"}
-    return "managed_service" if runtimes and runtimes.issubset(managed) else "self_managed"
+    managed = {
+        "openai",
+        "anthropic",
+        "azure_openai",
+        "ollama_cloud",
+        "azure_speech",
+        "elevenlabs",
+    }
+    return (
+        "managed_service" if runtimes and runtimes.issubset(managed) else "self_managed"
+    )
 
 
 def _provider_catalog_adapter(provider: dict[str, Any]) -> str | None:
@@ -992,7 +1173,9 @@ def _provider_catalog_adapter(provider: dict[str, Any]) -> str | None:
     return str(value) if value else None
 
 
-def _provider_mapping(data: dict[str, Any], origin: str, keep_origin: bool = True) -> dict[str, Any]:
+def _provider_mapping(
+    data: dict[str, Any], origin: str, keep_origin: bool = True
+) -> dict[str, Any]:
     if isinstance(data.get("providers"), dict):
         data = data["providers"]
     result = {}
@@ -1009,4 +1192,6 @@ def _provider_mapping(data: dict[str, Any], origin: str, keep_origin: bool = Tru
 
 def _validate_provider_name(name: str) -> None:
     if not name or not re.match(r"^[a-zA-Z0-9_.-]+$", name):
-        raise ValueError("provider name must contain only letters, digits, dot, underscore, or dash")
+        raise ValueError(
+            "provider name must contain only letters, digits, dot, underscore, or dash"
+        )

@@ -18,11 +18,18 @@ def merge_machine_model_filters(
 ) -> dict[str, Any]:
     selected = [bool(machine), bool(machine_file), bool(current_machine)]
     if sum(selected) > 1:
-        raise ValueError("choose only one of --machine, --machine-file, or --current-machine")
+        raise ValueError(
+            "choose only one of --machine, --machine-file, or --current-machine"
+        )
     if not any(selected):
         return filters
 
-    resolved = _resolve_machine(profile, machine=machine, machine_file=machine_file, current_machine=current_machine)
+    resolved = _resolve_machine(
+        profile,
+        machine=machine,
+        machine_file=machine_file,
+        current_machine=current_machine,
+    )
     derived = _model_filters_from_machine(resolved)
     merged = dict(filters)
     for key, value in derived.items():
@@ -66,7 +73,12 @@ def _model_filters_from_machine(machine: dict[str, Any]) -> dict[str, Any]:
 
 def _normalized_vendor(value: Any) -> str | None:
     vendor = str(value or "").strip().lower()
-    if not vendor or vendor in {"unknown", "auto", "provider_defined", "node_pool_defined"}:
+    if not vendor or vendor in {
+        "unknown",
+        "auto",
+        "provider_defined",
+        "node_pool_defined",
+    }:
         return None
     if vendor in {"none", "cpu"}:
         return "none"
@@ -77,7 +89,11 @@ def _normalized_vendor(value: Any) -> str | None:
 
 
 def _preferred_accelerator(values: Any, vendor: str | None) -> str | None:
-    accelerators = [str(item).strip().lower() for item in values] if isinstance(values, list) else []
+    accelerators = (
+        [str(item).strip().lower() for item in values]
+        if isinstance(values, list)
+        else []
+    )
     for preferred in ["cuda", "rocm", "metal", "vulkan", "openvino", "cpu"]:
         if preferred in accelerators:
             return preferred

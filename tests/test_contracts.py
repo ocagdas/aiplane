@@ -12,14 +12,22 @@ from aiplane.model_resources import (
     parameter_billions,
     resource_guess,
 )
-from aiplane.runtime_catalog import PROVIDER_ENDPOINT_DEFAULTS, RUNTIME_DEFINITIONS, SOURCE_DEFINITIONS
+from aiplane.runtime_catalog import (
+    PROVIDER_ENDPOINT_DEFAULTS,
+    RUNTIME_DEFINITIONS,
+    SOURCE_DEFINITIONS,
+)
 from aiplane.runtime_pull import runtime_pull_support
 
 
 def test_integration_contracts_define_tools_and_roles_once() -> None:
     assert "continue" in ALL_INTEGRATION_TOOLS
     assert "generic-mcp" in ALL_INTEGRATION_TOOLS
-    assert [role["name"] for role in required_roles("continue")] == ["chat", "autocomplete", "embedding"]
+    assert [role["name"] for role in required_roles("continue")] == [
+        "chat",
+        "autocomplete",
+        "embedding",
+    ]
     assert required_roles("generic-mcp") == []
 
 
@@ -44,13 +52,21 @@ def test_mcp_manifest_tools_have_input_schemas() -> None:
 
 def test_runtime_definition_reexports_keep_catalog_contracts_stable() -> None:
     assert RUNTIME_DEFINITIONS["ollama"]["model_sources"] == ["ollama", "gguf_import"]
-    assert SOURCE_DEFINITIONS["huggingface_gguf"]["typical_runtimes"] == ["llamacpp", "localai", "ollama"]
+    assert SOURCE_DEFINITIONS["huggingface_gguf"]["typical_runtimes"] == [
+        "llamacpp",
+        "localai",
+        "ollama",
+    ]
     assert PROVIDER_ENDPOINT_DEFAULTS["ollama"]["endpoint"] == "http://localhost:11434"
 
 
 def test_runtime_pull_support_is_pure_and_source_based() -> None:
-    assert runtime_pull_support("ollama", {"provider": "llamacpp", "source": "huggingface_gguf"})["supported"]
-    unsupported = runtime_pull_support("localai", {"provider": "llamacpp", "source": "huggingface_gguf"})
+    assert runtime_pull_support(
+        "ollama", {"provider": "llamacpp", "source": "huggingface_gguf"}
+    )["supported"]
+    unsupported = runtime_pull_support(
+        "localai", {"provider": "llamacpp", "source": "huggingface_gguf"}
+    )
     assert not unsupported["supported"]
     assert "manual" in unsupported["reason"]
 

@@ -30,7 +30,15 @@ def resource_estimate_source(model: dict[str, Any]) -> str | None:
     source = model.get("resource_estimate_source")
     if source:
         return str(source)
-    if any(key in model for key in ["min_ram_gb", "recommended_ram_gb", "min_vram_gb", "recommended_vram_gb"]):
+    if any(
+        key in model
+        for key in [
+            "min_ram_gb",
+            "recommended_ram_gb",
+            "min_vram_gb",
+            "recommended_vram_gb",
+        ]
+    ):
         return "configured"
     return None
 
@@ -46,14 +54,20 @@ def gpu_vendor_requirement(model: dict[str, Any]) -> str:
 
 
 def accelerator_api_requirements(model: dict[str, Any]) -> list[str]:
-    for key in ["required_accelerator_apis", "accelerator_api_requirements", "accelerator_apis"]:
+    for key in [
+        "required_accelerator_apis",
+        "accelerator_api_requirements",
+        "accelerator_apis",
+    ]:
         values = _string_list(model.get(key))
         if values:
             return [value.lower() for value in values]
     return []
 
 
-def matches_gpu_vendor_requirement(model: dict[str, Any], available_vendor: str) -> bool:
+def matches_gpu_vendor_requirement(
+    model: dict[str, Any], available_vendor: str
+) -> bool:
     available = available_vendor.strip().lower()
     requirement = gpu_vendor_requirement(model)
     if available in {"", "any", "generic"}:
@@ -65,7 +79,9 @@ def matches_gpu_vendor_requirement(model: dict[str, Any], available_vendor: str)
     return requirement == available
 
 
-def matches_accelerator_api_requirement(model: dict[str, Any], available_api: str) -> bool:
+def matches_accelerator_api_requirement(
+    model: dict[str, Any], available_api: str
+) -> bool:
     available = available_api.strip().lower()
     requirements = accelerator_api_requirements(model)
     if not requirements:

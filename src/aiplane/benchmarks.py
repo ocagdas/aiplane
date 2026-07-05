@@ -58,7 +58,11 @@ class BenchmarkRunner:
         environment_mode: str | None = None,
         timeout_seconds: int | None = None,
     ) -> dict[str, Any]:
-        spec = load_benchmark_spec(spec_path) if spec_path else {"name": "builtin-smoke", "tasks": BENCHMARK_TASKS}
+        spec = (
+            load_benchmark_spec(spec_path)
+            if spec_path
+            else {"name": "builtin-smoke", "tasks": BENCHMARK_TASKS}
+        )
         tasks = _select_tasks(spec, task)
         model = self.catalog.show(model_name)
         results = [
@@ -105,8 +109,12 @@ class BenchmarkRunner:
         timeout_seconds: int | None,
     ) -> dict[str, Any]:
         prompt = str(spec.get("prompt") or "")
-        expected_terms = [str(term).lower() for term in _list_value(spec.get("expected_terms"))]
-        evaluator = spec.get("evaluator") if isinstance(spec.get("evaluator"), dict) else {}
+        expected_terms = [
+            str(term).lower() for term in _list_value(spec.get("expected_terms"))
+        ]
+        evaluator = (
+            spec.get("evaluator") if isinstance(spec.get("evaluator"), dict) else {}
+        )
         timeout = int(timeout_seconds or spec.get("timeout_seconds") or 60)
         started = time.perf_counter()
         error = None
@@ -118,16 +126,22 @@ class BenchmarkRunner:
                 result = self.catalog.complete(model_name, prompt)
                 text = result.text
                 backend = result.backend
-            except Exception as exc:  # noqa: BLE001 - benchmark should report failures, not crash mid-suite.
+            except (
+                Exception
+            ) as exc:  # noqa: BLE001 - benchmark should report failures, not crash mid-suite.
                 text = ""
                 backend = str(model.get("provider", "unknown"))
                 error = str(exc)
         elapsed_ms = round((time.perf_counter() - started) * 1000, 2)
         output_length = len(text)
         lower = text.lower()
-        matched_terms = [term for term in expected_terms if term in lower] if not dry_run else []
+        matched_terms = (
+            [term for term in expected_terms if term in lower] if not dry_run else []
+        )
         evaluation = (
-            self._evaluate(task, prompt, text, evaluator, dry_run, environment_mode, timeout)
+            self._evaluate(
+                task, prompt, text, evaluator, dry_run, environment_mode, timeout
+            )
             if not error
             else {"type": "skipped", "passed": False, "score": 0, "reason": error}
         )
@@ -135,7 +149,9 @@ class BenchmarkRunner:
             task_passed = (
                 None
                 if dry_run
-                else error is None and bool(text.strip()) and len(matched_terms) >= max(1, len(expected_terms) // 2)
+                else error is None
+                and bool(text.strip())
+                and len(matched_terms) >= max(1, len(expected_terms) // 2)
             )
             score = _task_score(task_passed, elapsed_ms, output_length, dry_run)
             evaluation = {
@@ -182,7 +198,10 @@ class BenchmarkRunner:
             }
         workdir = self.profile.workspace / ".aiplane" / "benchmarks" / "work"
         workdir.mkdir(parents=True, exist_ok=True)
-        safe_task = "".join(ch if ch.isalnum() or ch in {"-", "_"} else "_" for ch in task) or "task"
+        safe_task = (
+            "".join(ch if ch.isalnum() or ch in {"-", "_"} else "_" for ch in task)
+            or "task"
+        )
         prompt_file = workdir / f"{safe_task}-prompt.txt"
         output_file = workdir / f"{safe_task}-output.txt"
         prompt_file.write_text(prompt, encoding="utf-8")
@@ -252,7 +271,9 @@ def load_benchmark_spec(path: Path) -> dict[str, Any]:
     return payload
 
 
-def latest_benchmark_summary(profile: Profile, model_name: str) -> dict[str, Any] | None:
+def latest_benchmark_summary(
+    profile: Profile, model_name: str
+) -> dict[str, Any] | None:
     root = profile.workspace / ".aiplane" / "benchmarks"
     if not root.exists():
         return None
@@ -274,7 +295,9 @@ def latest_benchmark_summary(profile: Profile, model_name: str) -> dict[str, Any
 
 def _select_tasks(spec: dict[str, Any], task: str) -> list[tuple[str, dict[str, Any]]]:
     raw_tasks = spec.get("tasks") if isinstance(spec.get("tasks"), dict) else {}
-    tasks = {str(name): value for name, value in raw_tasks.items() if isinstance(value, dict)}
+    tasks = {
+        str(name): value for name, value in raw_tasks.items() if isinstance(value, dict)
+    }
     if task == "all":
         return sorted(tasks.items())
     if task not in tasks:
@@ -282,7 +305,9 @@ def _select_tasks(spec: dict[str, Any], task: str) -> list[tuple[str, dict[str, 
     return [(task, tasks[task])]
 
 
-def _task_score(passed: bool | None, elapsed_ms: float, output_length: int, dry_run: bool) -> int:
+def _task_score(
+    passed: bool | None, elapsed_ms: float, output_length: int, dry_run: bool
+) -> int:
     if dry_run:
         return 0
     if not passed:

@@ -42,12 +42,18 @@ class McpTests(unittest.TestCase):
         self.assertIn("aiplane.runtimes.status", names)
         self.assertTrue(any(tool["mutates"] for tool in manifest["tools"]))
         self.assertTrue(
-            all(tool["mutates"] for tool in manifest["write_tools"] if tool["name"] != "aiplane.remote.tunnel.status")
+            all(
+                tool["mutates"]
+                for tool in manifest["write_tools"]
+                if tool["name"] != "aiplane.remote.tunnel.status"
+            )
         )
 
     def test_mcp_server_lists_tools(self) -> None:
         server = AiplaneMcpServer(Path.cwd())
-        response = server.handle_message({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
+        response = server.handle_message(
+            {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}
+        )
         self.assertIsNotNone(response)
         tools = response["result"]["tools"]
         names = {tool["name"] for tool in tools}
@@ -85,11 +91,17 @@ class McpTests(unittest.TestCase):
         self.assertIsNotNone(response)
         payload = response["result"]["structuredContent"]
         self.assertEqual(payload["group_by"], "ownership")
-        self.assertEqual(list(payload["groups"])[:2], ["self_managed", "managed_service"])
+        self.assertEqual(
+            list(payload["groups"])[:2], ["self_managed", "managed_service"]
+        )
         self.assertIn("self_managed", payload["groups"])
         self.assertIn("managed_service", payload["groups"])
-        self.assertTrue(any(row["name"] == "nvidia" for row in payload["groups"]["self_managed"]))
-        self.assertTrue(any(row["name"] == "openai" for row in payload["groups"]["managed_service"]))
+        self.assertTrue(
+            any(row["name"] == "nvidia" for row in payload["groups"]["self_managed"])
+        )
+        self.assertTrue(
+            any(row["name"] == "openai" for row in payload["groups"]["managed_service"])
+        )
 
     def test_mcp_server_can_list_ranked_models(self) -> None:
         server = AiplaneMcpServer(Path.cwd())
@@ -113,7 +125,9 @@ class McpTests(unittest.TestCase):
         self.assertIsNotNone(response)
         result = response["result"]["structuredContent"]
         self.assertLessEqual(len(result["models"]), 3)
-        self.assertTrue(all(row["ownership"] == "self_managed" for row in result["models"]))
+        self.assertTrue(
+            all(row["ownership"] == "self_managed" for row in result["models"])
+        )
 
     def test_mcp_model_list_schema_uses_shared_model_filter_contract(self) -> None:
         schema = mcp_module.TOOL_SCHEMAS["aiplane.models.list"]
@@ -182,10 +196,16 @@ class McpTests(unittest.TestCase):
                     },
                 }
             }
-            (profile_root / "models.yaml").write_text(agent_config.dump_yaml(models_config), encoding="utf-8")
+            (profile_root / "models.yaml").write_text(
+                agent_config.dump_yaml(models_config), encoding="utf-8"
+            )
             profile = load_profile("tmp", Path.cwd(), profiles_dir=profiles_dir)
-            MachineManager(profile).import_azure_sku("Standard_NC4as_T4_v3", "uksouth", name="azure_t4_test")
-            server = AiplaneMcpServer(Path.cwd(), default_profile="tmp", profiles_dir=profiles_dir)
+            MachineManager(profile).import_azure_sku(
+                "Standard_NC4as_T4_v3", "uksouth", name="azure_t4_test"
+            )
+            server = AiplaneMcpServer(
+                Path.cwd(), default_profile="tmp", profiles_dir=profiles_dir
+            )
             response = server.handle_message(
                 {
                     "jsonrpc": "2.0",
@@ -236,7 +256,9 @@ class McpTests(unittest.TestCase):
             }
         )
         self.assertIsNotNone(provider_response)
-        self.assertEqual(provider_response["result"]["structuredContent"]["provider"], "huggingface")
+        self.assertEqual(
+            provider_response["result"]["structuredContent"]["provider"], "huggingface"
+        )
 
     def test_mcp_write_tools_can_update_model_default(self) -> None:
         source = load_profile("local-dev", Path.cwd())
@@ -276,7 +298,9 @@ class McpTests(unittest.TestCase):
                     }
                 )
             self.assertIsNotNone(allowed)
-            self.assertEqual(allowed["result"]["structuredContent"]["name"], "fixture-code-small")
+            self.assertEqual(
+                allowed["result"]["structuredContent"]["name"], "fixture-code-small"
+            )
             self.assertIn(
                 "code_model: fixture-code-small",
                 (root / "models.yaml").read_text(encoding="utf-8"),
@@ -378,7 +402,9 @@ class McpTests(unittest.TestCase):
                 },
             }
         )
-        self.assertEqual(orchestrators["result"]["structuredContent"]["group_by"], "runtime")
+        self.assertEqual(
+            orchestrators["result"]["structuredContent"]["group_by"], "runtime"
+        )
         self.assertIn("ollama", orchestrators["result"]["structuredContent"]["groups"])
 
         shown = server.handle_message(
@@ -399,7 +425,9 @@ class McpTests(unittest.TestCase):
             profiles_dir = Path(tmp) / "profiles"
             create_profile("local-dev", profiles_dir=profiles_dir)
             profile = load_profile("local-dev", Path.cwd(), profiles_dir=profiles_dir)
-            MachineManager(profile).import_azure_sku("Standard_NC40ads_H100_v5", "uksouth", name="azure_h100_test")
+            MachineManager(profile).import_azure_sku(
+                "Standard_NC40ads_H100_v5", "uksouth", name="azure_h100_test"
+            )
             StackManager(profile).setup(
                 "code_on_gpu",
                 orchestrator="langgraph",
@@ -454,8 +482,12 @@ class McpTests(unittest.TestCase):
                     },
                 }
             )
-            self.assertEqual(stack_plan["result"]["structuredContent"]["machine"], "azure_h100_test")
-            self.assertEqual(stack_plan["result"]["structuredContent"]["orchestrator"], "langgraph")
+            self.assertEqual(
+                stack_plan["result"]["structuredContent"]["machine"], "azure_h100_test"
+            )
+            self.assertEqual(
+                stack_plan["result"]["structuredContent"]["orchestrator"], "langgraph"
+            )
 
             stack_export = server.handle_message(
                 {
@@ -468,7 +500,9 @@ class McpTests(unittest.TestCase):
                     },
                 }
             )
-            self.assertEqual(stack_export["result"]["structuredContent"]["framework"], "langgraph")
+            self.assertEqual(
+                stack_export["result"]["structuredContent"]["framework"], "langgraph"
+            )
             self.assertIn(
                 "framework: langgraph",
                 stack_export["result"]["structuredContent"]["content"],
@@ -486,7 +520,10 @@ class McpTests(unittest.TestCase):
                 }
             )
             self.assertTrue(
-                any(check["name"] == "machine_fit" for check in stack_doctor["result"]["structuredContent"]["checks"])
+                any(
+                    check["name"] == "machine_fit"
+                    for check in stack_doctor["result"]["structuredContent"]["checks"]
+                )
             )
 
     def test_mcp_can_export_non_continue_integrations(self) -> None:
@@ -523,7 +560,9 @@ class McpTests(unittest.TestCase):
         )
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            (root / "models.yaml").write_text(agent_config.dump_yaml(models_config), encoding="utf-8")
+            (root / "models.yaml").write_text(
+                agent_config.dump_yaml(models_config), encoding="utf-8"
+            )
             profile = Profile(
                 name="tmp",
                 root=root,
@@ -559,7 +598,9 @@ class McpTests(unittest.TestCase):
         self.assertEqual(payload["changes"]["would_import"], 1)
         self.assertEqual(payload["changes"]["would_remove"], 0)
         self.assertEqual(payload["results"]["ollama"]["source_models_returned"], 2)
-        self.assertEqual(payload["results"]["ollama"]["source_models_already_profiled"], 1)
+        self.assertEqual(
+            payload["results"]["ollama"]["source_models_already_profiled"], 1
+        )
         self.assertTrue(payload["results"]["ollama"]["source_contacted"])
         self.assertTrue(payload["results"]["ollama"]["prune_enabled"])
         self.assertNotIn("catalog", payload)
