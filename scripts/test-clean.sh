@@ -22,14 +22,24 @@ if [[ "$TEST_PROFILE_NAME" != "local-dev" ]]; then
   cp -R "$WORK_ROOT/profiles/$TEST_PROFILE_NAME" "$WORK_ROOT/profiles/local-dev"
 fi
 
-printf 'Using profile template %s as temporary profile %s at %s
-' \
+# Keep a deterministic workspace-local profiles directory so direct filesystem fixture
+# paths used by older tests (for example profiles/local-dev) remain valid.
+REPO_PROFILES_DIR="${PROJECT_ROOT}/profiles"
+mkdir -p "$REPO_PROFILES_DIR"
+rm -rf \
+  "$REPO_PROFILES_DIR/$TEST_PROFILE_NAME" \
+  "$REPO_PROFILES_DIR/local-dev"
+cp -R "$WORK_ROOT/profiles/$TEST_PROFILE_NAME" "$REPO_PROFILES_DIR/$TEST_PROFILE_NAME"
+cp -R "$WORK_ROOT/profiles/local-dev" "$REPO_PROFILES_DIR/local-dev"
+
+printf 'Using profile template %s as temporary profile %s at %s\\n' \
   "$TEST_PROFILE_TEMPLATE" "$TEST_PROFILE_NAME" "$WORK_ROOT/profiles/$TEST_PROFILE_NAME" >&2
 
 cd "$PROJECT_ROOT"
 export PYTHONDONTWRITEBYTECODE=1
 export PYTHONPATH="${PYTHONPATH:-src}"
 export AIPLANE_TEST_PROFILES_DIR="$WORK_ROOT/profiles"
+export AIPLANE_PROFILES_DIR="$WORK_ROOT/profiles"
 
 if [[ "$#" -eq 0 ]]; then
   set -- -m pytest -q
