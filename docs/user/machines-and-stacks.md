@@ -226,6 +226,7 @@ aiplane stacks setup qwen32b_on_h100 \
   --runtime vllm \
   --model MODEL_ALIAS \
   --machine azure_h100_live \
+  --target gpu_workstation_ssh \
   --access ssh_tunnel \
   --endpoint http://localhost:8000/v1
 
@@ -251,6 +252,7 @@ aiplane stacks setup coding_agents \
   --runtime vllm \
   --model MODEL_ALIAS \
   --machine azure_h100_live \
+  --target gpu_workstation_ssh \
   --access ssh_tunnel \
   --endpoint http://localhost:8000/v1 \
   --limit timeout=30m \
@@ -259,6 +261,8 @@ aiplane stacks setup coding_agents \
   --tool filesystem=workspace_only
 ```
 
+When `access=ssh_tunnel`, prefer `--target` to point at a configured tunnel target in `targets.yaml`.
+If omitted, `stacks` falls back to using the machine name as the tunnel target and marks this as a warning in preflight.
 
 Stack `--limit`, `--tool`, and `--role` values are structured pass-through metadata. `aiplane` stores and exports them, but enforcement belongs to the runtime, orchestrator, wrapper script, or later workload runner. A `--role ROLE=MODEL_ALIAS` entry validates that the model alias exists in the profile, records provider/runtime or managed-service endpoint ownership, and adds role-level approval and audit labels. Managed-service role aliases keep their provider endpoint, while the primary stack model remains the only model used for local runtime lifecycle install/pull/start actions.
 

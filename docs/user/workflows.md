@@ -230,7 +230,8 @@ aiplane machines discover
 aiplane stacks setup coding_agents \
   --runtime vllm \
   --model MODEL_ALIAS \
-  --machine gpu_workstation_ssh \
+  --machine azure_h100_remote \
+  --target gpu_workstation_ssh \
   --access ssh_tunnel \
   --dry-run
 

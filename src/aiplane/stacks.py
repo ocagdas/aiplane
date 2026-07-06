@@ -44,6 +44,7 @@ class StackManager:
                         "runtime": stack.get("runtime"),
                         "model": stack.get("model"),
                         "machine": stack.get("machine"),
+                        "target": stack.get("target"),
                         "access": stack.get("access"),
                         "endpoint_policy": stack.get("endpoint_policy"),
                         "endpoint_auth": stack.get("endpoint_auth", {}),
@@ -65,6 +66,7 @@ class StackManager:
         model: str,
         runtime: str,
         machine: str,
+        target: str | None = None,
         access: str = "ssh_tunnel",
         endpoint_policy: str = "private",
         endpoint: str | None = None,
@@ -78,6 +80,7 @@ class StackManager:
             runtime=runtime,
             model=model,
             machine=machine,
+            target=target,
             access=access,
             endpoint_policy=endpoint_policy,
             endpoint=endpoint,
@@ -94,6 +97,7 @@ class StackManager:
         runtime: str,
         model: str,
         machine: str,
+        target: str | None = None,
         access: str = "ssh_tunnel",
         endpoint_policy: str = "private",
         endpoint: str | None = None,
@@ -137,6 +141,8 @@ class StackManager:
             "limits": limits or {},
             "tools": tools or {},
         }
+        if target:
+            stack["target"] = target
         normalized_endpoint_auth = _normalize_endpoint_auth(endpoint_auth or {})
         if normalized_roles:
             stack["roles"] = normalized_roles
@@ -502,35 +508,48 @@ class StackManager:
         )
         access = str(stack.get("access") or "")
         if access == "ssh_tunnel":
-            tunnel_target = str(stack.get("target") or stack.get("machine") or "")
+            explicit_target = False
+            tunnel_target = str(stack.get("target") or "").strip()
+            if tunnel_target:
+                explicit_target = True
+            else:
+                tunnel_target = str(stack.get("machine") or "").strip()
+
             if not tunnel_target:
                 checks.append(
                     {
                         "name": "remote_tunnel_target",
                         "ok": False,
-                        "detail": "stack access is ssh_tunnel but no target or machine is configured",
+                        "detail": (
+                            "stack access is ssh_tunnel but neither a remote target nor a machine is configured"
+                        ),
                     }
                 )
             else:
                 try:
                     tunnel_plan = RemoteManager(self.profile).tunnel_plan(tunnel_target)
+                    detail = f"tunnel target {tunnel_target} is configured"
+                    if not explicit_target:
+                        detail = f"{detail}; stack has no explicit target and is using machine name as target fallback"
                     checks.append(
                         {
                             "name": "remote_tunnel_target",
                             "ok": True,
-                            "detail": f"tunnel target {tunnel_target} is configured",
-                            "warning": not bool(tunnel_plan.get("tool_available")),
+                            "detail": detail,
+                            "warning": (not bool(tunnel_plan.get("tool_available")) or not explicit_target),
                         }
                     )
                 except ValueError as exc:
+                    detail = str(exc)
+                    if not explicit_target:
+                        detail = f"{detail} (machine fallback was used for stack target)"
                     checks.append(
                         {
                             "name": "remote_tunnel_target",
                             "ok": False,
-                            "detail": str(exc),
+                            "detail": detail,
                         }
                     )
-
         if runtime in {"vllm", "tgi", "transformers"} and not (
             os.environ.get("HF_HOME") or os.environ.get("HUGGINGFACE_HUB_CACHE")
         ):

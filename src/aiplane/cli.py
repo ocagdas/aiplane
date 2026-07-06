@@ -1078,6 +1078,10 @@ def _main(argv: list[str] | None = None) -> int:
         help="Machine name from aiplane machines list; export/import a real machine profile first with hardware export-machine and machines import",
     )
     stacks_setup.add_argument(
+        "--target",
+        help="Explicit ssh_tunnel target name from targets.yaml when access=ssh_tunnel",
+    )
+    stacks_setup.add_argument(
         "--access",
         default="ssh_tunnel",
         help="Access mode, such as same_host, ssh_tunnel, lan_http, or gateway",
@@ -2733,6 +2737,7 @@ def _main(argv: list[str] | None = None) -> int:
                         model=args.model,
                         machine=args.machine,
                         access=args.access,
+                        target=args.target,
                         endpoint_policy=args.endpoint_policy,
                         endpoint=args.endpoint,
                         endpoint_auth={

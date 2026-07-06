@@ -62,6 +62,44 @@ class StackOrchestratorTests(unittest.TestCase):
             self.assertEqual(result["status"], "executed_same_host_steps")
             self.assertEqual(run.call_count, 3)
 
+    def test_stack_create_accepts_explicit_target(self) -> None:
+        source = load_profile("local-dev", Path.cwd())
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "hardware.yaml").write_text("", encoding="utf-8")
+            profile = Profile(
+                name="tmp",
+                root=root,
+                workspace=Path.cwd(),
+                hardware=json.loads(json.dumps(source.hardware)),
+                backends=source.backends,
+                repository=source.repository,
+                tools=source.tools,
+                approvals=source.approvals,
+                environment=source.environment,
+                models=source.models,
+                targets=source.targets,
+            )
+            exported = MachineManager(profile).export_machine("local_box")
+            machine_path = root / "local_box.json"
+            machine_path.write_text(json.dumps(exported), encoding="utf-8")
+            MachineManager(profile).import_file(machine_path)
+
+            stacks = StackManager(profile)
+            created = stacks.create(
+                "remote_chat_stack",
+                "fixture-analysis-small",
+                "ollama",
+                "local_box",
+                target="gpu_workstation_ssh",
+                access="ssh_tunnel",
+            )
+
+            self.assertEqual(created["stack"]["target"], "gpu_workstation_ssh")
+            self.assertEqual(created["stack"]["machine"], "local_box")
+            self.assertFalse(created["dry_run"])
+            self.assertIn("target: gpu_workstation_ssh", (root / "hardware.yaml").read_text(encoding="utf-8"))
+
     def test_stack_create_plan_doctor_and_export(self) -> None:
         source = load_profile("local-dev", Path.cwd())
         with tempfile.TemporaryDirectory() as tmp:
@@ -388,6 +426,8 @@ class StackOrchestratorTests(unittest.TestCase):
                         "fixture-analysis-small",
                         "--machine",
                         "local_box",
+                        "--target",
+                        "gpu_workstation_ssh",
                         "--limit",
                         "timeout=30m",
                         "--tool",
@@ -402,6 +442,7 @@ class StackOrchestratorTests(unittest.TestCase):
                 )
             self.assertEqual(code, 0)
             payload = json.loads(stdout.getvalue())
+            self.assertEqual(payload["stack"]["target"], "gpu_workstation_ssh")
             self.assertEqual(payload["stack"]["limits"]["timeout"], "30m")
             self.assertEqual(payload["stack"]["tools"]["shell"], "guarded")
             self.assertEqual(payload["stack"]["roles"]["planner"]["model"], "fixture-analysis-small")

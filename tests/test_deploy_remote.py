@@ -148,6 +148,102 @@ class DeployRemoteTests(unittest.TestCase):
         with self.assertRaises(PermissionError):
             DeployManager(profile).apply("aks_gpu_pool")
 
+    def test_remote_tunnel_plan_rejects_invalid_host(self) -> None:
+        source = load_profile("local-dev", Path.cwd())
+        mutated_targets = json.loads(json.dumps(source.targets))
+        mutated_targets["targets"]["gpu_workstation_ssh"]["ssh"]["host"] = "gpu-workstation with space"
+
+        profile = Profile(
+            name="tmp",
+            root=source.root,
+            workspace=Path.cwd(),
+            hardware=source.hardware,
+            backends=source.backends,
+            repository=source.repository,
+            tools=source.tools,
+            approvals=source.approvals,
+            environment=source.environment,
+            models=source.models,
+            targets=mutated_targets,
+        )
+
+        with self.assertRaises(ValueError) as exc:
+            RemoteManager(profile).tunnel_plan("gpu_workstation_ssh")
+
+        self.assertIn("whitespace", str(exc.exception))
+
+    def test_remote_tunnel_plan_rejects_invalid_user(self) -> None:
+        source = load_profile("local-dev", Path.cwd())
+        mutated_targets = json.loads(json.dumps(source.targets))
+        mutated_targets["targets"]["gpu_workstation_ssh"]["ssh"]["user"] = "bad user"
+
+        profile = Profile(
+            name="tmp",
+            root=source.root,
+            workspace=Path.cwd(),
+            hardware=source.hardware,
+            backends=source.backends,
+            repository=source.repository,
+            tools=source.tools,
+            approvals=source.approvals,
+            environment=source.environment,
+            models=source.models,
+            targets=mutated_targets,
+        )
+
+        with self.assertRaises(ValueError) as exc:
+            RemoteManager(profile).tunnel_plan("gpu_workstation_ssh")
+
+        self.assertIn("ssh.user", str(exc.exception))
+
+    def test_remote_tunnel_plan_rejects_invalid_port(self) -> None:
+        source = load_profile("local-dev", Path.cwd())
+        mutated_targets = json.loads(json.dumps(source.targets))
+        mutated_targets["targets"]["gpu_workstation_ssh"]["ssh"]["port"] = 70000
+
+        profile = Profile(
+            name="tmp",
+            root=source.root,
+            workspace=Path.cwd(),
+            hardware=source.hardware,
+            backends=source.backends,
+            repository=source.repository,
+            tools=source.tools,
+            approvals=source.approvals,
+            environment=source.environment,
+            models=source.models,
+            targets=mutated_targets,
+        )
+
+        with self.assertRaises(ValueError) as exc:
+            RemoteManager(profile).tunnel_plan("gpu_workstation_ssh")
+
+        self.assertIn("must be an integer in the range 1-65535", str(exc.exception))
+
+    def test_remote_tunnel_plan_rejects_invalid_endpoint(self) -> None:
+        source = load_profile("local-dev", Path.cwd())
+        mutated_targets = json.loads(json.dumps(source.targets))
+        mutated_targets["targets"]["gpu_workstation_ssh"]["endpoint"] = "localhost:11434/v1"
+
+        profile = Profile(
+            name="tmp",
+            root=source.root,
+            workspace=Path.cwd(),
+            hardware=source.hardware,
+            backends=source.backends,
+            repository=source.repository,
+            tools=source.tools,
+            approvals=source.approvals,
+            environment=source.environment,
+            models=source.models,
+            targets=mutated_targets,
+        )
+
+        with self.assertRaises(ValueError) as exc:
+            RemoteManager(profile).tunnel_plan("gpu_workstation_ssh")
+
+        self.assertIn("must include a URL scheme", str(exc.exception))
+
     def test_remote_tunnel_plan_uses_ssh_local_forwarding(self) -> None:
         profile = load_profile("local-dev", Path.cwd())
         plan = RemoteManager(profile).tunnel_plan("gpu_workstation_ssh")
