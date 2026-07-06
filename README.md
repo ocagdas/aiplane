@@ -11,6 +11,12 @@ It helps teams make local, remote, and cloud-adjacent AI workflows reproducible 
 - IDE/agent/automation exports, and
 - run-time readiness checks.
 
+Core config is declarative YAML. Profiles, providers, models, machines, stacks, and policy files can be committed and reviewed like any other environment contract. Secrets stay in ignored local files or environment variables while profile structure stays explicit and diff-friendly.
+
+`aiplane` exposes a practical command API that is easy to automate. Commands support both human-readable output and machine-readable output (`--format json`) for CI/CD and external DevOps hooks, so you can keep setup and checks in existing pipelines.
+
+A core goal is avoiding lock-in to one provider stack. With aiplane, teams can shift between managed endpoints, self-hosted runtimes, remote workstations, and mixed stacks using the same profile model. This is useful when teams want to optimise cost, move to regions with required data controls, or go fully on-prem as operational needs change.
+
 It is not a coding agent, chat UI, inference server, model marketplace, or cloud platform. It sits one layer lower:
 it coordinates models, runtimes, and tooling so human operators can keep AI environments understandable and auditable.
 The aim is to treat AI environment setup and workflow operations like AIOps for AI operations: taking care of setup, replication, migration, and model/runtime alignment so teams can spend time on model work and experimentation instead.
