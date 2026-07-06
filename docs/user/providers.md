@@ -351,7 +351,7 @@ aiplane models add azure_chat --alias azure-openai-gpt-4o-prod --role chat --dis
 Use `models clone` when the same underlying model should have a second local purpose, role, or note. The target entry still points at the same provider-native `model` value unless you override it with `--set model=...`:
 
 ```bash
-aiplane models clone local_chat local_fast_draft --role completion --notes "Fast draft model for local coding tasks."
+aiplane models clone local_chat local_fast_draft --role completion --notes "Fast draft model for local workflow tasks."
 aiplane models clone DISCOVERED_ENTRY_NAME local_chat --role chat --runtime ollama --dry-run
 ```
 

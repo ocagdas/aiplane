@@ -4,7 +4,7 @@ This is the master project guidance file for coding agents and IDE assistants wo
 
 ## Product Boundary
 
-`aiplane` is an AI control-plane CLI for self-managed and managed LLM development environments. It configures, checks, plans, and exports profiles, providers, models, runtimes, machines, stacks, IDE/MCP snippets, and supporting tools.
+`aiplane` is an AI control-plane CLI for AI development environments (self-managed and managed models and workflows). It configures, checks, plans, and exports profiles, providers, models, runtimes, machines, stacks, IDE/MCP snippets, and supporting tools.
 
 It must not become a coding agent, model runtime, model proxy, IDE extension, or hidden cloud deployment engine.
 

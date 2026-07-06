@@ -4,7 +4,7 @@ For status tracking and future milestones, see [Project Roadmap](roadmap.md). Th
 
 ## Project Quality Principles
 
-`aiplane` should be a professional-grade, community-first open-source tool: reliable, well documented, testable, inspectable, and respectful of the complexity of real AI coding environments.
+`aiplane` should be a professional-grade, community-first open-source tool: reliable, well documented, testable, inspectable, and respectful of the complexity of real AI workflow environments.
 
 Good design choices flow from that standard:
 
@@ -12,19 +12,20 @@ Good design choices flow from that standard:
 - Prefer composability over replacement. Integrate with tools developers already use rather than duplicating them.
 - Prefer explicitness over convenience at the cost of control. Profile-driven configuration is intentionally visible.
 - Prefer depth over breadth. Do the control-plane job well before expanding scope.
-- Prefer a polished local/hybrid AI coding stack doctor over broad integration lists that are not end-to-end useful.
+- Prefer a polished local/hybrid AI workflow stack doctor over broad integration lists that are not end-to-end useful.
 
 ## Positioning
 
-`aiplane` is a local-first configuration and operations control-plane CLI for AI coding environments across local, remote, VM, and cloud-adjacent machines. Its sharpest wedge is making local and hybrid AI coding stacks reproducible, inspectable, policy-aware, and portable from one profile.
+`aiplane` is a local-first configuration and operations control-plane CLI for AI workflow environments across local, remote, VM, and cloud-adjacent machines. Its sharpest wedge is making local and hybrid AI workflow stacks reproducible, inspectable, policy-aware, and portable from one profile.
 
 It is not a coding agent, IDE assistant, full chat UI, inference server, model marketplace, model proxy, or cloud platform. Existing tools such as Continue, Cline, Cursor, Codex-like CLIs, Claude Code, Aider, OpenHands, Ollama, LM Studio, vLLM, TGI, llama.cpp, LocalAI, OpenAI, Anthropic, and Azure OpenAI already cover large parts of those domains. `aiplane` should configure, check, plan, export, and govern those pieces rather than replacing them.
+The aim of `aiplane` is to make environment setup, migration, and model/runtime pairing an explicit, repeatable operations layer so teams can focus on AI experiments, model work, and code outcomes instead.
 
 Scope anchor: changing this boundary is allowed only as an explicit product decision recorded in strategy and roadmap. Do not drift into agent execution, runtime implementation, broad cloud apply, IDE replacement, or a generic chat/session product through incremental feature work.
 
 ## Core Problem
 
-AI coding setups are fragmented:
+AI workflow setups are fragmented:
 
 - local runtimes have different install, model, GPU, and API behavior;
 - managed providers have different keys, model catalogs, deployment names, and policy constraints;

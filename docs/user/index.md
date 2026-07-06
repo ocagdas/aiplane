@@ -1,10 +1,11 @@
 # User Documentation
 
 This page mirrors [README.md](README.md) for tools that link to `index.md`.
+It is focused on AI setup and environment operations (setup, migration, and model/runtime pairing) so teams can spend more time on model work.
 
 ## Start Here
 
-`aiplane` is a control-plane CLI for self-managed AI development environments: it plans, prepares, and connects model runtimes rather than replacing your IDE assistant, chat UI, or LLM gateway.
+`aiplane` is a control-plane CLI for self-managed AI development environments: it plans, prepares, and connects model runtimes rather than replacing your IDE assistant, chat UI, or model-serving endpoint.
 
 
 - [Practical Overview](overview.md): what `aiplane` does, terminology, implemented capabilities, and first useful flows.
@@ -25,7 +26,7 @@ This page mirrors [README.md](README.md) for tools that link to `index.md`.
   snippets for local or remote model endpoints.
 - [Cloud Deployment](cloud-deployment.md): plan and check Azure targets from the
   local CLI.
-- [MCP Adapter](mcp.md): run the MCP server for LLM/agent access to `aiplane`, including guarded write tools.
+- [MCP Adapter](mcp.md): run the MCP server for agent/tool access to `aiplane`, including guarded write tools.
 - [aiplane skill](../../skills/aiplane/SKILL.md): assistant workflow guidance for Codex-style skill-capable agents.
 
 ## Main Commands
@@ -52,7 +53,7 @@ Most commands accept `--profile`, but it is optional. `aiplane` resolves the pro
 3. `default_profile` in the local `.aiplane/config.yaml`.
 4. The only available profile, when exactly one exists.
 
-If no profile exists, start with the local coding quickstart:
+If no profile exists, start with the local AI quickstart:
 
 ```bash
 aiplane quickstart local-coding

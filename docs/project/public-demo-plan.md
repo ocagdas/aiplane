@@ -11,7 +11,7 @@ The `mvp_0.2` demo goals should remain the spine: install/validate `aiplane`, di
 The `mvp_0.3` enhancement is not a different product story. It makes that original story safer and easier to follow:
 
 - `quickstart local-coding` creates or previews the first local profile flow.
-- Top-level `doctor` gives one local/hybrid coding-stack readiness summary.
+- Top-level `doctor` gives one local/hybrid AI workflow readiness summary.
 - Model/runtime/provider/hardware/integration/MCP checks are more explicit.
 - `chat`, `run`, and code-task operations are runtime-agnostic endpoint runners where possible, while Ollama still has an optional native CLI path.
 - `--pull-model` now means execute the runtime-helper pull; `--dry-run --pull-model` means preview it.
@@ -19,10 +19,10 @@ The `mvp_0.3` enhancement is not a different product story. It makes that origin
 
 Use a three-part demo rather than two overloaded videos.
 
-1. **Section 1: Local Coding Stack Readiness** - target 2:45-3:00.
+1. **Section 1: Local AI Workflow Stack Readiness** - target 2:45-3:00.
    - Install or validate the CLI.
    - Run `quickstart local-coding` in dry-run and real disposable-profile modes.
-   - Show `aiplane doctor` as the local/hybrid coding-stack summary: profile files, required tools, model defaults, endpoints, hardware fit, Continue/Aider readiness, and MCP read-surface readiness.
+   - Show `aiplane doctor` as the local/hybrid AI workflow summary: profile files, required tools, model defaults, endpoints, hardware fit, Continue/Aider readiness, and MCP read-surface readiness.
    - Show that an empty structural template reports missing model defaults clearly rather than pretending it is ready.
 
 2. **Section 2: Model To Runtime To Runner** - target 2:45-3:00.
@@ -43,7 +43,7 @@ A single three-minute cut should be Section 1 plus a short runner clip from Sect
 A clean PR-ready demo cut is at this point when all of these are true:
 
 - `scripts/check.sh` is passing on the same branch that will be recorded.
-- `aiplane local-coding`, `quickstart local-coding`, and `doctor` flows are demonstrated with dry-runs before any live runtime mutation.
+- `aiplane quickstart local-coding`, `quickstart local-coding`, and `doctor` flows are demonstrated with dry-runs before any live runtime mutation.
 - `stacks doctor` includes stack role policy checks (`role_model_policy:<role>`) for both provider allow-list and cloud-policy outcomes, and these are visible in a rehearsal run.
 - `chat`, `run`, and `code` commands are demonstrated in dry-run and live/recorded-live only where runtime endpoint prerequisites are already met.
 - A second runtime track is shown through vLLM/OpenAI-compatible planning/export (dry-run at minimum).
@@ -54,7 +54,7 @@ With current behavior and current test coverage, we are at the feature-freeze po
 
 ## Demo Thesis
 
-Show that `aiplane` gives a structured path from intent to usable AI coding environment:
+Show that `aiplane` gives a structured path from intent to usable AI workflow environment:
 
 1. Describe the setup in profiles rather than ad hoc shell notes.
 2. Inspect readiness with doctors before mutating runtime or cloud state.
@@ -76,7 +76,7 @@ conda activate aiplane
 aiplane profiles validate local-dev
 aiplane environment doctor --required-only
 
-# Section 1: new local-coding readiness wedge.
+# Section 1: AI workflow readiness wedge.
 aiplane quickstart local-coding --dry-run --no-discovery
 aiplane quickstart local-coding --dry-run --no-discovery --format text
 aiplane --profiles-dir /tmp/aiplane-demo-profiles quickstart local-coding --name demo --no-discovery --no-hardware-discovery
@@ -133,7 +133,7 @@ Use `aiplane chat --native-ollama --dry-run --model "$CHAT_ALIAS"` only when you
 Key points to say explicitly:
 
 - `aiplane` is a control plane with thin runner/smoke-test surfaces; it is not a model runtime, full chat UI, IDE extension, autonomous coding agent, or cloud platform.
-- The narrow public wedge is local/hybrid AI coding stack readiness from one profile.
+- The narrow public wedge is local/hybrid AI workflow stack readiness from one profile.
 - Providers, models, runtimes, machines, stacks, credentials, integrations, MCP tools, assistant skills, and runner commands are separate concepts.
 - Ollama is the easiest local live demo path; vLLM/OpenAI-compatible is the second runtime path for endpoint planning, export, and dry-run runner checks unless a prepared endpoint is available.
 - Generated discovery entries are review buffers; profile-owned model entries are deliberate configuration.
@@ -158,7 +158,7 @@ aiplane --profiles-dir /tmp/aiplane-demo-profiles profiles validate demo
 
 Use `--profiles-dir /tmp/aiplane-demo-profiles --profile demo` on commands that intentionally write profile state, such as model refresh, machine import, or stack setup. Keep read-only commands on `local-dev` when you want to show the normal project profile.
 
-## Section 1: Local Coding Stack Readiness
+## Section 1: Local AI Workflow Stack Readiness
 
 ### 0:00-0:25 - Tool, Philosophy, Status
 
@@ -241,7 +241,7 @@ CHAT_ALIAS="$(aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --pr
 AUTOCOMPLETE_ALIAS="$(aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --runtime ollama --role autocomplete --enabled-only --sort-by role --limit 1 --name-only)"
 EMBEDDING_ALIAS="$(aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --runtime ollama --role embedding --enabled-only --sort-by role --limit 1 --name-only)"
 aiplane --profiles-dir /tmp/aiplane-demo-profiles models add --profile demo local_chat --alias "$CHAT_ALIAS" --role chat --runtime ollama
-aiplane --profiles-dir /tmp/aiplane-demo-profiles models clone --profile demo local_chat local_fast_draft --role completion --notes "Fast draft model for local coding tasks." --dry-run
+aiplane --profiles-dir /tmp/aiplane-demo-profiles models clone --profile demo local_chat local_fast_draft --role completion --notes "Fast draft model for local workflow tasks." --dry-run
 aiplane --profiles-dir /tmp/aiplane-demo-profiles hardware recommend --profile demo
 ```
 
