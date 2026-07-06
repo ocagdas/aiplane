@@ -14,6 +14,7 @@ from .support import (
     redirect_stdout,
     unittest,
 )
+from aiplane.integration_contracts import ALL_INTEGRATION_TOOLS
 from aiplane.local_doctor import local_coding_doctor, local_coding_doctor_text
 
 
@@ -64,6 +65,10 @@ class LocalDoctorTests(unittest.TestCase):
         self.assertIn("remote_targets_configured", remote_checks)
         self.assertIn("remote_stacks_configured", remote_checks)
         self.assertGreaterEqual(remote_checks["remote_targets_configured"]["detail"].count("configured"), 1)
+
+        integrations = next(section for section in payload["sections"] if section["name"] == "integrations")
+        integration_check_names = {check["name"] for check in integrations["checks"]}
+        self.assertEqual(integration_check_names, {f"integration:{tool}" for tool in ALL_INTEGRATION_TOOLS})
 
     def test_local_coding_doctor_includes_remote_tunnel_readiness(self) -> None:
         profile = load_profile("local-dev", Path.cwd())
@@ -173,7 +178,8 @@ class LocalDoctorTests(unittest.TestCase):
 
         integrations = next(section for section in payload["sections"] if section["name"] == "integrations")
         continue_check = next(check for check in integrations["checks"] if check["name"] == "integration:continue")
-        self.assertFalse(continue_check["ok"])
+        self.assertTrue(continue_check["ok"])
+        self.assertTrue(continue_check["warning"])
         self.assertIn("chat:incompatible", continue_check["detail"])
 
     def test_doctor_integration_readiness_matches_continue_plan_defaults(self) -> None:

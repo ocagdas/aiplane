@@ -3747,7 +3747,7 @@ def _quickstart_local_coding_text(payload: dict[str, object]) -> str:
     ]
     validation = bootstrap.get("validation") if isinstance(bootstrap.get("validation"), dict) else None
     if validation is not None:
-        lines.append(f"profile validation: {'ok' if validation.get('ok') else 'needs attention'}")
+        lines.append(f"profile validation: {'ok' if validation.get('ok') else 'issues found'}")
     pull = payload.get("pull") if isinstance(payload.get("pull"), dict) else None
     if pull is not None:
         lines.append(
@@ -3757,9 +3757,70 @@ def _quickstart_local_coding_text(payload: dict[str, object]) -> str:
     if doctor is not None:
         summary = doctor.get("summary") if isinstance(doctor.get("summary"), dict) else {}
         lines.append(
-            f"doctor: {'ok' if doctor.get('ok') else 'needs attention'}; "
-            f"blocking: {summary.get('blocking', 0)}; warnings: {summary.get('warnings', 0)}"
+            f"doctor: {'ok' if doctor.get('ok') else 'issues found'}; "
+            f"needs_attention: {summary.get('blocking', 0)}; further_actions: {summary.get('warnings', 0)}"
         )
+        # show top blocking checks and simple suggestions
+        if doctor is not None:
+            blocking: list[tuple[str, str]] = []
+            warnings: list[tuple[str, str]] = []
+            for section in doctor.get("sections", []) or []:
+                if not isinstance(section, dict):
+                    continue
+                section_name = str(section.get("name") or "general")
+                for check in section.get("checks", []) or []:
+                    if not isinstance(check, dict):
+                        continue
+                    reason = check.get("reason") or check.get("detail") or ""
+                    # simple suggestion mapping with exact CLI snippets
+                    if check.get("name") == "model_catalog":
+                        suggestion = (
+                            "Try: `aiplane models refresh --dry-run`; "
+                            "`aiplane models list --group-by runtime`; "
+                            "`aiplane models promote DISCOVERED_ENTRY_NAME --as ALIAS`"
+                        )
+                    elif section.get("name") == "model_defaults" or str(check.get("name", "")).endswith("_model"):
+                        role_arg = check.get("name") or "<role>"
+                        suggestion = (
+                            "Try: `aiplane models refresh --dry-run`; "
+                            "`aiplane models promote DISCOVERED_ENTRY_NAME --as ALIAS`; "
+                            f"`aiplane models use {role_arg} ALIAS`"
+                        )
+                    elif section.get("name") == "environment":
+                        suggestion = "Try: `aiplane environment doctor --required-only` then install missing CLIs listed above."
+                    elif section.get("name") == "endpoints" or str(check.get("name", "")).startswith("endpoint:"):
+                        suggestion = "Try: `aiplane runtimes status <runtime>` or `aiplane providers test <provider>`. If provider is disabled, run `aiplane providers enable <provider>`."
+                    elif section.get("name") == "integrations":
+                        suggestion = "Try: `aiplane integrations list`; `aiplane integrations roles <tool>`; `aiplane integrations plan <tool>`."
+                    else:
+                        suggestion = "See `aiplane doctor --profile <name>` for details."
+                    check_name = str(check.get("name") or "check")
+                    if section_name == "integrations" and check_name.startswith("integration:"):
+                        check_name = check_name.split(":", 1)[1]
+                    item = f"{check_name}: {reason} -> {suggestion}"
+                    if not check.get("ok"):
+                        blocking.append((section_name, item))
+                    elif check.get("warning"):
+                        warnings.append((section_name, item))
+
+            if blocking:
+                lines.append("")
+                lines.append(f"recommended actions ({len(blocking)}):")
+                current_root = ""
+                for root, item in blocking:
+                    if root != current_root:
+                        lines.append(f"- {root}:")
+                        current_root = root
+                    lines.append(f"  - {item}")
+            if warnings:
+                lines.append("")
+                lines.append(f"further actions/status ({len(warnings)}):")
+                current_root = ""
+                for root, item in warnings:
+                    if root != current_root:
+                        lines.append(f"- {root}:")
+                        current_root = root
+                    lines.append(f"  - {item}")
     lines.append("")
     lines.append("next commands:")
     commands = payload.get("commands", [])

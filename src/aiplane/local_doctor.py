@@ -4,7 +4,7 @@ from typing import Any
 
 from .config import CONFIG_FILES
 from .hardware import HardwareManager
-from .integration_contracts import required_roles
+from .integration_contracts import ALL_INTEGRATION_TOOLS, required_roles
 from .model_catalog import ModelCatalog, ownership_for_model
 from .policy import PolicyEngine
 from .models import Profile
@@ -77,10 +77,89 @@ def local_coding_doctor_text(payload: dict[str, Any]) -> str:
     summary = payload.get("summary", {}) if isinstance(payload.get("summary"), dict) else {}
     lines = [
         f"aiplane doctor for profile {payload.get('profile', 'unknown')}",
-        f"status: {'ok' if payload.get('ok') else 'needs attention'}; checks: {summary.get('checks', 0)}; blocking: {summary.get('blocking', 0)}; warnings: {summary.get('warnings', 0)}",
+        f"status: {'ok' if payload.get('ok') else 'issues found'}; checks: {summary.get('checks', 0)}; needs_attention: {summary.get('blocking', 0)}; further_actions: {summary.get('warnings', 0)}",
         "",
     ]
     sections = payload.get("sections", [])
+
+    def _suggest_fix(section_name: str, check: dict) -> str:
+        name = check.get("name", "")
+        if name == "model_catalog":
+            return (
+                "Try: `aiplane models refresh --dry-run`; "
+                "`aiplane models list --group-by runtime`; "
+                "`aiplane models promote DISCOVERED_ENTRY_NAME --as ALIAS`"
+            )
+        if section_name == "model_defaults" or name.endswith("_model"):
+            role_arg = check.get("name") or "<role>"
+            return (
+                "Try: `aiplane models refresh --dry-run`; "
+                "`aiplane models promote DISCOVERED_ENTRY_NAME --as ALIAS`; "
+                f"`aiplane models use {role_arg} ALIAS`"
+            )
+        if section_name == "environment":
+            return "Try: `aiplane environment doctor --required-only` then install missing CLIs listed above."
+        if section_name == "endpoints" or name.startswith("endpoint:"):
+            return "Try: `aiplane runtimes status <runtime>` or `aiplane providers test <provider>`. If provider is disabled, run `aiplane providers enable <provider>`."
+        if section_name == "integrations":
+            return "Try: `aiplane integrations list`; `aiplane integrations roles <tool>`; `aiplane integrations plan <tool>`."
+        if section_name == "profile":
+            return "Run `aiplane profiles validate <profile>` and repair missing files."
+        if section_name == "mcp":
+            return "Run `aiplane mcp manifest` to inspect MCP tools."
+        if section_name == "remote":
+            return "Run `aiplane remote tunnel plan --target <name>` or `aiplane stacks doctor <stack>`."
+        if section_name == "hardware":
+            return "Run `aiplane hardware doctor` or `aiplane hardware recommend`."
+        if section_name == "policy":
+            return "Run `aiplane policy explain --action <action>` to see why something is blocked."
+        return ""
+
+    # collect checks and warnings across sections
+    blocking_items: list[tuple[str, str]] = []
+    warning_items: list[tuple[str, str]] = []
+    if isinstance(sections, list):
+        for section in sections:
+            if not isinstance(section, dict):
+                continue
+            section_name = str(section.get("name") or "general")
+            for check in section.get("checks", []) or []:
+                if not isinstance(check, dict):
+                    continue
+                reason = check.get("reason") or check.get("detail") or ""
+                suggestion = _suggest_fix(section.get("name", ""), check)
+                check_name = str(check.get("name") or "check")
+                if section_name == "integrations" and check_name.startswith("integration:"):
+                    check_name = check_name.split(":", 1)[1]
+                item = f"{check_name}: {reason}"
+                if suggestion:
+                    item += f" -> {suggestion}"
+                if not check.get("ok"):
+                    blocking_items.append((section_name, item))
+                elif check.get("warning"):
+                    warning_items.append((section_name, item))
+
+    if blocking_items:
+        lines.append(f"recommended actions ({len(blocking_items)}):")
+        current_root = ""
+        for root, item in blocking_items:
+            if root != current_root:
+                lines.append(f"- {root}:")
+                current_root = root
+            lines.append(f"  - {item}")
+        lines.append("")
+
+    if warning_items:
+        lines.append(f"further actions/status ({len(warning_items)}):")
+        current_root = ""
+        for root, item in warning_items:
+            if root != current_root:
+                lines.append(f"- {root}:")
+                current_root = root
+            lines.append(f"  - {item}")
+        lines.append("")
+
+    # original per-section output (kept for full context)
     for section in sections if isinstance(sections, list) else []:
         if not isinstance(section, dict):
             continue
@@ -168,18 +247,35 @@ def _model_defaults_section(
         alias = defaults.get(default_role)
         model = models.get(str(alias)) if alias else None
         status = statuses.get(str(alias)) if alias else None
-        capability_ok, capability_reason = _role_capability(default_role, model)
+
         provider_name = str(model.get("provider") or "") if isinstance(model, dict) else ""
         provider = providers.get(provider_name, {})
         endpoint = _provider_endpoint(provider_name, provider)
         ownership = ownership_for_model(model, provider) if isinstance(model, dict) else None
-        configured = bool(alias and isinstance(model, dict) and bool(model.get("enabled", True)))
+
+        # Treat absence of an explicit default as a non-blocking warning (informational).
+        if not alias:
+            ok = True
+            warning = True
+            reason = "not configured"
+        # If an alias is present but the model isn't found in the catalog, that's a real error.
+        elif not isinstance(model, dict):
+            ok = False
+            warning = False
+            reason = f"configured alias {alias} missing from models"
+        else:
+            capability_ok, capability_reason = _role_capability(default_role, model)
+            configured = bool(model.get("enabled", True))
+            ok = bool(configured and capability_ok)
+            warning = bool(configured and capability_ok and status and not status.usable)
+            reason = (capability_reason if configured and not capability_ok else _status_reason(status))
+
         checks.append(
             {
                 "name": default_role,
-                "ok": bool(configured and capability_ok),
+                "ok": ok,
                 "detail": _default_detail(str(alias or "not configured"), provider_name, endpoint),
-                "reason": (capability_reason if configured and not capability_ok else _status_reason(status)),
+                "reason": reason,
                 "provider": provider_name or (status.provider if status else None),
                 "endpoint": endpoint,
                 "ownership": ownership,
@@ -189,7 +285,7 @@ def _model_defaults_section(
                 "model": model.get("model") if isinstance(model, dict) else None,
                 "roles": model.get("roles", []) if isinstance(model, dict) else [],
                 "usable": (status.usable if status else False),
-                "warning": bool(configured and capability_ok and status and not status.usable),
+                "warning": warning,
                 "role": label,
             }
         )
@@ -320,10 +416,21 @@ def _integration_section(defaults: dict[str, Any], models: dict[str, dict[str, A
         "autocomplete": "autocomplete_model",
         "embedding": "embedding_model",
     }
-    for tool in ["continue", "aider"]:
+    for tool in ALL_INTEGRATION_TOOLS:
         gaps = []
         role_aliases: dict[str, str] = {}
-        for role in required_roles(tool):
+        required = required_roles(tool)
+        if not required:
+            checks.append(
+                {
+                    "name": f"integration:{tool}",
+                    "ok": True,
+                    "detail": "no model roles required",
+                    "role_aliases": {},
+                }
+            )
+            continue
+        for role in required:
             role_name = role["name"]
             default_role = role_defaults.get(role_name, "chat_model")
             alias = defaults.get(default_role)
@@ -337,14 +444,15 @@ def _integration_section(defaults: dict[str, Any], models: dict[str, dict[str, A
         checks.append(
             {
                 "name": f"integration:{tool}",
-                "ok": not gaps,
+                "ok": True,
+                "warning": bool(gaps),
                 "detail": "ready" if not gaps else "role gaps: " + ", ".join(gaps),
                 "role_aliases": role_aliases,
             }
         )
     return {
         "name": "integrations",
-        "ok": all(check["ok"] for check in checks),
+        "ok": True,
         "checks": checks,
     }
 
@@ -432,11 +540,17 @@ def _remote_section(profile: Profile) -> dict[str, Any]:
         for name, target in (targets or {}).items()
         if isinstance(target, dict) and str(target.get("type") or "") == "ssh_tunnel"
     }
+    target_names = sorted(remote_targets.keys())
+    target_detail = (
+        f"{len(target_names)} configured ssh_tunnel targets: {', '.join(target_names)}"
+        if target_names
+        else "0 configured ssh_tunnel targets"
+    )
     checks.append(
         {
             "name": "remote_targets_configured",
             "ok": True,
-            "detail": f"{len(remote_targets)} configured ssh_tunnel targets",
+            "detail": target_detail,
         }
     )
 
@@ -465,31 +579,39 @@ def _remote_section(profile: Profile) -> dict[str, Any]:
         )
 
     remote_stacks = [row["name"] for row in stack_manager.list() if str(row.get("access") or "") == "ssh_tunnel"]
+    remote_stack_names = sorted(remote_stacks)
+    stack_detail = (
+        f"{len(remote_stack_names)} stacks using ssh_tunnel access: {', '.join(remote_stack_names)}"
+        if remote_stack_names
+        else "0 stacks using ssh_tunnel access"
+    )
     checks.append(
         {
             "name": "remote_stacks_configured",
             "ok": True,
-            "detail": f"{len(remote_stacks)} stacks using ssh_tunnel access",
+            "detail": stack_detail,
         }
     )
 
-    for stack_name in remote_stacks:
+    for stack_name in remote_stack_names:
         try:
             doctor = stack_manager.doctor(stack_name)
             stack_ok = bool(all(check.get("ok") for check in doctor.get("checks", [])))
             checks.append(
                 {
                     "name": f"stack_doctor:{stack_name}",
-                    "ok": stack_ok,
+                    "ok": True,
+                    "warning": not stack_ok,
                     "detail": doctor.get("plan_summary", {}).get("endpoint"),
-                    "reason": ("stack checks passed" if stack_ok else "stack readiness has blocking issues"),
+                    "reason": ("stack checks passed" if stack_ok else "stack readiness has issues"),
                 }
             )
         except ValueError as exc:
             checks.append(
                 {
                     "name": f"stack_doctor:{stack_name}",
-                    "ok": False,
+                    "ok": True,
+                    "warning": True,
                     "detail": str(exc),
                     "reason": "stack readiness check failed",
                 }
@@ -497,7 +619,7 @@ def _remote_section(profile: Profile) -> dict[str, Any]:
 
     return {
         "name": "remote",
-        "ok": all(check["ok"] for check in checks),
+        "ok": True,
         "checks": checks,
     }
 
@@ -657,13 +779,7 @@ def _next_steps(profile: str, sections: list[dict[str, Any]]) -> list[str]:
         )
     if not section_ok.get("hardware", False):
         steps.append("Run `aiplane hardware doctor` or choose a smaller local model alias for this machine.")
-    if not section_ok.get("integrations", False):
-        steps.append(
-            "Run `aiplane integrations roles continue` and `aiplane integrations plan continue` after model defaults are configured."
-        )
-    if section_ok.get("integrations", False):
-        steps.append(
-            "Export configs with `aiplane integrations export continue` and `aiplane integrations export aider`."
-        )
+    steps.append("Inspect integration status with `aiplane integrations list` and `aiplane integrations roles <tool>`.")
+    steps.append("Export configs with `aiplane integrations export <tool>` after selecting model aliases.")
     steps.append("Inspect MCP availability with `aiplane mcp manifest` when connecting IDE or agent clients.")
     return steps
