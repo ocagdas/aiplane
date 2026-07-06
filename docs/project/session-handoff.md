@@ -137,6 +137,6 @@ Orchestrator support now has stack role metadata over reviewed model aliases and
 ## Next Useful Work
 
 1. Finish the remote-workstation onboarding documentation pass and align it with the public demo plan sequence.
-2. Keep policy/risk behavior regressions visible: add/refresh tests for blocked cloud policy and disallowed provider usage paths in doctor and stack/tool policy surfaces.
+2. Keep policy/risk behavior regressions visible: blocked cloud-policy and disallowed-provider-path tests are now covered in `tests/test_stacks_orchestrators.py`; extend coverage next to remote-workstation policy surfaces.
 3. Keep docs/tests/command-coverage synchronized before the feature-freeze gate.
 

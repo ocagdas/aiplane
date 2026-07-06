@@ -16,6 +16,7 @@ from .orchestrators import OrchestratorCatalog
 from .runtime_catalog import RuntimeCatalog
 from .runtime_definitions import PROVIDER_ENDPOINT_DEFAULTS
 from .remote import RemoteManager
+from .policy import PolicyEngine
 
 
 FRAMEWORK_EXPORT_ARTIFACTS = {
@@ -725,11 +726,21 @@ class StackManager:
                 }
             )
             if model_ok:
+                policy = PolicyEngine(self.profile).model_decision(model_alias)
                 checks.append(
                     {
                         "name": f"role_model_enabled:{role}",
                         "ok": bool(model_config.get("enabled", True)),
                         "detail": ("enabled" if model_config.get("enabled", True) else "disabled"),
+                    }
+                )
+                checks.append(
+                    {
+                        "name": f"role_model_policy:{role}",
+                        "ok": policy.allowed,
+                        "detail": policy.reason,
+                        "provider": str(model_config.get("provider") or ""),
+                        "requires_approval": policy.requires_approval,
                     }
                 )
             runtime = str(binding.get("runtime") or "")

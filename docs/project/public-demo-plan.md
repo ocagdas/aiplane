@@ -38,6 +38,20 @@ Use a three-part demo rather than two overloaded videos.
 
 A single three-minute cut should be Section 1 plus a short runner clip from Section 2. The full public walkthrough should use all three sections.
 
+## Demo Freeze Readiness
+
+A clean PR-ready demo cut is at this point when all of these are true:
+
+- `scripts/check.sh` is passing on the same branch that will be recorded.
+- `aiplane local-coding`, `quickstart local-coding`, and `doctor` flows are demonstrated with dry-runs before any live runtime mutation.
+- `stacks doctor` includes stack role policy checks (`role_model_policy:<role>`) for both provider allow-list and cloud-policy outcomes, and these are visible in a rehearsal run.
+- `chat`, `run`, and `code` commands are demonstrated in dry-run and live/recorded-live only where runtime endpoint prerequisites are already met.
+- A second runtime track is shown through vLLM/OpenAI-compatible planning/export (dry-run at minimum).
+- MCP manifest export and skills handoff are shown, and credentials are kept out of screen recordings.
+
+With current behavior and current test coverage, we are at the feature-freeze point for the **Team Policy and Governance** milestone. The next demo checkpoint should be delayed only for any remaining remote-workstation hardening changes that are still being polished outside this milestone.
+
+
 ## Demo Thesis
 
 Show that `aiplane` gives a structured path from intent to usable AI coding environment:

@@ -395,6 +395,98 @@ class StackOrchestratorTests(unittest.TestCase):
             "https://api.openai.com/v1",
         )
 
+    def test_stack_doctor_reports_blocked_role_model_policy_by_provider(self) -> None:
+        source = load_profile("local-dev", Path.cwd())
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            models_config = json.loads(json.dumps(source.models))
+            managed_alias = models_config.setdefault("models", {}).setdefault("managed-chat-small", {})
+            managed_alias["provider"] = "openai"
+            managed_alias["model"] = managed_alias.get("model", "managed-chat-model")
+            managed_alias["local"] = False
+            managed_alias["enabled"] = True
+            managed_alias["ownership"] = "managed_service"
+            repository = json.loads(json.dumps(source.repository))
+            repository["allowed_providers"] = ["ollama"]
+            profile = Profile(
+                name="tmp",
+                root=root,
+                workspace=Path.cwd(),
+                hardware=json.loads(json.dumps(source.hardware)),
+                backends=source.backends,
+                repository=repository,
+                tools=source.tools,
+                approvals=source.approvals,
+                environment=source.environment,
+                models=models_config,
+                targets=source.targets,
+                orchestrators=source.orchestrators,
+            )
+            exported = MachineManager(profile).export_machine("local_box")
+            machine_path = root / "local_box.json"
+            machine_path.write_text(json.dumps(exported), encoding="utf-8")
+            MachineManager(profile).import_file(machine_path)
+            stacks = StackManager(profile)
+            stacks.setup(
+                "policy_blocked_stack",
+                orchestrator=None,
+                runtime="ollama",
+                model="fixture-analysis-small",
+                machine="local_box",
+                roles={"planner": "managed-chat-small"},
+            )
+            doctor = stacks.doctor("policy_blocked_stack")
+
+        checks = {check["name"]: check for check in doctor["checks"]}
+        self.assertFalse(checks["role_model_policy:planner"]["ok"])
+        self.assertIn("not allowed", str(checks["role_model_policy:planner"].get("detail")))
+
+    def test_stack_doctor_reports_blocked_role_model_policy_by_cloud_risk(self) -> None:
+        source = load_profile("local-dev", Path.cwd())
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            models_config = json.loads(json.dumps(source.models))
+            managed_alias = models_config.setdefault("models", {}).setdefault("managed-chat-small", {})
+            managed_alias["provider"] = "openai"
+            managed_alias["model"] = managed_alias.get("model", "managed-chat-model")
+            managed_alias["local"] = False
+            managed_alias["enabled"] = True
+            managed_alias["ownership"] = "managed_service"
+            repository = json.loads(json.dumps(source.repository))
+            repository.update({"classification": "client_sensitive", "allow_cloud": False})
+            profile = Profile(
+                name="tmp",
+                root=root,
+                workspace=Path.cwd(),
+                hardware=json.loads(json.dumps(source.hardware)),
+                backends=source.backends,
+                repository=repository,
+                tools=source.tools,
+                approvals=source.approvals,
+                environment=source.environment,
+                models=models_config,
+                targets=source.targets,
+                orchestrators=source.orchestrators,
+            )
+            exported = MachineManager(profile).export_machine("local_box")
+            machine_path = root / "local_box.json"
+            machine_path.write_text(json.dumps(exported), encoding="utf-8")
+            MachineManager(profile).import_file(machine_path)
+            stacks = StackManager(profile)
+            stacks.setup(
+                "cloud_policy_blocked_stack",
+                orchestrator=None,
+                runtime="ollama",
+                model="fixture-analysis-small",
+                machine="local_box",
+                roles={"planner": "managed-chat-small"},
+            )
+            doctor = stacks.doctor("cloud_policy_blocked_stack")
+
+        checks = {check["name"]: check for check in doctor["checks"]}
+        self.assertFalse(checks["role_model_policy:planner"]["ok"])
+        self.assertIn("cloud", str(checks["role_model_policy:planner"].get("detail").lower()))
+
     def test_stack_setup_cli_accepts_limits_and_tool_policies(self) -> None:
         source = load_profile("local-dev", Path.cwd())
         with tempfile.TemporaryDirectory() as tmp:

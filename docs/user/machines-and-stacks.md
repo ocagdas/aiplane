@@ -234,7 +234,7 @@ aiplane stacks plan qwen32b_on_h100
 aiplane stacks doctor qwen32b_on_h100
 ```
 
-Stack plans include preflight checks for runtime prerequisites, likely port conflicts on local endpoints, endpoint auth policy, and model cache-path hints. Doctor output folds those checks into the normal readiness checks and also checks role model aliases, disabled role models, managed-service endpoints, gateway/TLS/auth readiness, and warning-level risky tool-policy combinations so you can catch missing host tools or unsafe endpoint/role settings before running lifecycle commands.
+Stack plans include preflight checks for runtime prerequisites, likely port conflicts on local endpoints, endpoint auth policy, and model cache-path hints. Doctor output folds those checks into the normal readiness checks and also checks role model aliases, disabled role models, role policy decisions (including provider allow-lists and cloud policy), managed-service endpoints, gateway/TLS/auth readiness, and warning-level risky tool-policy combinations so you can catch missing host tools or unsafe endpoint/role settings before running lifecycle commands.
 
 ## Stacks
 
