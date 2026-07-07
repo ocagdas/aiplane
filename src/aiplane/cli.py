@@ -210,8 +210,9 @@ def _main(argv: list[str] | None = None) -> int:
     )
     local_coding.add_argument(
         "--overwrite",
-        action="store_true",
-        help="Replace an existing profile directory first",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Replace an existing profile directory first; use --no-overwrite to keep an existing profile directory",
     )
     local_coding.add_argument(
         "--no-discovery",
@@ -233,8 +234,7 @@ def _main(argv: list[str] | None = None) -> int:
     local_coding.add_argument(
         "--limit",
         type=int,
-        default=25,
-        help="Maximum model ids to read per provider catalog",
+        help="Maximum model ids to read per provider catalog; when omitted, uses the models refresh command default",
     )
     local_coding.add_argument(
         "--provider-limit",
@@ -276,8 +276,8 @@ def _main(argv: list[str] | None = None) -> int:
     local_coding.add_argument(
         "--format",
         choices=["json", "text"],
-        default="json",
-        help="Output format. JSON is the default for reproducible setup logs.",
+        default="text",
+        help="Output format. Text is the default human-readable summary; use json for scripts.",
     )
 
     config_cmd = _command(
@@ -511,8 +511,9 @@ def _main(argv: list[str] | None = None) -> int:
     )
     bootstrap.add_argument(
         "--overwrite",
-        action="store_true",
-        help="Replace an existing profile directory with a fresh copy of the template before discovery",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Replace an existing profile directory with a fresh copy of the template before discovery; use --no-overwrite to keep an existing profile directory",
     )
     bootstrap.add_argument(
         "--no-discovery",
@@ -538,8 +539,7 @@ def _main(argv: list[str] | None = None) -> int:
     bootstrap.add_argument(
         "--limit",
         type=int,
-        default=25,
-        help="Default maximum model ids to read per provider catalog during bootstrap discovery",
+        help="Maximum model ids to read per provider catalog during bootstrap discovery; when omitted, uses the models refresh command default",
     )
     bootstrap.add_argument(
         "--provider-limit",
@@ -3586,26 +3586,31 @@ def _bootstrap_local_profile(args, workspace: Path, profiles_dir: Path | None) -
             write = not args.dry_run
             try:
                 if args.provider == "all":
-                    discovery = catalog.refresh_all(
-                        write=write,
-                        enable=not args.disable_new,
-                        query=args.query,
-                        limit=args.limit,
-                        provider_limits=provider_limits,
-                        progress=progress,
-                        verbose=verbosity >= 2,
-                    )
+                    refresh_all_kwargs: dict[str, object] = {
+                        "write": write,
+                        "enable": not args.disable_new,
+                        "query": args.query,
+                        "provider_limits": provider_limits,
+                        "progress": progress,
+                        "verbose": verbosity >= 2,
+                    }
+                    if args.limit is not None:
+                        refresh_all_kwargs["limit"] = args.limit
+                    discovery = catalog.refresh_all(**refresh_all_kwargs)
                 else:
-                    provider_limit = int(provider_limits.get(args.provider, args.limit))
-                    discovery = catalog.refresh(
-                        args.provider,
-                        write=write,
-                        enable=not args.disable_new,
-                        query=args.query,
-                        limit=provider_limit,
-                        progress=progress,
-                        verbose=verbosity >= 2,
-                    )
+                    refresh_kwargs: dict[str, object] = {
+                        "write": write,
+                        "enable": not args.disable_new,
+                        "query": args.query,
+                        "progress": progress,
+                        "verbose": verbosity >= 2,
+                    }
+                    provider_limit = provider_limits.get(args.provider)
+                    if provider_limit is not None:
+                        refresh_kwargs["limit"] = int(provider_limit)
+                    elif args.limit is not None:
+                        refresh_kwargs["limit"] = args.limit
+                    discovery = catalog.refresh(args.provider, **refresh_kwargs)
             finally:
                 if progress:
                     progress("done", "", "")

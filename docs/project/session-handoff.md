@@ -72,7 +72,7 @@ PYTHONPATH=src python -m aiplane profiles validate local-dev
 PYTHONPATH=src python -m aiplane environment doctor --required-only
 PYTHONPATH=src python -m aiplane environment doctor --required-only --format json
 PYTHONPATH=src python -m aiplane quickstart local-coding --dry-run --no-discovery
-PYTHONPATH=src python -m aiplane quickstart local-coding --dry-run --no-discovery --format text
+PYTHONPATH=src python -m aiplane quickstart local-coding --dry-run --no-discovery --format json
 PYTHONPATH=src python -m aiplane quickstart local-coding --dry-run --no-discovery --pull-model MODEL_ALIAS
 PYTHONPATH=src python -m aiplane doctor --profile local-dev
 PYTHONPATH=src python -m aiplane doctor --profile local-dev --format json
@@ -105,6 +105,8 @@ Results:
 - `tools plan opentofu` passed and reported OpenTofu as optional/manual with non-mutating IaC plan guidance.
 - `models list` returned an empty list for the clean structural profile template until discovery or local model entries are added.
 - `models list --machine` and `models list --machine-file` are implemented and tested; they derive RAM, VRAM, GPU vendor, and accelerator API filters from named/imported machine profiles or portable machine files while leaving parameter-count filters explicit.
+- `models list --fits-machine` is now a shorthand alias for `--machine`.
+- Hardware-fit filtering now treats no-GPU machines as `vram=0`, `gpu_vendor=none`, and `accelerator_api=cpu`, so GPU-required entries are excluded consistently.
 - `models clear-cache --dry-run` passed with `include_curated: true` and zero removals on the clean cache.
 - `deploy workflow-plan --target azure_gpu_vm` passed and classified the target as `cloud_vm` with explicit cloud provisioning boundaries, `az`/SSH/IaC/Packer/Ansible tool ownership, and read-only MCP policy.
 - `deploy apply --target azure_gpu_vm` without `--yes` correctly failed before mutation with `error: deploy apply is mutating; run deploy plan first`.

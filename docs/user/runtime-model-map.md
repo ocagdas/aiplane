@@ -231,12 +231,14 @@ aiplane models defaults --group-by provider
 
 Model rows include model-size and hardware requirement hints where available: `parameter_count_b`, `min_ram_gb`, `recommended_ram_gb`, `min_vram_gb`, `recommended_vram_gb`, `resource_estimate_source`, `gpu_vendor_requirement`, and `accelerator_api_requirements`. `parameter_count_b` is inferred from model ids such as `7b`, `14B`, or `40b`; if no size marker exists it is `0`. Resource values come from profile metadata, provider/discovery metadata when supported, or aiplane's current parameter-size/role heuristic for discovered models. They are meant for filtering and planning; validate with real runtime startup and benchmarks before provisioning hardware.
 
-You can filter by the active hardware profile, a named imported machine, an external machine file, the current machine, or explicit target capacity and accelerator requirements. `--fits-hardware` derives RAM, VRAM, GPU vendor, and accelerator API filters from `aiplane hardware active`. `--machine NAME` derives the same filters from `aiplane machines list`; `--machine-file PATH` reads a portable export without importing it; `--current-machine` probes the current host at list time. Explicit `--ram-gb`, `--vram-gb`, `--gpu-vendor`, and `--accelerator-api` values remain useful when planning for another target or overriding a machine profile. Parameter-count filters remain explicit because they are model properties, not hardware facts.
+You can filter by the active hardware profile, a named imported machine, an external machine file, the current machine, or explicit target capacity and accelerator requirements. `--fits-hardware` derives RAM, VRAM, GPU vendor, and accelerator API filters from `aiplane hardware active`. `--machine NAME` (or shorthand `--fits-machine NAME`) derives the same filters from `aiplane machines list`; `--machine-file PATH` reads a portable export without importing it; `--current-machine` probes the current host at list time. Explicit `--ram-gb`, `--vram-gb`, `--gpu-vendor`, and `--accelerator-api` values remain useful when planning for another target or overriding a machine profile. Parameter-count filters remain explicit because they are model properties, not hardware facts.
+When the selected machine has no GPU, hardware-fit filtering treats VRAM as `0`, vendor as `none`, and accelerator as `cpu`, so entries that require GPU VRAM or explicit CUDA/ROCm/Metal requirements are excluded.
 
 ```bash
 aiplane models list --fits-hardware
 aiplane models list --runtime ollama --role chat --fits-hardware --sort-by benchmark --limit 3
 aiplane models list --runtime vllm --role chat --machine azure_h100_test --sort-by role --limit 10
+aiplane models list --runtime vllm --role chat --fits-machine azure_h100_test --sort-by role --limit 10
 aiplane models list --runtime vllm --role chat --machine-file local_box.machine.yaml --sort-by role --limit 10
 aiplane models list --runtime ollama --role chat --current-machine --limit 5
 aiplane models list --runtime ollama --role chat --ram-gb 64 --vram-gb 24 --sort-by benchmark --limit 3

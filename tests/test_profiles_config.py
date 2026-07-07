@@ -235,6 +235,8 @@ class ProfileConfigTests(unittest.TestCase):
                         "local-coding",
                         "--dry-run",
                         "--no-discovery",
+                        "--format",
+                        "json",
                     ]
                 )
             payload = json.loads(stdout.getvalue())
@@ -297,6 +299,8 @@ class ProfileConfigTests(unittest.TestCase):
                         "--no-hardware-discovery",
                         "--pull-model",
                         "fixture-chat-small",
+                        "--format",
+                        "json",
                     ]
                 )
             payload = json.loads(stdout.getvalue())
@@ -359,6 +363,8 @@ class ProfileConfigTests(unittest.TestCase):
                         "--pull-model",
                         "fixture-chat-small",
                         "--dry-run",
+                        "--format",
+                        "json",
                     ]
                 )
             payload = json.loads(stdout.getvalue())
@@ -436,6 +442,99 @@ class ProfileConfigTests(unittest.TestCase):
                 ModelCatalog(profile).providers()["ollama"]["origin"],
                 "default_runtime_catalog",
             )
+
+    def test_profiles_bootstrap_local_uses_refresh_default_limit_when_not_passed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            profiles_dir = Path(tmp) / "profiles"
+            stdout = StringIO()
+            refresh_result = {
+                "name": "model_catalog_refresh",
+                "changes": {"would_import": 0},
+                "results": {"ollama": {"status": "ok", "changes": {}}},
+            }
+            with (
+                patch.object(ModelCatalog, "refresh", return_value=refresh_result) as refresh,
+                redirect_stdout(stdout),
+            ):
+                code = cli_main(
+                    [
+                        "--profiles-dir",
+                        str(profiles_dir),
+                        "profiles",
+                        "bootstrap-local",
+                        "--provider",
+                        "ollama",
+                        "--no-hardware-discovery",
+                    ]
+                )
+            self.assertEqual(code, 0)
+            self.assertNotIn("limit", refresh.call_args.kwargs)
+
+    def test_profiles_bootstrap_local_passes_refresh_limit_when_explicit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            profiles_dir = Path(tmp) / "profiles"
+            stdout = StringIO()
+            refresh_result = {
+                "name": "model_catalog_refresh",
+                "changes": {"would_import": 0},
+                "results": {"ollama": {"status": "ok", "changes": {}}},
+            }
+            with (
+                patch.object(ModelCatalog, "refresh", return_value=refresh_result) as refresh,
+                redirect_stdout(stdout),
+            ):
+                code = cli_main(
+                    [
+                        "--profiles-dir",
+                        str(profiles_dir),
+                        "profiles",
+                        "bootstrap-local",
+                        "--provider",
+                        "ollama",
+                        "--limit",
+                        "42",
+                        "--no-hardware-discovery",
+                    ]
+                )
+            self.assertEqual(code, 0)
+            self.assertEqual(refresh.call_args.kwargs["limit"], 42)
+
+    def test_profiles_bootstrap_local_overwrites_existing_profile_by_default(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            profiles_dir = Path(tmp) / "profiles"
+            with redirect_stdout(StringIO()):
+                self.assertEqual(
+                    cli_main(
+                        [
+                            "--profiles-dir",
+                            str(profiles_dir),
+                            "profiles",
+                            "bootstrap-local",
+                            "--no-discovery",
+                            "--no-hardware-discovery",
+                        ]
+                    ),
+                    0,
+                )
+            models_path = profiles_dir / "local-dev" / "models.yaml"
+            models_path.write_text("defaults: {}\nmodels:\n  sentinel:\n    provider: x\n", encoding="utf-8")
+
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = cli_main(
+                    [
+                        "--profiles-dir",
+                        str(profiles_dir),
+                        "profiles",
+                        "bootstrap-local",
+                        "--no-discovery",
+                        "--no-hardware-discovery",
+                    ]
+                )
+            self.assertEqual(code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertTrue(payload["created"])
+            self.assertNotIn("sentinel", models_path.read_text(encoding="utf-8"))
 
     def test_profiles_root_uses_env_var(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

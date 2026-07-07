@@ -58,8 +58,10 @@ def _model_filters_from_machine(machine: dict[str, Any]) -> dict[str, Any]:
     gpu = machine.get("gpu") if isinstance(machine.get("gpu"), dict) else {}
     unified_gb = _number(memory.get("unified_memory_gb"))
     ram_gb = _number(memory.get("ram_gb")) or unified_gb
-    vram_gb = _number(gpu.get("vram_gb")) or unified_gb
     vendor = _normalized_vendor(gpu.get("vendor"))
+    vram_gb = _number(gpu.get("vram_gb"))
+    if vram_gb is None and vendor == "apple":
+        vram_gb = unified_gb
     accelerator_api = _preferred_accelerator(machine.get("accelerator_apis"), vendor)
     return {
         "max_min_ram_gb": ram_gb,

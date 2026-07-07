@@ -297,6 +297,7 @@ def add_models_parser(
     machine_filter_group = models_list.add_mutually_exclusive_group()
     machine_filter_group.add_argument(
         "--machine",
+        "--fits-machine",
         help="Named machine profile from `aiplane machines list`; derives RAM, VRAM, GPU vendor, and accelerator filters",
     )
     machine_filter_group.add_argument(
@@ -897,16 +898,28 @@ def active_hardware_model_filters(profile: Profile) -> dict[str, object]:
     memory = machine.get("memory", {}) if isinstance(machine.get("memory"), dict) else {}
     gpu = machine.get("gpu", {}) if isinstance(machine.get("gpu"), dict) else {}
     filters: dict[str, object] = {}
-    ram = memory.get("ram_gb") or memory.get("unified_memory_gb")
+    vendor = str(gpu.get("vendor") or "").strip().lower()
+    ram = _number_or_none(memory.get("ram_gb"))
+    if ram is None:
+        ram = _number_or_none(memory.get("unified_memory_gb"))
     if ram is not None:
         filters["max_min_ram_gb"] = ram
-    vram = gpu.get("vram_gb") or memory.get("unified_memory_gb")
+    vram = _number_or_none(gpu.get("vram_gb"))
+    # Treat unified memory as GPU budget only for unified-memory platforms.
+    if vram is None and vendor == "apple":
+        vram = _number_or_none(memory.get("unified_memory_gb"))
     if vram is not None:
         filters["max_min_vram_gb"] = vram
-    vendor = gpu.get("vendor")
     if vendor:
-        filters["gpu_vendor"] = str(vendor)
+        filters["gpu_vendor"] = vendor
     accelerator_apis = machine.get("accelerator_apis")
     if isinstance(accelerator_apis, list) and accelerator_apis:
         filters["accelerator_api"] = str(accelerator_apis[0])
     return filters
+
+
+def _number_or_none(value: object) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None

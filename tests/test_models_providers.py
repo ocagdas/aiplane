@@ -1618,6 +1618,82 @@ class ModelProviderTests(unittest.TestCase):
             memory = machine["memory"]["ram_gb"] or machine["memory"].get("unified_memory_gb")
             self.assertTrue(all(float(row.get("min_ram_gb") or 0) <= float(memory) for row in rows))
 
+    def test_models_list_fits_hardware_treats_no_gpu_as_zero_vram(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            profiles_dir = root / "profiles"
+            create_profile("tmp", profiles_dir=profiles_dir)
+            profile_root = profiles_dir / "tmp"
+            models_config = {
+                "models": {
+                    "cpu_ok": {
+                        "provider": "test_provider",
+                        "model": "cpu-ok:1b",
+                        "enabled": True,
+                        "roles": ["chat"],
+                        "supported_runtimes": ["ollama"],
+                        "min_ram_gb": 8,
+                        "min_vram_gb": 0,
+                    },
+                    "gpu_required": {
+                        "provider": "test_provider",
+                        "model": "gpu-required:7b",
+                        "enabled": True,
+                        "roles": ["chat"],
+                        "supported_runtimes": ["ollama"],
+                        "min_ram_gb": 8,
+                        "min_vram_gb": 8,
+                    },
+                }
+            }
+            hardware_config = {
+                "active": "local_auto",
+                "selected": {
+                    "origin": "local_auto",
+                    "custom": False,
+                    "values": {
+                        "machine_tag": "local_auto",
+                        "provider": "local",
+                        "placement": "same_host",
+                        "substrate": "native",
+                        "cpu_architecture": "auto",
+                        "cpu_cores": "auto",
+                        "cpu_threads": "auto",
+                        "memory_gb": 32,
+                        "gpu_vendor": "none",
+                        "gpu_model": "none",
+                        "gpu_count": 0,
+                        "vram_gb": 0,
+                        "total_vram_gb": 0,
+                        "memory_architecture": "discrete_or_system",
+                    },
+                },
+                "hardware_profiles": {"local_auto": {}},
+            }
+            (profile_root / "models.yaml").write_text(agent_config.dump_yaml(models_config), encoding="utf-8")
+            (profile_root / "hardware.yaml").write_text(agent_config.dump_yaml(hardware_config), encoding="utf-8")
+
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = cli_main(
+                    [
+                        "--profiles-dir",
+                        str(profiles_dir),
+                        "models",
+                        "list",
+                        "--profile",
+                        "tmp",
+                        "--provider",
+                        "test_provider",
+                        "--role",
+                        "chat",
+                        "--fits-hardware",
+                        "--enabled-only",
+                    ]
+                )
+            self.assertEqual(code, 0)
+            self.assertEqual([row["name"] for row in json.loads(stdout.getvalue())], ["cpu_ok"])
+
     def test_models_list_can_filter_by_named_machine_and_machine_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -1686,6 +1762,147 @@ class ModelProviderTests(unittest.TestCase):
                         "--role",
                         "chat",
                         "--machine",
+                        "azure_t4_test",
+                    ]
+                )
+            self.assertEqual(code, 0)
+            self.assertEqual([row["name"] for row in json.loads(stdout.getvalue())], ["fits_t4"])
+
+    def test_models_list_fits_hardware_enforces_vendor_and_api_requirements(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            profiles_dir = root / "profiles"
+            create_profile("tmp", profiles_dir=profiles_dir)
+            profile_root = profiles_dir / "tmp"
+            models_config = {
+                "models": {
+                    "amd_ok": {
+                        "provider": "test_provider",
+                        "model": "amd-ok:7b",
+                        "enabled": True,
+                        "roles": ["chat"],
+                        "supported_runtimes": ["ollama"],
+                        "min_ram_gb": 8,
+                        "min_vram_gb": 8,
+                        "required_gpu_vendor": "amd",
+                        "required_accelerator_apis": ["rocm"],
+                    },
+                    "nvidia_only": {
+                        "provider": "test_provider",
+                        "model": "nvidia-only:7b",
+                        "enabled": True,
+                        "roles": ["chat"],
+                        "supported_runtimes": ["ollama"],
+                        "min_ram_gb": 8,
+                        "min_vram_gb": 8,
+                        "required_gpu_vendor": "nvidia",
+                        "required_accelerator_apis": ["cuda"],
+                    },
+                }
+            }
+            hardware_config = {
+                "active": "local_auto",
+                "selected": {
+                    "origin": "local_auto",
+                    "custom": False,
+                    "values": {
+                        "machine_tag": "local_auto",
+                        "provider": "local",
+                        "placement": "same_host",
+                        "substrate": "native",
+                        "cpu_architecture": "auto",
+                        "cpu_cores": "auto",
+                        "cpu_threads": "auto",
+                        "memory_gb": 32,
+                        "gpu_vendor": "amd",
+                        "gpu_model": "Radeon",
+                        "gpu_count": 1,
+                        "vram_gb": 16,
+                        "total_vram_gb": 16,
+                        "accelerator_apis": ["rocm"],
+                    },
+                },
+                "hardware_profiles": {"local_auto": {}},
+            }
+            (profile_root / "models.yaml").write_text(agent_config.dump_yaml(models_config), encoding="utf-8")
+            (profile_root / "hardware.yaml").write_text(agent_config.dump_yaml(hardware_config), encoding="utf-8")
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = cli_main(
+                    [
+                        "--profiles-dir",
+                        str(profiles_dir),
+                        "models",
+                        "list",
+                        "--profile",
+                        "tmp",
+                        "--provider",
+                        "test_provider",
+                        "--role",
+                        "chat",
+                        "--fits-hardware",
+                        "--enabled-only",
+                    ]
+                )
+            self.assertEqual(code, 0)
+            self.assertEqual([row["name"] for row in json.loads(stdout.getvalue())], ["amd_ok"])
+
+    def test_models_list_fits_machine_shorthand_alias_matches_machine(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            profiles_dir = root / "profiles"
+            create_profile("tmp", profiles_dir=profiles_dir)
+            profile_root = profiles_dir / "tmp"
+            models_config = {
+                "models": {
+                    "fits_t4": {
+                        "provider": "test_provider",
+                        "model": "example-7b",
+                        "enabled": True,
+                        "roles": ["chat"],
+                        "supported_runtimes": ["vllm"],
+                        "min_ram_gb": 16,
+                        "min_vram_gb": 12,
+                        "required_gpu_vendor": "nvidia",
+                        "required_accelerator_apis": ["cuda"],
+                    },
+                    "too_large_for_t4": {
+                        "provider": "test_provider",
+                        "model": "example-14b",
+                        "enabled": True,
+                        "roles": ["chat"],
+                        "supported_runtimes": ["vllm"],
+                        "min_ram_gb": 32,
+                        "min_vram_gb": 24,
+                        "required_gpu_vendor": "nvidia",
+                        "required_accelerator_apis": ["cuda"],
+                    },
+                }
+            }
+            (profile_root / "models.yaml").write_text(agent_config.dump_yaml(models_config), encoding="utf-8")
+            profile = load_profile("tmp", Path.cwd(), profiles_dir=profiles_dir)
+            imported = MachineManager(profile).import_azure_sku(
+                "Standard_NC4as_T4_v3",
+                "uksouth",
+                name="azure_t4_test",
+            )
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = cli_main(
+                    [
+                        "--profiles-dir",
+                        str(profiles_dir),
+                        "models",
+                        "list",
+                        "--profile",
+                        "tmp",
+                        "--provider",
+                        "test_provider",
+                        "--runtime",
+                        "vllm",
+                        "--role",
+                        "chat",
+                        "--fits-machine",
                         "azure_t4_test",
                     ]
                 )

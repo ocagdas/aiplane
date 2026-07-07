@@ -79,8 +79,10 @@ aiplane environment doctor --required-only
 
 # Section 1: AI workflow readiness wedge.
 aiplane quickstart local-coding --dry-run --no-discovery
-aiplane quickstart local-coding --dry-run --no-discovery --format text
+aiplane quickstart local-coding --dry-run --no-discovery --format json
 aiplane quickstart local-coding --no-discovery --no-hardware-discovery
+aiplane hardware discover
+aiplane hardware show
 aiplane doctor
 
 # Section 2: original MVP execution path, enhanced with clearer dry-run/pull semantics.
@@ -132,6 +134,7 @@ aiplane integrations export continue-mcp
 aiplane mcp manifest
 sed -n '1,90p' skills/aiplane/SKILL.md
 aiplane hardware discover --dry-run
+aiplane models list --runtime ollama --role chat --current-machine --enabled-only --sort-by role --limit 3
 aiplane hardware recommend
 aiplane stacks setup cpu_chat --runtime ollama --model "$CHAT_ALIAS" --access same_host --dry-run
 ```
@@ -208,6 +211,8 @@ conda activate aiplane
 aiplane profiles bootstrap-local --no-discovery
 aiplane config default-profile local-dev
 aiplane profiles list
+aiplane hardware discover
+aiplane hardware show
 aiplane environment doctor --required-only
 aiplane tools matrix
 ```
