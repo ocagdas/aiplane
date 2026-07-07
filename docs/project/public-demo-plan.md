@@ -110,6 +110,7 @@ aiplane quickstart local-coding --no-discovery --pull-model "$CHAT_ALIAS"
 aiplane runtimes status ollama
 aiplane chat --model "$CHAT_ALIAS" --prompt "Say hello from the configured endpoint" --dry-run
 aiplane chat --model "$CHAT_ALIAS" --prompt "Say hello from the configured endpoint" --timeout-seconds 180
+aiplane bridge exec ollama-launch --dry-run
 aiplane run --model "$CHAT_ALIAS" --dry-run "Summarize what aiplane is in one sentence."
 aiplane code write --model "$CHAT_ALIAS" --task "write a Python function that validates an email address" --dry-run
 

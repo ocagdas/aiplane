@@ -109,6 +109,7 @@ Results:
 - Hardware-fit filtering now treats no-GPU machines as `vram=0`, `gpu_vendor=none`, and `accelerator_api=cpu`, so GPU-required entries are excluded consistently.
 - `machines discover azure` now accepts explicit candidate filters (`--gpu-vendor`, `--min-cpu-cores`, `--min-ram-gb`, `--min-vram-gb`) and streams redacted Azure CLI progress to stderr by default (`--verbosity 0` keeps one active command line with a 2-second dot ticker), with optional per-command output logging at `--verbosity 1`.
 - Live `machines discover azure` results now include per-candidate retail unit pricing (when available) from Azure Retail Prices (`unit_price`, `currency`, `unit`, `unit_of_measure`) so machine candidate review can include cost context.
+- `bridge list/exec` now exposes a strict allowlisted external-runtime relay surface (currently Ollama shorthand actions only) so `aiplane` can delegate selected native commands without opening arbitrary shell passthrough.
 - `models clear-cache --dry-run` passed with `include_curated: true` and zero removals on the clean cache.
 - `deploy workflow-plan --target azure_gpu_vm` passed and classified the target as `cloud_vm` with explicit cloud provisioning boundaries, `az`/SSH/IaC/Packer/Ansible tool ownership, and read-only MCP policy.
 - `deploy apply --target azure_gpu_vm` without `--yes` correctly failed before mutation with `error: deploy apply is mutating; run deploy plan first`.

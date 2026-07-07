@@ -1739,7 +1739,7 @@ class ModelProviderTests(unittest.TestCase):
             }
             (profile_root / "models.yaml").write_text(agent_config.dump_yaml(models_config), encoding="utf-8")
             profile = load_profile("tmp", Path.cwd(), profiles_dir=profiles_dir)
-            imported = MachineManager(profile).import_azure_sku(
+            MachineManager(profile).import_azure_sku(
                 "Standard_NC4as_T4_v3",
                 "uksouth",
                 name="azure_t4_test",

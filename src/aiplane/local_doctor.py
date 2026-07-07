@@ -268,7 +268,7 @@ def _model_defaults_section(
             configured = bool(model.get("enabled", True))
             ok = bool(configured and capability_ok)
             warning = bool(configured and capability_ok and status and not status.usable)
-            reason = (capability_reason if configured and not capability_ok else _status_reason(status))
+            reason = capability_reason if configured and not capability_ok else _status_reason(status)
 
         checks.append(
             {

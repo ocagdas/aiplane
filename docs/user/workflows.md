@@ -115,6 +115,17 @@ Supported execution protocols are currently:
 
 If a model points at a provider/runtime without one of those protocols, `aiplane run` and `models test` fail explicitly instead of guessing. Use `--dry-run` first to confirm the selected alias and prompt.
 
+When you want native runtime UX without opening arbitrary shell passthrough, use the allowlisted bridge actions:
+
+```bash
+aiplane bridge list
+aiplane bridge exec ollama-launch --dry-run
+aiplane bridge exec ollama-launch
+aiplane bridge exec ollama-run --model llama3.1:8b --prompt "Say hello from native Ollama"
+```
+
+`bridge exec` only supports predefined shorthand actions and validated arguments. It does not relay arbitrary commands.
+
 ## Workflow 5: MCP Plus Model Endpoint
 
 Use this when an IDE or agent should query `aiplane` as tools as well as call a model endpoint.

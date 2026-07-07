@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
 import threading
@@ -96,6 +97,34 @@ def _profiles_dir_from_env() -> Path | None:
     if env_path:
         return Path(env_path).expanduser().resolve()
     return None
+
+
+_BRIDGE_ACTIONS: dict[str, dict[str, object]] = {
+    "ollama-launch": {
+        "description": "Launch Ollama native app flow",
+        "base_command": ["ollama", "launch"],
+        "requires_model": False,
+        "supports_prompt": False,
+    },
+    "ollama-list": {
+        "description": "List local Ollama models",
+        "base_command": ["ollama", "list"],
+        "requires_model": False,
+        "supports_prompt": False,
+    },
+    "ollama-ps": {
+        "description": "List running Ollama models",
+        "base_command": ["ollama", "ps"],
+        "requires_model": False,
+        "supports_prompt": False,
+    },
+    "ollama-run": {
+        "description": "Run Ollama model by id/alias",
+        "base_command": ["ollama", "run"],
+        "requires_model": True,
+        "supports_prompt": True,
+    },
+}
 
 
 def _integration_selection_args(parser) -> None:
@@ -1595,6 +1624,37 @@ def _main(argv: list[str] | None = None) -> int:
         help="Preview the endpoint chat plan, or the native Ollama command when --native-ollama is used",
     )
 
+    bridge_cmd = _command(
+        subparsers,
+        "bridge",
+        "Run allowlisted external runtime commands",
+        "Run selected allowlisted runtime CLI commands without exposing arbitrary shell passthrough.",
+        "Examples:\n  aiplane bridge list\n  aiplane bridge exec ollama-launch --dry-run\n  aiplane bridge exec ollama-run --model llama3.1:8b --prompt 'Say hello'",
+    )
+    bridge_sub = bridge_cmd.add_subparsers(dest="bridge_command", required=True, metavar="command")
+    bridge_sub.add_parser(
+        "list",
+        help="List allowlisted bridge actions",
+        description="List shorthand actions that aiplane can delegate to external runtime CLIs.",
+        formatter_class=HelpFormatter,
+        allow_abbrev=False,
+    )
+    bridge_exec = bridge_sub.add_parser(
+        "exec",
+        help="Execute one allowlisted bridge action",
+        description="Run one allowlisted external command by shorthand action.",
+        formatter_class=HelpFormatter,
+        allow_abbrev=False,
+    )
+    bridge_exec.add_argument("action", choices=sorted(_BRIDGE_ACTIONS), help="Bridge action shorthand")
+    bridge_exec.add_argument("--model", help="Model id/alias for actions that require a model")
+    bridge_exec.add_argument("--prompt", help="Prompt text for actions that support prompts")
+    bridge_exec.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print the resolved external command without executing it",
+    )
+
     deploy_cmd = _command(
         subparsers,
         "deploy",
@@ -3016,6 +3076,47 @@ def _main(argv: list[str] | None = None) -> int:
                 print(output)
         return 0
 
+    if args.command == "bridge":
+        if args.bridge_command == "list":
+            actions = []
+            for action, spec in sorted(_BRIDGE_ACTIONS.items()):
+                actions.append(
+                    {
+                        "action": action,
+                        "description": spec.get("description"),
+                        "command": list(spec.get("base_command", [])),
+                        "requires_model": bool(spec.get("requires_model")),
+                        "supports_prompt": bool(spec.get("supports_prompt")),
+                    }
+                )
+            print(_json({"name": "bridge_actions", "actions": actions}, indent=2))
+            return 0
+        if args.bridge_command == "exec":
+            command = _bridge_action_command(args.action, model=args.model, prompt=args.prompt)
+            payload = {
+                "name": "bridge_exec",
+                "action": args.action,
+                "command": command,
+                "dry_run": bool(args.dry_run),
+            }
+            executable = command[0] if command else ""
+            if executable and not shutil.which(executable):
+                payload["ok"] = False
+                payload["reason"] = f"required executable not found on PATH: {executable}"
+                print(_json(payload, indent=2))
+                return 2
+            if args.dry_run:
+                payload["ok"] = True
+                print(_json(payload, indent=2))
+                return 0
+            completed = subprocess.run(command, text=True, capture_output=True, check=False)
+            if completed.stdout:
+                print(completed.stdout, end="")
+            if completed.stderr:
+                print(completed.stderr, end="", file=sys.stderr)
+            return int(completed.returncode)
+        raise ValueError(f"unknown bridge command: {args.bridge_command}")
+
     if args.command == "deploy":
         profile = load_profile(effective_profile, workspace, profiles_dir=profiles_dir)
         manager = DeployManager(profile)
@@ -3294,6 +3395,26 @@ def _runtime_helper_substrate(profile: object, runtime: str, override: str | Non
     provider = ModelCatalog(profile).providers().get(runtime, {}) if hasattr(profile, "models") else {}
     substrate = str(provider.get("substrate") or "native") if isinstance(provider, dict) else "native"
     return "docker" if substrate == "docker" else "native"
+
+
+def _bridge_action_command(action: str, model: str | None = None, prompt: str | None = None) -> list[str]:
+    if action not in _BRIDGE_ACTIONS:
+        raise ValueError(f"unsupported bridge action: {action}")
+    spec = _BRIDGE_ACTIONS[action]
+    requires_model = bool(spec.get("requires_model"))
+    supports_prompt = bool(spec.get("supports_prompt"))
+    if requires_model and not (model or "").strip():
+        raise ValueError(f"bridge action {action} requires --model")
+    if not requires_model and model:
+        raise ValueError(f"bridge action {action} does not accept --model")
+    if not supports_prompt and prompt:
+        raise ValueError(f"bridge action {action} does not accept --prompt")
+    command = [str(part) for part in spec.get("base_command", [])]
+    if requires_model:
+        command.append(str(model).strip())
+    if supports_prompt and prompt is not None:
+        command.append(prompt)
+    return command
 
 
 def _run_provider_helper(
@@ -4010,7 +4131,9 @@ def _quickstart_local_coding_text(payload: dict[str, object]) -> str:
                             f"`aiplane models use {role_arg} ALIAS`"
                         )
                     elif section.get("name") == "environment":
-                        suggestion = "Try: `aiplane environment doctor --required-only` then install missing CLIs listed above."
+                        suggestion = (
+                            "Try: `aiplane environment doctor --required-only` then install missing CLIs listed above."
+                        )
                     elif section.get("name") == "endpoints" or str(check.get("name", "")).startswith("endpoint:"):
                         suggestion = "Try: `aiplane runtimes status <runtime>` or `aiplane providers test <provider>`. If provider is disabled, run `aiplane providers enable <provider>`."
                     elif section.get("name") == "integrations":
