@@ -22,6 +22,7 @@ aiplane mcp serve
 
 The current read tools are:
 
+- `aiplane.docs.list` and `aiplane.docs.read` for project docs/help text
 - `aiplane.profiles.list`
 - `aiplane.providers.list` with `status`, `runtime`, and `group_by` filters for ownership/runtime grouping
 - `aiplane.providers.models`

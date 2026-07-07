@@ -129,17 +129,18 @@ aiplane models refresh --provider huggingface --query text-generation --limit 50
 aiplane models refresh --limit 100 --provider-limit huggingface=500 --provider-limit ollama=500 --dry-run
 aiplane models clear-cache --dry-run
 aiplane models clear-cache --provider huggingface --keep-curated --dry-run
-aiplane models refresh --provider huggingface --limit 10 --dry-run --verbose
+aiplane models refresh --provider huggingface --limit 10 --dry-run --verbosity 2
 ```
 
-The default CLI refresh result omits the full provider `results` map and prints
-compact provider-level counts under `provider_summary`. Add `--verbose` when you
-need the full `results` map, including `source_models_returned`,
+Refresh verbosity controls output shape: `--verbosity 0` (default) prints only
+top-level summary fields, `--verbosity 1` adds compact provider-level counts
+under `provider_summary`, and `--verbosity 2` includes the full `results` map.
+Use `--verbosity 2` when you need full provider details including `source_models_returned`,
 `profile_models_before_refresh`, `profile_curated_models_before_refresh`,
 `profile_refresh_imported_models_before_refresh`, `source_models_already_profiled`,
 `source_models_to_import`, `source_models_to_update`, `source_contacted`,
 `source_discovery_method`, `source_discovery_reason`, `model_changes_count`, and
-per-model `model_changes` rows. Verbose rows use `model.id`/`model.source` for
+per-model `model_changes` rows. Level-2 rows use `model.id`/`model.source` for
 the model source and `runtime_endpoint` for the configured runtime endpoint.
 `prune_enabled: true` means a successful authoritative online source response is being used
 as the source of truth for stale discovered ids. Profile-owned model entries in `models.yaml` are preserved by refresh. `models clear-cache` includes profile-owned review entries by default unless `--keep-curated` is used, so discovery state can be cleared and repopulated from providers. Profile-catalog fallback never updates
@@ -314,7 +315,7 @@ Audio, image, and video generation should come from provider discovery or delibe
 ```bash
 aiplane providers models huggingface --online --query text-to-speech --limit 20
 aiplane providers models elevenlabs --online --query voice --limit 20
-aiplane models refresh --provider huggingface --query text-to-speech --dry-run --verbose --limit 20
+aiplane models refresh --provider huggingface --query text-to-speech --dry-run --verbosity 2 --limit 20
 aiplane models refresh --provider huggingface --query text-to-speech --disable-new --limit 20
 aiplane models list --role text_to_speech --sort-by role
 

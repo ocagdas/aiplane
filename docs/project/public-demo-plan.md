@@ -73,59 +73,67 @@ Use this path for a compact rehearsal. It keeps the original `mvp_0.2` execution
 # Install and validate the CLI/profile.
 scripts/setup_env.sh --mode conda --conda-env aiplane --action install --editable
 conda activate aiplane
-aiplane profiles validate local-dev
+aiplane profiles bootstrap-local --no-discovery
+aiplane profiles validate
 aiplane environment doctor --required-only
 
 # Section 1: AI workflow readiness wedge.
 aiplane quickstart local-coding --dry-run --no-discovery
 aiplane quickstart local-coding --dry-run --no-discovery --format text
-aiplane --profiles-dir /tmp/aiplane-demo-profiles quickstart local-coding --name demo --no-discovery --no-hardware-discovery
-aiplane --profiles-dir /tmp/aiplane-demo-profiles doctor --profile demo
+aiplane quickstart local-coding --no-discovery --no-hardware-discovery
+aiplane doctor
 
 # Section 2: original MVP execution path, enhanced with clearer dry-run/pull semantics.
-aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider ollama --query chat --dry-run --limit 5
-aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider ollama --query chat --limit 10
-aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --runtime ollama --role chat --capability 'general_chat>=2' --fits-hardware --enabled-only --sort-by role --limit 5
-CHAT_ALIAS="$(aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --runtime ollama --role chat --capability 'general_chat>=2' --fits-hardware --enabled-only --sort-by role --limit 1 --name-only)"
+aiplane models refresh --provider ollama --query chat --dry-run --limit 5
+aiplane models refresh --provider ollama --query chat --limit 10
+aiplane models refresh --provider ollama --query code --limit 10
+aiplane models refresh --provider ollama --query embed --limit 10
+aiplane models list --group-by runtime --limit 10
+aiplane models list --runtime ollama --role chat --capability 'general_chat>=2' --fits-hardware --enabled-only --sort-by role --limit 3
+aiplane models list --runtime ollama --role chat --ram-gb 16 --vram-gb 0 --sort-by role --limit 3
+aiplane models list --runtime ollama --role chat --ram-gb 32 --vram-gb 8 --sort-by role --limit 3
+aiplane models list --runtime ollama --role autocomplete --ram-gb 16 --vram-gb 0 --sort-by role --limit 3
+aiplane models list --runtime ollama --role embedding --ram-gb 16 --vram-gb 0 --sort-by role --limit 3
+CHAT_ALIAS="$(aiplane models list --runtime ollama --role chat --capability 'general_chat>=2' --fits-hardware --enabled-only --sort-by role --limit 1 --name-only)"
 printf 'chat_alias=%s\n' "$CHAT_ALIAS"
 
 # Review/add/promote the chosen alias before exporting or running.
-aiplane --profiles-dir /tmp/aiplane-demo-profiles models show --profile demo "$CHAT_ALIAS"
-aiplane --profiles-dir /tmp/aiplane-demo-profiles integrations roles continue --profile demo
+aiplane models show "$CHAT_ALIAS"
+aiplane integrations roles continue
 
 # Pull preview versus execution. Run the non-dry command only on a prepared recording machine.
-aiplane --profiles-dir /tmp/aiplane-demo-profiles quickstart local-coding --name demo --dry-run --no-discovery --pull-model "$CHAT_ALIAS"
-aiplane --profiles-dir /tmp/aiplane-demo-profiles quickstart local-coding --name demo --no-discovery --pull-model "$CHAT_ALIAS"
+aiplane quickstart local-coding --dry-run --no-discovery --pull-model "$CHAT_ALIAS"
+aiplane quickstart local-coding --no-discovery --pull-model "$CHAT_ALIAS"
 
 aiplane runtimes status ollama
-aiplane --profiles-dir /tmp/aiplane-demo-profiles chat --profile demo --model "$CHAT_ALIAS" --prompt "Say hello from the configured endpoint" --dry-run
-aiplane --profiles-dir /tmp/aiplane-demo-profiles chat --profile demo --model "$CHAT_ALIAS" --prompt "Say hello from the configured endpoint" --timeout-seconds 180
-aiplane --profiles-dir /tmp/aiplane-demo-profiles run --profile demo --model "$CHAT_ALIAS" --dry-run "Summarize what aiplane is in one sentence."
-aiplane --profiles-dir /tmp/aiplane-demo-profiles code write --profile demo --model "$CHAT_ALIAS" --task "write a Python function that validates an email address" --dry-run
+aiplane chat --model "$CHAT_ALIAS" --prompt "Say hello from the configured endpoint" --dry-run
+aiplane chat --model "$CHAT_ALIAS" --prompt "Say hello from the configured endpoint" --timeout-seconds 180
+aiplane run --model "$CHAT_ALIAS" --dry-run "Summarize what aiplane is in one sentence."
+aiplane code write --model "$CHAT_ALIAS" --task "write a Python function that validates an email address" --dry-run
 
 # Export after aliases/defaults exist or pass explicit role selections.
-aiplane --profiles-dir /tmp/aiplane-demo-profiles integrations export continue --profile demo --chat "$CHAT_ALIAS"
-aiplane --profiles-dir /tmp/aiplane-demo-profiles integrations export aider --profile demo --chat "$CHAT_ALIAS"
+aiplane integrations export continue --chat "$CHAT_ALIAS"
+aiplane integrations export aider --chat "$CHAT_ALIAS"
 
 # Second runtime track: vLLM/OpenAI-compatible endpoint planning and runner dry-runs.
 VLLM_ALIAS="vllm_demo_chat"
-aiplane --profiles-dir /tmp/aiplane-demo-profiles models add "$VLLM_ALIAS" --profile demo --provider local_file --model /models/TinyLlama-1.1B-Chat-v1.0 --role chat --runtime vllm --preferred-runtime vllm --set min_ram_gb=16 --set min_vram_gb=8 --dry-run
-aiplane --profiles-dir /tmp/aiplane-demo-profiles models add "$VLLM_ALIAS" --profile demo --provider local_file --model /models/TinyLlama-1.1B-Chat-v1.0 --role chat --runtime vllm --preferred-runtime vllm --set min_ram_gb=16 --set min_vram_gb=8 --overwrite
-aiplane --profiles-dir /tmp/aiplane-demo-profiles models show --profile demo "$VLLM_ALIAS"
-aiplane --profiles-dir /tmp/aiplane-demo-profiles runtimes prerequisites vllm
-aiplane --profiles-dir /tmp/aiplane-demo-profiles runtimes bundle vllm --profile demo --model "$VLLM_ALIAS" --mode docker --format dockerfile
-aiplane --profiles-dir /tmp/aiplane-demo-profiles runtimes start vllm --profile demo --model "$VLLM_ALIAS" --dry-run
-aiplane --profiles-dir /tmp/aiplane-demo-profiles integrations export openai-compatible --profile demo --model "$VLLM_ALIAS" --endpoint http://localhost:8000/v1
-aiplane --profiles-dir /tmp/aiplane-demo-profiles chat --profile demo --model "$VLLM_ALIAS" --prompt "Say hello from the vLLM endpoint" --dry-run
+aiplane models add "$VLLM_ALIAS" --provider local_file --model /models/TinyLlama-1.1B-Chat-v1.0 --role chat --runtime vllm --preferred-runtime vllm --set min_ram_gb=16 --set min_vram_gb=8 --dry-run
+aiplane models add "$VLLM_ALIAS" --provider local_file --model /models/TinyLlama-1.1B-Chat-v1.0 --role chat --runtime vllm --preferred-runtime vllm --set min_ram_gb=16 --set min_vram_gb=8 --overwrite
+aiplane models show "$VLLM_ALIAS"
+aiplane runtimes prerequisites vllm
+aiplane runtimes bundle vllm --model "$VLLM_ALIAS" --mode docker --format dockerfile
+aiplane runtimes start vllm --model "$VLLM_ALIAS" --dry-run
+aiplane integrations export openai-compatible --model "$VLLM_ALIAS" --endpoint http://localhost:8000/v1
+aiplane chat --model "$VLLM_ALIAS" --prompt "Say hello from the vLLM endpoint" --dry-run
 
 # Section 3: MCP, skills, and repeatability surfaces.
-aiplane --profiles-dir /tmp/aiplane-demo-profiles integrations export vscode-mcp --profile demo
-aiplane --profiles-dir /tmp/aiplane-demo-profiles integrations export continue-mcp --profile demo
+aiplane integrations export vscode-mcp
+aiplane integrations export continue-mcp
 aiplane mcp manifest
 sed -n '1,90p' skills/aiplane/SKILL.md
-aiplane --profiles-dir /tmp/aiplane-demo-profiles hardware discover --profile demo --dry-run
-aiplane --profiles-dir /tmp/aiplane-demo-profiles hardware recommend --profile demo
-aiplane --profiles-dir /tmp/aiplane-demo-profiles stacks setup --profile demo cpu_chat --runtime ollama --model "$CHAT_ALIAS" --access same_host --dry-run
+aiplane hardware discover --dry-run
+aiplane hardware recommend
+aiplane stacks setup cpu_chat --runtime ollama --model "$CHAT_ALIAS" --access same_host --dry-run
 ```
 
 Use `aiplane chat --native-ollama --dry-run --model "$CHAT_ALIAS"` only when you explicitly want to show Ollama's `ollama run` path. The default chat path should demonstrate the endpoint-backed runner.
@@ -142,21 +150,21 @@ Key points to say explicitly:
 - MCP exposes structured inspection/planning/export plus narrow guarded writes; broad shell execution, runtime installs, model pulls, cloud apply, and secret writes remain outside MCP.
 - The longer-term direction includes remote GPU workstation profiles, team policy/governance, richer benchmark data, orchestrator exports, and guarded cloud/resource planning.
 
-## Disposable Demo Profile
+## Default Profile Demo Setup
 
 Complete the Conda install step in Section 1 before running these prep commands, or
 run it once before recording. The command blocks below assume the `aiplane`
 console script is available from the active Conda environment.
 
-Use a temporary profile directory for recording so machine imports, discovered entries, and stack setup rehearsals do not change `profiles/local-dev`:
+Use the shipped default profile flow for recording. This keeps every command in the video aligned with normal user onboarding (no custom profile paths or profile-selection flags).
 
 ```bash
-rm -rf /tmp/aiplane-demo-profiles /tmp/demo-local-cpu.machine.yaml
-aiplane --profiles-dir /tmp/aiplane-demo-profiles profiles create demo --template local-dev
-aiplane --profiles-dir /tmp/aiplane-demo-profiles profiles validate demo
+rm -f /tmp/demo-local-cpu.machine.yaml
+aiplane profiles bootstrap-local --no-discovery
+aiplane profiles validate
 ```
 
-Use `--profiles-dir /tmp/aiplane-demo-profiles --profile demo` on commands that intentionally write profile state, such as model refresh, machine import, or stack setup. Keep read-only commands on `local-dev` when you want to show the normal project profile.
+For this demo plan, assume the default profile is active and keep commands profile-agnostic.
 
 ## Section 1: Local AI Workflow Stack Readiness
 
@@ -166,7 +174,7 @@ On screen:
 
 ```bash
 aiplane --help
-aiplane profiles validate local-dev
+aiplane profiles validate
 ```
 
 Voiceover:
@@ -197,17 +205,28 @@ conda activate aiplane
 # Convenience flow: source the setup helper if you want activation to persist automatically.
 # source scripts/setup_env.sh --mode conda --conda-env aiplane --action install --editable
 
+aiplane profiles bootstrap-local --no-discovery
+aiplane config default-profile local-dev
 aiplane profiles list
 aiplane environment doctor --required-only
 aiplane tools matrix
 ```
 
 The setup helper creates the Conda environment if it is missing, upgrades pip,
-installs this checkout, bootstraps ignored `profiles/local-dev` from the shipped
-template with discovery disabled, runs the profile-aware sanity check, and prints
-activation commands. Executing it like a regular installer is the clearest demo
-path; sourcing it is a convenience option when you want the Conda environment to
-remain active in the same shell automatically.
+installs this checkout, and prints activation commands. Right after install,
+initialize the default editable profile with `profiles bootstrap-local --no-discovery`,
+then set/confirm the default with `config default-profile local-dev`. Executing
+the helper like a regular installer is the clearest demo path; sourcing it is a
+convenience option when you want the Conda environment to remain active in the
+same shell automatically.
+
+Video narration snippet (what is in a profile):
+
+> A profile is the explicit environment contract for this workflow. It stores provider endpoints and enablement, reviewed model aliases and role defaults, runtime preferences, machine hardware facts, remote targets, stack definitions, repository policy/approvals, and integration/MCP-relevant settings. It does not store local runtime caches or raw API keys.
+
+Video narration snippet (listing profiles):
+
+> If you want to see what profiles are available, run `aiplane profiles list`. The active default profile is marked with `*`.
 
 `--editable` means a source-linked development install. For Conda, venv, or the current Python environment, it runs `pip install -e .`, so changes in this checkout are visible immediately without reinstalling. For a snapshot-style install, use `--static`; that runs a normal install and later source edits require reinstalling.
 
@@ -229,25 +248,30 @@ Voiceover:
 On screen:
 
 ```bash
-# Requires: profiles/create+validate for demo must have run to create profile
+# Requires: default profile bootstrap/validate from the install step
 aiplane integrations roles continue  # shows required roles for integrations.
 aiplane integrations roles continue --groups
-aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider ollama --query chat --dry-run --limit 5
-aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider ollama --query chat --limit 10
-aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider ollama --query code --limit 10
-aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider ollama --query embed --limit 10
-aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --group-by runtime --limit 10
-CHAT_ALIAS="$(aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --provider ollama --role chat --enabled-only --sort-by role --limit 1 --name-only)"
-AUTOCOMPLETE_ALIAS="$(aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --runtime ollama --role autocomplete --enabled-only --sort-by role --limit 1 --name-only)"
-EMBEDDING_ALIAS="$(aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --runtime ollama --role embedding --enabled-only --sort-by role --limit 1 --name-only)"
-aiplane --profiles-dir /tmp/aiplane-demo-profiles models add --profile demo local_chat --alias "$CHAT_ALIAS" --role chat --runtime ollama
-aiplane --profiles-dir /tmp/aiplane-demo-profiles models clone --profile demo local_chat local_fast_draft --role completion --notes "Fast draft model for local workflow tasks." --dry-run
-aiplane --profiles-dir /tmp/aiplane-demo-profiles hardware recommend --profile demo
+aiplane models refresh --provider ollama --query chat --dry-run --limit 5
+aiplane models refresh --provider ollama --query chat --limit 10
+aiplane models refresh --provider ollama --query code --limit 10
+aiplane models refresh --provider ollama --query embed --limit 10
+aiplane models list --group-by runtime --limit 10
+aiplane models list --provider ollama --role chat --ram-gb 16 --vram-gb 0 --sort-by role --limit 5
+aiplane models list --provider ollama --role chat --ram-gb 32 --vram-gb 8 --sort-by role --limit 5
+aiplane models list --provider ollama --role chat --gpu-vendor nvidia --accelerator-api cuda --sort-by role --limit 5
+CHAT_ALIAS="$(aiplane models list --provider ollama --role chat --enabled-only --sort-by role --limit 1 --name-only)"
+AUTOCOMPLETE_ALIAS="$(aiplane models list --runtime ollama --role autocomplete --enabled-only --sort-by role --limit 1 --name-only)"
+EMBEDDING_ALIAS="$(aiplane models list --runtime ollama --role embedding --enabled-only --sort-by role --limit 1 --name-only)"
+aiplane models add local_chat --alias "$CHAT_ALIAS" --role chat --runtime ollama
+aiplane models clone local_chat local_fast_draft --role completion --notes "Fast draft model for local workflow tasks." --dry-run
+aiplane hardware recommend
 ```
 
 Voiceover:
 
-> The top-down shape is provider, model purpose, runtime, hardware, then tool integration. Provider ownership separates self-managed sources from managed services. Discovery can pull provider results into an ignored discovery cache, but managed-service providers such as OpenAI, Anthropic, Azure OpenAI, Ollama Cloud, Azure Speech, and ElevenLabs do not have local model weights for aiplane to pull. Then we filter by role, runtime, RAM, VRAM, score signals, and target hardware before adding the reviewed candidate into stable profile-owned model config.
+> The top-down shape is provider, model purpose, runtime, hardware, then tool integration. Provider ownership separates self-managed sources from managed services. Discovery can pull provider results into an ignored discovery cache, but managed-service providers such as OpenAI, Anthropic, Azure OpenAI, Ollama Cloud, Azure Speech, and ElevenLabs do not have local model weights for aiplane to pull. Then we filter by role, runtime, RAM, VRAM, GPU vendor/API, score signals, and target hardware before adding the reviewed candidate into stable profile-owned model config.
+
+> Call out that RAM/VRAM values are planning estimates, not guarantees. `models refresh` stores `min_ram_gb` and `min_vram_gb` from catalog metadata when available; otherwise `aiplane` infers them with `resource_estimate_source: catalog_heuristic:parameter_size_and_role` (parameter-size parsing plus role/runtime heuristics). Final runtime usage still depends on quantization, batch size, context length, backend settings, and driver/runtime overhead.
 
 What to highlight:
 
@@ -259,6 +283,8 @@ What to highlight:
 - `models add --alias` shows the reviewed path from discovered candidate to stable profile-owned model entry.
 - `models clone` shows why a second local entry can point at the same real model for a different purpose.
 - `models list --group-by runtime` and role/hardware filters show structure.
+- Show at least two RAM/VRAM filter passes (e.g., `16/0` vs `32/8`) so viewers can see shortlist changes.
+- Explain that filter thresholds compare against configured or estimated minimums (`min_ram_gb`, `min_vram_gb`), then `--fits-hardware` applies active-machine constraints.
 - Hardware fit is a recommendation signal, not a hidden install/deploy action.
 - Managed-service providers are configured and tested through credentials/endpoints; use provider tests instead of model pull commands.
 
@@ -304,20 +330,20 @@ Recording note: show the redacted `credentials list/show` output, not the editor
 Use the integration setup flow as the practical task-level bundle. It reuses the Continue plan, checks the selected runtime/model state, and previews supported install/start/pull helper actions before doing anything live:
 
 ```bash
-aiplane --profiles-dir /tmp/aiplane-demo-profiles integrations setup continue --profile demo --chat "$CHAT_ALIAS" --autocomplete "$AUTOCOMPLETE_ALIAS" --embedding "$EMBEDDING_ALIAS" --dry-run
+aiplane integrations setup continue --chat "$CHAT_ALIAS" --autocomplete "$AUTOCOMPLETE_ALIAS" --embedding "$EMBEDDING_ALIAS" --dry-run
 # Run without --dry-run only on a prepared recording machine.
-aiplane --profiles-dir /tmp/aiplane-demo-profiles integrations setup continue --profile demo --chat "$CHAT_ALIAS" --autocomplete "$AUTOCOMPLETE_ALIAS" --embedding "$EMBEDDING_ALIAS"
+aiplane integrations setup continue --chat "$CHAT_ALIAS" --autocomplete "$AUTOCOMPLETE_ALIAS" --embedding "$EMBEDDING_ALIAS"
 aiplane runtimes status ollama
 
 # Confirm the alias is suitable for interactive local chat, then launch it.
-aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --provider ollama --role chat --enabled-only --name-only --limit 3
-aiplane --profiles-dir /tmp/aiplane-demo-profiles models show --profile demo "$CHAT_ALIAS"
-aiplane --profiles-dir /tmp/aiplane-demo-profiles chat --profile demo --model "$CHAT_ALIAS" --dry-run
-aiplane --profiles-dir /tmp/aiplane-demo-profiles chat --profile demo --model "$CHAT_ALIAS"
+aiplane models list --provider ollama --role chat --enabled-only --name-only --limit 3
+aiplane models show "$CHAT_ALIAS"
+aiplane chat --model "$CHAT_ALIAS" --dry-run
+aiplane chat --model "$CHAT_ALIAS"
 
 # Small one-shot CLI tasks against a model alias.
-aiplane --profiles-dir /tmp/aiplane-demo-profiles code write --profile demo --model "$CHAT_ALIAS" --task "write a Python function that validates an email address" --dry-run
-aiplane --profiles-dir /tmp/aiplane-demo-profiles code analyze --profile demo --model "$CHAT_ALIAS" src/aiplane/cli.py --dry-run
+aiplane code write --model "$CHAT_ALIAS" --task "write a Python function that validates an email address" --dry-run
+aiplane code analyze --model "$CHAT_ALIAS" src/aiplane/cli.py --dry-run
 ```
 
 Keep the lower-level runtime commands available as diagnostics or when you want to show native versus Docker explicitly:
@@ -343,14 +369,14 @@ Use vLLM as the second runtime story. Keep it dry-run unless the recording machi
 
 ```bash
 VLLM_ALIAS="vllm_demo_chat"
-aiplane --profiles-dir /tmp/aiplane-demo-profiles models add "$VLLM_ALIAS" --profile demo --provider local_file --model /models/TinyLlama-1.1B-Chat-v1.0 --role chat --runtime vllm --preferred-runtime vllm --set min_ram_gb=16 --set min_vram_gb=8 --dry-run
-aiplane --profiles-dir /tmp/aiplane-demo-profiles models add "$VLLM_ALIAS" --profile demo --provider local_file --model /models/TinyLlama-1.1B-Chat-v1.0 --role chat --runtime vllm --preferred-runtime vllm --set min_ram_gb=16 --set min_vram_gb=8 --overwrite
-aiplane --profiles-dir /tmp/aiplane-demo-profiles models show --profile demo "$VLLM_ALIAS"
-aiplane --profiles-dir /tmp/aiplane-demo-profiles runtimes prerequisites vllm
-aiplane --profiles-dir /tmp/aiplane-demo-profiles runtimes bundle vllm --profile demo --model "$VLLM_ALIAS" --mode docker --format dockerfile
-aiplane --profiles-dir /tmp/aiplane-demo-profiles runtimes start vllm --profile demo --model "$VLLM_ALIAS" --dry-run
-aiplane --profiles-dir /tmp/aiplane-demo-profiles integrations export openai-compatible --profile demo --model "$VLLM_ALIAS" --endpoint http://localhost:8000/v1
-aiplane --profiles-dir /tmp/aiplane-demo-profiles chat --profile demo --model "$VLLM_ALIAS" --prompt "Say hello from the vLLM endpoint" --dry-run
+aiplane models add "$VLLM_ALIAS" --provider local_file --model /models/TinyLlama-1.1B-Chat-v1.0 --role chat --runtime vllm --preferred-runtime vllm --set min_ram_gb=16 --set min_vram_gb=8 --dry-run
+aiplane models add "$VLLM_ALIAS" --provider local_file --model /models/TinyLlama-1.1B-Chat-v1.0 --role chat --runtime vllm --preferred-runtime vllm --set min_ram_gb=16 --set min_vram_gb=8 --overwrite
+aiplane models show "$VLLM_ALIAS"
+aiplane runtimes prerequisites vllm
+aiplane runtimes bundle vllm --model "$VLLM_ALIAS" --mode docker --format dockerfile
+aiplane runtimes start vllm --model "$VLLM_ALIAS" --dry-run
+aiplane integrations export openai-compatible --model "$VLLM_ALIAS" --endpoint http://localhost:8000/v1
+aiplane chat --model "$VLLM_ALIAS" --prompt "Say hello from the vLLM endpoint" --dry-run
 ```
 
 Voiceover:
@@ -362,9 +388,9 @@ Voiceover:
 Plan and export Continue config from the selected model entries:
 
 ```bash
-aiplane --profiles-dir /tmp/aiplane-demo-profiles integrations plan continue --profile demo --chat "$CHAT_ALIAS" --autocomplete "$AUTOCOMPLETE_ALIAS" --embedding "$EMBEDDING_ALIAS"
-aiplane --profiles-dir /tmp/aiplane-demo-profiles integrations export continue --profile demo --chat "$CHAT_ALIAS" --autocomplete "$AUTOCOMPLETE_ALIAS" --embedding "$EMBEDDING_ALIAS"
-aiplane --profiles-dir /tmp/aiplane-demo-profiles integrations export openai-compatible --profile demo --model "$CHAT_ALIAS" --endpoint http://localhost:11434/v1
+aiplane integrations plan continue --chat "$CHAT_ALIAS" --autocomplete "$AUTOCOMPLETE_ALIAS" --embedding "$EMBEDDING_ALIAS"
+aiplane integrations export continue --chat "$CHAT_ALIAS" --autocomplete "$AUTOCOMPLETE_ALIAS" --embedding "$EMBEDDING_ALIAS"
+aiplane integrations export openai-compatible --model "$CHAT_ALIAS" --endpoint http://localhost:11434/v1
 ```
 
 Voiceover:
@@ -405,46 +431,41 @@ Voiceover:
 On screen:
 
 ```bash
-aiplane --profiles-dir /tmp/aiplane-demo-profiles hardware export-machine --profile demo --name demo-local-cpu > /tmp/demo-local-cpu.machine.yaml
-aiplane --profiles-dir /tmp/aiplane-demo-profiles machines import --profile demo /tmp/demo-local-cpu.machine.yaml --name demo-local-cpu
-aiplane --profiles-dir /tmp/aiplane-demo-profiles machines list --profile demo
-aiplane --profiles-dir /tmp/aiplane-demo-profiles stacks setup --profile demo cpu_chat --runtime ollama --model "$CHAT_ALIAS" --machine demo-local-cpu --access same_host --dry-run
+aiplane hardware export-machine --name demo-local-cpu > /tmp/demo-local-cpu.machine.yaml
+aiplane machines import /tmp/demo-local-cpu.machine.yaml --name demo-local-cpu
+aiplane machines list
+aiplane stacks setup cpu_chat --runtime ollama --model "$CHAT_ALIAS" --machine demo-local-cpu --access same_host --dry-run
 ```
 
-Show the first remote replication path as plain file transfer, not Ansible/Vagrant yet:
+Show the first remote replication path as re-running the same default-profile bootstrap flow on another machine, not copying profile directories or introducing Ansible/Vagrant yet:
 
 ```bash
-# On the source machine: copy the profile state, not runtime caches or raw secrets.
-tar -C /tmp/aiplane-demo-profiles -czf /tmp/aiplane-demo-profile.tgz demo
-scp /tmp/aiplane-demo-profile.tgz user@gpu-box-01:/tmp/
-
 # On the remote machine after installing aiplane:
-mkdir -p ~/aiplane-profiles
-tar -C ~/aiplane-profiles -xzf /tmp/aiplane-demo-profile.tgz
-aiplane --profiles-dir ~/aiplane-profiles profiles validate demo
-CHAT_ALIAS="$(aiplane --profiles-dir ~/aiplane-profiles models list --profile demo --provider ollama --role chat --enabled-only --sort-by role --limit 1 --name-only)"
-AUTOCOMPLETE_ALIAS="$(aiplane --profiles-dir ~/aiplane-profiles models list --profile demo --runtime ollama --role autocomplete --enabled-only --sort-by role --limit 1 --name-only)"
-EMBEDDING_ALIAS="$(aiplane --profiles-dir ~/aiplane-profiles models list --profile demo --runtime ollama --role embedding --enabled-only --sort-by role --limit 1 --name-only)"
-aiplane --profiles-dir ~/aiplane-profiles integrations setup continue --profile demo --chat "$CHAT_ALIAS" --autocomplete "$AUTOCOMPLETE_ALIAS" --embedding "$EMBEDDING_ALIAS" --dry-run
+aiplane profiles bootstrap-local --no-discovery
+aiplane profiles validate
+CHAT_ALIAS="$(aiplane models list --provider ollama --role chat --enabled-only --sort-by role --limit 1 --name-only)"
+AUTOCOMPLETE_ALIAS="$(aiplane models list --runtime ollama --role autocomplete --enabled-only --sort-by role --limit 1 --name-only)"
+EMBEDDING_ALIAS="$(aiplane models list --runtime ollama --role embedding --enabled-only --sort-by role --limit 1 --name-only)"
+aiplane integrations setup continue --chat "$CHAT_ALIAS" --autocomplete "$AUTOCOMPLETE_ALIAS" --embedding "$EMBEDDING_ALIAS" --dry-run
 ```
 
 Voiceover:
 
-> Profiles and YAML make the setup repeatable. Machine profiles can be exported from one host and imported into another control-plane profile. A stack binds model, runtime, machine, and access policy so a setup can be repeated locally, over SSH, or against a cloud VM. For the first remote replication demo, copy the profile directory and rerun validate/setup on the remote host. Do not copy `.aiplane` PID/log/runtime state or local model caches; the remote runtime should install/start/pull its own models from the alias mappings. Credentials stay local as environment variables or ignored credential refs, not raw secrets in the profile bundle.
+> Profiles and YAML make the setup repeatable. Machine profiles can be exported from one host and imported into another control-plane profile. A stack binds model, runtime, machine, and access policy so a setup can be repeated locally, over SSH, or against a cloud VM. For the first remote replication demo, rerun bootstrap/validate/setup on the remote host with the default profile flow. Keep runtime state and credentials local to each host: no raw secrets in profile files.
 
 ### 0:30-1:10 - Grouping, Best Fit, And Custom Scoring Direction
 
 On screen:
 
 ```bash
-aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --group-by provider-kind --limit 20
-aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --group-by runtime --limit 20
-aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --role chat --runtime ollama --capability 'general_chat>=2' --fits-hardware --sort-by role --limit 5
-BEST_FIT_ALIAS="$(aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --role chat --runtime ollama --capability 'general_chat>=2' --fits-hardware --sort-by role --limit 1 --name-only)"
+aiplane models list --group-by provider-kind --limit 20
+aiplane models list --group-by runtime --limit 20
+aiplane models list --role chat --runtime ollama --capability 'general_chat>=2' --fits-hardware --sort-by role --limit 5
+BEST_FIT_ALIAS="$(aiplane models list --role chat --runtime ollama --capability 'general_chat>=2' --fits-hardware --sort-by role --limit 1 --name-only)"
 printf 'best_fit=%s\n' "$BEST_FIT_ALIAS"
 # `--sort-by role` is the score sort for the requested role; `avg` is the broad average score.
-aiplane --profiles-dir /tmp/aiplane-demo-profiles hardware recommend --profile demo
-aiplane --profiles-dir /tmp/aiplane-demo-profiles models benchmark --profile demo --task generation "$CHAT_ALIAS" --dry-run
+aiplane hardware recommend
+aiplane models benchmark --task generation "$CHAT_ALIAS" --dry-run
 ```
 
 Voiceover:
@@ -456,13 +477,13 @@ Voiceover:
 Show that audio, image, and video generation are represented as AI model choices with runtime and platform requirements. The demo does not need to run these on CPU.
 
 ```bash
-aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider huggingface --query text-to-image --disable-new --limit 10
-aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --role image_generation --runtime diffusers --ram-gb 64 --vram-gb 16 --sort-by role --limit 5
-aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider huggingface --query text-to-video --disable-new --limit 10
-aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --role video_generation --runtime diffusers --ram-gb 128 --vram-gb 16 --sort-by role --limit 5
-aiplane --profiles-dir /tmp/aiplane-demo-profiles machines azure-status --profile demo --region uksouth
-aiplane --profiles-dir /tmp/aiplane-demo-profiles machines discover azure --profile demo --region uksouth --workload media_generation --runtime diffusers --limit 5
-aiplane --profiles-dir /tmp/aiplane-demo-profiles machines profile-remote-plan --profile demo --name gpu-box-01 --host gpu-box-01.example.internal --user azureuser
+aiplane models refresh --provider huggingface --query text-to-image --disable-new --limit 10
+aiplane models list --role image_generation --runtime diffusers --ram-gb 64 --vram-gb 16 --sort-by role --limit 5
+aiplane models refresh --provider huggingface --query text-to-video --disable-new --limit 10
+aiplane models list --role video_generation --runtime diffusers --ram-gb 128 --vram-gb 16 --sort-by role --limit 5
+aiplane machines azure-status --region uksouth
+aiplane machines discover azure --region uksouth --workload media_generation --runtime diffusers --limit 5
+aiplane machines profile-remote-plan --name gpu-box-01 --host gpu-box-01.example.internal --user azureuser
 ```
 
 Voiceover:
@@ -494,7 +515,7 @@ On screen:
 aiplane tools matrix
 aiplane tools plan ansible
 aiplane tools export ansible
-aiplane deploy plan --profile demo --target azure_gpu_vm
+aiplane deploy plan --target azure_gpu_vm
 ```
 
 Voiceover:
@@ -531,28 +552,28 @@ Use these phrases across all three sections:
 ## Public Demo Commands To Dry-Run Before Recording
 
 ```bash
-aiplane profiles validate local-dev
+aiplane profiles validate
 aiplane environment doctor --required-only
 aiplane tools matrix
 # Optional when a sanitized credential ref is configured:
 # aiplane providers test openai --credential-ref openai.personal
-aiplane --profiles-dir /tmp/aiplane-demo-profiles profiles validate demo
-aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider ollama --query chat --dry-run --limit 5
-aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider ollama --query chat --limit 10
-aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider ollama --query code --limit 10
-aiplane --profiles-dir /tmp/aiplane-demo-profiles models refresh --profile demo --provider ollama --query embed --limit 10
-aiplane --profiles-dir /tmp/aiplane-demo-profiles models list --profile demo --provider ollama --role chat --ram-gb 16 --vram-gb 0 --sort-by role --limit 5
-aiplane --profiles-dir /tmp/aiplane-demo-profiles integrations plan continue --profile demo --chat "$CHAT_ALIAS" --autocomplete "$AUTOCOMPLETE_ALIAS" --embedding "$EMBEDDING_ALIAS"
-aiplane --profiles-dir /tmp/aiplane-demo-profiles integrations export continue --profile demo --chat "$CHAT_ALIAS" --autocomplete "$AUTOCOMPLETE_ALIAS" --embedding "$EMBEDDING_ALIAS"
+aiplane profiles validate
+aiplane models refresh --provider ollama --query chat --dry-run --limit 5
+aiplane models refresh --provider ollama --query chat --limit 10
+aiplane models refresh --provider ollama --query code --limit 10
+aiplane models refresh --provider ollama --query embed --limit 10
+aiplane models list --provider ollama --role chat --ram-gb 16 --vram-gb 0 --sort-by role --limit 5
+aiplane integrations plan continue --chat "$CHAT_ALIAS" --autocomplete "$AUTOCOMPLETE_ALIAS" --embedding "$EMBEDDING_ALIAS"
+aiplane integrations export continue --chat "$CHAT_ALIAS" --autocomplete "$AUTOCOMPLETE_ALIAS" --embedding "$EMBEDDING_ALIAS"
 aiplane integrations export vscode-mcp
 aiplane integrations export continue-mcp
 aiplane mcp manifest
 sed -n '1,90p' skills/aiplane/SKILL.md
 VLLM_ALIAS="vllm_demo_chat"
-aiplane --profiles-dir /tmp/aiplane-demo-profiles models add "$VLLM_ALIAS" --profile demo --provider local_file --model /models/TinyLlama-1.1B-Chat-v1.0 --role chat --runtime vllm --preferred-runtime vllm --set min_ram_gb=16 --set min_vram_gb=8 --dry-run
-aiplane --profiles-dir /tmp/aiplane-demo-profiles models add "$VLLM_ALIAS" --profile demo --provider local_file --model /models/TinyLlama-1.1B-Chat-v1.0 --role chat --runtime vllm --preferred-runtime vllm --set min_ram_gb=16 --set min_vram_gb=8 --overwrite
-aiplane --profiles-dir /tmp/aiplane-demo-profiles runtimes bundle vllm --profile demo --model "$VLLM_ALIAS" --mode docker --format dockerfile
-aiplane --profiles-dir /tmp/aiplane-demo-profiles machines discover azure --profile demo --region uksouth --workload inference_small --runtime vllm --limit 5
+aiplane models add "$VLLM_ALIAS" --provider local_file --model /models/TinyLlama-1.1B-Chat-v1.0 --role chat --runtime vllm --preferred-runtime vllm --set min_ram_gb=16 --set min_vram_gb=8 --dry-run
+aiplane models add "$VLLM_ALIAS" --provider local_file --model /models/TinyLlama-1.1B-Chat-v1.0 --role chat --runtime vllm --preferred-runtime vllm --set min_ram_gb=16 --set min_vram_gb=8 --overwrite
+aiplane runtimes bundle vllm --model "$VLLM_ALIAS" --mode docker --format dockerfile
+aiplane machines discover azure --region uksouth --workload inference_small --runtime vllm --limit 5
 ```
 
 ## Quick Local-Dev Runner Checklist

@@ -36,7 +36,7 @@ def add_models_parser(
         "models",
         "List, inspect, test, pull, and benchmark approved models",
         "Work with the approved model catalog in the selected profile.",
-        "Examples:\n  aiplane models list\n  aiplane models show MODEL_ALIAS\n  aiplane models test --dry-run MODEL_ALIAS\n  aiplane models benchmark --task all MODEL_ALIAS\n  aiplane models defaults\n  aiplane models use self_managed_model MODEL_ALIAS",
+        "Examples:\n  aiplane models list\n  aiplane models show MODEL_ALIAS\n  aiplane models test --dry-run MODEL_ALIAS\n  aiplane models benchmark --task all MODEL_ALIAS\n  aiplane models defaults\n  aiplane models use self_managed_model MODEL_ALIAS\n  aiplane models clear-cache --dry-run",
     )
     models_sub = models_cmd.add_subparsers(dest="models_command", required=True, metavar="command")
     models_defaults = models_sub.add_parser(
@@ -404,7 +404,7 @@ def add_models_parser(
         help="Refresh model-provider model catalog entries",
         description="Refresh the editable profile catalog from model providers. Providers are model catalogs or artifact sources such as Ollama Library, Hugging Face Hub, GGUF sources, Azure Speech voices, or local files. Runtimes such as vLLM, TGI, llama.cpp, Transformers, and LM Studio are execution engines and are managed under aiplane runtimes. Refresh is online-first where a source adapter exists, then falls back to the profile catalog for sources without an online adapter or temporarily unavailable APIs.",
         formatter_class=formatter_class,
-        epilog="Examples:\n  aiplane models refresh --dry-run\n  aiplane models refresh --provider huggingface --query text-generation --limit 500 --dry-run\n  aiplane models refresh --provider huggingface --reset-cache --dry-run\n  aiplane models refresh --limit 100 --provider-limit huggingface=500 --provider-limit ollama=500 --dry-run\n  aiplane models refresh --provider huggingface --limit 10 --dry-run --verbose\n  aiplane models refresh --disable-new",
+        epilog="Examples:\n  aiplane models refresh --dry-run\n  aiplane models refresh --provider huggingface --query text-generation --limit 500 --dry-run\n  aiplane models refresh --provider huggingface --reset-cache --dry-run\n  aiplane models refresh --limit 100 --provider-limit huggingface=500 --provider-limit ollama=500 --dry-run\n  aiplane models refresh --provider huggingface --limit 10 --dry-run --verbosity 1\n  aiplane models refresh --provider huggingface --limit 10 --dry-run --verbosity 2\n  aiplane models refresh --disable-new",
     )
     profile_arg(models_refresh)
     models_refresh.add_argument(
@@ -450,9 +450,11 @@ def add_models_parser(
         help="Override --limit for one model provider; can be repeated, for example --provider-limit huggingface=25 --provider-limit ollama=500",
     )
     models_refresh.add_argument(
-        "--verbose",
-        action="store_true",
-        help="Include per-model change rows. By default refresh prints provider-level counts only.",
+        "--verbosity",
+        type=int,
+        choices=[0, 1, 2],
+        default=0,
+        help="Output detail: 0=top-level summary, 1=add provider_summary, 2=full provider results including per-model change rows",
     )
     models_clear_cache = models_sub.add_parser(
         "clear-cache",
@@ -715,6 +717,7 @@ def handle_models_command(args: argparse.Namespace, *, profile: Profile, json_du
         return 0
     if args.models_command == "refresh":
         write = not args.dry_run
+        verbosity = int(args.verbosity)
         provider_limits = parse_provider_limits(args.provider_limit)
         reset_cache_result = None
         if args.reset_cache:
@@ -782,7 +785,7 @@ def handle_models_command(args: argparse.Namespace, *, profile: Profile, json_du
                     limit=args.limit,
                     provider_limits=provider_limits,
                     progress=progress,
-                    verbose=args.verbose,
+                    verbose=verbosity >= 2,
                 )
             else:
                 provider_limit = int(provider_limits.get(args.provider, args.limit))
@@ -793,14 +796,14 @@ def handle_models_command(args: argparse.Namespace, *, profile: Profile, json_du
                     query=args.query,
                     limit=provider_limit,
                     progress=progress,
-                    verbose=args.verbose,
+                    verbose=verbosity >= 2,
                 )
         finally:
             if progress:
                 progress("done", "", "")
         if reset_cache_result is not None:
             result["reset_cache"] = reset_cache_result
-        print(json_dumps(refresh_cli_payload(result, verbose=args.verbose), indent=2))
+        print(json_dumps(refresh_cli_payload(result, verbosity=verbosity), indent=2))
         return 0
     if args.models_command == "clear-cache":
         print(
@@ -852,11 +855,18 @@ def handle_models_command(args: argparse.Namespace, *, profile: Profile, json_du
     return 0
 
 
-def refresh_cli_payload(result: dict[str, object], verbose: bool) -> dict[str, object]:
-    if verbose or not isinstance(result.get("results"), dict):
+def refresh_cli_payload(result: dict[str, object], verbosity: int) -> dict[str, object]:
+    if not isinstance(result.get("results"), dict):
         return result
     payload = dict(result)
+    payload.pop("verbose", None)
+    payload["verbosity"] = verbosity
     results = result.get("results", {})
+    if verbosity <= 0:
+        payload.pop("results", None)
+        return payload
+    if verbosity >= 2:
+        return payload
     provider_summary = []
     if isinstance(results, dict):
         for provider, row in sorted(results.items()):

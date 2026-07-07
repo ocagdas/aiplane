@@ -85,7 +85,7 @@ PYTHONPATH=src python -m aiplane models list
 PYTHONPATH=src python -m aiplane models clear-cache --dry-run
 PYTHONPATH=src python -m aiplane deploy workflow-plan --target azure_gpu_vm
 PYTHONPATH=src python -m aiplane deploy apply --target azure_gpu_vm
-PYTHONPATH=src python -m aiplane models refresh --provider huggingface --query text-to-video --dry-run --verbose --limit 2
+PYTHONPATH=src python -m aiplane models refresh --provider huggingface --query text-to-video --dry-run --verbosity 2 --limit 2
 PYTHONPATH=src python -m pytest -q tests/test_models_providers.py tests/test_runtimes_execution.py tests/test_integrations_chat.py -k "models_list_and_defaults_support_grouping or managed_service_models_do_not_mix_into_runtime_groups or model_catalog_cloud_doctor_checks_env_var or runtime_catalog_maps_sources_and_models or integrations_export_continue_uses_planner_constraints"
 PYTHONPATH=src python -m aiplane models list --profile local-dev --group-by provider-kind
 PYTHONPATH=src python -m aiplane models list --profile local-dev --group-by runtime
@@ -139,4 +139,3 @@ Orchestrator support now has stack role metadata over reviewed model aliases and
 1. Finish the remote-workstation onboarding documentation pass and align it with the public demo plan sequence.
 2. Keep policy/risk behavior regressions visible: blocked cloud-policy and disallowed-provider-path tests are now covered in `tests/test_stacks_orchestrators.py`; extend coverage next to remote-workstation policy surfaces.
 3. Keep docs/tests/command-coverage synchronized before the feature-freeze gate.
-

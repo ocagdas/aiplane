@@ -35,6 +35,8 @@ class McpTests(unittest.TestCase):
         self.assertEqual(manifest["transport"], "stdio")
         self.assertTrue(manifest["tools"])
         names = {tool["name"] for tool in manifest["tools"]}
+        self.assertIn("aiplane.docs.list", names)
+        self.assertIn("aiplane.docs.read", names)
         self.assertIn("aiplane.models.defaults", names)
         self.assertIn("aiplane.models.list", names)
         self.assertIn("aiplane.models.refresh", names)
@@ -68,6 +70,36 @@ class McpTests(unittest.TestCase):
         result = response["result"]
         self.assertIn("local-dev", result["structuredContent"]["profiles"])
         self.assertEqual(result["content"][0]["type"], "text")
+
+    def test_mcp_docs_tools_list_and_read_docs(self) -> None:
+        server = AiplaneMcpServer(Path.cwd())
+        listing = server.handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 201,
+                "method": "tools/call",
+                "params": {"name": "aiplane.docs.list", "arguments": {}},
+            }
+        )
+        self.assertIsNotNone(listing)
+        docs = listing["result"]["structuredContent"]["docs"]
+        self.assertTrue(any(row["path"] == "docs/user/mcp.md" for row in docs))
+
+        read = server.handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 202,
+                "method": "tools/call",
+                "params": {
+                    "name": "aiplane.docs.read",
+                    "arguments": {"path": "docs/user/mcp.md", "max_chars": 400},
+                },
+            }
+        )
+        self.assertIsNotNone(read)
+        payload = read["result"]["structuredContent"]
+        self.assertEqual(payload["path"], "docs/user/mcp.md")
+        self.assertIn("MCP", payload["content"])
 
     def test_mcp_provider_list_supports_status_and_ownership_grouping(self) -> None:
         server = AiplaneMcpServer(Path.cwd())
@@ -123,6 +155,13 @@ class McpTests(unittest.TestCase):
         self.assertEqual(properties["sort_by"]["enum"], MODEL_SORT_CHOICES)
         self.assertEqual(properties["gpu_vendor"]["enum"], GPU_VENDOR_CHOICES)
         self.assertEqual(properties["accelerator_api"]["enum"], ACCELERATOR_API_CHOICES)
+
+    def test_mcp_models_refresh_schema_uses_verbosity_levels(self) -> None:
+        schema = mcp_module.TOOL_SCHEMAS["aiplane.models.refresh"]
+        properties = schema["properties"]
+        self.assertIn("verbosity", properties)
+        self.assertNotIn("verbose", properties)
+        self.assertEqual(properties["verbosity"]["enum"], [0, 1, 2])
 
     def test_mcp_model_list_supports_parameter_filters_and_sorting(self) -> None:
         server = AiplaneMcpServer(Path.cwd())

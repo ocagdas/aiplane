@@ -32,6 +32,14 @@ from .support import (
 
 
 class ModelProviderTests(unittest.TestCase):
+    def test_models_help_lists_clear_cache_command(self) -> None:
+        stdout = StringIO()
+        with self.assertRaises(SystemExit) as ctx:
+            with redirect_stdout(stdout):
+                cli_main(["models", "--help"])
+        self.assertEqual(ctx.exception.code, 0)
+        self.assertIn("clear-cache", stdout.getvalue())
+
     def test_model_catalog_lists_default_models(self) -> None:
         profile = load_profile("local-dev", Path.cwd())
         rows = ModelCatalog(profile).list()
@@ -148,7 +156,7 @@ class ModelProviderTests(unittest.TestCase):
             self.assertIn("Do not edit it manually", discovered_text)
             self.assertIn("enabled: true", discovered_text)
 
-    def test_models_refresh_default_omits_per_model_changes_until_verbose(self) -> None:
+    def test_models_refresh_default_omits_provider_and_per_model_sections(self) -> None:
         discovered = ProviderModelsResult("ollama", "provider_api", ["new-model:1b"], "test discovery")
         with patch.object(ProviderRegistry, "models", return_value=discovered):
             stdout = StringIO()
@@ -168,6 +176,31 @@ class ModelProviderTests(unittest.TestCase):
         payload = json.loads(stdout.getvalue())
         self.assertEqual(payload["changes"]["would_import"], 1)
         self.assertNotIn("results", payload)
+        self.assertNotIn("provider_summary", payload)
+        self.assertEqual(payload["verbosity"], 0)
+
+    def test_models_refresh_verbosity_one_adds_provider_summary(self) -> None:
+        discovered = ProviderModelsResult("ollama", "provider_api", ["new-model:1b"], "test discovery")
+        with patch.object(ProviderRegistry, "models", return_value=discovered):
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = cli_main(
+                    [
+                        "models",
+                        "refresh",
+                        "--profile",
+                        "local-dev",
+                        "--provider",
+                        "ollama",
+                        "--dry-run",
+                        "--verbosity",
+                        "1",
+                    ]
+                )
+        self.assertEqual(code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertNotIn("results", payload)
+        self.assertEqual(payload["verbosity"], 1)
         self.assertEqual(payload["provider_summary"][0]["provider"], "ollama")
         self.assertGreaterEqual(payload["provider_summary"][0]["model_changes_count"], 1)
         self.assertEqual(payload["provider_summary"][0]["changes"]["would_import"], 1)
@@ -187,6 +220,8 @@ class ModelProviderTests(unittest.TestCase):
                         "--provider",
                         "azure_openai",
                         "--dry-run",
+                        "--verbosity",
+                        "1",
                     ]
                 )
         self.assertEqual(code, 0)
@@ -213,7 +248,8 @@ class ModelProviderTests(unittest.TestCase):
                         "--provider",
                         "ollama",
                         "--dry-run",
-                        "--verbose",
+                        "--verbosity",
+                        "2",
                     ]
                 )
         self.assertEqual(code, 0)
@@ -243,7 +279,8 @@ class ModelProviderTests(unittest.TestCase):
                         "ollama",
                         "--disable-new",
                         "--dry-run",
-                        "--verbose",
+                        "--verbosity",
+                        "2",
                     ]
                 )
         self.assertEqual(code, 0)
@@ -400,7 +437,8 @@ class ModelProviderTests(unittest.TestCase):
                             "ollama",
                             "--reset-cache",
                             "--dry-run",
-                            "--verbose",
+                            "--verbosity",
+                            "2",
                         ]
                     )
         self.assertEqual(code, 0)
@@ -2684,6 +2722,45 @@ class ModelProviderTests(unittest.TestCase):
         self.assertEqual(rows[0]["min_ram_gb"], entry["min_ram_gb"])
         self.assertEqual(rows[0]["min_vram_gb"], entry["min_vram_gb"])
         self.assertEqual(rows[0]["gpu_vendor_requirement"], "generic")
+
+    def test_discovered_model_resource_requirements_can_come_from_provider_metadata(
+        self,
+    ) -> None:
+        entry = _discovered_model_entry(
+            "huggingface",
+            "org/example-model",
+            enable=True,
+            source_metadata={
+                "min_ram_gb": 24,
+                "min_vram_gb": 10,
+                "resource_estimate_source": "provider_catalog:huggingface_metadata",
+            },
+        )
+        source = load_profile("local-dev", Path.cwd())
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            models_config = {"models": {}}
+            generated_config = {"models": {"huggingface-org-example-model": entry}}
+            (root / "models.yaml").write_text(agent_config.dump_yaml(models_config), encoding="utf-8")
+            (root / "models.discovered.yaml").write_text(agent_config.dump_yaml(generated_config), encoding="utf-8")
+            profile = Profile(
+                name="tmp",
+                root=root,
+                workspace=Path.cwd(),
+                hardware=source.hardware,
+                backends=source.backends,
+                repository=source.repository,
+                tools=source.tools,
+                approvals=source.approvals,
+                environment=source.environment,
+                models=models_config,
+                targets=source.targets,
+                orchestrators=source.orchestrators,
+            )
+            rows = ModelCatalog(profile).filter({"max_min_ram_gb": 64, "max_min_vram_gb": 64})
+        self.assertEqual(rows[0]["min_ram_gb"], 24.0)
+        self.assertEqual(rows[0]["min_vram_gb"], 10.0)
+        self.assertEqual(rows[0]["resource_estimate_source"], "provider_catalog:huggingface_metadata")
 
     def test_models_list_can_filter_and_sort_by_parameter_count(self) -> None:
         source = load_profile("local-dev", Path.cwd())

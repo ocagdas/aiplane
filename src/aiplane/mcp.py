@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sys
+from pathlib import Path as FsPath
 from typing import Any
 
 from .audit import AuditLogger
@@ -27,6 +28,16 @@ from .models import AuditEvent, Profile
 
 
 READ_ONLY_TOOLS: list[dict[str, Any]] = [
+    {
+        "name": "aiplane.docs.list",
+        "description": "List project documentation and guidance files available to MCP clients.",
+        "mutates": False,
+    },
+    {
+        "name": "aiplane.docs.read",
+        "description": "Read one documentation/help file by relative path.",
+        "mutates": False,
+    },
     {
         "name": "aiplane.profiles.list",
         "description": "List configured aiplane profiles.",
@@ -187,6 +198,21 @@ MUTATING_TOOL_NAMES = {str(tool["name"]) for tool in WRITE_TOOLS if tool.get("mu
 
 
 TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
+    "aiplane.docs.list": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": False,
+    },
+    "aiplane.docs.read": {
+        "type": "object",
+        "properties": {
+            "path": {"type": "string"},
+            "start": {"type": "integer", "minimum": 0, "default": 0},
+            "max_chars": {"type": "integer", "minimum": 1, "maximum": 50000, "default": 12000},
+        },
+        "required": ["path"],
+        "additionalProperties": False,
+    },
     "aiplane.profiles.list": {
         "type": "object",
         "properties": {},
@@ -431,7 +457,7 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
             "disable_new": {"type": "boolean", "default": False},
             "include_empty_providers": {"type": "boolean", "default": False},
             "dry_run": {"type": "boolean", "default": False},
-            "verbose": {"type": "boolean", "default": False},
+            "verbosity": {"type": "integer", "enum": [0, 1, 2], "default": 0},
         },
         "additionalProperties": False,
     },
@@ -548,6 +574,14 @@ class AiplaneMcpServer:
             return _error(request_id, -32000, str(exc))
 
     def call_tool(self, name: str, arguments: dict[str, Any]) -> Any:
+        if name == "aiplane.docs.list":
+            return {"docs": self._doc_index()}
+        if name == "aiplane.docs.read":
+            return self._read_doc(
+                str(arguments.get("path") or ""),
+                start=int(arguments.get("start") or 0),
+                max_chars=int(arguments.get("max_chars") or 12000),
+            )
         if name == "aiplane.profiles.list":
             return {"profiles": list_profiles(self.profiles_dir)}
 
@@ -685,18 +719,19 @@ class AiplaneMcpServer:
             provider = str(arguments.get("provider") or "all")
             write = not bool(arguments.get("dry_run", False))
             enable_new = not bool(arguments.get("disable_new", False))
+            verbosity = int(arguments.get("verbosity", 0))
             if provider == "all":
                 return catalog.refresh_all(
                     write=write,
                     enable=enable_new,
                     include_empty_providers=bool(arguments.get("include_empty_providers", False)),
-                    verbose=bool(arguments.get("verbose", False)),
+                    verbose=verbosity >= 2,
                 )
             return catalog.refresh(
                 provider,
                 write=write,
                 enable=enable_new,
-                verbose=bool(arguments.get("verbose", False)),
+                verbose=verbosity >= 2,
             )
         if name == "aiplane.models.use":
             return ModelCatalog(profile).set_default(
@@ -737,6 +772,46 @@ class AiplaneMcpServer:
             }
             for tool in READ_ONLY_TOOLS + WRITE_TOOLS
         ]
+
+    def _doc_index(self) -> list[dict[str, Any]]:
+        root = FsPath(self.workspace).resolve()
+        docs: list[dict[str, Any]] = []
+        for rel in _allowed_doc_paths(root):
+            path = root / rel
+            title = rel
+            try:
+                first = path.read_text(encoding="utf-8", errors="replace").splitlines()
+                heading = next((line.strip("# ").strip() for line in first if line.startswith("#")), "")
+                if heading:
+                    title = heading
+            except OSError:
+                continue
+            docs.append({"path": rel, "title": title})
+        return docs
+
+    def _read_doc(self, path: str, start: int, max_chars: int) -> dict[str, Any]:
+        root = FsPath(self.workspace).resolve()
+        allowed = set(_allowed_doc_paths(root))
+        rel = path.strip()
+        if rel not in allowed:
+            raise ValueError("unknown doc path; call aiplane.docs.list first")
+        target = (root / rel).resolve()
+        try:
+            target.relative_to(root)
+        except ValueError as exc:
+            raise ValueError("doc path escapes workspace") from exc
+        text = target.read_text(encoding="utf-8", errors="replace")
+        safe_start = max(0, int(start))
+        safe_max = max(1, min(int(max_chars), 50000))
+        chunk = text[safe_start : safe_start + safe_max]
+        return {
+            "path": rel,
+            "start": safe_start,
+            "max_chars": safe_max,
+            "total_chars": len(text),
+            "truncated": (safe_start + safe_max) < len(text),
+            "content": chunk,
+        }
 
 
 def serve_stdio(workspace, default_profile: str | None = None, profiles_dir=None) -> int:
@@ -811,3 +886,29 @@ def _string_list(value: object) -> list[str]:
     if isinstance(value, str) and value:
         return [value]
     return []
+
+
+def _allowed_doc_paths(workspace: FsPath) -> list[str]:
+    roots = [
+        workspace / "docs" / "user",
+        workspace / "docs" / "project",
+    ]
+    paths: list[str] = []
+    for root in roots:
+        if not root.exists():
+            continue
+        for item in sorted(root.rglob("*.md")):
+            if item.is_file():
+                paths.append(str(item.relative_to(workspace)))
+    for single in [workspace / "README.md", workspace / "skills" / "aiplane" / "SKILL.md"]:
+        if single.is_file():
+            paths.append(str(single.relative_to(workspace)))
+    # Deduplicate while preserving deterministic order.
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for path in paths:
+        if path in seen:
+            continue
+        seen.add(path)
+        ordered.append(path)
+    return ordered

@@ -2128,6 +2128,21 @@ def _discovered_model_entry(
     params = _parameter_billions(model_id.lower())
     roles = _roles_for_discovered_model(provider_name, model_id, source_metadata or {})
     min_ram, recommended_ram, min_vram, recommended_vram = _resource_guess(params, roles)
+    resource_source = "catalog_heuristic:parameter_size_and_role"
+    overrides = _resource_requirements_from_source_metadata(source_metadata or {})
+    if overrides:
+        if overrides.get("min_ram_gb") is not None:
+            min_ram = overrides["min_ram_gb"]
+        if overrides.get("recommended_ram_gb") is not None:
+            recommended_ram = overrides["recommended_ram_gb"]
+        if overrides.get("min_vram_gb") is not None:
+            min_vram = overrides["min_vram_gb"]
+        if overrides.get("recommended_vram_gb") is not None:
+            recommended_vram = overrides["recommended_vram_gb"]
+        if isinstance(overrides.get("resource_estimate_source"), str) and overrides.get("resource_estimate_source"):
+            resource_source = str(overrides["resource_estimate_source"])
+        else:
+            resource_source = "provider_catalog:source_metadata"
     preferred_runtime = _preferred_runtime_for_discovered_roles(provider_name, roles)
     managed_sources = {
         "openai",
@@ -2150,7 +2165,7 @@ def _discovered_model_entry(
         "min_ram_gb": min_ram,
         "recommended_ram_gb": recommended_ram,
         "min_vram_gb": min_vram,
-        "resource_estimate_source": "catalog_heuristic:parameter_size_and_role",
+        "resource_estimate_source": resource_source,
         "source_metadata": source_metadata or {},
     }
     supported_runtimes = _supported_runtimes_for_discovered_roles(roles)
@@ -2279,6 +2294,49 @@ def _supported_runtimes_for_discovered_roles(roles: list[str]) -> list[str]:
     if "text_to_speech" in role_set:
         return ["transformers"]
     return []
+
+
+def _resource_requirements_from_source_metadata(source_metadata: dict[str, Any]) -> dict[str, float | str]:
+    if not isinstance(source_metadata, dict):
+        return {}
+    candidates: list[dict[str, Any]] = [source_metadata]
+    for key in ["resources", "resource_requirements", "requirements", "hardware"]:
+        value = source_metadata.get(key)
+        if isinstance(value, dict):
+            candidates.append(value)
+
+    def _first_number(keys: list[str]) -> float | None:
+        for block in candidates:
+            for key in keys:
+                value = _number_or_none(block.get(key))
+                if value is not None:
+                    return value
+        return None
+
+    min_ram = _first_number(["min_ram_gb", "minimum_ram_gb"])
+    rec_ram = _first_number(["recommended_ram_gb"])
+    min_vram = _first_number(["min_vram_gb", "minimum_vram_gb"])
+    rec_vram = _first_number(["recommended_vram_gb"])
+    if all(value is None for value in [min_ram, rec_ram, min_vram, rec_vram]):
+        return {}
+    source = None
+    for block in candidates:
+        value = block.get("resource_estimate_source")
+        if isinstance(value, str) and value.strip():
+            source = value.strip()
+            break
+    payload: dict[str, float | str] = {}
+    if min_ram is not None:
+        payload["min_ram_gb"] = min_ram
+    if rec_ram is not None:
+        payload["recommended_ram_gb"] = rec_ram
+    if min_vram is not None:
+        payload["min_vram_gb"] = min_vram
+    if rec_vram is not None:
+        payload["recommended_vram_gb"] = rec_vram
+    if source:
+        payload["resource_estimate_source"] = source
+    return payload
 
 
 def _roles_for_discovered_model(provider_name: str, model_id: str, source_metadata: dict[str, Any]) -> list[str]:

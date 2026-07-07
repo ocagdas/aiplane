@@ -36,7 +36,7 @@ from .deploy import DeployManager
 from .env import EnvironmentManager
 from .hardware import HardwareManager
 from .cli_integrations import add_integrations_parser, handle_integrations_command
-from .cli_models import add_models_parser, handle_models_command
+from .cli_models import add_models_parser, handle_models_command, refresh_cli_payload
 from .cli_support import (
     parse_provider_limits as _parse_provider_limits,
     parse_setting_value as _parse_setting_value,
@@ -248,7 +248,13 @@ def _main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Write newly discovered entries as disabled",
     )
-    local_coding.add_argument("--verbose", action="store_true", help="Include per-model discovery rows")
+    local_coding.add_argument(
+        "--verbosity",
+        type=int,
+        choices=[0, 1, 2],
+        default=0,
+        help="Discovery output detail: 0=top-level summary, 1=provider summary, 2=full per-model change rows",
+    )
     local_coding.add_argument(
         "--dry-run",
         action="store_true",
@@ -548,9 +554,11 @@ def _main(argv: list[str] | None = None) -> int:
         help="Write newly discovered entries as disabled; by default they are enabled",
     )
     bootstrap.add_argument(
-        "--verbose",
-        action="store_true",
-        help="Include per-model discovery rows in the refresh result",
+        "--verbosity",
+        type=int,
+        choices=[0, 1, 2],
+        default=0,
+        help="Discovery output detail: 0=top-level summary, 1=provider summary, 2=full per-model change rows",
     )
     bootstrap.add_argument(
         "--dry-run",
@@ -3563,6 +3571,7 @@ def _bootstrap_local_profile(args, workspace: Path, profiles_dir: Path | None) -
     if profile_exists:
         profile = load_profile(args.name, workspace, profiles_dir=profiles_dir)
         validation = _validate_profile(profile)
+        verbosity = int(getattr(args, "verbosity", 0))
         if not args.no_hardware_discovery:
             manager = HardwareManager(profile)
             hardware = (
@@ -3584,7 +3593,7 @@ def _bootstrap_local_profile(args, workspace: Path, profiles_dir: Path | None) -
                         limit=args.limit,
                         provider_limits=provider_limits,
                         progress=progress,
-                        verbose=args.verbose,
+                        verbose=verbosity >= 2,
                     )
                 else:
                     provider_limit = int(provider_limits.get(args.provider, args.limit))
@@ -3595,11 +3604,13 @@ def _bootstrap_local_profile(args, workspace: Path, profiles_dir: Path | None) -
                         query=args.query,
                         limit=provider_limit,
                         progress=progress,
-                        verbose=args.verbose,
+                        verbose=verbosity >= 2,
                     )
             finally:
                 if progress:
                     progress("done", "", "")
+            if isinstance(discovery, dict) and "results" in discovery:
+                discovery = refresh_cli_payload(discovery, verbosity=verbosity)
     elif not args.no_discovery or not args.no_hardware_discovery:
         skipped = "profile does not exist yet; rerun without --dry-run to create it before discovery"
         if not args.no_discovery:

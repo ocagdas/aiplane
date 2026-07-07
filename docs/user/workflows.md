@@ -137,7 +137,7 @@ How to think about it:
 Use this when you want local searchable model-source data in the ignored discovery cache. The shipped profile has no model defaults; local defaults should be added only after discovery and review.
 
 ```bash
-aiplane models refresh --provider huggingface --query text-generation --limit 25 --dry-run --verbose
+aiplane models refresh --provider huggingface --query text-generation --limit 25 --dry-run --verbosity 2
 aiplane models refresh --provider huggingface --query text-generation --limit 25
 
 aiplane models list --source huggingface --limit 10
