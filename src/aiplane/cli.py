@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import subprocess
 import sys
+import threading
 from pathlib import Path
 
 from .agents import AgentManager
@@ -798,7 +800,7 @@ def _main(argv: list[str] | None = None) -> int:
         "machines",
         "Manage self-managed machine inventory",
         "Import, list, recommend, and discover self-managed machines that can run local runtimes on local PCs, shared workstations, or cloud VMs.",
-        "Examples:\n  aiplane machines import gpu_box_01.machine.yaml\n  aiplane machines list\n  aiplane machines recommend --model MODEL_ALIAS --runtime vllm\n  aiplane machines discover azure --region uksouth --workload inference_large",
+        "Examples:\n  aiplane machines import gpu_box_01.machine.yaml\n  aiplane machines list\n  aiplane machines recommend --model MODEL_ALIAS --runtime vllm\n  aiplane machines discover azure --region uksouth --workload inference_large --gpu-vendor nvidia --min-vram-gb 48",
     )
     machines_sub = machines_cmd.add_subparsers(dest="machines_command", required=True, metavar="command")
     machines_list = machines_sub.add_parser(
@@ -858,6 +860,13 @@ def _main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Also run az vm list-skus as a live query probe",
     )
+    machines_azure_status.add_argument(
+        "--verbosity",
+        type=int,
+        default=0,
+        choices=[0, 1],
+        help="Azure CLI progress verbosity: 0 shows active command with dot progress, 1 also logs every command and redacted outputs",
+    )
     machines_import = machines_sub.add_parser(
         "import",
         help="Import exported machine profile",
@@ -903,7 +912,18 @@ def _main(argv: list[str] | None = None) -> int:
     machines_discover.add_argument("--workload", help="Workload class filter")
     machines_discover.add_argument("--model", help="Configured model alias filter")
     machines_discover.add_argument("--runtime", help="Runtime name filter")
+    machines_discover.add_argument("--gpu-vendor", help="GPU vendor filter, such as nvidia, amd, intel, apple, or none")
+    machines_discover.add_argument("--min-cpu-cores", type=float, help="Minimum CPU cores filter")
+    machines_discover.add_argument("--min-ram-gb", type=float, help="Minimum RAM (GB) filter")
+    machines_discover.add_argument("--min-vram-gb", type=float, help="Minimum VRAM (GB) filter")
     machines_discover.add_argument("--limit", type=int, default=20, help="Maximum candidates to return")
+    machines_discover.add_argument(
+        "--verbosity",
+        type=int,
+        default=0,
+        choices=[0, 1],
+        help="Azure CLI progress verbosity: 0 shows active command with dot progress, 1 also logs every command and redacted outputs",
+    )
     machines_import_azure = machines_sub.add_parser(
         "import-azure-sku",
         help="Import an Azure SKU as a machine",
@@ -2617,12 +2637,22 @@ def _main(argv: list[str] | None = None) -> int:
             print(_json(manager.cache_clear(args.key), indent=2))
             return 0
         if args.machines_command == "azure-status":
-            print(
-                _json(
-                    manager.azure_status(region=args.region, run_sku_probe=args.sku_query),
-                    indent=2,
+            verbosity = int(getattr(args, "verbosity", 0))
+            reporter = _AzCommandReporter(verbosity=verbosity)
+            try:
+                print(
+                    _json(
+                        manager.azure_status(
+                            region=args.region,
+                            run_sku_probe=args.sku_query,
+                            verbosity=verbosity,
+                            az_event_sink=reporter.report,
+                        ),
+                        indent=2,
+                    )
                 )
-            )
+            finally:
+                reporter.close()
             return 0
         if args.machines_command == "import":
             print(
@@ -2650,18 +2680,29 @@ def _main(argv: list[str] | None = None) -> int:
             )
             return 0
         if args.machines_command == "discover":
-            print(
-                _json(
-                    manager.discover_azure(
-                        args.region,
-                        workload=args.workload,
-                        model=args.model,
-                        runtime=args.runtime,
-                        limit=args.limit,
-                    ),
-                    indent=2,
+            verbosity = int(getattr(args, "verbosity", 0))
+            reporter = _AzCommandReporter(verbosity=verbosity)
+            try:
+                print(
+                    _json(
+                        manager.discover_azure(
+                            args.region,
+                            workload=args.workload,
+                            model=args.model,
+                            runtime=args.runtime,
+                            gpu_vendor=args.gpu_vendor,
+                            min_cpu_cores=args.min_cpu_cores,
+                            min_ram_gb=args.min_ram_gb,
+                            min_vram_gb=args.min_vram_gb,
+                            limit=args.limit,
+                            verbosity=verbosity,
+                            az_event_sink=reporter.report,
+                        ),
+                        indent=2,
+                    )
                 )
-            )
+            finally:
+                reporter.close()
             return 0
         if args.machines_command == "import-azure-sku":
             print(
@@ -3438,6 +3479,172 @@ def _validate_profile(profile) -> dict[str, object]:
         "ok": all(bool(check["ok"]) for check in checks if not check.get("warning")),
         "checks": checks,
     }
+
+
+_AZ_SENSITIVE_FLAGS = {
+    "--subscription",
+    "--tenant",
+    "--tenant-id",
+    "--account-name",
+    "--username",
+    "--password",
+    "--token",
+    "--access-token",
+    "--api-key",
+    "--client-id",
+    "--client-secret",
+    "--sas-token",
+    "--connection-string",
+}
+
+_AZ_SENSITIVE_JSON_KEYS = {
+    "id",
+    "tenantid",
+    "subscriptionid",
+    "userid",
+    "username",
+    "principalid",
+    "clientid",
+    "objectid",
+    "accesstoken",
+    "refreshtoken",
+    "token",
+    "password",
+    "secret",
+    "connectionstring",
+}
+
+
+def _redact_command_for_stderr(command: list[str]) -> str:
+    parts: list[str] = []
+    redact_next = False
+    for item in command:
+        token = str(item)
+        lowered = token.lower()
+        if redact_next:
+            parts.append("[redacted]")
+            redact_next = False
+            continue
+        if "=" in token:
+            key, value = token.split("=", 1)
+            key_lower = key.lower()
+            if key_lower in _AZ_SENSITIVE_FLAGS or _looks_sensitive_assignment(key):
+                parts.append(f"{key}=[redacted]")
+                continue
+            parts.append(token if value else key)
+            continue
+        if lowered in _AZ_SENSITIVE_FLAGS:
+            parts.append(token)
+            redact_next = True
+            continue
+        parts.append(token)
+    return " ".join(parts)
+
+
+def _looks_sensitive_assignment(key: str) -> bool:
+    key_lower = key.lower()
+    return any(marker in key_lower for marker in ("token", "secret", "password", "apikey", "api_key", "key"))
+
+
+def _redact_az_output_text(value: str) -> str:
+    stripped = value.strip()
+    if not stripped:
+        return value
+    try:
+        payload = json.loads(stripped)
+    except json.JSONDecodeError:
+        return value
+    redacted = _redact_json_payload(payload)
+    return json.dumps(redacted, indent=2, ensure_ascii=False)
+
+
+def _redact_json_payload(value):
+    if isinstance(value, dict):
+        redacted = {}
+        for key, item in value.items():
+            key_lower = str(key).lower()
+            if key_lower in _AZ_SENSITIVE_JSON_KEYS:
+                redacted[key] = "[redacted]"
+                continue
+            if key_lower == "user" and isinstance(item, dict):
+                user_redacted = dict(item)
+                if "name" in user_redacted and user_redacted["name"]:
+                    user_redacted["name"] = "[redacted]"
+                redacted[key] = _redact_json_payload(user_redacted)
+                continue
+            redacted[key] = _redact_json_payload(item)
+        return redacted
+    if isinstance(value, list):
+        return [_redact_json_payload(item) for item in value]
+    return value
+
+
+class _AzCommandReporter:
+    def __init__(self, verbosity: int):
+        self.verbosity = max(int(verbosity), 0)
+        self._lock = threading.Lock()
+        self._has_running_line = False
+        self._dot_thread: threading.Thread | None = None
+        self._dot_stop: threading.Event | None = None
+
+    def report(self, event: dict[str, object]) -> None:
+        phase = str(event.get("phase") or "")
+        command = event.get("command")
+        command_parts = [str(part) for part in command] if isinstance(command, list) else [str(command or "")]
+        command_text = _redact_command_for_stderr(command_parts)
+        if phase == "start":
+            self._start_command_line(command_text)
+            return
+        if phase == "complete":
+            self._stop_dot_line(clear_line=True)
+            if self.verbosity >= 1:
+                returncode = event.get("returncode", "?")
+                self._write(f"[az] completed (exit {returncode}): {command_text}\n")
+                stdout = event.get("stdout")
+                stderr = event.get("stderr")
+                if isinstance(stdout, str) and stdout.strip():
+                    self._write(f"[az] stdout:\n{_redact_az_output_text(stdout).rstrip()}\n")
+                if isinstance(stderr, str) and stderr.strip():
+                    self._write(f"[az] stderr:\n{_redact_az_output_text(stderr).rstrip()}\n")
+
+    def close(self) -> None:
+        self._stop_dot_line(clear_line=True)
+
+    def _start_command_line(self, command_text: str) -> None:
+        self._stop_dot_line(clear_line=True)
+        if self.verbosity <= 0 and self._has_running_line:
+            self._write("\x1b[1A\r\x1b[2K")
+        self._write(f"[az] running: {command_text}\n")
+        self._has_running_line = True
+        self._start_dot_line()
+
+    def _start_dot_line(self) -> None:
+        stop = threading.Event()
+        self._dot_stop = stop
+        thread = threading.Thread(target=self._dot_worker, args=(stop,), daemon=True)
+        self._dot_thread = thread
+        thread.start()
+
+    def _dot_worker(self, stop: threading.Event) -> None:
+        while not stop.wait(2):
+            self._write(".")
+
+    def _stop_dot_line(self, clear_line: bool) -> None:
+        stop = self._dot_stop
+        thread = self._dot_thread
+        self._dot_stop = None
+        self._dot_thread = None
+        if stop:
+            stop.set()
+        if thread:
+            thread.join(timeout=3)
+        if clear_line:
+            self._write("\r\x1b[2K\r")
+
+    def _write(self, text: str) -> None:
+        with self._lock:
+            sys.stderr.write(text)
+            sys.stderr.flush()
 
 
 def _stderr_line_progress():

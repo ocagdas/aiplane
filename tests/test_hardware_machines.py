@@ -8,10 +8,12 @@ from .support import (
     StringIO,
     agent_config,
     cli_main,
+    cli_module,
     create_profile,
     json,
     load_profile,
     patch,
+    redirect_stderr,
     redirect_stdout,
     tempfile,
     unittest,
@@ -310,6 +312,19 @@ class HardwareMachineTests(unittest.TestCase):
                     self.stdout = stdout
                     self.stderr = ""
 
+            class PriceResponse:
+                def __init__(self, payload):
+                    self._payload = payload
+
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, exc_type, exc, tb):
+                    return None
+
+                def read(self):
+                    return json.dumps(self._payload).encode("utf-8")
+
             def fake_run(command, **kwargs):
                 calls.append(command)
                 if command[:3] == ["az", "account", "show"]:
@@ -364,6 +379,24 @@ class HardwareMachineTests(unittest.TestCase):
             with (
                 patch("aiplane.machines.shutil.which", return_value="/usr/bin/az"),
                 patch("aiplane.machines.subprocess.run", side_effect=fake_run),
+                patch(
+                    "aiplane.machines.urlopen",
+                    return_value=PriceResponse(
+                        {
+                            "Items": [
+                                {
+                                    "armSkuName": "Standard_NC40ads_H100_v5",
+                                    "currencyCode": "USD",
+                                    "unitPrice": 12.34,
+                                    "unitOfMeasure": "1 Hour",
+                                    "meterName": "NC40ads H100 v5",
+                                    "productName": "Virtual Machines NCads H100 v5",
+                                    "skuName": "NC40ads H100 v5",
+                                }
+                            ]
+                        }
+                    ),
+                ),
             ):
                 result = MachineManager(profile).discover_azure("uksouth", workload="inference_large", limit=1)
             self.assertEqual(result["discovery"]["method"], "live")
@@ -373,6 +406,179 @@ class HardwareMachineTests(unittest.TestCase):
                 result["candidates"][0]["restrictions"][0]["reason_code"],
                 "NotAvailableForSubscription",
             )
+            self.assertEqual(result["candidates"][0]["pricing"]["currency"], "USD")
+            self.assertEqual(result["candidates"][0]["pricing"]["unit"], "per_hour")
+
+    def test_machine_azure_discovery_supports_resource_and_vendor_filters(self) -> None:
+        source = load_profile("local-dev", Path.cwd())
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "hardware.yaml").write_text("", encoding="utf-8")
+            profile = Profile(
+                name="tmp",
+                root=root,
+                workspace=Path.cwd(),
+                hardware=json.loads(json.dumps(source.hardware)),
+                backends=source.backends,
+                repository=source.repository,
+                tools=source.tools,
+                approvals=source.approvals,
+                environment=source.environment,
+                models=source.models,
+                targets=source.targets,
+            )
+            manager = MachineManager(profile)
+            with patch("aiplane.machines.shutil.which", return_value=None):
+                cpu_only = manager.discover_azure(
+                    "uksouth",
+                    workload="compile_build",
+                    gpu_vendor="none",
+                    min_cpu_cores=20,
+                    min_ram_gb=100,
+                    limit=10,
+                )
+                gpu_heavy = manager.discover_azure(
+                    "uksouth",
+                    workload="inference_large",
+                    gpu_vendor="nvidia",
+                    min_cpu_cores=30,
+                    min_ram_gb=300,
+                    min_vram_gb=80,
+                    limit=10,
+                )
+            self.assertEqual([row["name"] for row in cpu_only["candidates"]], ["azure_standard_e32s_v5"])
+            self.assertEqual(
+                {row["name"] for row in gpu_heavy["candidates"]},
+                {"azure_standard_nc40ads_h100_v5", "azure_standard_nd96asr_v4"},
+            )
+
+    def test_machines_discover_azure_verbosity_streams_az_progress(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            profiles_dir = Path(tmp) / "profiles"
+            create_profile("local-dev", profiles_dir=profiles_dir)
+
+            class Completed:
+                def __init__(self, stdout, returncode=0, stderr=""):
+                    self.returncode = returncode
+                    self.stdout = stdout
+                    self.stderr = stderr
+
+            class PriceResponse:
+                def __init__(self, payload):
+                    self._payload = payload
+
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, exc_type, exc, tb):
+                    return None
+
+                def read(self):
+                    return json.dumps(self._payload).encode("utf-8")
+
+            def fake_run(command, **kwargs):
+                if command[:3] == ["az", "account", "show"]:
+                    return Completed(
+                        json.dumps(
+                            {
+                                "environmentName": "AzureCloud",
+                                "state": "Enabled",
+                                "isDefault": True,
+                                "name": "sub",
+                                "id": "sub-id",
+                                "tenantId": "tenant",
+                                "user": {"name": "u", "type": "user"},
+                            }
+                        )
+                    )
+                if command[:3] == ["az", "vm", "list-skus"]:
+                    return Completed(json.dumps([{"name": "Standard_NC40ads_H100_v5"}]))
+                if command[:3] == ["az", "vm", "list-usage"]:
+                    return Completed("[]")
+                return Completed("", returncode=1, stderr="unexpected command")
+
+            stdout = StringIO()
+            stderr = StringIO()
+            with (
+                patch("aiplane.machines.shutil.which", return_value="/usr/bin/az"),
+                patch("aiplane.machines.subprocess.run", side_effect=fake_run),
+                patch("aiplane.machines.urlopen", return_value=PriceResponse({"Items": []})),
+                redirect_stdout(stdout),
+                redirect_stderr(stderr),
+            ):
+                code = cli_main(
+                    [
+                        "--profiles-dir",
+                        str(profiles_dir),
+                        "machines",
+                        "discover",
+                        "azure",
+                        "--profile",
+                        "local-dev",
+                        "--region",
+                        "uksouth",
+                        "--workload",
+                        "inference_large",
+                        "--limit",
+                        "1",
+                    ]
+                )
+            self.assertEqual(code, 0)
+            progress = stderr.getvalue()
+            self.assertIn("[az] running: az account show --output json", progress)
+            self.assertIn("[az] running: az vm list-skus --location uksouth", progress)
+            self.assertIn("\x1b[1A", progress)
+            self.assertNotIn("[az] stdout:", progress)
+
+            stdout = StringIO()
+            stderr = StringIO()
+            with (
+                patch("aiplane.machines.shutil.which", return_value="/usr/bin/az"),
+                patch("aiplane.machines.subprocess.run", side_effect=fake_run),
+                patch("aiplane.machines.urlopen", return_value=PriceResponse({"Items": []})),
+                redirect_stdout(stdout),
+                redirect_stderr(stderr),
+            ):
+                code = cli_main(
+                    [
+                        "--profiles-dir",
+                        str(profiles_dir),
+                        "machines",
+                        "discover",
+                        "azure",
+                        "--profile",
+                        "local-dev",
+                        "--region",
+                        "uksouth",
+                        "--workload",
+                        "inference_large",
+                        "--limit",
+                        "1",
+                        "--verbosity",
+                        "1",
+                    ]
+                )
+            self.assertEqual(code, 0)
+            verbose_progress = stderr.getvalue()
+            self.assertIn("[az] completed (exit 0): az vm list-skus --location uksouth", verbose_progress)
+            self.assertIn('"name": "Standard_NC40ads_H100_v5"', verbose_progress)
+            self.assertIn('"id": "[redacted]"', verbose_progress)
+
+    def test_az_command_progress_redacts_sensitive_command_values(self) -> None:
+        rendered = cli_module._redact_command_for_stderr(
+            [
+                "az",
+                "vm",
+                "list-skus",
+                "--subscription",
+                "11111111-2222-3333-4444-555555555555",
+                "API_KEY=secret-value",
+            ]
+        )
+        self.assertIn("--subscription [redacted]", rendered)
+        self.assertIn("API_KEY=[redacted]", rendered)
+        self.assertNotIn("secret-value", rendered)
+        self.assertNotIn("11111111-2222-3333-4444-555555555555", rendered)
 
     def test_machine_azure_discovery_records_method_and_live_overrides_offline_cache(
         self,
@@ -406,9 +612,23 @@ class HardwareMachineTests(unittest.TestCase):
                 stdout = json.dumps([{"name": "Standard_NC40ads_H100_v5"}])
                 stderr = ""
 
+            class PriceResponse:
+                def __init__(self, payload):
+                    self._payload = payload
+
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, exc_type, exc, tb):
+                    return None
+
+                def read(self):
+                    return json.dumps(self._payload).encode("utf-8")
+
             with (
                 patch("aiplane.machines.shutil.which", return_value="/usr/bin/az"),
                 patch("aiplane.machines.subprocess.run", return_value=Completed()),
+                patch("aiplane.machines.urlopen", return_value=PriceResponse({"Items": []})),
             ):
                 live = manager.discover_azure("uksouth", workload="inference_large", limit=2)
             self.assertEqual(live["discovery"]["method"], "live")

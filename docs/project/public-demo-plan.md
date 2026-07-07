@@ -136,6 +136,7 @@ sed -n '1,90p' skills/aiplane/SKILL.md
 aiplane hardware discover --dry-run
 aiplane models list --runtime ollama --role chat --current-machine --enabled-only --sort-by role --limit 3
 aiplane hardware recommend
+aiplane machines discover azure --region uksouth --workload inference_small --runtime vllm --gpu-vendor nvidia --min-vram-gb 16 --verbosity 1 --limit 3
 aiplane stacks setup cpu_chat --runtime ollama --model "$CHAT_ALIAS" --access same_host --dry-run
 ```
 
@@ -487,13 +488,13 @@ aiplane models list --role image_generation --runtime diffusers --ram-gb 64 --vr
 aiplane models refresh --provider huggingface --query text-to-video --disable-new --limit 10
 aiplane models list --role video_generation --runtime diffusers --ram-gb 128 --vram-gb 16 --sort-by role --limit 5
 aiplane machines azure-status --region uksouth
-aiplane machines discover azure --region uksouth --workload media_generation --runtime diffusers --limit 5
+aiplane machines discover azure --region uksouth --workload media_generation --runtime diffusers --gpu-vendor nvidia --min-cpu-cores 32 --min-ram-gb 128 --min-vram-gb 24 --verbosity 0 --limit 5
 aiplane machines profile-remote-plan --name gpu-box-01 --host gpu-box-01.example.internal --user azureuser
 ```
 
 Voiceover:
 
-> For heavier workloads like video generation, the same planning shape applies. Discover models by purpose, filter by runtime and hardware needs, then discover machine candidates that fit the workload. Azure discovery can be live or fall back to offline hints. Remote profiling plans show how an existing workstation or VM can be measured and imported without hand-writing inventory.
+> For heavier workloads like video generation, the same planning shape applies. Discover models by purpose, filter by runtime and hardware needs, then discover machine candidates that fit the workload. Azure discovery can be live or fall back to offline hints, and live results can include unit pricing (currency + per-hour/per-unit measure) so cost is visible during candidate review. Remote profiling plans show how an existing workstation or VM can be measured and imported without hand-writing inventory.
 
 Recording note: inspect Azure output before publishing. Do not show subscription IDs, tenant IDs, personal account names, or Azure portal pages. Fast-forward live discovery if it takes time.
 
@@ -578,7 +579,7 @@ VLLM_ALIAS="vllm_demo_chat"
 aiplane models add "$VLLM_ALIAS" --provider local_file --model /models/TinyLlama-1.1B-Chat-v1.0 --role chat --runtime vllm --preferred-runtime vllm --set min_ram_gb=16 --set min_vram_gb=8 --dry-run
 aiplane models add "$VLLM_ALIAS" --provider local_file --model /models/TinyLlama-1.1B-Chat-v1.0 --role chat --runtime vllm --preferred-runtime vllm --set min_ram_gb=16 --set min_vram_gb=8 --overwrite
 aiplane runtimes bundle vllm --model "$VLLM_ALIAS" --mode docker --format dockerfile
-aiplane machines discover azure --region uksouth --workload inference_small --runtime vllm --limit 5
+aiplane machines discover azure --region uksouth --workload inference_small --runtime vllm --gpu-vendor nvidia --min-vram-gb 16 --verbosity 1 --limit 5
 ```
 
 ## Quick Local-Dev Runner Checklist

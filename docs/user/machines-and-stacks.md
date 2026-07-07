@@ -129,7 +129,20 @@ aiplane machines azure-status --region uksouth --sku-query
 ```bash
 aiplane machines discover azure --region uksouth --workload inference_large
 aiplane machines discover azure --region uksouth --model MODEL_ALIAS --runtime vllm
+aiplane machines discover azure --region uksouth --workload media_generation --runtime diffusers --gpu-vendor nvidia --min-cpu-cores 32 --min-ram-gb 128 --min-vram-gb 24 --verbosity 1
 ```
+
+`machines discover azure` supports optional hardware filters:
+
+- `--gpu-vendor` (for example `nvidia`, `amd`, `intel`, `apple`, `none`)
+- `--min-cpu-cores`
+- `--min-ram-gb`
+- `--min-vram-gb`
+
+Azure command progress is printed on `stderr` during discovery:
+
+- `--verbosity 0` (default): shows only the currently running redacted `az ...` command and a dot ticker every 2 seconds on the line below; when a command finishes, the dot line is cleared.
+- `--verbosity 1`: logs each command on a new line and includes redacted Azure CLI stdout/stderr payloads.
 
 Import a selected SKU into the same self-managed machine inventory:
 
@@ -152,6 +165,7 @@ When live Azure discovery works, output also includes:
 
 - `quota`: live `az vm list-usage` results for the selected region, including current usage, limit, and remaining capacity where Azure returns those values.
 - `restrictions`: SKU restriction data from `az vm list-skus`, such as subscription or location restrictions.
+- `pricing`: per-candidate retail unit pricing from the Azure Retail Prices API when available, including `unit_price`, `currency`, `unit` (`per_hour`/etc.), and `unit_of_measure`.
 
 Results are cached in `profiles/<profile>/machine-discovery-cache.json`. Offline results create or update the cache only when no live cache exists for the same provider/region/filter. A later live discovery always overwrites the cached offline result for that same key, so Azure data takes precedence over static hints as soon as it is available.
 
@@ -160,7 +174,7 @@ Inspect or clear cached discovery results:
 ```bash
 aiplane machines cache-list
 aiplane machines cache-clear
-aiplane machines cache-clear --key azure__uksouth__inference_large__any_model__any_runtime
+aiplane machines cache-clear --key <cache-key-from-cache-list>
 ```
 
 Always verify real Azure availability, quota, pricing, and exact GPU memory before provisioning.
