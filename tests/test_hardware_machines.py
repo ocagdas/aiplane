@@ -21,6 +21,12 @@ from .support import (
 
 
 class HardwareMachineTests(unittest.TestCase):
+    def test_machines_discover_cli_rejects_runtime_argument(self) -> None:
+        stderr = StringIO()
+        with redirect_stderr(stderr), self.assertRaises(SystemExit):
+            cli_main(["machines", "discover", "azure", "--region", "uksouth", "--runtime", "vllm"])
+        self.assertIn("unrecognized arguments: --runtime vllm", stderr.getvalue())
+
     def test_hardware_template_uses_normalized_machine_fields_only(self) -> None:
         data = agent_config.parse_yaml(
             (Path.cwd() / "profile-templates/local-dev/hardware.yaml").read_text(encoding="utf-8")

@@ -128,8 +128,8 @@ aiplane machines azure-status --region uksouth --sku-query
 
 ```bash
 aiplane machines discover azure --region uksouth --workload inference_large
-aiplane machines discover azure --region uksouth --model MODEL_ALIAS --runtime vllm
-aiplane machines discover azure --region uksouth --workload media_generation --runtime diffusers --gpu-vendor nvidia --min-cpu-cores 32 --min-ram-gb 128 --min-vram-gb 24 --verbosity 1
+aiplane machines discover azure --region uksouth --model MODEL_ALIAS
+aiplane machines discover azure --region uksouth --workload media_generation --gpu-vendor nvidia --min-cpu-cores 32 --min-ram-gb 128 --min-vram-gb 24 --verbosity 1
 ```
 
 `machines discover azure` supports optional hardware filters:

@@ -940,7 +940,6 @@ def _main(argv: list[str] | None = None) -> int:
     machines_discover.add_argument("--region", required=True, help="Provider region, such as uksouth")
     machines_discover.add_argument("--workload", help="Workload class filter")
     machines_discover.add_argument("--model", help="Configured model alias filter")
-    machines_discover.add_argument("--runtime", help="Runtime name filter")
     machines_discover.add_argument("--gpu-vendor", help="GPU vendor filter, such as nvidia, amd, intel, apple, or none")
     machines_discover.add_argument("--min-cpu-cores", type=float, help="Minimum CPU cores filter")
     machines_discover.add_argument("--min-ram-gb", type=float, help="Minimum RAM (GB) filter")
@@ -2749,7 +2748,6 @@ def _main(argv: list[str] | None = None) -> int:
                             args.region,
                             workload=args.workload,
                             model=args.model,
-                            runtime=args.runtime,
                             gpu_vendor=args.gpu_vendor,
                             min_cpu_cores=args.min_cpu_cores,
                             min_ram_gb=args.min_ram_gb,

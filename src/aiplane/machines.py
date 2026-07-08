@@ -213,7 +213,6 @@ class MachineManager:
         region: str,
         workload: str | None = None,
         model: str | None = None,
-        runtime: str | None = None,
         gpu_vendor: str | None = None,
         min_cpu_cores: float | None = None,
         min_ram_gb: float | None = None,
@@ -222,7 +221,7 @@ class MachineManager:
         verbosity: int = 0,
         az_event_sink: Callable[[dict[str, Any]], None] | None = None,
     ) -> dict[str, Any]:
-        criteria = self._criteria(model, runtime, workload)
+        criteria = self._criteria(model, None, workload)
         criteria["gpu_vendor"] = (gpu_vendor or "").strip().lower() or None
         criteria["min_cpu_cores"] = _float(min_cpu_cores)
         criteria["min_ram_gb"] = max(
