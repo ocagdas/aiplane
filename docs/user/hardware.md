@@ -13,6 +13,8 @@ aiplane hardware discover --select-closest
 aiplane hardware clear
 aiplane hardware active
 aiplane hardware show
+aiplane hardware show --format text
+aiplane hardware show --format json
 aiplane hardware show --verbosity 0
 aiplane hardware show --list-types
 aiplane hardware templates
@@ -38,8 +40,9 @@ aiplane hardware export-machine --name local_box > local_box.machine.yaml
   custom status, current values, and the normalized effective machine used for
   recommendations.
 - `show`: prints the selected hardware summary (`active_selection` and
-  `effective_machine`). Use `--list-types` to print known template types instead of
-  the summary. `--verbosity` currently accepts `0` and defaults to no template catalog output.
+  `effective_machine`). Use `--format text` for compact output and `--format json`
+  for scripts; output is still scoped by `--verbosity`.
+  `--verbosity 0` omits template-catalog rows and keeps the summary terse.
 - `templates`: prints immutable hardware templates.
 - `schema`: prints the editable machine fields used for recommendation and fit checks.
 - `use`: copies a template into the selected config and optionally applies

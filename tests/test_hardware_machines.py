@@ -59,6 +59,25 @@ class HardwareMachineTests(unittest.TestCase):
         self.assertIn("effective_machine", payload)
         self.assertNotIn("hardware_profiles", payload)
 
+    def test_hardware_show_cli_outputs_text_when_format_text(self) -> None:
+        stdout = StringIO()
+        with redirect_stdout(stdout):
+            code = cli_main([
+                "hardware",
+                "show",
+                "--profile",
+                "local-dev",
+                "--format",
+                "text",
+            ])
+        self.assertEqual(code, 0)
+        rows = [line for line in stdout.getvalue().splitlines() if line.strip()]
+        self.assertEqual(rows[0], "hardware show")
+        self.assertIn("active_selection", rows)
+        self.assertIn("effective_machine", rows)
+        self.assertTrue(any("NAME" in line and "ORIGIN" in line and "CUSTOM" in line for line in rows))
+        self.assertFalse(rows[1].startswith("{"))
+
     def test_hardware_show_list_types_includes_template_names(self) -> None:
         profile = load_profile("local-dev", Path.cwd())
         payload = HardwareManager(profile).show_types()

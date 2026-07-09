@@ -771,6 +771,12 @@ def _main(argv: list[str] | None = None) -> int:
     )
     _profile_arg(hardware_show)
     hardware_show.add_argument(
+        "--format",
+        choices=["text", "json"],
+        default=None,
+        help="Output format. JSON is full payload; text is compact table view.",
+    )
+    hardware_show.add_argument(
         "--verbosity",
         type=int,
         choices=[0],
@@ -2794,7 +2800,17 @@ def _main(argv: list[str] | None = None) -> int:
             if args.list_types:
                 print(_json(manager.show_types(), indent=2, sort_keys=True))
                 return 0
-            print(_json(manager.show(verbosity=int(args.verbosity)), indent=2, sort_keys=True))
+            output_format = resolve_output_format(
+                args.format,
+                profile=effective_profile,
+                command="hardware show",
+                path=local_config_path(),
+                default="json",
+            )
+            if output_format == "text":
+                print(_hardware_show_text(manager.show(verbosity=int(args.verbosity))))
+            else:
+                print(_json(manager.show(verbosity=int(args.verbosity)), indent=2, sort_keys=True))
             return 0
         if args.hardware_command == "templates":
             print(_json(manager.templates(), indent=2, sort_keys=True))
@@ -4044,6 +4060,100 @@ def _runtimes_list_text(rows: list[dict[str, object]]) -> str:
         lines.append("".join(row[key].ljust(widths[key] + 2) for key in keys))
     return "\n".join(lines)
 
+
+def _hardware_show_text(payload: dict[str, object]) -> str:
+    if not isinstance(payload, dict):
+        return "hardware show\n(no data)"
+
+    active = payload.get("active_selection", {})
+    if not isinstance(active, dict):
+        active = {}
+    machine = payload.get("effective_machine", {})
+    if not isinstance(machine, dict):
+        machine = {}
+    cpu = machine.get("cpu", {})
+    memory = machine.get("memory", {})
+    gpu = machine.get("gpu", {})
+    stock = machine.get("stock", {})
+    if not isinstance(cpu, dict):
+        cpu = {}
+    if not isinstance(memory, dict):
+        memory = {}
+    if not isinstance(gpu, dict):
+        gpu = {}
+    if not isinstance(stock, dict):
+        stock = {}
+
+    def _to_text(value: object) -> str:
+        if value is None:
+            return ""
+        if isinstance(value, bool):
+            return "yes" if value else "no"
+        if isinstance(value, (list, tuple)):
+            return ", ".join(str(item) for item in value)
+        return str(value)
+
+    def _single_row_table(headers: dict[str, str], row: dict[str, str]) -> str:
+        keys = list(headers)
+        widths = {key: len(headers[key]) for key in keys}
+        for key in keys:
+            widths[key] = max(widths[key], len(row.get(key, "")))
+        lines = [
+            "".join(headers[key].ljust(widths[key] + 2) for key in keys),
+            "".join(row[key].ljust(widths[key] + 2) for key in keys),
+        ]
+        return "\n".join(lines)
+
+    active_row = {
+        "name": _to_text(active.get("name")),
+        "origin": _to_text(active.get("origin")),
+        "custom": _to_text(active.get("custom")),
+    }
+    active_lines = _single_row_table(
+        {"name": "NAME", "origin": "ORIGIN", "custom": "CUSTOM"},
+        active_row,
+    )
+
+    effective_row = {
+        "name": _to_text(machine.get("name")),
+        "provider": _to_text(stock.get("provider")),
+        "placement": _to_text(machine.get("placement")),
+        "substrate": _to_text(machine.get("substrate")),
+        "cpu_cores": _to_text(cpu.get("cores")),
+        "cpu_threads": _to_text(cpu.get("threads")),
+        "ram_gb": _to_text(memory.get("ram_gb")),
+        "vram_gb": _to_text(gpu.get("vram_gb")),
+        "total_vram_gb": _to_text(gpu.get("total_vram_gb")),
+        "gpu_vendor": _to_text(gpu.get("vendor")),
+        "gpu_model": _to_text(gpu.get("model")),
+    }
+    effective_lines = _single_row_table(
+        {
+            "name": "NAME",
+            "provider": "PROVIDER",
+            "placement": "PLACEMENT",
+            "substrate": "SUBSTRATE",
+            "cpu_cores": "CPU_CORES",
+            "cpu_threads": "CPU_THREADS",
+            "ram_gb": "RAM_GB",
+            "vram_gb": "VRAM_GB",
+            "total_vram_gb": "TOTAL_VRAM_GB",
+            "gpu_vendor": "GPU_VENDOR",
+            "gpu_model": "GPU_MODEL",
+        },
+        effective_row,
+    )
+
+    return "\n".join(
+        [
+            "hardware show",
+            "active_selection",
+            active_lines,
+            "",
+            "effective_machine",
+            effective_lines,
+        ]
+    )
 
 def _environment_doctor_text(payload: dict[str, object]) -> str:
     summary = payload.get("summary", {}) if isinstance(payload.get("summary"), dict) else {}

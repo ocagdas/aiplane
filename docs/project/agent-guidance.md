@@ -49,6 +49,21 @@ Behavior changes should normally land with matching test updates in the same cha
 - OpenTofu is the default provider-agnostic IaC direction; Terraform is supported for teams standardized on it; Pulumi is optional for language-native IaC.
 - Packer builds images; Vagrant runs local dev VMs from boxes/images. They complement each other.
 
+## LLM Automation Workaround (Sandbox/Bwrap)
+
+Use this workflow when edits are blocked by sandbox behavior in this environment:
+
+1. Keep the intended change as a small, surgical diff block with exact anchors.
+2. Use an explicit scripted edit (`sed -i`, `perl -0pi`, or a short temporary-file rewrite) instead of broad refactors.
+3. Re-read only the changed region and proceed only when the new text is scoped and syntactically consistent.
+
+Concrete normal pattern for repeated `apply_patch` failures:
+
+- If `apply_patch` reports the loopback sandbox error (`bwrap: loopback: Failed RTM_NEWADDR`), do not keep retrying.
+- Edit the target file directly with one narrow command and a deterministic anchor.
+- Run `git diff` to confirm only the intended section changed.
+- Record the edit path and workaround in final handoff notes for future repeatability.
+
 ## Validation Expectations
 
 Before claiming a release-ready or beta-ready state, run the focused smoke checks that match the change plus the full test suite:
