@@ -3325,16 +3325,16 @@ def _main(argv: list[str] | None = None) -> int:
                 "command": command,
                 "dry_run": bool(args.dry_run),
             }
+            if args.dry_run:
+                payload["ok"] = True
+                print(_json(payload, indent=2))
+                return 0
             executable = command[0] if command else ""
             if executable and not shutil.which(executable):
                 payload["ok"] = False
                 payload["reason"] = f"required executable not found on PATH: {executable}"
                 print(_json(payload, indent=2))
                 return 2
-            if args.dry_run:
-                payload["ok"] = True
-                print(_json(payload, indent=2))
-                return 0
             completed = subprocess.run(command, text=True, capture_output=True, check=False)
             if completed.stdout:
                 print(completed.stdout, end="")
