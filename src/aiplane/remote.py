@@ -19,21 +19,34 @@ class RemoteManager:
         target = self._target(name)
         if target.get("type") != "ssh_tunnel":
             raise ValueError(f"target {name!r} is not an ssh_tunnel target")
+
         ssh = _dict(target.get("ssh"))
         forward = _dict(target.get("forward"))
-        host = str(ssh.get("host") or "")
-        user = str(ssh.get("user") or "")
-        ssh_port = int(ssh.get("port") or 22)
-        local_host = str(forward.get("local_host") or "127.0.0.1")
-        local_port = int(forward.get("local_port") or 11434)
-        remote_host = str(forward.get("remote_host") or "127.0.0.1")
-        remote_port = int(forward.get("remote_port") or 11434)
-        if not host:
-            raise ValueError(f"ssh_tunnel target {name!r} is missing ssh.host")
+
+        host = _coerce_host(ssh.get("host"), "ssh.host")
+        user = _coerce_optional_identity(str(ssh.get("user") or ""))
+        ssh_port = _coerce_port(ssh.get("port"), "ssh.port", default=22)
+        local_host = _coerce_host(forward.get("local_host"), "forward.local_host", default="127.0.0.1")
+        local_port = _coerce_port(forward.get("local_port"), "forward.local_port", default=11434)
+        remote_host = _coerce_host(forward.get("remote_host"), "forward.remote_host", default="127.0.0.1")
+        remote_port = _coerce_port(forward.get("remote_port"), "forward.remote_port", default=11434)
+
+        endpoint = str(target.get("endpoint") or "").strip() or f"http://localhost:{local_port}/v1"
+        if "//" not in endpoint:
+            raise ValueError(
+                f"ssh_tunnel target {name!r} endpoint must include a URL scheme, such as http:// or https://"
+            )
+
         destination = f"{user + '@' if user else ''}{host}"
         command = [
             "ssh",
             "-N",
+            "-o",
+            "ExitOnForwardFailure=yes",
+            "-o",
+            "ServerAliveInterval=15",
+            "-o",
+            "ServerAliveCountMax=3",
             "-L",
             f"{local_host}:{local_port}:{remote_host}:{remote_port}",
             "-p",
@@ -47,11 +60,11 @@ class RemoteManager:
             "tool_available": shutil.which("ssh") is not None,
             "command": command,
             "pid_file": str(self._pid_file(name)),
-            "endpoint": target.get("endpoint") or f"http://localhost:{local_port}/v1",
+            "endpoint": endpoint,
             "connection": {
                 "local_bind": f"{local_host}:{local_port}",
                 "remote_service": f"{remote_host}:{remote_port}",
-                "ide_endpoint": target.get("endpoint") or f"http://localhost:{local_port}/v1",
+                "ide_endpoint": endpoint,
                 "ssh_destination": destination,
                 "ssh_port": ssh_port,
             },
@@ -85,9 +98,11 @@ class RemoteManager:
         status = self.tunnel_status(name)
         if status["running"]:
             return {"target": name, "status": "already_running", **status}
+
         plan = self.tunnel_plan(name)
         if not plan["tool_available"]:
             raise RuntimeError("ssh is not available on PATH")
+
         pid_file = self._pid_file(name)
         log_file = self._log_file(name)
         pid_file.parent.mkdir(parents=True, exist_ok=True)
@@ -117,6 +132,7 @@ class RemoteManager:
         pid = _read_pid(pid_file)
         if pid is None:
             return {"target": name, "status": "not_running", "pid_file": str(pid_file)}
+
         if _pid_running(pid):
             os.kill(pid, signal.SIGTERM)
             status = "stopped"
@@ -149,6 +165,37 @@ class RemoteManager:
 
 def _dict(value: object) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
+
+
+def _coerce_host(value: object, field: str, default: str | None = None) -> str:
+    host = str(value or "").strip()
+    if not host:
+        host = str(default or "").strip()
+    if not host:
+        raise ValueError(f"target is missing required field {field}")
+    if any(ch.isspace() for ch in host):
+        raise ValueError(f"target field {field!r} contains whitespace")
+    return host
+
+
+def _coerce_optional_identity(value: str) -> str:
+    candidate = value.strip()
+    if not candidate:
+        return ""
+    if any(ch.isspace() for ch in candidate):
+        raise ValueError("target ssh.user contains whitespace")
+    return candidate
+
+
+def _coerce_port(value: object, field: str, default: int) -> int:
+    raw = value if value is not None else default
+    try:
+        port = int(raw)
+    except (TypeError, ValueError):
+        raise ValueError(f"target field {field} must be an integer in the range 1-65535")
+    if not (1 <= port <= 65535):
+        raise ValueError(f"target field {field} must be an integer in the range 1-65535")
+    return port
 
 
 def _read_pid(path: Path) -> int | None:

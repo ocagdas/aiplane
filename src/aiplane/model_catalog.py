@@ -6,8 +6,26 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-from .backends import BackendResult, OllamaBackend, OpenAICompatibleBackend
+from .backends import (
+    AnthropicMessagesBackend,
+    AzureOpenAIBackend,
+    BackendResult,
+    OllamaBackend,
+    OpenAICompatibleBackend,
+)
 from .models import Profile
+from .model_resources import (
+    accelerator_api_requirements as _accelerator_api_requirements,
+    gpu_vendor_requirement as _gpu_vendor_requirement,
+    matches_accelerator_api_requirement as _matches_accelerator_api_requirement,
+    matches_gpu_vendor_requirement as _matches_gpu_vendor_requirement,
+    number_or_none as _number_or_none,
+    parameter_billions as _parameter_billions,
+    resource_estimate_source as _resource_estimate_source,
+    resource_guess as _resource_guess,
+    size_bonus as _size_bonus,
+)
+from .runtime_pull import runtime_model_id
 from .secrets import CredentialStore
 
 
@@ -72,8 +90,8 @@ class ModelCatalog:
                     "role": role,
                     "name": name,
                     "exists": isinstance(model, dict),
-                    "enabled": bool(model.get("enabled", True)) if isinstance(model, dict) else False,
-                    "provider": model.get("provider") if isinstance(model, dict) else None,
+                    "enabled": (bool(model.get("enabled", True)) if isinstance(model, dict) else False),
+                    "provider": (model.get("provider") if isinstance(model, dict) else None),
                     "model": model.get("model") if isinstance(model, dict) else None,
                 }
             )
@@ -606,14 +624,48 @@ class ModelCatalog:
         from .providers import ProviderRegistry
         from .runtime_catalog import RuntimeCatalog
 
+        registry = ProviderRegistry(self.profile)
+        configured_providers = registry.model_providers()
+        if provider_name not in configured_providers:
+            raise ValueError(f"unknown catalog provider: {provider_name}")
         if progress:
             progress("connecting", provider_name, "")
         try:
-            discovered = ProviderRegistry(self.profile).models(provider_name, query=query, limit=limit, online=online)
-        except Exception as exc:
+            discovered = registry.models(provider_name, query=query, limit=limit, online=online)
+        except Exception as exc:  # noqa: BLE001 - refresh should report configured provider failures as data.
             if progress:
                 progress("failed", provider_name, str(exc))
-            raise
+            return self._refresh_failure_result(
+                provider_name,
+                write=write,
+                enable=enable,
+                online=online,
+                query=query,
+                limit=limit,
+                verbose=verbose,
+                error=str(exc),
+                provider_config={
+                    **configured_providers.get(provider_name, {}),
+                    **self.providers().get(provider_name, {}),
+                },
+            )
+        if discovered.source == "error":
+            if progress:
+                progress("failed", provider_name, discovered.reason)
+            return self._refresh_failure_result(
+                provider_name,
+                write=write,
+                enable=enable,
+                online=online,
+                query=query,
+                limit=limit,
+                verbose=verbose,
+                error=discovered.reason,
+                provider_config={
+                    **configured_providers.get(provider_name, {}),
+                    **self.providers().get(provider_name, {}),
+                },
+            )
         if progress:
             progress("succeeded", provider_name, f"{len(discovered.models)} source model(s)")
         runtime_catalog = RuntimeCatalog(self.profile)
@@ -793,6 +845,73 @@ class ModelCatalog:
             "changes": changes,
             "results": {provider_name: provider_result},
             "next_steps": _refresh_next_steps(write, changes, provider_name=provider_name),
+        }
+
+    def _refresh_failure_result(
+        self,
+        provider_name: str,
+        *,
+        write: bool,
+        enable: bool,
+        online: bool,
+        query: str | None,
+        limit: int,
+        verbose: bool,
+        error: str,
+        provider_config: dict[str, Any],
+    ) -> dict[str, Any]:
+        all_models = self.models()
+        provider_models = [model for model in all_models.values() if model_source(model) == provider_name]
+        provider_imported_models = [model for model in provider_models if _is_refresh_imported_model(model)]
+        provider_curated_models = [model for model in provider_models if not _is_refresh_imported_model(model)]
+        changes = {
+            "imported": 0,
+            "would_import": 0,
+            "updated": 0,
+            "would_update": 0,
+            "removed": 0,
+            "would_remove": 0,
+        }
+        provider_result = {
+            "ownership": str(
+                provider_config.get("ownership")
+                or (
+                    "managed_service"
+                    if provider_name in {"openai", "anthropic", "azure_openai", "ollama_cloud"}
+                    else "self_managed"
+                )
+            ),
+            "status": "failed",
+            "source_contacted": False,
+            "prune_enabled": False,
+            "source_discovery_method": "error",
+            "source_discovery_reason": error,
+            "source_models_returned": 0,
+            "profile_models_before_refresh": len(provider_models),
+            "profile_curated_models_before_refresh": len(provider_curated_models),
+            "profile_refresh_imported_models_before_refresh": len(provider_imported_models),
+            "source_models_already_profiled": 0,
+            "source_models_to_import": 0,
+            "source_models_to_update": 0,
+            "model_changes_count": 0,
+            "changes": changes,
+            "error": error,
+        }
+        path = self.profile.root / "models.yaml"
+        discovered_path = self._generated_path()
+        return {
+            "name": "model_catalog_refresh",
+            "write": write,
+            "new_entries_enabled": enable,
+            "online": online,
+            "query": query,
+            "limit": limit,
+            "verbose": verbose,
+            "path": str(path),
+            "discovered_path": str(discovered_path),
+            "changes": changes,
+            "results": {provider_name: provider_result},
+            "next_steps": _refresh_failure_next_steps(provider_name),
         }
 
     def refresh_all(
@@ -1086,7 +1205,10 @@ class ModelCatalog:
         from .config import dump_yaml
 
         path = self._generated_path()
-        path.write_text(DISCOVERED_MODELS_BANNER + dump_yaml(self.generated_config), encoding="utf-8")
+        path.write_text(
+            DISCOVERED_MODELS_BANNER + dump_yaml(self.generated_config),
+            encoding="utf-8",
+        )
         return path
 
     def pull_plan(
@@ -1209,36 +1331,81 @@ class ModelCatalog:
             raise RuntimeError(output or f"ollama pull failed for {model_id}")
         return output
 
-    def complete(self, name: str, prompt: str, timeout_seconds: int | None = None) -> BackendResult:
+    def complete(
+        self,
+        name: str,
+        prompt: str,
+        timeout_seconds: int | None = None,
+        purpose: str = "chat",
+    ) -> BackendResult:
         model = self.get(name)
+        self.require_execution_capability(name, model, purpose)
         provider_name = self._runtime_for_model(name, model)
         if provider_name in {"ollama", "ollama_cloud"}:
             return self._ollama_backend(provider_name, timeout_seconds=timeout_seconds).chat(
                 self._execution_model_id(provider_name, model), prompt
             )
         if self._is_openai_compatible(provider_name):
-            return self._openai_compatible_backend(provider_name, timeout_seconds=timeout_seconds).chat(
+            return self._openai_compatible_backend(provider_name, model, timeout_seconds=timeout_seconds).chat(
                 str(model.get("model")), prompt
             )
-        raise ValueError(f"execution is not wired for runtime/provider: {provider_name}")
+        if self._is_azure_openai(provider_name):
+            return self._azure_openai_backend(provider_name, model, timeout_seconds=timeout_seconds).chat(
+                str(model.get("model")), prompt
+            )
+        if self._is_anthropic(provider_name):
+            return self._anthropic_backend(provider_name, model, timeout_seconds=timeout_seconds).chat(
+                str(model.get("model")), prompt
+            )
+        raise ValueError(
+            f"execution is not wired for runtime/provider: {provider_name}; "
+            "supported protocols are ollama_api, openai_compatible, azure_openai, and anthropic_api"
+        )
+
+    def require_execution_capability(self, name: str, model: dict[str, Any], purpose: str) -> None:
+        roles = {str(role) for role in model.get("roles", []) or []}
+        scores = model.get("capability_scores")
+        if not isinstance(scores, dict):
+            capabilities = model.get("capabilities")
+            if isinstance(capabilities, dict):
+                scores = capabilities.get("scores")
+        score_names = {key for key, value in (scores or {}).items() if self._positive_score(value)}
+        purpose_roles = {
+            "chat": {"chat", "generation"},
+            "analysis": {"analysis", "chat"},
+            "completion": {"completion", "autocomplete", "code", "chat"},
+            "write": {"generation", "refactor", "code", "chat"},
+        }
+        purpose_scores = {
+            "chat": {"general_chat", "reasoning", "tool_use"},
+            "analysis": {"code_analysis", "reasoning", "general_chat"},
+            "completion": {"code_completion", "code_generation", "general_chat"},
+            "write": {"code_generation", "debugging_refactor", "general_chat"},
+        }
+        allowed_roles = purpose_roles.get(purpose, purpose_roles["chat"])
+        allowed_scores = purpose_scores.get(purpose, purpose_scores["chat"])
+        if roles.intersection(allowed_roles) or score_names.intersection(allowed_scores):
+            return
+        provider_name = str(model.get("provider") or "unknown")
+        model_id = str(model.get("model") or "")
+        role_text = ", ".join(sorted(roles)) or "none"
+        role_hint = next(iter(sorted(allowed_roles)))
+        raise ValueError(
+            f"model {name!r} is not suitable for {purpose} execution: roles={role_text}. "
+            f"Use `aiplane models list --role {role_hint} --enabled-only` to select a compatible model, "
+            "or promote/add a reviewed chat/task-capable alias. "
+            f"Provider={provider_name!r}, model={model_id!r}."
+        )
+
+    @staticmethod
+    def _positive_score(value: Any) -> bool:
+        try:
+            return float(value) > 0
+        except (TypeError, ValueError):
+            return False
 
     def _execution_model_id(self, runtime_name: str, model: dict[str, Any]) -> str:
-        model_id = str(model.get("model") or "")
-        if runtime_name != "ollama":
-            return model_id
-        from .runtime_catalog import RuntimeCatalog
-
-        runtime_catalog = RuntimeCatalog(self.profile)
-        source = runtime_catalog.source_for_model(model)
-        supported = runtime_catalog.compatible_runtimes_for_entry(model, include_gui=True)
-        if source == "huggingface_gguf" and "ollama" in supported:
-            if model_id.startswith("hf.co/"):
-                return model_id
-            if model_id.startswith(("http://", "https://")):
-                return model_id
-            if "/" in model_id:
-                return f"hf.co/{model_id}"
-        return model_id
+        return runtime_model_id(self.profile, runtime_name, model)
 
     def _runtime_for_model(self, name: str, model: dict[str, Any]) -> str:
         provider_name = str(model.get("provider") or "")
@@ -1269,7 +1436,7 @@ class ModelCatalog:
         endpoint = str(
             provider.get(
                 "endpoint",
-                "http://localhost:11434" if provider_name == "ollama" else "https://ollama.com",
+                ("http://localhost:11434" if provider_name == "ollama" else "https://ollama.com"),
             )
         )
         timeout = int(timeout_seconds or provider.get("timeout_seconds", 60))
@@ -1284,20 +1451,60 @@ class ModelCatalog:
         return OllamaBackend(endpoint, timeout, headers)
 
     def _openai_compatible_backend(
-        self, provider_name: str, timeout_seconds: int | None = None
+        self,
+        provider_name: str,
+        model: dict[str, Any] | None = None,
+        timeout_seconds: int | None = None,
     ) -> OpenAICompatibleBackend:
         provider = self.providers().get(provider_name, {})
         endpoint = self._openai_compatible_endpoint(provider_name, provider)
         timeout = int(timeout_seconds or provider.get("timeout_seconds", 60))
         headers = {}
-        credential_ref = str(provider.get("credential_ref") or "")
-        api_key = CredentialStore().api_key(credential_ref) if credential_ref else None
-        key_env = provider.get("api_key_env")
-        if not api_key and key_env and os.environ.get(str(key_env)):
-            api_key = os.environ[str(key_env)]
+        api_key = self._api_key(provider, model)
         if api_key:
             headers["Authorization"] = "Bearer " + api_key
         return OpenAICompatibleBackend(endpoint, timeout, headers)
+
+    def _azure_openai_backend(
+        self,
+        provider_name: str,
+        model: dict[str, Any] | None = None,
+        timeout_seconds: int | None = None,
+    ) -> AzureOpenAIBackend:
+        provider = self.providers().get(provider_name, {})
+        endpoint = str(provider.get("endpoint") or "")
+        if not endpoint:
+            raise ValueError(f"provider {provider_name!r} is missing endpoint")
+        timeout = int(timeout_seconds or provider.get("timeout_seconds", 60))
+        headers = {}
+        api_key = self._api_key(provider, model)
+        if api_key:
+            headers["api-key"] = api_key
+        return AzureOpenAIBackend(endpoint, str(provider.get("api_version") or "2024-02-01"), timeout, headers)
+
+    def _anthropic_backend(
+        self,
+        provider_name: str,
+        model: dict[str, Any] | None = None,
+        timeout_seconds: int | None = None,
+    ) -> AnthropicMessagesBackend:
+        provider = self.providers().get(provider_name, {})
+        endpoint = str(provider.get("endpoint") or "https://api.anthropic.com")
+        timeout = int(timeout_seconds or provider.get("timeout_seconds", 60))
+        headers = {}
+        api_key = self._api_key(provider, model)
+        if api_key:
+            headers["x-api-key"] = api_key
+        return AnthropicMessagesBackend(endpoint, timeout, headers, str(provider.get("api_version") or "2023-06-01"))
+
+    def _api_key(self, provider: dict[str, Any], model: dict[str, Any] | None = None) -> str | None:
+        model = model or {}
+        credential_ref = str(model.get("credential_ref") or provider.get("credential_ref") or "")
+        api_key = CredentialStore().api_key(credential_ref) if credential_ref else None
+        key_env = model.get("api_key_env") or provider.get("api_key_env")
+        if not api_key and key_env and os.environ.get(str(key_env)):
+            api_key = os.environ[str(key_env)]
+        return api_key
 
     def _openai_compatible_endpoint(self, provider_name: str, provider: dict[str, Any] | None = None) -> str:
         provider = provider or self.providers().get(provider_name, {})
@@ -1320,18 +1527,32 @@ class ModelCatalog:
             "openai",
         }
 
+    def _is_azure_openai(self, provider_name: str) -> bool:
+        provider = self.providers().get(provider_name, {})
+        return provider_name == "azure_openai" or str(provider.get("protocol") or "") == "azure_openai"
+
+    def _is_anthropic(self, provider_name: str) -> bool:
+        provider = self.providers().get(provider_name, {})
+        return provider_name == "anthropic" or str(provider.get("protocol") or "") in {
+            "anthropic_api",
+            "anthropic_messages",
+        }
+
     def test_prompt(self, name: str, task: str, target: Path | None = None, dry_run: bool = False) -> BackendResult:
         model = self.get(name)
         prompt = build_smoke_prompt(task, target)
         if dry_run:
             return BackendResult("dry_run", prompt, False)
         provider_name = str(model.get("provider"))
-        if provider_name not in {
-            "ollama",
-            "ollama_cloud",
-        } and not self._is_openai_compatible(provider_name):
+        if (
+            provider_name not in {"ollama", "ollama_cloud"}
+            and not self._is_openai_compatible(provider_name)
+            and not self._is_azure_openai(provider_name)
+            and not self._is_anthropic(provider_name)
+        ):
             raise ValueError(
-                "model test cannot execute this provider yet; use --dry-run or configure an OpenAI-compatible endpoint"
+                "model test cannot execute this provider yet; use --dry-run or configure an Ollama, "
+                "OpenAI-compatible, Azure OpenAI, or Anthropic Messages endpoint"
             )
         return self.complete(name, prompt)
 
@@ -1367,24 +1588,15 @@ class ModelCatalog:
                 provider_name,
                 True,
                 pulled,
-                "model is pulled" if pulled else f"model is not pulled: ollama pull {model_id}",
+                ("model is pulled" if pulled else f"model is not pulled: ollama pull {model_id}"),
             )
         if self._is_openai_compatible(provider_name):
-            credential_ref = str(model.get("credential_ref") or provider.get("credential_ref") or "")
-            key_env = provider.get("api_key_env")
-            if credential_ref and not CredentialStore().api_key(credential_ref):
-                return ModelStatus(
-                    name,
-                    provider_name,
-                    True,
-                    False,
-                    f"missing credential {credential_ref}",
-                )
-            if not credential_ref and key_env and not os.environ.get(str(key_env)):
-                return ModelStatus(name, provider_name, True, False, f"missing env var {key_env}")
+            credential_problem = self._credential_problem(model, provider)
+            if credential_problem:
+                return ModelStatus(name, provider_name, True, False, credential_problem)
             if not bool(provider.get("enabled", True)):
                 return ModelStatus(name, provider_name, True, False, "provider is disabled")
-            backend = self._openai_compatible_backend(provider_name)
+            backend = self._openai_compatible_backend(provider_name, model)
             reachable, reason = backend.is_reachable()
             if not reachable:
                 return ModelStatus(name, provider_name, True, False, reason)
@@ -1399,8 +1611,17 @@ class ModelCatalog:
                 provider_name,
                 True,
                 usable,
-                "model is available" if usable else f"model was not listed by provider: {model_id}",
+                ("model is available" if usable else f"model was not listed by provider: {model_id}"),
             )
+        if self._is_azure_openai(provider_name) or self._is_anthropic(provider_name):
+            credential_problem = self._credential_problem(model, provider)
+            if credential_problem:
+                return ModelStatus(name, provider_name, True, False, credential_problem)
+            if not bool(provider.get("enabled", True)):
+                return ModelStatus(name, provider_name, True, False, "provider is disabled")
+            if self._is_azure_openai(provider_name) and not provider.get("endpoint"):
+                return ModelStatus(name, provider_name, True, False, "provider is missing endpoint")
+            return ModelStatus(name, provider_name, True, True, "model endpoint is configured")
         credential_ref = str(model.get("credential_ref") or provider.get("credential_ref") or "")
         if credential_ref:
             present = bool(CredentialStore().api_key(credential_ref))
@@ -1409,7 +1630,7 @@ class ModelCatalog:
                 provider_name,
                 True,
                 present,
-                f"credential {credential_ref} is present" if present else f"missing credential {credential_ref}",
+                (f"credential {credential_ref} is present" if present else f"missing credential {credential_ref}"),
             )
         key_env = provider.get("api_key_env")
         if key_env:
@@ -1419,7 +1640,7 @@ class ModelCatalog:
                 provider_name,
                 True,
                 present,
-                f"env var {key_env} is present" if present else f"missing env var {key_env}",
+                (f"env var {key_env} is present" if present else f"missing env var {key_env}"),
             )
         return ModelStatus(
             name,
@@ -1428,6 +1649,15 @@ class ModelCatalog:
             False,
             "provider has no usable local check yet",
         )
+
+    def _credential_problem(self, model: dict[str, Any], provider: dict[str, Any]) -> str | None:
+        credential_ref = str(model.get("credential_ref") or provider.get("credential_ref") or "")
+        key_env = model.get("api_key_env") or provider.get("api_key_env")
+        if credential_ref and not CredentialStore().api_key(credential_ref):
+            return f"missing credential {credential_ref}"
+        if not credential_ref and key_env and not os.environ.get(str(key_env)):
+            return f"missing env var {key_env}"
+        return None
 
 
 def capability_profile(model: dict[str, Any]) -> dict[str, Any]:
@@ -1561,30 +1791,6 @@ def _benchmark_refs(model: dict[str, Any]) -> list[str]:
     return list(dict.fromkeys(refs))
 
 
-def _parameter_billions(model_id: str) -> float:
-    import re
-
-    matches = re.findall(r"(\d+(?:\.\d+)?)\s*b", model_id)
-    if not matches:
-        return 0.0
-    try:
-        return float(matches[-1])
-    except ValueError:
-        return 0.0
-
-
-def _size_bonus(params: float) -> int:
-    if params >= 70:
-        return 3
-    if params >= 30:
-        return 3
-    if params >= 14:
-        return 2
-    if params >= 7:
-        return 1
-    return 0
-
-
 def _clamp(value: int) -> int:
     return max(0, min(5, int(value)))
 
@@ -1627,55 +1833,6 @@ def _metadata_number(metadata: dict[str, Any], key: str) -> float:
         value = value.replace(",", "").strip()
     number = _number_or_none(value)
     return float(number or 0)
-
-
-def _resource_estimate_source(model: dict[str, Any]) -> str | None:
-    source = model.get("resource_estimate_source")
-    if source:
-        return str(source)
-    if any(key in model for key in ["min_ram_gb", "recommended_ram_gb", "min_vram_gb", "recommended_vram_gb"]):
-        return "configured"
-    return None
-
-
-def _gpu_vendor_requirement(model: dict[str, Any]) -> str:
-    for key in ["required_gpu_vendor", "gpu_vendor_requirement", "gpu_vendor"]:
-        value = str(model.get(key) or "").strip().lower()
-        if value:
-            if value == "any":
-                return "generic"
-            return value
-    return "generic"
-
-
-def _accelerator_api_requirements(model: dict[str, Any]) -> list[str]:
-    for key in ["required_accelerator_apis", "accelerator_api_requirements", "accelerator_apis"]:
-        values = _string_list(model.get(key))
-        if values:
-            return [value.lower() for value in values]
-    return []
-
-
-def _matches_gpu_vendor_requirement(model: dict[str, Any], available_vendor: str) -> bool:
-    available = available_vendor.strip().lower()
-    requirement = _gpu_vendor_requirement(model)
-    if available in {"", "any", "generic"}:
-        return requirement in {"generic", "none", "cpu"}
-    if requirement in {"generic", "none", "cpu"}:
-        return True
-    if requirement == "mixed":
-        return available not in {"none", "cpu"}
-    return requirement == available
-
-
-def _matches_accelerator_api_requirement(model: dict[str, Any], available_api: str) -> bool:
-    available = available_api.strip().lower()
-    requirements = _accelerator_api_requirements(model)
-    if not requirements:
-        return True
-    if available in {"", "any", "generic"}:
-        return False
-    return available in requirements
 
 
 def _benchmark_score(row: dict[str, Any]) -> float:
@@ -1810,6 +1967,14 @@ def _capability_average(profile: dict[str, Any]) -> float:
     scores = profile.get("scores", {}) if isinstance(profile, dict) else {}
     values = [int(value) for value in scores.values() if isinstance(value, int)]
     return round(sum(values) / len(values), 2) if values else 0.0
+
+
+def _refresh_failure_next_steps(provider_name: str) -> list[str]:
+    return [
+        f"Run aiplane providers show {provider_name} to inspect endpoint, auth, and catalog adapter settings.",
+        f"Run aiplane providers test {provider_name} after configuring credentials or endpoint overrides.",
+        f"Rerun aiplane models refresh --provider {provider_name} --dry-run once provider discovery is configured.",
+    ]
 
 
 def _refresh_next_steps(write: bool, changes: dict[str, int], provider_name: str | None = None) -> list[str]:
@@ -1963,6 +2128,21 @@ def _discovered_model_entry(
     params = _parameter_billions(model_id.lower())
     roles = _roles_for_discovered_model(provider_name, model_id, source_metadata or {})
     min_ram, recommended_ram, min_vram, recommended_vram = _resource_guess(params, roles)
+    resource_source = "catalog_heuristic:parameter_size_and_role"
+    overrides = _resource_requirements_from_source_metadata(source_metadata or {})
+    if overrides:
+        if overrides.get("min_ram_gb") is not None:
+            min_ram = overrides["min_ram_gb"]
+        if overrides.get("recommended_ram_gb") is not None:
+            recommended_ram = overrides["recommended_ram_gb"]
+        if overrides.get("min_vram_gb") is not None:
+            min_vram = overrides["min_vram_gb"]
+        if overrides.get("recommended_vram_gb") is not None:
+            recommended_vram = overrides["recommended_vram_gb"]
+        if isinstance(overrides.get("resource_estimate_source"), str) and overrides.get("resource_estimate_source"):
+            resource_source = str(overrides["resource_estimate_source"])
+        else:
+            resource_source = "provider_catalog:source_metadata"
     preferred_runtime = _preferred_runtime_for_discovered_roles(provider_name, roles)
     managed_sources = {
         "openai",
@@ -1973,7 +2153,7 @@ def _discovered_model_entry(
         "elevenlabs",
     }
     entry: dict[str, Any] = {
-        "provider": provider_name if provider_name in managed_sources else preferred_runtime,
+        "provider": (provider_name if provider_name in managed_sources else preferred_runtime),
         "model": model_id,
         "roles": roles,
         "local": provider_name not in managed_sources,
@@ -1985,7 +2165,7 @@ def _discovered_model_entry(
         "min_ram_gb": min_ram,
         "recommended_ram_gb": recommended_ram,
         "min_vram_gb": min_vram,
-        "resource_estimate_source": "catalog_heuristic:parameter_size_and_role",
+        "resource_estimate_source": resource_source,
         "source_metadata": source_metadata or {},
     }
     supported_runtimes = _supported_runtimes_for_discovered_roles(roles)
@@ -2116,6 +2296,49 @@ def _supported_runtimes_for_discovered_roles(roles: list[str]) -> list[str]:
     return []
 
 
+def _resource_requirements_from_source_metadata(source_metadata: dict[str, Any]) -> dict[str, float | str]:
+    if not isinstance(source_metadata, dict):
+        return {}
+    candidates: list[dict[str, Any]] = [source_metadata]
+    for key in ["resources", "resource_requirements", "requirements", "hardware"]:
+        value = source_metadata.get(key)
+        if isinstance(value, dict):
+            candidates.append(value)
+
+    def _first_number(keys: list[str]) -> float | None:
+        for block in candidates:
+            for key in keys:
+                value = _number_or_none(block.get(key))
+                if value is not None:
+                    return value
+        return None
+
+    min_ram = _first_number(["min_ram_gb", "minimum_ram_gb"])
+    rec_ram = _first_number(["recommended_ram_gb"])
+    min_vram = _first_number(["min_vram_gb", "minimum_vram_gb"])
+    rec_vram = _first_number(["recommended_vram_gb"])
+    if all(value is None for value in [min_ram, rec_ram, min_vram, rec_vram]):
+        return {}
+    source = None
+    for block in candidates:
+        value = block.get("resource_estimate_source")
+        if isinstance(value, str) and value.strip():
+            source = value.strip()
+            break
+    payload: dict[str, float | str] = {}
+    if min_ram is not None:
+        payload["min_ram_gb"] = min_ram
+    if rec_ram is not None:
+        payload["recommended_ram_gb"] = rec_ram
+    if min_vram is not None:
+        payload["min_vram_gb"] = min_vram
+    if rec_vram is not None:
+        payload["recommended_vram_gb"] = rec_vram
+    if source:
+        payload["resource_estimate_source"] = source
+    return payload
+
+
 def _roles_for_discovered_model(provider_name: str, model_id: str, source_metadata: dict[str, Any]) -> list[str]:
     pipeline = str(source_metadata.get("pipeline_tag") or "").lower().strip()
     tags = (
@@ -2180,39 +2403,6 @@ def _roles_for_model_id(model_id: str) -> list[str]:
             return ["completion", "autocomplete"]
         return ["analysis", "completion", "autocomplete", "generation"]
     return ["chat", "analysis", "generation"]
-
-
-def _resource_guess(params: float, roles: list[str]) -> tuple[int, int, int, int | None]:
-    if "embedding" in roles:
-        return 4, 8, 0, None
-    if "text_to_speech" in roles:
-        return 8, 16, 0, None
-    if "speech_to_text" in roles:
-        return 16, 32, 0, 8
-    if "image_generation" in roles:
-        return 32, 64, 12, 16
-    if "video_generation" in roles:
-        return 64, 128, 8, 16
-    if params <= 0:
-        return 8, 16, 0, None
-    if params <= 2:
-        return 8, 16, 0, None
-    if params <= 4:
-        return 12, 24, 0, 4
-    if params <= 9:
-        return 16, 32, 6, 10
-    if params <= 16:
-        return 32, 64, 12, 16
-    if params <= 35:
-        return 64, 128, 24, 32
-    return 128, 256, 48, 80
-
-
-def _number_or_none(value: object) -> float | None:
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
 
 
 def build_smoke_prompt(task: str, target: Path | None = None) -> str:

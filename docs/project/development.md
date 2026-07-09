@@ -83,37 +83,73 @@ python -m pip install -e .
 
 ### Development and Test Dependencies
 
-The current test suite uses `unittest`, so no separate test dependency install is
-needed. Run tests with:
+The test suite uses the `pytest` runner for local development checks. Keep
+dependencies in `pyproject.toml` so local Python, `venv`, Conda, and Docker
+install the same environment surface.
 
 ```bash
-PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src python -m unittest discover -s tests
+python -m pip install -e .[dev]
 ```
 
-Or, after editable install:
+If future dependencies are added, keep them in `pyproject.toml` so all
+workflows use the same source of truth.
+
+## Running Tests
+
+`make test` runs the suite in your current working environment.
 
 ```bash
-PYTHONDONTWRITEBYTECODE=1 python -m unittest discover -s tests
+make test
 ```
 
-If future dependencies are added, keep them in `pyproject.toml` so local, venv,
-conda, and Docker setup all use the same source of truth.
-
-## Running Unit Tests
-
-The project currently uses the Python standard-library `unittest` runner.
-
-Without installing the package:
+`make test-clean` is the clean-mode runner. It creates a temporary profile root
+and runs tests from that isolated copy so local profile edits do not leak into the
+suite and local/CI behavior stays in sync.
 
 ```bash
-cd aiplane
-PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src python -m unittest discover -s tests
+make test-clean
 ```
 
-After editable install in local Python, `venv`, or Conda:
+You can tune clean-mode inputs with these variables:
 
 ```bash
-PYTHONDONTWRITEBYTECODE=1 python -m unittest discover -s tests
+make test-clean TEST_PROFILE_TEMPLATE=local-dev TEST_PROFILE_NAME=ci-test
+```
+
+### Make Targets and Test Coverage
+
+- `make format`: format only (no tests)
+- `make lint`: lint only (no tests)
+- `make test`: run tests in the current environment
+- `make test-clean`: run tests in isolated temp profiles
+- `make check`: `format + lint + test-clean` (full local gate)
+
+### Git Pre-Push Hook
+
+Install the local hook:
+
+```bash
+make install-hooks
+```
+
+By default, the hook runs:
+- `make check` (format + lint + `test-clean`)
+
+You can override behavior when you need speed or need to bypass checks for
+backup-only/local-only pushes:
+
+```bash
+# fast path (tests only)
+AIPLANE_PREPUSH_MODE=fast git push
+
+# skip checks (use only when intended, e.g. backup-only workflows)
+AIPLANE_PREPUSH_MODE=backup git push
+```
+
+You can always bypass all hooks with git's built-in flag:
+
+```bash
+git push --no-verify
 ```
 
 Through the setup helper:
@@ -122,14 +158,21 @@ Through the setup helper:
 scripts/setup_env.sh --mode venv --action test
 scripts/setup_env.sh --mode conda --conda-env aiplane --action test
 scripts/setup_env.sh --mode local --action test
+scripts/setup_env.sh --mode docker --action test
 ```
 
-Unit tests must stay hermetic and fast. Do not call real cloud CLIs, Docker, SSH, provider APIs, model runtimes, or long-running local services from the normal unit suite. Mock those boundaries and assert the planned commands, parsed results, fallback behavior, and error handling. Keep live Azure/Ollama/Docker checks as explicit manual or integration smoke commands so a developer's installed tools do not make `python -m unittest discover -s tests` slow or environment-dependent.
-
+Unit tests must stay hermetic and fast. Do not call real cloud CLIs, Docker,
+SSH, provider APIs, model runtimes, or long-running local services from normal
+suite runs. Mock those boundaries and assert planned commands, parser behavior,
+failure handling, and contracts. Keep real checks as explicit manual or
+integration smoke commands.
 
 ## JSON Output Conventions
 
-User-facing JSON-like output should be predictable and easy to scan. Use the shared helpers in `src/aiplane/output.py` instead of calling `json.dumps(..., sort_keys=True)` directly from CLI, MCP, or integration-output code.
+User-facing JSON-like output should be predictable and easy to scan. Use the
+shared helpers in `src/aiplane/output.py` instead of calling
+`json.dumps(..., sort_keys=True)` directly from CLI, MCP, or integration-output
+code.
 
 Rules:
 
@@ -140,7 +183,8 @@ Rules:
 - Group output when it improves scanning, for example by provider, source, runtime, or model id.
 - Keep raw JSONL audit/event storage compact, but format displayed CLI output through the shared ordering helper.
 
-When adding a new command, test at least one representative JSON output shape if field order matters to users.
+When adding a new command, test at least one representative JSON output shape if field
+order matters to users.
 
 ## Useful Smoke Checks
 

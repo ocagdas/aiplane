@@ -12,8 +12,10 @@ the local/cloud prerequisites, and then calls the existing tools.
 ```bash
 aiplane deploy list
 aiplane deploy show --target aks_gpu_pool
+aiplane deploy workflow-plan --target aks_gpu_pool
 aiplane deploy plan --target aks_gpu_pool
 aiplane deploy doctor --target aks_gpu_pool
+aiplane deploy workflow-plan --target azure_gpu_vm
 aiplane deploy plan --target azure_gpu_vm
 aiplane deploy doctor --target azure_gpu_vm
 ```
@@ -21,11 +23,11 @@ aiplane deploy doctor --target azure_gpu_vm
 `apply` is guarded:
 
 ```bash
-aiplane deploy apply --target aks_gpu_pool
-aiplane deploy apply --target azure_gpu_vm
+aiplane deploy apply --target aks_gpu_pool --yes
+aiplane deploy apply --target azure_gpu_vm --yes
 ```
 
-Run `plan` first. `apply` only runs the narrow mutating steps shown in the plan.
+Run `workflow-plan`, `plan`, and `doctor` first. `workflow-plan` classifies the target as local install, local VM, remote workstation/VM, cloud VM, or cloud Kubernetes and shows which external tools own each phase. `apply` requires `--yes` and only runs the narrow mutating steps shown in the plan.
 For AKS this currently means bootstrap steps such as loading cluster credentials
 and creating the target namespace. For Azure VM targets this means Azure CLI
 resource creation steps such as resource group creation, VM creation, and
@@ -36,7 +38,7 @@ later step.
 
 `aiplane machines import` and `aiplane machines import-azure-sku` only register machine profiles for planning and recommendation. They do not create Azure resources.
 
-Use `aiplane deploy plan` and `aiplane deploy doctor` to render and check provisioning steps. Guarded Azure VM apply is available for the narrow create path shown in the plan. AKS apply is currently limited to narrow bootstrap steps. Stack deployment is automatic only for same-host/local runtime lifecycle steps.
+Use `aiplane deploy workflow-plan`, `aiplane deploy plan`, and `aiplane deploy doctor` to classify, render, and check provisioning steps. Guarded Azure VM apply is available for the narrow create path shown in the plan. AKS apply is currently limited to narrow bootstrap steps. Stack deployment is automatic only for same-host/local runtime lifecycle steps.
 
 ## Target Configuration
 
@@ -78,7 +80,7 @@ aiplane deploy doctor --target azure_gpu_vm
 Create the VM only after reviewing the plan:
 
 ```bash
-aiplane deploy apply --target azure_gpu_vm
+aiplane deploy apply --target azure_gpu_vm --yes
 ```
 
 Azure SKU names and GPU availability change by region and subscription quota.
@@ -129,7 +131,7 @@ Authentication options, from simplest to stronger:
 - Azure Entra ID, managed identity, or API Management for Azure-hosted endpoints.
 - mTLS for high-control internal environments.
 
-`aiplane` should store endpoint URL, auth mode, and API key environment-variable names in profile config. It should not store real secrets in YAML. IDE/CLI export should then point tools such as Continue, Cursor-compatible clients, or generic OpenAI-compatible clients at the controlled endpoint.
+`aiplane` should store endpoint URL, auth mode, gateway/TLS posture, and API key environment-variable names in profile config. It should not store real secrets in YAML. `aiplane stacks endpoint-plan STACK` renders a non-mutating checklist for those controls; it does not configure the proxy, gateway, firewall, or identity provider. IDE/CLI export should then point tools such as Continue, Cursor-compatible clients, or generic OpenAI-compatible clients at the controlled endpoint.
 
 Example target endpoint shape:
 

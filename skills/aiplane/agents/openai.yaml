@@ -1,0 +1,4 @@
+interface:
+  display_name: "aiplane"
+  short_description: "Work safely in the aiplane control-plane repo"
+  default_prompt: "Use the aiplane skill to inspect profiles, providers, models, runtimes, MCP, docs, and tests before changing this repository."

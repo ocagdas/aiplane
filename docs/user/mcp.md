@@ -22,15 +22,20 @@ aiplane mcp serve
 
 The current read tools are:
 
+- `aiplane.docs.list` and `aiplane.docs.read` for project docs/help text
 - `aiplane.profiles.list`
 - `aiplane.providers.list` with `status`, `runtime`, and `group_by` filters for ownership/runtime grouping
 - `aiplane.providers.models`
 - `aiplane.models.defaults`
-- `aiplane.models.list` with filters, sorting, and limits
+- `aiplane.models.list` with filters, named-machine/current-machine fit filtering, sorting, and limits
 - `aiplane.models.show`
 - `aiplane.hardware.discover`
 - `aiplane.hardware.recommend`
+- `aiplane.machines.list`, `aiplane.machines.show`, and `aiplane.machines.recommend`
+- `aiplane.stacks.list`, `aiplane.stacks.show`, `aiplane.stacks.plan`, and `aiplane.stacks.doctor`
 - `aiplane.integrations.export`
+- `aiplane.integrations.roles` and `aiplane.integrations.plan`
+- `aiplane.orchestrators.list` and `aiplane.orchestrators.show`
 - `aiplane.runtimes.status`
 - `aiplane.remote.tunnel.plan`
 - `aiplane.remote.tunnel.status`
@@ -52,7 +57,7 @@ New CLI features are not automatically MCP tools. MCP coverage is reviewed durin
 
 MCP and agent skills solve different problems. MCP is a live protocol surface: an IDE or agent calls `aiplane` tools over stdio and receives structured results. An agent skill is an instruction/playbook package for a coding assistant: it tells the assistant how to approach an `aiplane` task, which commands to prefer, which safety boundaries matter, and when to use MCP.
 
-A useful `aiplane` skill can reference the MCP server, but it should not duplicate MCP. The skill should teach workflow and judgment; MCP should expose current structured state and guarded operations.
+The repository ships a versioned starter skill at `skills/aiplane/SKILL.md`. A useful `aiplane` skill can reference the MCP server, but it should not duplicate MCP. The skill should teach workflow and judgment; MCP should expose current structured state and guarded operations.
 
 ## Generate Client Config
 

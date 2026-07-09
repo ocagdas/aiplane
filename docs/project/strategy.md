@@ -4,7 +4,7 @@ For status tracking and future milestones, see [Project Roadmap](roadmap.md). Th
 
 ## Project Quality Principles
 
-`aiplane` should be a professional-grade, community-first open-source tool: reliable, well documented, testable, inspectable, and respectful of the complexity of real AI coding environments.
+`aiplane` should be a professional-grade, community-first open-source tool: reliable, well documented, testable, inspectable, and respectful of the complexity of real AI workflow environments.
 
 Good design choices flow from that standard:
 
@@ -12,16 +12,20 @@ Good design choices flow from that standard:
 - Prefer composability over replacement. Integrate with tools developers already use rather than duplicating them.
 - Prefer explicitness over convenience at the cost of control. Profile-driven configuration is intentionally visible.
 - Prefer depth over breadth. Do the control-plane job well before expanding scope.
+- Prefer a polished local/hybrid AI workflow stack doctor over broad integration lists that are not end-to-end useful.
 
 ## Positioning
 
-`aiplane` is a configuration and operations control-plane CLI for local, remote, VM, and cloud-adjacent AI development environments.
+`aiplane` is a local-first configuration and operations control-plane CLI for AI workflow environments across local, remote, VM, and cloud-adjacent machines. Its sharpest wedge is making local and hybrid AI workflow stacks reproducible, inspectable, policy-aware, and portable from one profile.
 
-It is not a coding agent, IDE assistant, chat UI, inference server, model marketplace, model proxy, or cloud platform. Existing tools such as Continue, Cline, Cursor, Codex-like CLIs, Claude Code, Aider, OpenHands, Ollama, LM Studio, vLLM, TGI, llama.cpp, LocalAI, OpenAI, Anthropic, and Azure OpenAI already cover large parts of those domains. `aiplane` should configure, check, plan, export, and govern those pieces rather than replacing them.
+It is not a coding agent, IDE assistant, full chat UI, inference server, model marketplace, model proxy, or cloud platform. Existing tools such as Continue, Cline, Cursor, Codex-like CLIs, Claude Code, Aider, OpenHands, Ollama, LM Studio, vLLM, TGI, llama.cpp, LocalAI, OpenAI, Anthropic, and Azure OpenAI already cover large parts of those domains. `aiplane` should configure, check, plan, export, and govern those pieces rather than replacing them.
+The aim of `aiplane` is to make environment setup, migration, and model/runtime pairing an explicit, repeatable operations layer so teams can focus on AI experiments, model work, and code outcomes instead.
+
+Scope anchor: changing this boundary is allowed only as an explicit product decision recorded in strategy and roadmap. Do not drift into agent execution, runtime implementation, broad cloud apply, IDE replacement, or a generic chat/session product through incremental feature work.
 
 ## Core Problem
 
-AI coding setups are fragmented:
+AI workflow setups are fragmented:
 
 - local runtimes have different install, model, GPU, and API behavior;
 - managed providers have different keys, model catalogs, deployment names, and policy constraints;
@@ -78,6 +82,18 @@ AI coding setups are fragmented:
 - integration export for the user-facing tool.
 
 Remote deployment should start as planning, validation, and starter artifact generation around official tools: OpenSSH, Docker/Compose, Azure CLI, OpenTofu/Terraform, Pulumi, Vagrant, Packer, Dev Container CLI, Ansible, kubectl, and Helm. Direct mutation stays guarded, previewable, and auditable.
+
+## Post-Merge Architecture Priorities
+
+The merged MVP has enough surface area that maintainability now matters as much as feature growth. Near-term architecture work should focus on consolidation and clear contracts:
+
+- Keep source/provider, runtime, endpoint, profile model alias, machine, stack, MCP tool, and agent skill concepts separate in code as well as docs.
+- Reduce duplication between CLI parser options, MCP schemas, output filters, and manager method signatures. Model-list filters, integration roles, and provider/runtime compatibility are the first places to centralize.
+- Move runtime/source compatibility decisions toward Python catalog services and keep shell helpers focused on invoking official tools.
+- Treat MCP as a structured adapter over existing managers, not a parallel implementation of CLI behavior.
+- Treat skills as versioned assistant workflow guidance, not live tools. A skill can explain when to call MCP, but it should not duplicate MCP schemas.
+- Treat orchestrators as external frameworks. `aiplane` should generate role/endpoint/policy config and readiness checks, not run autonomous agent conversations itself.
+- Keep tests close to behavior boundaries. As the code is split, tests should move from one large MVP file into focused modules for profiles/config, provider/model catalog, runtimes, integrations, MCP, orchestrators, stacks, and CLI smoke coverage.
 
 ## Execution Fabric Tracks
 

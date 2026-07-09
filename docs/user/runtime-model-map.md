@@ -44,6 +44,8 @@ Show the source/runtime map:
 aiplane runtimes map
 aiplane runtimes sources
 aiplane runtimes list
+aiplane runtimes list --format text
+aiplane runtimes list --format json
 ```
 
 Group configured models by runtime:
@@ -129,17 +131,18 @@ aiplane models refresh --provider huggingface --query text-generation --limit 50
 aiplane models refresh --limit 100 --provider-limit huggingface=500 --provider-limit ollama=500 --dry-run
 aiplane models clear-cache --dry-run
 aiplane models clear-cache --provider huggingface --keep-curated --dry-run
-aiplane models refresh --provider huggingface --limit 10 --dry-run --verbose
+aiplane models refresh --provider huggingface --limit 10 --dry-run --verbosity 2
 ```
 
-The default CLI refresh result omits the full provider `results` map and prints
-compact provider-level counts under `provider_summary`. Add `--verbose` when you
-need the full `results` map, including `source_models_returned`,
+Refresh verbosity controls output shape: `--verbosity 0` (default) prints only
+top-level summary fields, `--verbosity 1` adds compact provider-level counts
+under `provider_summary`, and `--verbosity 2` includes the full `results` map.
+Use `--verbosity 2` when you need full provider details including `source_models_returned`,
 `profile_models_before_refresh`, `profile_curated_models_before_refresh`,
 `profile_refresh_imported_models_before_refresh`, `source_models_already_profiled`,
 `source_models_to_import`, `source_models_to_update`, `source_contacted`,
 `source_discovery_method`, `source_discovery_reason`, `model_changes_count`, and
-per-model `model_changes` rows. Verbose rows use `model.id`/`model.source` for
+per-model `model_changes` rows. Level-2 rows use `model.id`/`model.source` for
 the model source and `runtime_endpoint` for the configured runtime endpoint.
 `prune_enabled: true` means a successful authoritative online source response is being used
 as the source of truth for stale discovered ids. Profile-owned model entries in `models.yaml` are preserved by refresh. `models clear-cache` includes profile-owned review entries by default unless `--keep-curated` is used, so discovery state can be cleared and repopulated from providers. Profile-catalog fallback never updates
@@ -226,15 +229,28 @@ aiplane models list --group-by provider-kind
 aiplane models list --group-by runtime
 aiplane models list --group-by model
 aiplane models defaults --group-by provider
+
+For `models list`, `--format text` uses a compact table at `--verbosity 0` and falls back to JSON with a warning at higher verbosity:
+
+```bash
+aiplane models list --format text
+aiplane models list --format text --verbosity 0 --limit 5
+aiplane models list --format text --verbosity 1 --limit 5
+```
 ```
 
 Model rows include model-size and hardware requirement hints where available: `parameter_count_b`, `min_ram_gb`, `recommended_ram_gb`, `min_vram_gb`, `recommended_vram_gb`, `resource_estimate_source`, `gpu_vendor_requirement`, and `accelerator_api_requirements`. `parameter_count_b` is inferred from model ids such as `7b`, `14B`, or `40b`; if no size marker exists it is `0`. Resource values come from profile metadata, provider/discovery metadata when supported, or aiplane's current parameter-size/role heuristic for discovered models. They are meant for filtering and planning; validate with real runtime startup and benchmarks before provisioning hardware.
 
-You can filter by the active hardware profile or by explicit target capacity and accelerator requirements. `--fits-hardware` derives RAM, VRAM, GPU vendor, and accelerator API filters from `aiplane hardware active`; explicit flags remain useful when planning for another target. Imported machine profiles and external machine files are used by `hardware recommend` and `machines recommend`, and first-class `models list --machine` / `--hardware-file` filtering is planned:
+You can filter by the active hardware profile, a named imported machine, an external machine file, the current machine, or explicit target capacity and accelerator requirements. `--fits-hardware` derives RAM, VRAM, GPU vendor, and accelerator API filters from `aiplane hardware active`. `--machine NAME` (or shorthand `--fits-machine NAME`) derives the same filters from `aiplane machines list`; `--machine-file PATH` reads a portable export without importing it; `--current-machine` probes the current host at list time. Explicit `--ram-gb`, `--vram-gb`, `--gpu-vendor`, and `--accelerator-api` values remain useful when planning for another target or overriding a machine profile. Parameter-count filters remain explicit because they are model properties, not hardware facts.
+When the selected machine has no GPU, hardware-fit filtering treats VRAM as `0`, vendor as `none`, and accelerator as `cpu`, so entries that require GPU VRAM or explicit CUDA/ROCm/Metal requirements are excluded.
 
 ```bash
 aiplane models list --fits-hardware
 aiplane models list --runtime ollama --role chat --fits-hardware --sort-by benchmark --limit 3
+aiplane models list --runtime vllm --role chat --machine azure_h100_test --sort-by role --limit 10
+aiplane models list --runtime vllm --role chat --fits-machine azure_h100_test --sort-by role --limit 10
+aiplane models list --runtime vllm --role chat --machine-file local_box.machine.yaml --sort-by role --limit 10
+aiplane models list --runtime ollama --role chat --current-machine --limit 5
 aiplane models list --runtime ollama --role chat --ram-gb 64 --vram-gb 24 --sort-by benchmark --limit 3
 aiplane models list --runtime ollama --role chat --min-parameters-b 7 --max-parameters-b 14 --sort-by parameters --limit 5
 aiplane models list --runtime vllm --gpu-vendor nvidia --accelerator-api cuda --ram-gb 64 --vram-gb 24
@@ -250,6 +266,17 @@ Grouping meanings:
 - `runtime`: groups by each supported runtime. A model may appear in more than one runtime group when it can run under multiple runtimes, for example vLLM, TGI, and Transformers. Managed-service entries appear under `no_runtime`; `preferred_runtime` and `supported_runtimes` are ignored for managed-service entries so they cannot be combined with local runtime config.
 - `model`: groups by provider-native model id. This is useful when multiple profile-owned entries point at the same underlying model id. It is less useful when equivalent models use different naming schemes across sources.
 - defaults grouped by `provider`: shows which default roles, such as `chat_model`, `autocomplete_model`, `embedding_model`, `self_managed_model`, or `reasoning_model`, resolve to each provider.
+
+## Single-Prompt Execution Protocols
+
+`aiplane run`, `aiplane chat`, `aiplane models test`, and code task commands use profile-owned model aliases and provider endpoint metadata. They do not install runtimes, pull weights, or run a coding agent. They currently execute against these protocols:
+
+- `ollama_api`: local or configured Ollama endpoint.
+- `openai_compatible`: OpenAI-compatible `/chat/completions` endpoint, including OpenAI, vLLM, TGI, llama.cpp, LocalAI, LM Studio, and custom compatible gateways when configured.
+- `azure_openai`: Azure OpenAI deployment chat completions; the model id is the deployment name.
+- `anthropic_api` / `anthropic_messages`: Anthropic Messages API.
+
+For runtimes that are libraries or file loaders, such as raw Transformers or Diffusers, expose a supported HTTP endpoint first or use a framework-specific export. Unsupported protocols fail explicitly. Chat/task execution also checks the selected alias role and capability metadata before calling a backend, so embedding-only, media-only, or otherwise non-chat/task aliases fail with a selection hint instead of being sent to a chat endpoint.
 
 ## Current Runtime Policy
 
@@ -300,7 +327,7 @@ Audio, image, and video generation should come from provider discovery or delibe
 ```bash
 aiplane providers models huggingface --online --query text-to-speech --limit 20
 aiplane providers models elevenlabs --online --query voice --limit 20
-aiplane models refresh --provider huggingface --query text-to-speech --dry-run --verbose --limit 20
+aiplane models refresh --provider huggingface --query text-to-speech --dry-run --verbosity 2 --limit 20
 aiplane models refresh --provider huggingface --query text-to-speech --disable-new --limit 20
 aiplane models list --role text_to_speech --sort-by role
 

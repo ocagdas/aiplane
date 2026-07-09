@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+MODE="${AIPLANE_PREPUSH_MODE:-full}"
+case "$MODE" in
+  full)
+    echo "[aiplane] Running full pre-push checks: make check"
+    make check
+    ;;
+  fast)
+    echo "[aiplane] Running fast pre-push checks: make test"
+    make test
+    ;;
+  backup|off|skip)
+    echo "[aiplane] pre-push checks skipped via AIPLANE_PREPUSH_MODE=$MODE"
+    ;;
+  *)
+    echo "[aiplane] Unknown AIPLANE_PREPUSH_MODE '$MODE'. Use full, fast, backup/skip/off." >&2
+    exit 1
+    ;;
+esac

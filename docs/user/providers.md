@@ -65,7 +65,7 @@ Managed providers are not local runtimes. They sit in `aiplane` as hosted provid
 4. `models add`/`models promote` creates profile-owned aliases under `models:`. For Azure OpenAI, the alias `model` value is the deployment name.
 5. `models list` and `models show` expose these aliases as `managed_service` entries under `no_runtime`; they are not runtime-fit candidates.
 6. `integrations plan/export` turns selected aliases into IDE/tool config using the provider endpoint, protocol, and API-key environment variable.
-7. `aiplane run` or `models test` can use managed aliases only through provider endpoint support and policy/credential checks; runtime bundle/install/start/pull paths remain self-managed only.
+7. `aiplane run` or `models test` can use managed aliases through supported endpoint protocols and policy/credential checks. Current execution protocols cover OpenAI-compatible chat completions, Azure OpenAI chat completions, and Anthropic Messages. Runtime bundle/install/start/pull paths remain self-managed only.
 
 The practical flow is:
 
@@ -92,7 +92,7 @@ For hosted TTS, ElevenLabs can be used as a managed provider/source. `aiplane` c
 ```bash
 export ELEVENLABS_API_KEY=...
 aiplane providers models elevenlabs --online --limit 20
-aiplane models refresh --provider elevenlabs --dry-run --verbose --limit 20
+aiplane models refresh --provider elevenlabs --dry-run --verbosity 2 --limit 20
 aiplane models list --provider elevenlabs --role text_to_speech
 ```
 
@@ -226,13 +226,14 @@ aiplane providers models ollama --online --query model_row --limit 500
 aiplane providers models huggingface --online --query text-generation --limit 500
 aiplane providers models huggingface --online --query text-to-speech --limit 50
 aiplane providers models nvidia --online --query Nemotron --limit 50
+aiplane providers models openai --online --query chat --limit 20
 aiplane providers models elevenlabs --online --query voice --limit 20
 aiplane providers models huggingface --online --query text-to-image --limit 50
 aiplane providers models huggingface --online --query text-to-video --limit 50
 aiplane providers models huggingface_gguf --online --query llama-3.1-8b --limit 500
 ```
 
-Current default catalog adapters are `ollama`, `huggingface`, `nvidia`, `huggingface_gguf`, `azure_openai` deployments when endpoint/key configuration is present, and `elevenlabs` voices when `ELEVENLABS_API_KEY` or a credential reference is configured. The `nvidia` provider uses the Hugging Face adapter scoped to NVIDIA-owned repos. Hugging Face discovery can return media pipeline metadata that `models refresh` maps into roles such as `text_to_speech`, `image_generation`, and `video_generation` before candidates are filtered or promoted. If an online query fails or the provider has no adapter yet, `aiplane` falls back to the profile catalog and includes the reason. Fallback is non-destructive: it does not update or prune local entries because it is only re-reading the local profile.
+Current default catalog adapters are `ollama`, `huggingface`, `nvidia`, `huggingface_gguf`, OpenAI-compatible `/v1/models` for `openai` when endpoint/key configuration is present, `azure_openai` deployments when endpoint/key configuration is present, and `elevenlabs` voices when `ELEVENLABS_API_KEY` or a credential reference is configured. The `nvidia` provider uses the Hugging Face adapter scoped to NVIDIA-owned repos. Hugging Face discovery can return media pipeline metadata that `models refresh` maps into roles such as `text_to_speech`, `image_generation`, and `video_generation` before candidates are filtered or promoted. If a self-managed online query fails or the provider has no adapter yet, `aiplane` falls back to the profile catalog and includes the reason. Fallback is non-destructive: it does not update or prune local entries because it is only re-reading the local profile. Managed providers with live catalog adapters report missing endpoint/credential configuration as structured refresh failures instead of presenting an empty local fallback as success.
 
 ## Provider Configuration Files
 
@@ -260,7 +261,7 @@ aiplane providers init-defaults --overwrite
 
 Without `--overwrite`, `init-defaults` writes `model-providers.yaml` only when it does not already exist. If the file exists, the command exits with an error instead of replacing your provider config.
 
-Provider APIs are not universally standardized. A user-added provider must declare one of the endpoint families and catalog adapters listed by `aiplane providers endpoint-types`. If the provider uses a different catalog API, auth scheme, pagination shape, or deployment/listing API, `aiplane` needs a code update before live discovery or provider tests can support it. Use `--catalog-adapter profile_catalog` for providers whose model list is curated manually instead of fetched from a live API.
+Provider APIs are not universally standardized. A user-added provider must declare one of the endpoint families and catalog adapters listed by `aiplane providers endpoint-types`. If the provider uses a different catalog API, auth scheme, pagination shape, or deployment/listing API, `aiplane` needs a code update before live discovery or provider tests can support it. Use `--catalog-adapter openai` for OpenAI-compatible `/v1/models` catalogs, and use `--catalog-adapter profile_catalog` for providers whose model list is curated manually instead of fetched from a live API.
 
 Use `--runtime` only for `self_managed` providers that supply model artifacts for local runtimes. Use `--endpoint-family` for `managed_service` providers. Managed services can declare `--auth-method`, `--api-key-env`, `--credential-ref`, and `--endpoint`; raw keys still belong in environment variables or ignored `.aiplane/credentials.yaml`, not provider YAML.
 
@@ -269,7 +270,7 @@ To inspect supported provider API shapes and add, disable, enable, remove, or cl
 ```bash
 aiplane providers endpoint-types
 aiplane providers add private_hf --ownership self_managed --runtime vllm --catalog-adapter huggingface
-aiplane providers add my_gateway --ownership managed_service --endpoint-family custom_openai_compatible --catalog-adapter profile_catalog --endpoint https://gateway.example.com/v1 --auth-method bearer --api-key-env MY_GATEWAY_API_KEY
+aiplane providers add my_gateway --ownership managed_service --endpoint-family custom_openai_compatible --catalog-adapter openai --endpoint https://gateway.example.com/v1 --auth-method bearer --api-key-env MY_GATEWAY_API_KEY
 aiplane providers disable ollama
 aiplane providers enable all
 aiplane providers remove local_file
@@ -287,16 +288,16 @@ aiplane providers clear --scope all
 
 When an online source adapter succeeds, the source result is treated as authoritative for discovered/imported entries when it is not a query or limit-truncated window: new source ids are imported into `models.discovered.yaml`, stale discovered ids are pruned, and changed source metadata updates discovered entries. Profile-owned entries in `models.yaml` are preserved by refresh; if a local profile-owned entry points at a returned source id, only source-derived metadata is refreshed while human-maintained fields stay intact. In this context, profile-owned means human-maintained data such as entry names, enabled/disabled state, roles, preferred runtime, RAM/VRAM overrides, and notes.
 
-When online contact fails or no online adapter exists, refresh reports the error/reason and falls back to local profile entries without pruning or updating.
+When a self-managed online source fails or no online adapter exists, refresh reports the reason and falls back to local profile entries without pruning or updating. Managed providers with live catalog adapters, such as OpenAI-compatible `/v1/models`, Azure OpenAI deployments, or ElevenLabs voices, report a structured refresh failure when endpoint or credential configuration is missing; fix `providers show` / `providers test` first, then rerun refresh.
 
 ```bash
 aiplane models refresh --dry-run
 aiplane models refresh --provider huggingface --query text-generation --limit 500 --dry-run
 aiplane models refresh --limit 100 --provider-limit huggingface=500 --provider-limit ollama=500 --dry-run
-aiplane models refresh --provider huggingface --limit 10 --dry-run --verbose
+aiplane models refresh --provider huggingface --limit 10 --dry-run --verbosity 2
 ```
 
-`--limit` is the default per-provider maximum. Repeat `--provider-limit PROVIDER=COUNT` to override a particular model provider. For example, use a large Hugging Face limit and a smaller/larger provider-specific limit when refreshing all providers. By default refresh omits the full provider `results` map and prints compact provider-level counts under `provider_summary`; add `--verbose` to include the full provider results and per-model change rows. Refresh output also includes `next_steps` so dry runs and writes show the safe path from discovery, to discovered entries, to reviewed promotion.
+`--limit` is the default per-provider maximum. Repeat `--provider-limit PROVIDER=COUNT` to override a particular model provider. For example, use a large Hugging Face limit and a smaller/larger provider-specific limit when refreshing all providers. Refresh verbosity controls output shape: `--verbosity 0` (default) prints only top-level summary, `--verbosity 1` adds `provider_summary`, and `--verbosity 2` includes the full provider `results` map and per-model change rows. Refresh output also includes `next_steps` so dry runs and writes show the safe path from discovery, to discovered entries, to reviewed promotion.
 
 When provider metadata includes popularity fields, `models list` can filter and rank by them after normal provider/source, role, runtime, capability, and hardware filters:
 
@@ -350,7 +351,7 @@ aiplane models add azure_chat --alias azure-openai-gpt-4o-prod --role chat --dis
 Use `models clone` when the same underlying model should have a second local purpose, role, or note. The target entry still points at the same provider-native `model` value unless you override it with `--set model=...`:
 
 ```bash
-aiplane models clone local_chat local_fast_draft --role completion --notes "Fast draft model for local coding tasks."
+aiplane models clone local_chat local_fast_draft --role completion --notes "Fast draft model for local workflow tasks."
 aiplane models clone DISCOVERED_ENTRY_NAME local_chat --role chat --runtime ollama --dry-run
 ```
 
@@ -383,9 +384,9 @@ Important output fields:
 - `source_contacted`: whether an online/source API was contacted successfully. `false` means the result came from fallback/profile data; see `source_discovery_reason` for the error or missing-adapter reason.
 - `source_discovery_method`: where the result came from, for example `source_api` or `profile_catalog` fallback.
 - `prune_enabled`: whether missing source ids are allowed to remove discovered entries. Pruning is enabled only after a successful authoritative online/source response. Query results, limit-truncated source windows, and profile-catalog fallback do not prune.
-- `provider_summary`: compact default CLI list of provider status/counts. The full provider `results` map is omitted unless `--verbose` is used.
+- `provider_summary`: compact provider list of status/counts shown with `--verbosity 1`.
 - `model_changes_count`: number of per-model change rows hidden from the default summary.
-- `model_changes`: shown only inside verbose `results`; contains entries that would be imported/imported, would be updated/updated, or would be removed/removed. In verbose rows, `model.id` is the provider-native model id, `model.source` is the model provider, and `runtime_endpoint` is the configured runtime endpoint such as `ollama`, `vllm`, `transformers`, or `llamacpp`.
+- `model_changes`: shown only in `--verbosity 2` results; contains entries that would be imported/imported, would be updated/updated, or would be removed/removed. In those rows, `model.id` is the provider-native model id, `model.source` is the model provider, and `runtime_endpoint` is the configured runtime endpoint such as `ollama`, `vllm`, `transformers`, or `llamacpp`.
 - `next_steps`: command-specific guidance for the safe review flow, such as writing a dry-run refresh, promoting one discovered entry, validating the profile, or previewing cache cleanup.
 
 New entries are enabled by default. Use `--disable-new` to import them disabled.

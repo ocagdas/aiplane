@@ -21,6 +21,17 @@ CONFIG_FILES = {
 }
 
 
+OUTPUT_FORMAT_OPTIONS = {"text", "json"}
+OUTPUT_FORMAT_CONFIG_KEY = "format"
+OUTPUT_FORMAT_PROFILE_OVERRIDES_KEY = "profile_formats"
+OUTPUT_FORMAT_COMMAND_OVERRIDES_KEY = "command_formats"
+
+OUTPUT_VERBOSITY_OPTIONS = {0, 1, 2}
+OUTPUT_VERBOSITY_CONFIG_KEY = "verbosity"
+OUTPUT_VERBOSITY_PROFILE_OVERRIDES_KEY = "profile_verbosity"
+OUTPUT_VERBOSITY_COMMAND_OVERRIDES_KEY = "command_verbosity"
+
+
 def project_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
@@ -68,6 +79,253 @@ def init_local_config(template: str = "local", path: Path | str | None = None, o
     destination.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(source, destination)
     return destination
+
+
+def _validate_output_format(value: object) -> str:
+    if not isinstance(value, str) or value not in OUTPUT_FORMAT_OPTIONS:
+        raise ValueError(f"format must be one of: {', '.join(sorted(OUTPUT_FORMAT_OPTIONS))}")
+    return value
+
+
+def _validate_output_verbosity(value: object) -> int:
+    try:
+        verbosity = int(value)
+    except (TypeError, ValueError):
+        raise ValueError(f"verbosity must be one of: {', '.join(str(v) for v in sorted(OUTPUT_VERBOSITY_OPTIONS))}")
+    if verbosity not in OUTPUT_VERBOSITY_OPTIONS:
+        raise ValueError(f"verbosity must be one of: {', '.join(str(v) for v in sorted(OUTPUT_VERBOSITY_OPTIONS))}")
+    return verbosity
+
+
+def get_output_format_override(path: Path | str | None = None, default: str = "text") -> str:
+    config = load_local_config(path)
+    return _validate_output_format(config.get(OUTPUT_FORMAT_CONFIG_KEY, default))
+
+
+def get_profile_output_format(profile: str, path: Path | str | None = None) -> str | None:
+    config = load_local_config(path)
+    raw = config.get(OUTPUT_FORMAT_PROFILE_OVERRIDES_KEY, {})
+    if not isinstance(raw, dict):
+        return None
+    value = raw.get(profile)
+    if value is None:
+        return None
+    return _validate_output_format(value)
+
+
+def get_command_output_format(command: str, path: Path | str | None = None) -> str | None:
+    config = load_local_config(path)
+    raw = config.get(OUTPUT_FORMAT_COMMAND_OVERRIDES_KEY, {})
+    if not isinstance(raw, dict):
+        return None
+    value = raw.get(command)
+    if value is None:
+        return None
+    return _validate_output_format(value)
+
+
+def set_output_format(
+    value: str,
+    *,
+    profile: str | None = None,
+    command: str | None = None,
+    path: Path | str | None = None,
+) -> Path:
+    _validate_output_format(value)
+    config_path = local_config_path(path)
+    config = load_local_config(config_path)
+    if profile is not None and command is not None:
+        raise ValueError("set_output_format accepts profile or command, but not both")
+    if profile:
+        _validate_profile_name(profile)
+        profile_formats = config.get(OUTPUT_FORMAT_PROFILE_OVERRIDES_KEY, {})
+        if not isinstance(profile_formats, dict):
+            raise ValueError(f"{OUTPUT_FORMAT_PROFILE_OVERRIDES_KEY} must be a mapping")
+        profile_formats[profile] = value
+        config[OUTPUT_FORMAT_PROFILE_OVERRIDES_KEY] = profile_formats
+    elif command:
+        command_formats = config.get(OUTPUT_FORMAT_COMMAND_OVERRIDES_KEY, {})
+        if not isinstance(command_formats, dict):
+            raise ValueError(f"{OUTPUT_FORMAT_COMMAND_OVERRIDES_KEY} must be a mapping")
+        command_formats[command] = value
+        config[OUTPUT_FORMAT_COMMAND_OVERRIDES_KEY] = command_formats
+    else:
+        config[OUTPUT_FORMAT_CONFIG_KEY] = value
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(dump_yaml(config), encoding='utf-8')
+    return config_path
+
+
+def clear_output_format(
+    profile: str | None = None,
+    *,
+    command: str | None = None,
+    path: Path | str | None = None,
+) -> Path:
+    if profile is not None and command is not None:
+        raise ValueError("clear_output_format accepts profile or command, but not both")
+    config_path = local_config_path(path)
+    config = load_local_config(config_path)
+    if profile is None:
+        if command is None:
+            config.pop(OUTPUT_FORMAT_CONFIG_KEY, None)
+            config_path.parent.mkdir(parents=True, exist_ok=True)
+            config_path.write_text(dump_yaml(config), encoding='utf-8')
+            return config_path
+        command_formats = config.get(OUTPUT_FORMAT_COMMAND_OVERRIDES_KEY, {})
+        if not isinstance(command_formats, dict):
+            command_formats = {}
+        if command in command_formats:
+            command_formats.pop(command)
+        config[OUTPUT_FORMAT_COMMAND_OVERRIDES_KEY] = command_formats
+    else:
+        _validate_profile_name(profile)
+        profile_formats = config.get(OUTPUT_FORMAT_PROFILE_OVERRIDES_KEY, {})
+        if not isinstance(profile_formats, dict):
+            profile_formats = {}
+        if profile in profile_formats:
+            profile_formats.pop(profile)
+        config[OUTPUT_FORMAT_PROFILE_OVERRIDES_KEY] = profile_formats
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(dump_yaml(config), encoding='utf-8')
+    return config_path
+
+
+def resolve_output_format(
+    explicit: str | None = None,
+    *,
+    profile: str | None = None,
+    command: str | None = None,
+    default: str = "text",
+    path: Path | str | None = None,
+) -> str:
+    if explicit is not None:
+        return _validate_output_format(explicit)
+    if command:
+        command_fmt = get_command_output_format(command, path=path)
+        if command_fmt is not None:
+            return command_fmt
+    if profile:
+        profile_fmt = get_profile_output_format(profile, path=path)
+        if profile_fmt is not None:
+            return profile_fmt
+    return get_output_format_override(path=path, default=default)
+
+
+def get_output_verbosity_override(path: Path | str | None = None) -> int:
+    return _validate_output_verbosity(load_local_config(path).get(OUTPUT_VERBOSITY_CONFIG_KEY, 0))
+
+
+def get_profile_output_verbosity(profile: str, path: Path | str | None = None) -> int | None:
+    config = load_local_config(path)
+    raw = config.get(OUTPUT_VERBOSITY_PROFILE_OVERRIDES_KEY, {})
+    if not isinstance(raw, dict):
+        return None
+    value = raw.get(profile)
+    if value is None:
+        return None
+    return _validate_output_verbosity(value)
+
+
+def get_command_output_verbosity(command: str, path: Path | str | None = None) -> int | None:
+    config = load_local_config(path)
+    raw = config.get(OUTPUT_VERBOSITY_COMMAND_OVERRIDES_KEY, {})
+    if not isinstance(raw, dict):
+        return None
+    value = raw.get(command)
+    if value is None:
+        return None
+    return _validate_output_verbosity(value)
+
+
+def set_output_verbosity(
+    value: int,
+    *,
+    profile: str | None = None,
+    command: str | None = None,
+    path: Path | str | None = None,
+) -> Path:
+    verbosity = _validate_output_verbosity(value)
+    config_path = local_config_path(path)
+    config = load_local_config(config_path)
+    if profile is not None and command is not None:
+        raise ValueError("set_output_verbosity accepts profile or command, but not both")
+    if profile:
+        _validate_profile_name(profile)
+        profile_verbosity = config.get(OUTPUT_VERBOSITY_PROFILE_OVERRIDES_KEY, {})
+        if not isinstance(profile_verbosity, dict):
+            raise ValueError(f"{OUTPUT_VERBOSITY_PROFILE_OVERRIDES_KEY} must be a mapping")
+        profile_verbosity[profile] = verbosity
+        config[OUTPUT_VERBOSITY_PROFILE_OVERRIDES_KEY] = profile_verbosity
+    elif command:
+        command_verbosity = config.get(OUTPUT_VERBOSITY_COMMAND_OVERRIDES_KEY, {})
+        if not isinstance(command_verbosity, dict):
+            raise ValueError(f"{OUTPUT_VERBOSITY_COMMAND_OVERRIDES_KEY} must be a mapping")
+        command_verbosity[command] = verbosity
+        config[OUTPUT_VERBOSITY_COMMAND_OVERRIDES_KEY] = command_verbosity
+    else:
+        config[OUTPUT_VERBOSITY_CONFIG_KEY] = verbosity
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(dump_yaml(config), encoding='utf-8')
+    return config_path
+
+
+def clear_output_verbosity(
+    profile: str | None = None,
+    *,
+    command: str | None = None,
+    path: Path | str | None = None,
+) -> Path:
+    if profile is not None and command is not None:
+        raise ValueError("clear_output_verbosity accepts profile or command, but not both")
+    config_path = local_config_path(path)
+    config = load_local_config(config_path)
+    if profile is None:
+        if command is None:
+            config.pop(OUTPUT_VERBOSITY_CONFIG_KEY, None)
+            config_path.parent.mkdir(parents=True, exist_ok=True)
+            config_path.write_text(dump_yaml(config), encoding='utf-8')
+            return config_path
+        command_verbosity = config.get(OUTPUT_VERBOSITY_COMMAND_OVERRIDES_KEY, {})
+        if not isinstance(command_verbosity, dict):
+            command_verbosity = {}
+        if command in command_verbosity:
+            command_verbosity.pop(command)
+        config[OUTPUT_VERBOSITY_COMMAND_OVERRIDES_KEY] = command_verbosity
+    else:
+        _validate_profile_name(profile)
+        profile_verbosity = config.get(OUTPUT_VERBOSITY_PROFILE_OVERRIDES_KEY, {})
+        if not isinstance(profile_verbosity, dict):
+            profile_verbosity = {}
+        if profile in profile_verbosity:
+            profile_verbosity.pop(profile)
+        config[OUTPUT_VERBOSITY_PROFILE_OVERRIDES_KEY] = profile_verbosity
+
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(dump_yaml(config), encoding='utf-8')
+    return config_path
+
+
+def resolve_output_verbosity(
+    explicit: int | None = None,
+    *,
+    profile: str | None = None,
+    command: str | None = None,
+    default: int = 0,
+    path: Path | str | None = None,
+) -> int:
+    if explicit is not None:
+        return _validate_output_verbosity(explicit)
+    if command:
+        command_verbosity = get_command_output_verbosity(command, path=path)
+        if command_verbosity is not None:
+            return command_verbosity
+    if profile:
+        profile_verbosity = get_profile_output_verbosity(profile, path=path)
+        if profile_verbosity is not None:
+            return profile_verbosity
+    return get_output_verbosity_override(path=path)
+
 
 
 def default_profile(path: Path | str | None = None) -> str:

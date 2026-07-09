@@ -128,8 +128,21 @@ aiplane machines azure-status --region uksouth --sku-query
 
 ```bash
 aiplane machines discover azure --region uksouth --workload inference_large
-aiplane machines discover azure --region uksouth --model MODEL_ALIAS --runtime vllm
+aiplane machines discover azure --region uksouth --model MODEL_ALIAS
+aiplane machines discover azure --region uksouth --workload media_generation --gpu-vendor nvidia --min-cpu-cores 32 --min-ram-gb 128 --min-vram-gb 24 --verbosity 1
 ```
+
+`machines discover azure` supports optional hardware filters:
+
+- `--gpu-vendor` (for example `nvidia`, `amd`, `intel`, `apple`, `none`)
+- `--min-cpu-cores`
+- `--min-ram-gb`
+- `--min-vram-gb`
+
+Azure command progress is printed on `stderr` during discovery:
+
+- `--verbosity 0` (default): shows only the currently running redacted `az ...` command and a dot ticker every 2 seconds on the line below; when a command finishes, the dot line is cleared.
+- `--verbosity 1`: logs each command on a new line and includes redacted Azure CLI stdout/stderr payloads.
 
 Import a selected SKU into the same self-managed machine inventory:
 
@@ -152,6 +165,7 @@ When live Azure discovery works, output also includes:
 
 - `quota`: live `az vm list-usage` results for the selected region, including current usage, limit, and remaining capacity where Azure returns those values.
 - `restrictions`: SKU restriction data from `az vm list-skus`, such as subscription or location restrictions.
+- `pricing`: per-candidate retail unit pricing from the Azure Retail Prices API when available, including `unit_price`, `currency`, `unit` (`per_hour`/etc.), and `unit_of_measure`.
 
 Results are cached in `profiles/<profile>/machine-discovery-cache.json`. Offline results create or update the cache only when no live cache exists for the same provider/region/filter. A later live discovery always overwrites the cached offline result for that same key, so Azure data takes precedence over static hints as soon as it is available.
 
@@ -160,7 +174,7 @@ Inspect or clear cached discovery results:
 ```bash
 aiplane machines cache-list
 aiplane machines cache-clear
-aiplane machines cache-clear --key azure__uksouth__inference_large__any_model__any_runtime
+aiplane machines cache-clear --key <cache-key-from-cache-list>
 ```
 
 Always verify real Azure availability, quota, pricing, and exact GPU memory before provisioning.
@@ -204,7 +218,7 @@ aiplane deploy doctor --target azure_gpu_vm
 6. To create the VM through `aiplane`, review the plan and doctor output first, then run guarded apply:
 
 ```bash
-aiplane deploy apply --target azure_gpu_vm
+aiplane deploy apply --target azure_gpu_vm --yes
 ```
 
 This runs the mutating Azure CLI steps shown in the plan, such as resource group creation, VM creation, and optional SSH port opening. It can create billable Azure resources.
@@ -226,6 +240,7 @@ aiplane stacks setup qwen32b_on_h100 \
   --runtime vllm \
   --model MODEL_ALIAS \
   --machine azure_h100_live \
+  --target gpu_workstation_ssh \
   --access ssh_tunnel \
   --endpoint http://localhost:8000/v1
 
@@ -233,13 +248,13 @@ aiplane stacks plan qwen32b_on_h100
 aiplane stacks doctor qwen32b_on_h100
 ```
 
-Stack plans include preflight checks for runtime prerequisites, likely port conflicts on local endpoints, endpoint auth policy, and model cache-path hints. Doctor output folds those checks into the normal readiness checks so you can catch missing host tools or risky endpoint settings before running lifecycle commands.
+Stack plans include preflight checks for runtime prerequisites, likely port conflicts on local endpoints, endpoint auth policy, and model cache-path hints. Doctor output folds those checks into the normal readiness checks and also checks role model aliases, disabled role models, role policy decisions (including provider allow-lists and cloud policy), managed-service endpoints, gateway/TLS/auth readiness, and warning-level risky tool-policy combinations so you can catch missing host tools or unsafe endpoint/role settings before running lifecycle commands.
 
 ## Stacks
 
 A stack is the operational unit for running or exposing an AI setup. It binds one optional orchestrator, one runtime or hosted endpoint contract, one primary model, one machine or endpoint target, and one access policy. Self-managed stacks use the runtime and machine fields for fit checks and lifecycle planning. Managed-service stacks keep provider/runtime endpoint metadata so exports and orchestrators can call the hosted service, but they are not treated as local runtime candidates.
 
-That one-to-one shape is intentional for now. If you need separate planner/coder/reviewer models, create separate stacks or wait for the planned multi-role stack schema. Keeping the first stack model simple makes fit checks, lifecycle commands, and exports easier to reason about. Multi-role and agent-to-agent setups are planned as orchestrator metadata over reviewed model aliases, endpoints, tool policies, and approval modes rather than as a hidden agent runner inside `aiplane`.
+The primary model remains the lifecycle model for install/pull/start actions. For orchestrated workflows, a stack can also carry role metadata over reviewed profile model aliases. These role bindings are configuration for established frameworks such as LangGraph, CrewAI, AutoGen, Semantic Kernel, LlamaIndex Workflows, or OpenHands. `aiplane` stores, validates, plans, and exports the metadata; it does not run autonomous agent-to-agent conversations itself.
 
 Before creating a stack, the machine must exist in `aiplane machines list`. Hardware templates such as `local_auto` are not automatically stack machines. Export/import a real machine profile first, or import an Azure SKU candidate.
 
@@ -251,6 +266,7 @@ aiplane stacks setup coding_agents \
   --runtime vllm \
   --model MODEL_ALIAS \
   --machine azure_h100_live \
+  --target gpu_workstation_ssh \
   --access ssh_tunnel \
   --endpoint http://localhost:8000/v1 \
   --limit timeout=30m \
@@ -259,8 +275,10 @@ aiplane stacks setup coding_agents \
   --tool filesystem=workspace_only
 ```
 
+When `access=ssh_tunnel`, prefer `--target` to point at a configured tunnel target in `targets.yaml`.
+If omitted, `stacks` falls back to using the machine name as the tunnel target and marks this as a warning in preflight.
 
-Stack `--limit` and `--tool` values are structured pass-through metadata. `aiplane` stores and exports them, but enforcement belongs to the runtime, orchestrator, wrapper script, or later workload runner.
+Stack `--limit`, `--tool`, and `--role` values are structured pass-through metadata. `aiplane` stores and exports them, but enforcement belongs to the runtime, orchestrator, wrapper script, or later workload runner. A `--role ROLE=MODEL_ALIAS` entry validates that the model alias exists in the profile, records provider/runtime or managed-service endpoint ownership, and adds role-level approval and audit labels. Managed-service role aliases keep their provider endpoint, while the primary stack model remains the only model used for local runtime lifecycle install/pull/start actions.
 
 Common examples:
 
@@ -271,6 +289,11 @@ Common examples:
 --tool shell=guarded
 --tool filesystem=workspace_only
 --tool git=read_only
+--role planner=local_chat
+--role coder=local_code
+--role reviewer=managed_review
+--approval-mode ask
+--audit-label repo_agents
 ```
 
 Preview without writing:
@@ -289,7 +312,26 @@ Plan and check it:
 ```bash
 aiplane stacks plan coding_agents
 aiplane stacks doctor coding_agents
+aiplane stacks endpoint-plan coding_agents
 aiplane stacks status coding_agents
+```
+
+For shared or public endpoints, record the intended gateway controls when creating the stack. This still does not configure the gateway; it gives plan/doctor/export enough metadata to warn before a raw model runtime is exposed:
+
+```bash
+aiplane stacks setup shared_ollama \
+  --runtime ollama \
+  --model MODEL_ALIAS \
+  --machine local_box \
+  --access gateway \
+  --endpoint-policy shared \
+  --endpoint https://llm.example.com/v1 \
+  --endpoint-auth bearer \
+  --endpoint-auth-env LLM_GATEWAY_API_KEY \
+  --endpoint-tls terminated \
+  --gateway caddy
+
+aiplane stacks endpoint-plan shared_ollama
 ```
 
 Prepare the stack. This is the convenience lifecycle command for install/pull/config style actions:
@@ -310,7 +352,7 @@ aiplane stacks restart coding_agents
 
 `start` does not implicitly install or pull models. Use `prepare` first when you want the higher-level install/pull/config path.
 
-For same-host/local stacks, lifecycle commands return structured execution reporting: `status`, `outcome`, `steps_total`, `steps_executed`, `failed_step`, per-step stdout/stderr tails, and a best-effort `runtime_status_after` snapshot. Remote, SSH, Azure, and AKS stacks still return planned commands instead of executing.
+For same-host/local stacks, lifecycle commands return structured execution reporting: `status`, `outcome`, `execution_mode`, `steps_total`, `steps_executed`, `failed_step`, `started_at`, `finished_at`, `duration_seconds`, per-step stdout/stderr tails, and best-effort `runtime_status_before` / `runtime_status_after` snapshots. Remote, SSH, Azure, and AKS stacks still return planned commands instead of executing.
 
 Export IDE or packaging artifacts:
 
@@ -320,9 +362,15 @@ aiplane stacks export openai-compatible coding_agents
 aiplane stacks export dockerfile coding_agents
 aiplane stacks export conda-yaml coding_agents
 aiplane stacks export compose coding_agents
+aiplane stacks export langgraph coding_agents
+aiplane stacks export crewai coding_agents
+aiplane stacks export autogen coding_agents
+aiplane stacks export semantic-kernel coding_agents
+aiplane stacks export llamaindex-workflows coding_agents
+aiplane stacks export openhands coding_agents
 ```
 
-The Dockerfile, Conda YAML, and Compose exports are starter artifacts for review, CI, or custom packaging. They include profile-aware comments or environment variables for stack name, profile, orchestrator, runtime, model, endpoint, machine, limits, tool policies, and selected Docker resource hints where available. The normal user flow is still `stacks setup`, `stacks prepare`, and `stacks start`.
+The Dockerfile, Conda YAML, Compose, and framework exports are starter artifacts for review, CI, or custom packaging. They include profile-aware comments or metadata for stack name, profile, orchestrator, runtime, model, endpoint, machine, role bindings, limits, tool policies, approval labels, audit labels, and selected Docker resource hints where available. Framework exports are metadata starters; they do not install packages, generate a full agent application, or run autonomous workflows. The normal user flow is still `stacks setup`, `stacks prepare`, and `stacks start`.
 
 ## Orchestrators
 
@@ -377,7 +425,7 @@ aiplane stacks setup coding_agents \
   --tool shell=guarded
 ```
 
-Limits, approval labels, and tool policies for orchestrated workloads are structured pass-through stack fields. `aiplane` stores and exports them, but the orchestrator/runtime or managed provider decides whether and how to enforce them. For managed-service models, keep endpoint credentials in ignored local credential references or environment variables; do not place raw provider secrets in stack or profile YAML.
+Limits, role bindings, approval labels, audit labels, and tool policies for orchestrated workloads are structured pass-through stack fields. `aiplane` stores and exports them, and `stacks doctor` warns about obviously risky combinations such as unrestricted shell-style tools with auto/no approval, but the orchestrator/runtime or managed provider decides whether and how to enforce them. For managed-service models, keep endpoint credentials in ignored local credential references or environment variables; do not place raw provider secrets in stack or profile YAML.
 
 ## Current Limits
 

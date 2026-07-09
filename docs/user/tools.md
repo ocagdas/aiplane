@@ -81,7 +81,7 @@ aiplane environment doctor --format json
 - runtime prerequisite/status rows for common local runtimes and provider-selected managed services;
 - dry-run setup commands to try next, such as `aiplane runtimes install vllm --dry-run`.
 
-Text output is the default human-readable aligned table with tool/runtime name, type, status, mandatory/optional scope, and a short purpose. Mandatory tool checks are listed before optional workflow checks, and installed tools appear before missing tools within each group. While probes run, progress is written to stderr on a single updating line so stdout remains usable for the final text or JSON report. Use `--format json` for scripts and tests. Use `tools matrix` when you need a broader workflow map across infrastructure, VM, container, remote, cloud, Kubernetes, and benchmark tools.
+Text output is the default human-readable aligned table with tool/runtime name, type, status, mandatory/optional scope, and a short purpose. Mandatory tool checks are listed before optional workflow checks, and installed tools appear before missing tools within each group. While probes run, progress is written to stderr on a single updating line so stdout remains usable for the final text or JSON report. Use `--format json` for scripts and tests. Use top-level `aiplane doctor` first for the local/hybrid AI workflow stack summary. Use `tools matrix` when you need a broader workflow map across infrastructure, VM, container, remote, cloud, Kubernetes, and benchmark tools.
 
 Check one tool:
 

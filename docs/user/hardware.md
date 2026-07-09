@@ -13,6 +13,10 @@ aiplane hardware discover --select-closest
 aiplane hardware clear
 aiplane hardware active
 aiplane hardware show
+aiplane hardware show --format text
+aiplane hardware show --format json
+aiplane hardware show --verbosity 0
+aiplane hardware show --list-types
 aiplane hardware templates
 aiplane hardware schema
 aiplane hardware use nvidia_consumer_gpu --set vram_gb=16
@@ -35,8 +39,10 @@ aiplane hardware export-machine --name local_box > local_box.machine.yaml
 - `active`: prints only the selected hardware config, including template origin,
   custom status, current values, and the normalized effective machine used for
   recommendations.
-- `show`: prints the full hardware profile config plus `active_selection` and
-  `effective_machine`.
+- `show`: prints the selected hardware summary (`active_selection` and
+  `effective_machine`). Use `--format text` for compact output and `--format json`
+  for scripts; output is still scoped by `--verbosity`.
+  `--verbosity 0` omits template-catalog rows and keeps the summary terse.
 - `templates`: prints immutable hardware templates.
 - `schema`: prints the editable machine fields used for recommendation and fit checks.
 - `use`: copies a template into the selected config and optionally applies

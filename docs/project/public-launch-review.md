@@ -4,7 +4,7 @@ This is the release-readiness checklist for the initial public version and later
 
 ## Scope
 
-`aiplane` should present itself as an AI control-plane CLI for local and self-managed LLM environments. It should not claim to be a coding agent, model runtime, model proxy, marketplace, or production LLM gateway.
+`aiplane` should present itself as an AI control-plane CLI for local and self-managed AI model environments. It should not claim to be a coding agent, model runtime, model proxy, marketplace, or production LLM gateway.
 
 ## Terminology
 

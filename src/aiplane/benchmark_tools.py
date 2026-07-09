@@ -190,7 +190,7 @@ class BenchmarkToolManager:
             "description": spec.get("description"),
             "install": spec.get("install"),
             "tool": tool_name,
-            "available": True if tool_name is None else bool(tool and tool.get("installed")),
+            "available": (True if tool_name is None else bool(tool and tool.get("installed"))),
             "tool_status": tool,
             "best_for": spec.get("best_for", []),
         }

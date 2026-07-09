@@ -1,246 +1,199 @@
 # aiplane
 
-`aiplane` is a control-plane CLI for building and checking managed LLM environments. It helps teams keep model providers, local runtimes, machines, profiles, credentials, IDE exports, automation tools, and benchmark workflows in one understandable place.
+`aiplane` is a control-plane CLI for AI model environments across text, image, audio, video, and reasoning workflows.
+It helps teams make local, remote, and cloud-adjacent AI workflows reproducible by organizing the non-model part of AI operations:
 
-It is not a coding agent, chat UI, inference server, model marketplace, or cloud platform. It coordinates those pieces so local, remote, VM, and cloud-adjacent AI development environments can be planned, reproduced, checked, and connected safely.
+- providers and provider credentials references,
+- runtime and endpoint selection,
+- machine/hardware fit,
+- policy constraints,
+- model catalogs and aliases,
+- IDE/agent/automation exports, and
+- run-time readiness checks.
 
-## Why It Exists
+Core config is declarative YAML. Profiles, providers, models, machines, stacks, and policy files can be committed and reviewed like any other environment contract. Secrets stay in ignored local files or environment variables while profile structure stays explicit and diff-friendly.
 
-Self-managed AI development setups quickly become a mix of:
+`aiplane` exposes a practical command API that is easy to automate. Commands support both human-readable output and machine-readable output (`--format json`) for CI/CD and external DevOps hooks, so you can keep setup and checks in existing pipelines.
 
-- local runtimes such as Ollama, vLLM, TGI, llama.cpp, LocalAI, LM Studio, or Transformers;
-- managed providers such as OpenAI, Anthropic, Azure OpenAI, and OpenAI-compatible endpoints;
-- IDE and agent tools such as Continue, Cline, Zed, Aider, Codex-like CLIs, and MCP-capable clients;
-- machines ranging from laptops to shared GPU boxes, local VMs, remote VMs, and Kubernetes or cloud targets;
-- provisioning tools such as Ansible, Vagrant, Packer, OpenTofu/Terraform, Pulumi, Docker, Dev Containers, kubectl, Helm, and Azure CLI;
-- benchmark tools that may run locally while targeting a remote endpoint, or directly on the GPU host.
+A core goal is avoiding lock-in to one provider stack. With aiplane, teams can shift between managed endpoints, self-hosted runtimes, remote workstations, and mixed stacks using the same profile model. This is useful when teams want to optimise cost, move to regions with required data controls, or go fully on-prem as operational needs change.
 
-`aiplane` gives that operational layer a profile-driven CLI: inspect what exists, plan what should happen, export config for other tools, and keep risky operations explicit.
+It is not a coding agent, chat UI, inference server, model marketplace, or cloud platform. It sits one layer lower:
+it coordinates models, runtimes, and tooling so human operators can keep AI environments understandable and auditable.
+The aim is to treat AI environment setup and workflow operations like AIOps for AI operations: taking care of setup, replication, migration, and model/runtime alignment so teams can spend time on model work and experimentation instead.
 
-## Current Status
+## Why this exists
 
-`aiplane` is pre-1.0 and suitable for early beta testing by engineers who are comfortable reading plans and generated config before applying changes. The current branch is focused on **agentic environment setup and remote tooling integration**.
+Most teams discover that “working AI setup” becomes a pile of one-off shell commands, hidden assumptions, and environment drift:
 
-Implemented foundations include:
+- one model works locally, another in a remote VM,
+- one assistant needs one endpoint format, another needs another,
+- local and managed providers require different credentials and auth paths,
+- hardware constraints (`RAM`, `VRAM`, GPU type) get implicit and untracked,
+- and repeatability depends on tribal knowledge.
 
-- profile loading, validation, local config, ignored credentials, and selected/default summaries;
-- environment planning for system Python, `venv`, Conda, and Docker execution mode;
-- `environment doctor` and `tools doctor` readiness checks;
-- provider catalogs for local, open-weight, OpenAI-compatible, OpenAI, Anthropic, Azure OpenAI, Ollama Cloud placeholder, Hugging Face, GGUF, and runtime-backed discovery, with no checked-in model aliases;
-- ignored generated model caches that are repopulated from provider discovery and can be filtered by role, runtime, capability, RAM/VRAM, benchmark score, and target hardware;
-- runtime helper delegation for supported providers such as Ollama;
-- machine inventory, hardware discovery, hardware-aware model recommendations, and stack planning;
-- integration plan/setup/export for Continue, Cline, Zed, Aider, OpenAI-compatible clients, and MCP client snippets;
-- starter agent application scaffolds through `agents templates/plan/export`;
-- non-mutating tool plans and starter exports for Vagrant, Packer, OpenTofu/Terraform, Pulumi, Dev Containers, and Ansible;
-- benchmark planning helpers for smoke/custom checks, lm-evaluation-harness, vLLM serving benchmarks, and Locust-style load tests.
+`aiplane` reduces this by making setup, checks, and exports profile-first and explicit.
 
-Still in progress: remote mutation workflows, production service management, provider-specific IaC/playbooks, richer agent templates, distributed benchmark execution, and endpoint authentication/gateway automation.
+## What `aiplane` is (today)
+
+Current branch focus: **early beta / pre-1.0**, with core value around reproducible AI workflow setup.
+
+### In place now
+
+- Profile loading, validation, config inheritance, and profile selection for local and non-local contexts.
+- Provider catalogs for managed and self-managed sources.
+- Ignored model discovery cache (`models.discovered.yaml`) and explicit profile-owned model entries in `models.yaml`.
+- Provider/model discovery, filtering, and model import paths with RAM/VRAM/capability metadata and provider/source/runtimes separation.
+- Runtime helper orchestration for supported self-managed runtimes (with dry-run first-class behavior).
+- Hardware discovery, machine imports, and hardware-aware recommendations.
+- Stack planning and setup workflows (including role model mapping and policy-aware checks).
+- Integration exports for Continue, Cline, Zed, Aider, OpenAI-compatible clients, MCP clients.
+- MCP read tooling and narrow audited write tooling.
+- External tooling readiness checks (`tools doctor/matrix`, `environment doctor`) for provisioning and benchmark workflows.
+- Policy and audit foundations for explicitness in cloud escalation and managed endpoint use.
+- Smoke-test command scaffolding and benchmark planning.
+
+### Not in scope yet
+
+- it is not a full coding agent,
+- it is not an inference engine,
+- it is not a hidden production orchestrator,
+- it does not run arbitrary shell actions through MCP,
+- and it does not promise turnkey enterprise cloud deployment.
 
 ## Install
 
-Fresh Conda install from a clone:
+Fresh Conda install:
 
 ```bash
+# from a clone
 git clone https://github.com/ocagdas/aiplane.git
 cd aiplane
 source scripts/setup_env.sh --mode conda --conda-env aiplane --action install --editable
+
 aiplane profiles list
 aiplane environment doctor --required-only
 ```
 
-`setup_env.sh` creates the Conda environment when needed, installs `aiplane`,
-bootstraps ignored `profiles/local-dev` from the shipped template, runs the
-profile-aware sanity check, and activates the environment when the script is
-sourced. Sourced runs return to the same shell with the Conda environment active.
+Alternative flows are supported for local Python, venv, Docker CLI images, and static installs; use `scripts/setup_env.sh --help` for supported modes.
 
-Manual pip install from the repository root:
-
-```bash
-python -m pip install -e .
-aiplane profiles bootstrap-local --no-discovery
-aiplane profiles list
-```
-
-Without installing the package:
+If you already have the package installed:
 
 ```bash
 PYTHONPATH=src python -m aiplane profiles bootstrap-local --no-discovery
-PYTHONPATH=src python -m aiplane profiles list
 ```
 
-Create ignored local config when you want machine/user-specific defaults:
+When you want per-machine local defaults:
 
 ```bash
 aiplane config init --template local
 aiplane config show
 ```
 
-`config show` reports the active/default config path, profile roots, current/default profile paths, credentials path, and agent artifact path.
+## Quick start flow
 
-## Quick Start
-
-Check the configured profile and environment:
+Use this when you want to evaluate the project end-to-end:
 
 ```bash
-aiplane profiles list
+aiplane quickstart local-coding
+# preview only
+
+aiplane quickstart local-coding --dry-run
+# add a model pull only when you choose one alias
+aiplane quickstart local-coding --pull-model MODEL_ALIAS
+
+aiplane doctor
+aiplane doctor --format json
+
 aiplane profiles show --selected
-aiplane profiles validate
-aiplane environment doctor
 ```
 
-Inspect provider state, then populate an ignored local model cache from discovery when needed:
+`quickstart local-coding` builds a local profile baseline, runs a readiness doctor when possible, and prints the next deterministic commands.
+Model pulls remain opt-in and can always be previewed with `--dry-run`.
+
+### Common workflow
 
 ```bash
+# 1) discover candidates
+
 aiplane providers list
-aiplane models refresh --provider huggingface --query text-generation --limit 25 --dry-run
-aiplane models list --group-by ownership
-aiplane models clear-cache --dry-run
-```
+aiplane models refresh --provider huggingface --query text-generation --dry-run
 
-Plan a local runtime/model setup before changing the machine. Replace `MODEL_ALIAS` with an alias discovered into `models.generated.yaml` or deliberately promoted into local `models.yaml`:
+aiplane models list --group-by ownership --enabled-only
 
-```bash
+# 2) stage runnable setup (explicitly)
 aiplane runtimes install ollama --dry-run
-aiplane runtimes pull ollama --model MODEL_ALIAS --dry-run
 aiplane integrations roles continue
-```
 
-Export IDE or agent-tool config after choosing aliases. MCP exports do not need a model alias:
+aiplane runtimes pull ollama --model MODEL_ALIAS --dry-run
 
-```bash
+# 3) export and run
 aiplane integrations export continue --model MODEL_ALIAS
 aiplane integrations export vscode-mcp
-aiplane mcp manifest
+aiplane chat --model MODEL_ALIAS --dry-run
 ```
 
-Plan an agent application scaffold outside the repo/profile tree:
+## Execution tracks
+
+The current project direction is organized into three execution tracks:
+
+1. **Agentic environments and workflows**
+   - profile-driven endpoints,
+   - policy-aware role bindings,
+   - starter project scaffolds (non-mutating export path first).
+
+2. **Provisioning and automation tooling**
+   - clear tool readiness checks,
+   - non-mutating plans/exports for Vagrant, Packer, OpenTofu/Terraform, Pulumi, Ansible, Docker/Compose, dev containers, and Kubernetes tooling,
+   - explicit guardrails before applying remote changes.
+
+3. **Benchmark and evaluation workflow integration**
+   - smoke/custom checks,
+   - benchmark tool install/check/plan helpers,
+   - explicit placement of benchmark execution (local host, remote endpoint, same host as runtime).
+
+See [Roadmap](docs/project/roadmap.md) for concrete implementation status.
+
+## Safety, governance, and trust model
+
+- credentials and local machine state are intentionally outside git in ignored files,
+- secrets are redacted by command output tooling,
+- plans/doctor/install previews come before mutation,
+- MCP mutations are narrow and audited,
+- and policy checks are surfaced before escalation is allowed.
+
+Security reporting is documented in [SECURITY.md](SECURITY.md).
+
+## Helper scripts
+
+- `scripts/setup_env.sh`: bootstrap paths for local execution modes and environment setup.
+- `scripts/provider_helper.sh`: thin runtime operation dispatcher used by the CLI.
+- `aiplane environment plan`: renders how a command would run under current profile context.
+- `aiplane environment doctor` and `aiplane tools doctor`: first checks when setup quality looks off.
+
+More command detail in:
+- [setup](docs/user/setup.md)
+- [providers and runtime helpers](docs/user/providers.md)
+- [tools and provisioning](docs/user/tools.md)
+- [runtime map](docs/user/runtime-model-map.md)
+
+## Validation expectations
+
+Before relying on a branch for demos or review, run:
 
 ```bash
-aiplane agents templates
-aiplane agents plan news-briefing --framework langgraph --model MODEL_ALIAS
-aiplane agents export news-briefing --framework langgraph --model MODEL_ALIAS --file agent.py
+conda run -n aiplane scripts/check.sh
+# and a representative smoke set for your area
+PYTHONPATH=src python -m pytest tests/test_* -k "smoke or critical"
 ```
 
-Inspect automation and provisioning tool readiness:
-
-```bash
-aiplane tools doctor
-aiplane tools plan ansible
-aiplane tools export opentofu
-aiplane tools export vagrant
-```
-
-Plan benchmark tooling:
-
-```bash
-aiplane benchmarks list
-aiplane benchmarks doctor
-aiplane benchmarks plan vllm-serving --model MODEL_ALIAS
-```
-
-## The Three Execution Fabric Tracks
-
-The current roadmap is organized around three tracks.
-
-### 1. Agentic Environments and Workflows
-
-Goal: create, configure, and validate external agent applications that use the model endpoints and credentials managed by `aiplane`.
-
-Current capability:
-
-- starter templates for LangGraph and simple OpenAI-compatible Python agents;
-- model endpoint selection from configured profile aliases;
-- configurable agent artifact root via `--output-dir`, `AIPLANE_AGENT_ARTIFACTS_DIR`, or local config `agent_artifacts_dir`;
-- roadmap demo for a news briefing/video agent.
-
-Next work:
-
-- write full agent project directories instead of printing individual files;
-- add richer templates for research, news, coding, and multi-agent workflows;
-- add run/test lifecycle checks for generated agents;
-- define multi-agent coordination across local, network, and cloud targets.
-
-### 2. Provisioning and Automation Tools
-
-Goal: interface cleanly with the tools that prepare machines and environments instead of replacing them.
-
-Current capability:
-
-- readiness checks for Azure CLI, OpenTofu, Terraform, Pulumi, Vagrant, Packer, Docker/Compose, Dev Container CLI, kubectl, Helm, OpenSSH, Ansible, and benchmark helpers;
-- non-mutating plans and starter exports for Vagrant, Packer, OpenTofu/Terraform, Pulumi, Dev Containers, and Ansible;
-- explicit helper/runtime delegation for supported runtimes.
-
-Next work:
-
-- generate Ansible inventories from known machines;
-- harden VM, image, IaC, and Dev Container templates;
-- make local install, local VM provisioning, remote VM provisioning, remote PC setup, and cloud provisioning distinct workflows;
-- keep remote mutation behind explicit plans, SSH controls, and audit output.
-
-### 3. Benchmarking and Evaluation
-
-Goal: benchmark models and endpoints using the right tool in the right place.
-
-Current capability:
-
-- smoke/custom model checks;
-- benchmark tool list/doctor/install/plan helpers;
-- initial support for lm-evaluation-harness, vLLM serving benchmarks, and Locust-style load tests.
-
-Benchmark placement depends on the task:
-
-- API/load benchmarks can usually run on the `aiplane` host while targeting a remote endpoint.
-- In-process GPU/model benchmarks usually need to run on the remote runtime host.
-- Quality/eval benchmarks can run locally or remotely if the model is reachable and datasets/tools are available.
-
-Next work:
-
-- represent `benchmark driver: local | remote | same-host-as-runtime`;
-- capture latency, throughput, token metrics, and repeated-run summaries;
-- compare benchmark results across models, runtimes, and machines.
-
-## Helper Scripts
-
-The CLI is the normal entry point. Helper scripts exist for bootstrap and runtime operations that are easier to express in shell.
-
-- `scripts/setup_env.sh` prepares ways to run the `aiplane` CLI itself.
-  - Supports local Python, `venv`, Conda, and Docker CLI-image flows.
-  - Use `--editable` for source-linked development installs.
-  - Use `--static` for snapshot installs that update only when rebuilt/reinstalled.
-  - Use `--action doctor` to check an existing setup.
-
-- `scripts/provider_helper.sh` performs provider/runtime operations behind CLI wrappers.
-  - Used by commands such as `aiplane runtimes install/start/stop/restart/status/pull/list-runtime-models`.
-  - Covers supported runtime paths such as Ollama today.
-  - Prefer the `aiplane runtimes ... --dry-run` path before direct helper use so profile selection, command rendering, and safety checks stay visible.
-
-- `aiplane environment plan ...` shows how a command would run under the active profile environment.
-  - Use it for system, `venv`, Conda, or Docker execution-mode checks.
-  - It is non-mutating.
-
-- `aiplane environment doctor` and `aiplane tools doctor` are the first checks to run when setup looks wrong.
-  - `environment doctor` checks the current aiplane/profile environment.
-  - `tools doctor` checks external tools needed for provisioning, deployment, containers, Kubernetes, remote access, and benchmarks.
-
-More detail: [setup](docs/user/setup.md), [providers and runtime helpers](docs/user/providers.md), [tools](docs/user/tools.md), [runtime map](docs/user/runtime-model-map.md).
-
-## Safety Model
-
-`aiplane` is designed around visible decisions:
-
-- local config and credentials are ignored by git;
-- credential commands redact secrets;
-- profiles store credential references or environment variable names, not raw keys;
-- plans, doctors, exports, and dry runs are preferred before mutation;
-- MCP write tools are narrow and audited;
-- arbitrary shell/cloud apply through MCP is out of scope.
-
-Project guidance for AI coding tools lives in [docs/project/agent-guidance.md](docs/project/agent-guidance.md). Tools working in this repo must not commit, push, tag, publish, or open PRs.
+Use [command coverage](docs/project/command-coverage.md), [strategy](docs/project/strategy.md), and [session handoff](docs/project/session-handoff.md) to keep behavior, docs, and tests synchronized.
 
 ## Documentation
 
 - [User docs](docs/user/index.md)
+- [Security policy](SECURITY.md)
+- [Contributing](CONTRIBUTING.md)
+- [Code of conduct](CODE_OF_CONDUCT.md)
 - [Setup](docs/user/setup.md)
 - [Providers and credentials](docs/user/providers.md)
 - [Tools and provisioning](docs/user/tools.md)
@@ -248,26 +201,22 @@ Project guidance for AI coding tools lives in [docs/project/agent-guidance.md](d
 - [Machines and stacks](docs/user/machines-and-stacks.md)
 - [Benchmarks](docs/user/benchmarks.md)
 - [MCP](docs/user/mcp.md)
+- [aiplane skill](skills/aiplane/SKILL.md)
 - [Roadmap](docs/project/roadmap.md)
 - [Project handoff](docs/project/session-handoff.md)
 
 ## Contributing
 
-This project is looking for practical contributions from people running local models, remote GPU machines, small team AI environments, or cloud-adjacent agent workflows. Useful areas include:
+We want practical contributions from teams that run local models, remote GPUs, or AI workflows that span local + managed services.
+Good first areas:
 
-- testing setup on Ubuntu, macOS, WSL, Conda, Docker, and GPU hosts;
-- improving provider/runtime checks;
-- adding safe tool plans and starter exports;
-- expanding agent templates and benchmark workflows;
-- tightening docs when commands or terminology are unclear.
+- improve provider/runtime checks,
+- harden guardrails and policy behavior,
+- improve reproducible setup flows,
+- improve benchmark and evaluation ergonomics,
+- and tighten docs where commands or terminology still create ambiguity.
 
-Before opening changes, run:
-
-```bash
-PYTHONPATH=src python -m pytest
-PYTHONPATH=src python -m aiplane profiles validate local-dev
-PYTHONPATH=src python -m aiplane environment doctor --required-only
-```
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 

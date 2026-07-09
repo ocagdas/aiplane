@@ -16,6 +16,36 @@ agent_artifacts_dir: null
 # when set, otherwise .aiplane/credentials.yaml. This file is ignored by git.
 credentials_path: null
 
+# Default output formatting for commands that support --format when not passed.
+format: text
+
+# Optional per-profile output format overrides for commands that support --format.
+# Mapping entries are profile-name -> text|json, e.g.
+# profile_formats:
+#   local-dev: json
+profile_formats: {}
+
+# Optional per-command output format overrides for commands that support --format.
+# Mapping entries are command-name -> text|json, e.g.
+# command_formats:
+#   "models list": text
+command_formats: {}
+
+# Default output verbosity for commands that support --verbosity.
+verbosity: 0
+
+# Optional per-profile output verbosity overrides for commands that support --verbosity.
+# Mapping entries are profile-name -> 0|1|2, e.g.
+# profile_verbosity:
+#   local-dev: 1
+profile_verbosity: {}
+
+# Optional per-command output verbosity overrides for commands that support --verbosity.
+# Mapping entries are command-name -> 0|1|2, e.g.
+# command_verbosity:
+#   "models list": 1
+command_verbosity: {}
+
 # Reserved for future defaults. Current commands still default to local-dev unless
 # --profile is passed explicitly.
 default_profile: local-dev

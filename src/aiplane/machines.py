@@ -4,8 +4,12 @@ import json
 import platform
 import shutil
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
+from urllib.error import URLError
+from urllib.parse import quote_plus
+from urllib.request import urlopen
 
 from .config import dump_yaml, parse_yaml
 from .hardware import HardwareManager
@@ -172,20 +176,10 @@ class MachineManager:
         name: str | None = None,
         overrides: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        payload = _read_payload(path)
-        machine = payload.get("machine") if isinstance(payload.get("machine"), dict) else payload
-        if not isinstance(machine, dict):
-            raise ValueError("machine import file must contain a mapping or a top-level machine mapping")
-        machine_name = name or str(payload.get("name") or machine.get("name") or machine.get("machine_tag") or "")
-        if not machine_name:
-            raise ValueError("machine import needs --name or a name in the file")
-        machine = _deepcopy_json(machine)
-        machine["name"] = machine_name
-        for key, value in (overrides or {}).items():
-            _set_machine_value(machine, key, value)
-        validation = validate_machine(machine)
-        if not validation["ok"]:
-            raise ValueError("invalid machine profile: " + "; ".join(validation["errors"]))
+        loaded = load_machine_profile(path, name=name, overrides=overrides)
+        machine_name = loaded["name"]
+        machine = loaded["machine"]
+        validation = loaded["validation"]
         self.config.setdefault("self_managed_machines", {})[machine_name] = machine
         self._write_config()
         return {
@@ -219,10 +213,25 @@ class MachineManager:
         region: str,
         workload: str | None = None,
         model: str | None = None,
-        runtime: str | None = None,
+        gpu_vendor: str | None = None,
+        min_cpu_cores: float | None = None,
+        min_ram_gb: float | None = None,
+        min_vram_gb: float | None = None,
         limit: int = 20,
+        verbosity: int = 0,
+        az_event_sink: Callable[[dict[str, Any]], None] | None = None,
     ) -> dict[str, Any]:
-        criteria = self._criteria(model, runtime, workload)
+        criteria = self._criteria(model, None, workload)
+        criteria["gpu_vendor"] = (gpu_vendor or "").strip().lower() or None
+        criteria["min_cpu_cores"] = _float(min_cpu_cores)
+        criteria["min_ram_gb"] = max(
+            float(criteria.get("min_ram_gb") or 0.0),
+            _float(min_ram_gb) or 0.0,
+        )
+        criteria["min_vram_gb"] = max(
+            float(criteria.get("min_vram_gb") or 0.0),
+            _float(min_vram_gb) or 0.0,
+        )
         command = [
             "az",
             "vm",
@@ -237,12 +246,17 @@ class MachineManager:
         ]
         source = "static_hints"
         method = "offline"
-        azure_cli = self.azure_status(region=region, run_sku_probe=False)
+        azure_cli = self.azure_status(
+            region=region,
+            run_sku_probe=False,
+            verbosity=verbosity,
+            az_event_sink=az_event_sink,
+        )
         status = "az CLI unavailable; using built-in SKU hints"
         skus = []
         quota = {"method": "not_checked", "items": []}
         if azure_cli["cli_available"]:
-            completed = _run_az(command)
+            completed = _run_az(command, verbosity=verbosity, az_event_sink=az_event_sink)
             azure_cli["sku_query"] = _az_command_status(completed)
             if completed.returncode == 0 and completed.stdout.strip():
                 live_values = json.loads(completed.stdout)
@@ -253,7 +267,7 @@ class MachineManager:
                     status = (
                         "live Azure CLI discovery succeeded; matching live SKU results override cached/offline results"
                     )
-                    quota = self.azure_quota(region)
+                    quota = self.azure_quota(region, verbosity=verbosity, az_event_sink=az_event_sink)
                 else:
                     status = (
                         "az CLI SKU query succeeded but returned no supported SKU matches; using built-in SKU hints"
@@ -262,16 +276,28 @@ class MachineManager:
                 status = f"az CLI SKU query failed or returned no output (exit {completed.returncode}); using built-in SKU hints"
         if not skus:
             skus = [self.azure_machine_from_sku(name, region)["machine"] for name in AZURE_SKU_HINTS]
+        pricing = {"method": "skipped", "ok": False, "reason": "requires live Azure SKU discovery", "items": {}}
+        if method == "live":
+            sku_names = [
+                str(((machine.get("stock") or {}).get("stock_sku") or "")).strip()
+                for machine in skus
+                if isinstance(machine, dict)
+            ]
+            pricing = _azure_retail_price_map(region, sku_names)
         candidates = []
         for machine in skus:
             fit = _machine_fit(machine, criteria)
             if fit["level"] == "not_recommended":
                 continue
+            if not _azure_machine_matches_filters(machine, criteria):
+                continue
+            sku_name = str(((machine.get("stock") or {}).get("stock_sku") or "")).strip()
             candidates.append(
                 {
                     "name": machine["name"],
                     **fit,
                     "restrictions": machine.get("restrictions", []),
+                    "pricing": pricing["items"].get(sku_name),
                     "machine": _machine_summary(machine),
                 }
             )
@@ -291,11 +317,18 @@ class MachineManager:
             "status": status,
             "command": command,
             "azure_cli": azure_cli,
+            "pricing": {k: v for k, v in pricing.items() if k != "items"},
             "cache": cache,
         }
         return result
 
-    def azure_status(self, region: str | None = None, run_sku_probe: bool = False) -> dict[str, Any]:
+    def azure_status(
+        self,
+        region: str | None = None,
+        run_sku_probe: bool = False,
+        verbosity: int = 0,
+        az_event_sink: Callable[[dict[str, Any]], None] | None = None,
+    ) -> dict[str, Any]:
         az_path = shutil.which("az")
         status: dict[str, Any] = {
             "name": "azure_cli",
@@ -307,7 +340,11 @@ class MachineManager:
         if not az_path:
             status["account"] = {"ok": False, "reason": "az CLI not found on PATH"}
             return status
-        account = _run_az(["az", "account", "show", "--output", "json"])
+        account = _run_az(
+            ["az", "account", "show", "--output", "json"],
+            verbosity=verbosity,
+            az_event_sink=az_event_sink,
+        )
         status["account"] = _az_account_status(account)
         if run_sku_probe and region:
             query = _run_az(
@@ -322,12 +359,19 @@ class MachineManager:
                     "--all",
                     "--output",
                     "json",
-                ]
+                ],
+                verbosity=verbosity,
+                az_event_sink=az_event_sink,
             )
             status["sku_query"] = _az_command_status(query)
         return status
 
-    def azure_quota(self, region: str) -> dict[str, Any]:
+    def azure_quota(
+        self,
+        region: str,
+        verbosity: int = 0,
+        az_event_sink: Callable[[dict[str, Any]], None] | None = None,
+    ) -> dict[str, Any]:
         if not shutil.which("az"):
             return {
                 "method": "unavailable",
@@ -336,7 +380,7 @@ class MachineManager:
                 "items": [],
             }
         command = ["az", "vm", "list-usage", "--location", region, "--output", "json"]
-        completed = _run_az(command)
+        completed = _run_az(command, verbosity=verbosity, az_event_sink=az_event_sink)
         if completed.returncode != 0 or not completed.stdout.strip():
             return {
                 "method": "live",
@@ -389,9 +433,9 @@ class MachineManager:
                     "region": value.get("region"),
                     "method": discovery.get("method"),
                     "source": discovery.get("source"),
-                    "candidate_count": len(value.get("candidates", []))
-                    if isinstance(value.get("candidates"), list)
-                    else 0,
+                    "candidate_count": (
+                        len(value.get("candidates", [])) if isinstance(value.get("candidates"), list) else 0
+                    ),
                     "criteria": value.get("criteria", {}),
                 }
             )
@@ -464,7 +508,7 @@ class MachineManager:
                 "total_vram_gb": hint.get("total_vram_gb", (vram or 0) * (gpu_count or 0)),
                 "indices": None,
             },
-            "accelerator_apis": ["cuda"] if hint.get("gpu_vendor") == "nvidia" else ["cpu"],
+            "accelerator_apis": (["cuda"] if hint.get("gpu_vendor") == "nvidia" else ["cpu"]),
             "os": "linux",
             "notes": "Imported from Azure SKU hints; verify region availability, quota, and exact GPU memory before provisioning.",
         }
@@ -684,6 +728,28 @@ def validate_machine(machine: dict[str, Any]) -> dict[str, Any]:
     return {"ok": not errors, "errors": errors, "warnings": warnings}
 
 
+def load_machine_profile(
+    path: Path,
+    name: str | None = None,
+    overrides: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    payload = _read_payload(path)
+    machine = payload.get("machine") if isinstance(payload.get("machine"), dict) else payload
+    if not isinstance(machine, dict):
+        raise ValueError("machine import file must contain a mapping or a top-level machine mapping")
+    machine_name = name or str(payload.get("name") or machine.get("name") or machine.get("machine_tag") or "")
+    if not machine_name:
+        raise ValueError("machine import needs --name or a name in the file")
+    machine = _deepcopy_json(machine)
+    machine["name"] = machine_name
+    for key, value in (overrides or {}).items():
+        _set_machine_value(machine, key, value)
+    validation = validate_machine(machine)
+    if not validation["ok"]:
+        raise ValueError("invalid machine profile: " + "; ".join(validation["errors"]))
+    return {"name": machine_name, "machine": machine, "validation": validation}
+
+
 def _az_account_status(completed: subprocess.CompletedProcess[str]) -> dict[str, Any]:
     if completed.returncode != 0:
         return {
@@ -734,9 +800,11 @@ def _az_command_status(completed: subprocess.CompletedProcess[str]) -> dict[str,
     return {
         "ok": completed.returncode == 0 and bool((completed.stdout or "").strip()),
         "returncode": completed.returncode,
-        "reason": "query succeeded"
-        if completed.returncode == 0 and (completed.stdout or "").strip()
-        else f"query failed or returned no output (exit {completed.returncode})",
+        "reason": (
+            "query succeeded"
+            if completed.returncode == 0 and (completed.stdout or "").strip()
+            else f"query failed or returned no output (exit {completed.returncode})"
+        ),
     }
 
 
@@ -747,17 +815,45 @@ class _AzTimeoutResult:
         self.stderr = f"command timed out after {timeout_seconds}s: {' '.join(command)}"
 
 
-def _run_az(command: list[str]):
+def _run_az(
+    command: list[str],
+    verbosity: int = 0,
+    az_event_sink: Callable[[dict[str, Any]], None] | None = None,
+):
+    if az_event_sink:
+        az_event_sink({"phase": "start", "command": command})
     try:
-        return subprocess.run(
+        completed = subprocess.run(
             command,
             text=True,
             capture_output=True,
             check=False,
             timeout=AZURE_CLI_TIMEOUT_SECONDS,
         )
+        if az_event_sink:
+            event: dict[str, Any] = {
+                "phase": "complete",
+                "command": command,
+                "returncode": completed.returncode,
+            }
+            if verbosity >= 1:
+                event["stdout"] = completed.stdout
+                event["stderr"] = completed.stderr
+            az_event_sink(event)
+        return completed
     except subprocess.TimeoutExpired:
-        return _AzTimeoutResult(command, AZURE_CLI_TIMEOUT_SECONDS)
+        timeout = _AzTimeoutResult(command, AZURE_CLI_TIMEOUT_SECONDS)
+        if az_event_sink:
+            event = {
+                "phase": "complete",
+                "command": command,
+                "returncode": timeout.returncode,
+            }
+            if verbosity >= 1:
+                event["stdout"] = timeout.stdout
+                event["stderr"] = timeout.stderr
+            az_event_sink(event)
+        return timeout
 
 
 def _read_payload(path: Path) -> dict[str, Any]:
@@ -805,6 +901,98 @@ def _azure_sku_restrictions(item: dict[str, Any]) -> list[dict[str, Any]]:
     return rows
 
 
+def _azure_retail_price_map(region: str, skus: list[str]) -> dict[str, Any]:
+    unique_skus = sorted({sku for sku in skus if sku})
+    if not unique_skus:
+        return {"method": "skipped", "ok": False, "reason": "no SKU names available", "items": {}}
+    sku_filter = " or ".join(f"armSkuName eq '{sku}'" for sku in unique_skus)
+    filter_expr = (
+        "serviceName eq 'Virtual Machines' and "
+        f"armRegionName eq '{region}' and "
+        "priceType eq 'Consumption' and "
+        f"({sku_filter})"
+    )
+    encoded_filter = quote_plus(filter_expr)
+    url = f"https://prices.azure.com/api/retail/prices?$filter={encoded_filter}"
+    try:
+        with urlopen(url, timeout=4) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except URLError as exc:
+        return {
+            "method": "azure_retail_prices_api",
+            "ok": False,
+            "reason": str(exc),
+            "items": {},
+            "failed_skus": unique_skus,
+        }
+    except Exception as exc:
+        return {
+            "method": "azure_retail_prices_api",
+            "ok": False,
+            "reason": str(exc),
+            "items": {},
+            "failed_skus": unique_skus,
+        }
+
+    values = payload.get("Items", []) if isinstance(payload, dict) else []
+    if not isinstance(values, list):
+        return {
+            "method": "azure_retail_prices_api",
+            "ok": False,
+            "reason": "unexpected retail prices response shape",
+            "items": {},
+            "failed_skus": unique_skus,
+        }
+    best_by_sku: dict[str, dict[str, Any]] = {}
+    for item in values:
+        if not isinstance(item, dict):
+            continue
+        arm_sku = str(item.get("armSkuName") or "")
+        if not arm_sku or arm_sku not in unique_skus:
+            continue
+        unit_price = _float(item.get("unitPrice"))
+        if unit_price is None:
+            continue
+        meter_name = str(item.get("meterName") or "")
+        if "spot" in meter_name.lower():
+            continue
+        existing = best_by_sku.get(arm_sku)
+        if existing is None or (_float(existing.get("unitPrice")) or 0.0) > unit_price:
+            best_by_sku[arm_sku] = item
+
+    items: dict[str, dict[str, Any]] = {}
+    for sku, selected in best_by_sku.items():
+        unit_of_measure = str(selected.get("unitOfMeasure") or "")
+        items[sku] = {
+            "currency": selected.get("currencyCode"),
+            "unit_price": _float(selected.get("unitPrice")),
+            "unit_of_measure": unit_of_measure,
+            "unit": _normalize_price_unit(unit_of_measure),
+            "meter_name": selected.get("meterName"),
+            "product_name": selected.get("productName"),
+            "sku_name": selected.get("skuName"),
+            "source": "azure_retail_prices_api",
+        }
+    return {
+        "method": "azure_retail_prices_api",
+        "ok": bool(items),
+        "items": items,
+        "missing_skus": [sku for sku in unique_skus if sku not in items],
+        "failed_skus": [],
+    }
+
+
+def _normalize_price_unit(unit_of_measure: str) -> str:
+    lowered = unit_of_measure.strip().lower()
+    if "hour" in lowered:
+        return "per_hour"
+    if "month" in lowered:
+        return "per_month"
+    if "second" in lowered:
+        return "per_second"
+    return unit_of_measure or "unknown"
+
+
 def _discovery_cache_key(provider: str, region: str, criteria: dict[str, Any]) -> str:
     parts = [
         provider,
@@ -812,8 +1000,41 @@ def _discovery_cache_key(provider: str, region: str, criteria: dict[str, Any]) -
         str(criteria.get("workload") or "any_workload"),
         str(criteria.get("model") or "any_model"),
         str(criteria.get("runtime") or "any_runtime"),
+        f"gpu_{criteria.get('gpu_vendor') or 'any'}",
+        f"cpu_{criteria.get('min_cpu_cores') or 'any'}",
+        f"ram_{criteria.get('min_ram_gb') or 'any'}",
+        f"vram_{criteria.get('min_vram_gb') or 'any'}",
     ]
     return "__".join(_safe_name(part) for part in parts)
+
+
+def _azure_machine_matches_filters(machine: dict[str, Any], criteria: dict[str, Any]) -> bool:
+    required_vendor = str(criteria.get("gpu_vendor") or "").strip().lower()
+    machine_vendor = str((machine.get("gpu") or {}).get("vendor") or "").strip().lower()
+    if required_vendor and machine_vendor != required_vendor:
+        return False
+
+    min_cpu = _float(criteria.get("min_cpu_cores")) or 0.0
+    cpu_cores = _float((machine.get("cpu") or {}).get("cores")) or 0.0
+    if cpu_cores < min_cpu:
+        return False
+
+    min_ram = _float(criteria.get("min_ram_gb")) or 0.0
+    ram = (
+        _float((machine.get("memory") or {}).get("ram_gb"))
+        or _float((machine.get("memory") or {}).get("unified_memory_gb"))
+        or 0.0
+    )
+    if ram < min_ram:
+        return False
+
+    min_vram = _float(criteria.get("min_vram_gb")) or 0.0
+    vram = (
+        _float((machine.get("gpu") or {}).get("vram_gb"))
+        or _float((machine.get("memory") or {}).get("unified_memory_gb"))
+        or 0.0
+    )
+    return vram >= min_vram
 
 
 def _machine_fit(machine: dict[str, Any], criteria: dict[str, Any]) -> dict[str, Any]:

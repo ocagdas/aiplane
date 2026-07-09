@@ -44,14 +44,40 @@ class DeployManager:
         target_name, target = self._target(name)
         return {"name": target_name, "target": target}
 
+    def workflow_plan(self, name: str | None = None) -> dict[str, Any]:
+        target_name, target = self._target(name)
+        target_type = str(target.get("type") or "")
+        workflow = _workflow_for_target(target_name, target)
+        return {
+            "target": target_name,
+            "type": target_type,
+            "workflow": workflow,
+            "phases": _workflow_phases(workflow, target),
+            "boundaries": {
+                "local_install": workflow == "local_install",
+                "local_vm_provisioning": workflow == "local_vm",
+                "remote_existing_machine_setup": workflow in {"remote_workstation", "remote_vm"},
+                "cloud_resource_provisioning": workflow in {"cloud_vm", "cloud_kubernetes"},
+            },
+            "mutation_policy": _workflow_mutation_policy(workflow),
+            "recommended_tools": _workflow_tools(workflow, target),
+            "notes": [
+                "This workflow plan is non-mutating and separates host setup, access, endpoint exposure, and cloud provisioning responsibilities.",
+                "Use deploy plan/doctor for target-specific commands, remote tunnel plan for SSH access, and stacks endpoint-plan before sharing endpoints.",
+            ],
+        }
+
     def plan(self, name: str | None = None) -> dict[str, Any]:
         target_name, target = self._target(name)
         target_type = target.get("type")
+        workflow = self.workflow_plan(target_name)
         if target_type == "azure_aks":
             steps = _azure_aks_steps(target)
             return {
                 "target": target_name,
                 "type": "azure_aks",
+                "workflow": workflow["workflow"],
+                "workflow_boundaries": workflow["boundaries"],
                 "first_control_tool": "az",
                 "required_tools": ["az", "kubectl"],
                 "config": {
@@ -74,6 +100,8 @@ class DeployManager:
             return {
                 "target": target_name,
                 "type": "azure_vm",
+                "workflow": workflow["workflow"],
+                "workflow_boundaries": workflow["boundaries"],
                 "first_control_tool": "az",
                 "required_tools": ["az", "ssh"],
                 "config": {
@@ -235,6 +263,165 @@ class DeployManager:
         if not target_name or not isinstance(target, dict):
             raise ValueError(f"unknown deploy target: {target_name or '<default>'}")
         return target_name, target
+
+
+def _workflow_for_target(target_name: str, target: dict[str, Any]) -> str:
+    target_type = str(target.get("type") or "")
+    if target_type == "azure_aks":
+        return "cloud_kubernetes"
+    if target_type == "azure_vm":
+        return "cloud_vm"
+    if target_type == "ssh_tunnel":
+        return "remote_workstation"
+    if target_type in {"local_vm", "vagrant"}:
+        return "local_vm"
+    if target_type in {"same_host", "local"}:
+        return "local_install"
+    if "vm" in target_name and str((target.get("access") or {}).get("mode") or "") == "ssh_tunnel":
+        return "remote_vm"
+    return "custom_remote"
+
+
+def _workflow_tools(workflow: str, target: dict[str, Any]) -> list[str]:
+    if workflow == "cloud_kubernetes":
+        return ["az", "kubectl", "helm", "opentofu", "terraform", "pulumi"]
+    if workflow == "cloud_vm":
+        return ["az", "ssh", "opentofu", "terraform", "pulumi", "packer", "ansible"]
+    if workflow == "remote_workstation":
+        return ["ssh", "ansible"]
+    if workflow == "remote_vm":
+        return ["ssh", "ansible", "packer"]
+    if workflow == "local_vm":
+        return ["vagrant", "packer", "ansible"]
+    if workflow == "local_install":
+        return ["docker", "conda", "venv"]
+    return [str(target.get("control_cli") or "ssh")]
+
+
+def _workflow_mutation_policy(workflow: str) -> dict[str, Any]:
+    if workflow in {"cloud_vm", "cloud_kubernetes"}:
+        return {
+            "default": "plan_and_doctor_first",
+            "apply": "guarded_cli_only",
+            "mcp": "read_plan_only",
+            "notes": "cloud provisioning must stay explicit, reviewed, and outside MCP broad write surfaces",
+        }
+    if workflow in {"remote_workstation", "remote_vm"}:
+        return {
+            "default": "ssh_plan_first",
+            "apply": "manual_or_guarded_remote_tooling",
+            "mcp": "read_plan_only",
+            "notes": "remote host mutation should go through SSH/Ansible plans with explicit operator review",
+        }
+    if workflow == "local_vm":
+        return {
+            "default": "vagrant_packer_plan_first",
+            "apply": "external_tool_cli",
+            "mcp": "read_plan_only",
+            "notes": "local VM lifecycle belongs to Vagrant/Packer, not hidden aiplane mutation",
+        }
+    return {
+        "default": "local_doctor_plan_setup",
+        "apply": "same_host_helpers_where_supported",
+        "mcp": "narrow_guarded_writes_only",
+        "notes": "same-host setup can use existing helper paths when available",
+    }
+
+
+def _workflow_phases(workflow: str, target: dict[str, Any]) -> list[dict[str, Any]]:
+    if workflow == "cloud_kubernetes":
+        return [
+            {"name": "cloud account and quota", "tool_owner": "az", "mutates": False},
+            {"name": "cluster access", "tool_owner": "az/kubectl", "mutates": True},
+            {
+                "name": "runtime manifests",
+                "tool_owner": "kubectl/helm",
+                "mutates": True,
+            },
+            {
+                "name": "endpoint auth/gateway",
+                "tool_owner": "gateway/APIM/Ingress",
+                "mutates": True,
+            },
+        ]
+    if workflow == "cloud_vm":
+        return [
+            {
+                "name": "cloud account, region, quota, and SKU",
+                "tool_owner": "az",
+                "mutates": False,
+            },
+            {
+                "name": "VM/resource group provisioning",
+                "tool_owner": "az/OpenTofu/Terraform/Pulumi",
+                "mutates": True,
+            },
+            {
+                "name": "host configuration",
+                "tool_owner": "SSH/Ansible/cloud-init",
+                "mutates": True,
+            },
+            {
+                "name": "runtime stack setup",
+                "tool_owner": "aiplane stacks prepare/start or runtime helper",
+                "mutates": True,
+            },
+            {
+                "name": "endpoint access",
+                "tool_owner": "SSH tunnel/VPN/gateway",
+                "mutates": False,
+            },
+        ]
+    if workflow in {"remote_workstation", "remote_vm"}:
+        return [
+            {
+                "name": "remote inventory/profile",
+                "tool_owner": "machines profile-remote-plan",
+                "mutates": False,
+            },
+            {
+                "name": "SSH access",
+                "tool_owner": "remote tunnel plan/start",
+                "mutates": True,
+            },
+            {
+                "name": "host configuration",
+                "tool_owner": "manual SSH/Ansible",
+                "mutates": True,
+            },
+            {
+                "name": "endpoint access",
+                "tool_owner": "SSH tunnel/VPN/gateway",
+                "mutates": False,
+            },
+        ]
+    if workflow == "local_vm":
+        return [
+            {
+                "name": "image/box selection",
+                "tool_owner": "Packer/Vagrant",
+                "mutates": False,
+            },
+            {"name": "local VM lifecycle", "tool_owner": "Vagrant", "mutates": True},
+            {
+                "name": "inside-VM setup",
+                "tool_owner": "setup_env/environment doctor",
+                "mutates": True,
+            },
+        ]
+    return [
+        {
+            "name": "local tool doctor",
+            "tool_owner": "environment/tools doctor",
+            "mutates": False,
+        },
+        {"name": "runtime setup", "tool_owner": "runtime helper", "mutates": True},
+        {
+            "name": "endpoint export",
+            "tool_owner": "integrations/stacks export",
+            "mutates": False,
+        },
+    ]
 
 
 def _azure_vm_steps(target: dict[str, Any]) -> list[CommandStep]:

@@ -50,7 +50,7 @@ def contains_secret(value: Any) -> bool:
 def redact(value: Any) -> Any:
     if isinstance(value, dict):
         return {
-            key: "[REDACTED_SECRET]" if str(key).lower() in SENSITIVE_KEYS and inner else redact(inner)
+            key: ("[REDACTED_SECRET]" if str(key).lower() in SENSITIVE_KEYS and inner else redact(inner))
             for key, inner in value.items()
         }
     if isinstance(value, list):

@@ -69,7 +69,7 @@ openai:
     required: true
     method: bearer
   typical_runtimes: []
-  catalog_adapter: profile_catalog
+  catalog_adapter: openai
   enabled: true
   origin: default
 anthropic:

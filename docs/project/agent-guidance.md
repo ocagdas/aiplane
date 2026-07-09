@@ -4,13 +4,13 @@ This is the master project guidance file for coding agents and IDE assistants wo
 
 ## Product Boundary
 
-`aiplane` is an AI control-plane CLI for self-managed and managed LLM development environments. It configures, checks, plans, and exports profiles, providers, models, runtimes, machines, stacks, IDE/MCP snippets, and supporting tools.
+`aiplane` is an AI control-plane CLI for AI development environments (self-managed and managed models and workflows). It configures, checks, plans, and exports profiles, providers, models, runtimes, machines, stacks, IDE/MCP snippets, and supporting tools.
 
 It must not become a coding agent, model runtime, model proxy, IDE extension, or hidden cloud deployment engine.
 
 ## Open Source Quality Bar
 
-Treat `aiplane` as a public open-source project that should be worthy of trust, adoption, and contribution. Keep code, documentation, roadmap, implemented features, command coverage, handoff notes, examples, and tests aligned and held to a high standard. Do not let the project drift into a collection of impressive but undocumented, untested, or overstated capabilities.
+Treat `aiplane` as a public open-source project that should be worthy of trust, adoption, and contribution. Code quality, practical tests, CLI help, user docs, roadmap/status notes, command coverage, and handoff updates are part of every implementation task unless there is a concrete engineering reason they do not apply. Keep code, documentation, roadmap, implemented features, command coverage, handoff notes, examples, and tests aligned and held to a high standard. Do not let the project drift into a collection of impressive but undocumented, untested, or overstated capabilities.
 
 ## Local Direction Notes
 
@@ -25,13 +25,13 @@ When changing behavior, update these together in the same change whenever releva
 - `docs/project/roadmap.md` for implemented/planned status;
 - `docs/project/session-handoff.md` for current handoff state;
 - `docs/project/command-coverage.md` for public CLI coverage;
-- tests in `tests/test_mvp.py` or a focused new test file.
+- focused tests under `tests/` using the domain-specific modules and shared `tests/support.py` helpers.
 
-Do not leave roadmap, handoff, or command coverage stale after adding commands, changing defaults, or moving a feature between planned/in-progress/implemented.
+Behavior changes should normally land with matching test updates in the same change. Tests should cover the behavior contract, failure mode, or regression risk that matters; do not add tests just to increase counts. If a behavior change genuinely does not need a new or changed test, make that an explicit engineering decision and still run the relevant focused tests. Do not leave roadmap, handoff, command coverage, or tests stale after adding commands, changing defaults, or moving a feature between planned/in-progress/implemented.
 
 ## Compatibility Policy
 
-`aiplane` has not been deployed or released as a stable public interface yet. Until the human owner says otherwise, do not add backward-compatibility shims, deprecated aliases, or legacy behavior solely to preserve older local commands. Prefer the clean current interface, and keep README, user docs, command coverage, roadmap/handoff notes, and tests aligned with that interface.
+`aiplane` has not been deployed or released as a stable public interface yet. Until the human owner says otherwise, do not add backward-compatibility shims, deprecated aliases, or legacy behavior solely to preserve older local commands. Prefer the clean current interface, and keep README, user docs, command coverage, roadmap/handoff notes, and tests aligned with that interface. If an option, command shape, field name, or workflow is inconsistent or does not make sense, replace it with the coherent interface instead of preserving it. During this early-beta phase, consistency, clarity, and maintainability take precedence over backwards compatibility.
 
 ## Implementation Rules
 
@@ -40,6 +40,7 @@ Do not leave roadmap, handoff, or command coverage stale after adding commands, 
 - Prefer plan, doctor, dry-run, and export flows before mutating hosts, runtimes, or cloud accounts.
 - If `apply_patch` fails with the sandbox loopback error (`bwrap: loopback: Failed RTM_NEWADDR`), do not retry it repeatedly. Use a narrow scripted edit for the specific file/block instead, document what changed, and keep the edit scoped to the intended conflict or behavior change.
 - Keep generated/cache/local files out of git: `.aiplane/`, generated model caches, PID/log files, and runtime state must remain ignored.
+- Test thoroughly but realistically. Add tests for behavior, contracts, regressions, and realistic failure modes; do not add tests merely to increase counts. Prefer synthetic fixture profiles, temp directories, mocked subprocess/network boundaries, and controlled generated cache files over real local profile data. Tests that intentionally depend on disk data, generated caches, Conda, venvs, or external tools must make that dependency explicit and keep it isolated in the dev setup. Keep tests deterministic, isolated from the developer machine where possible, and mindful of suite runtime.
 - Preserve the distinction between provider/model source, runtime, runtime endpoint, profile model alias, machine, stack, integration export, MCP tool surface, and agent skill guidance.
 - During pre-PR merge cleanup, tidy-up, release review, or a recurring MCP/skills synchronization checkpoint, audit the public CLI/options against docs, command coverage, MCP tools, planned/implemented agent skills, and tests. These checkpoints should happen periodically, not continuously after every feature and not at every regular milestone. Bring MCP and skills into sync where appropriate, explicitly leave risky operations out of MCP/skills when guardrails are not ready, and run or add focused tests for the synced surface.
 - Managed providers such as OpenAI, Anthropic, Azure OpenAI, and Ollama Cloud are sources/endpoints; they become useful to tools through profile-owned model entries in `models.yaml`.
@@ -47,6 +48,21 @@ Do not leave roadmap, handoff, or command coverage stale after adding commands, 
 - Use official external tools instead of reimplementing their domain: Docker/Compose, OpenSSH, Azure CLI, OpenTofu/Terraform/Pulumi, Vagrant, Packer, Dev Container CLI, Ansible, kubectl, and Helm.
 - OpenTofu is the default provider-agnostic IaC direction; Terraform is supported for teams standardized on it; Pulumi is optional for language-native IaC.
 - Packer builds images; Vagrant runs local dev VMs from boxes/images. They complement each other.
+
+## LLM Automation Workaround (Sandbox/Bwrap)
+
+Use this workflow when edits are blocked by sandbox behavior in this environment:
+
+1. Keep the intended change as a small, surgical diff block with exact anchors.
+2. Use an explicit scripted edit (`sed -i`, `perl -0pi`, or a short temporary-file rewrite) instead of broad refactors.
+3. Re-read only the changed region and proceed only when the new text is scoped and syntactically consistent.
+
+Concrete normal pattern for repeated `apply_patch` failures:
+
+- If `apply_patch` reports the loopback sandbox error (`bwrap: loopback: Failed RTM_NEWADDR`), do not keep retrying.
+- Edit the target file directly with one narrow command and a deterministic anchor.
+- Run `git diff` to confirm only the intended section changed.
+- Record the edit path and workaround in final handoff notes for future repeatability.
 
 ## Validation Expectations
 

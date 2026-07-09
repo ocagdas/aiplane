@@ -266,7 +266,7 @@ class OrchestratorCatalog:
                     "name": str(package),
                     "module": module,
                     "ok": _module_available(module),
-                    "detail": "importable" if _module_available(module) else "not importable",
+                    "detail": ("importable" if _module_available(module) else "not importable"),
                 }
             )
         checks = [
@@ -274,7 +274,7 @@ class OrchestratorCatalog:
             {
                 "name": "configured",
                 "ok": bool(configured),
-                "detail": "configured in orchestrators.yaml" if configured else "not configured yet",
+                "detail": ("configured in orchestrators.yaml" if configured else "not configured yet"),
             },
             {
                 "name": "environment_known",

@@ -29,6 +29,7 @@ SUPPORTED_CATALOG_ADAPTERS = {
     "huggingface_gguf",
     "ollama",
     "civitai",
+    "openai",
     "azure_openai",
     "elevenlabs",
 }
@@ -158,6 +159,7 @@ class ProviderRegistry:
             "huggingface_gguf": "Hugging Face Hub search filtered for GGUF-style artifacts.",
             "ollama": "Ollama model catalog adapter.",
             "civitai": "Civitai model catalog adapter.",
+            "openai": "OpenAI-compatible /v1/models API; requires an endpoint and bearer/API key.",
             "azure_openai": "Azure OpenAI deployments API; requires endpoint and credentials.",
             "elevenlabs": "ElevenLabs voices API; requires credentials.",
         }
@@ -355,7 +357,11 @@ class ProviderRegistry:
         from .runtime_catalog import SOURCE_DEFINITIONS
 
         return {
-            name: {**value, "enabled": bool(value.get("enabled", True)), "origin": "default"}
+            name: {
+                **value,
+                "enabled": bool(value.get("enabled", True)),
+                "origin": "default",
+            }
             for name, value in SOURCE_DEFINITIONS.items()
         }
 
@@ -437,7 +443,10 @@ class ProviderRegistry:
         self, name: str, credential_ref: str | None = None, timeout: int | None = None
     ) -> dict[str, Any]:
         providers = self.model_providers(include_removed=True)
-        provider_config = {**providers.get(name, {}), **self.catalog.providers().get(name, {})}
+        provider_config = {
+            **providers.get(name, {}),
+            **self.catalog.providers().get(name, {}),
+        }
         if name not in providers and not provider_config:
             raise ValueError(f"unknown provider: {name}")
         if providers.get(name, {}).get("removed"):
@@ -581,6 +590,13 @@ class ProviderRegistry:
         )
         reason = "using aiplane profile catalog entries for this model provider"
         if online and online_error:
+            if _provider_ownership(providers[name]) == "managed_service":
+                return ProviderModelsResult(
+                    name,
+                    "error",
+                    [],
+                    f"online catalog query failed: {online_error}",
+                )
             reason += f"; online catalog query failed: {online_error}"
         elif online:
             reason += "; no online catalog adapter is available for this model provider"
@@ -617,11 +633,78 @@ class ProviderRegistry:
             return self._civitai_models(query=query, limit=limit)
         if adapter == "ollama" or name == "ollama":
             return self._ollama_library_models(query=query, limit=limit)
+        if adapter == "openai" or name == "openai":
+            return self._openai_compatible_models(name, query=query, limit=limit)
         if adapter == "azure_openai" or name == "azure_openai":
             return self._azure_openai_deployments(query=query, limit=limit)
         if adapter == "elevenlabs" or name == "elevenlabs":
             return self._elevenlabs_voices(query=query, limit=limit)
         return None
+
+    def _openai_compatible_models(
+        self,
+        name: str,
+        query: str | None = None,
+        limit: int = DEFAULT_PROVIDER_MODEL_LIMIT,
+    ) -> ProviderModelsResult:
+        provider_config = {
+            **self.model_providers().get(name, {}),
+            **self.catalog.providers().get(name, {}),
+        }
+        defaults = PROVIDER_ENDPOINT_DEFAULTS.get(name, {})
+        endpoint = str(
+            provider_config.get("endpoint")
+            or defaults.get("endpoint")
+            or ("https://api.openai.com/v1" if name == "openai" else "")
+        ).rstrip("/")
+        if not endpoint:
+            raise ValueError(f"{name} discovery needs provider endpoint")
+        credential_ref = str(provider_config.get("credential_ref") or "")
+        key_env = str(provider_config.get("api_key_env") or defaults.get("api_key_env") or "")
+        api_key = CredentialStore().api_key(credential_ref) if credential_ref else os.environ.get(key_env)
+        if not api_key:
+            need = f"credential {credential_ref}" if credential_ref else f"env var {key_env or 'provider api_key_env'}"
+            raise ValueError(f"{name} discovery needs {need}")
+        url = f"{endpoint}/models"
+        payload = _json_get(
+            url,
+            timeout=int(provider_config.get("timeout_seconds") or defaults.get("timeout_seconds") or 20),
+            headers={"Authorization": f"Bearer {api_key}"},
+        )
+        items = payload.get("data") if isinstance(payload, dict) else None
+        if not isinstance(items, list):
+            raise RuntimeError(f"{name} returned an unexpected models response")
+        ids: list[str] = []
+        metadata: dict[str, dict[str, Any]] = {}
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            model_id = str(item.get("id") or "").strip()
+            if not model_id:
+                continue
+            searchable = " ".join(
+                str(value)
+                for value in [
+                    model_id,
+                    item.get("owned_by"),
+                    item.get("object"),
+                ]
+                if value
+            )
+            if query and query.lower() not in searchable.lower():
+                continue
+            ids.append(model_id)
+            metadata[model_id] = {key: item[key] for key in ["id", "object", "created", "owned_by"] if key in item}
+            if len(ids) >= max(1, int(limit)):
+                break
+        unique_ids = list(dict.fromkeys(ids))[: max(1, int(limit))]
+        return ProviderModelsResult(
+            name,
+            "provider_api",
+            unique_ids,
+            f"queried OpenAI-compatible models API: {url}",
+            {model_id: metadata.get(model_id, {}) for model_id in unique_ids},
+        )
 
     def _azure_openai_deployments(
         self, query: str | None = None, limit: int = DEFAULT_PROVIDER_MODEL_LIMIT
@@ -733,7 +816,7 @@ class ProviderRegistry:
                 "pipeline_tag": "text-to-speech",
                 "category": item.get("category"),
                 "description": item.get("description"),
-                "labels": item.get("labels") if isinstance(item.get("labels"), dict) else {},
+                "labels": (item.get("labels") if isinstance(item.get("labels"), dict) else {}),
             }
             if len(ids) >= max(1, int(limit)):
                 break
@@ -910,7 +993,14 @@ def _provider_ownership(provider: dict[str, Any]) -> str:
     if provider.get("endpoint_family"):
         return "managed_service"
     runtimes = {str(value) for value in provider.get("typical_runtimes", []) if value}
-    managed = {"openai", "anthropic", "azure_openai", "ollama_cloud", "azure_speech", "elevenlabs"}
+    managed = {
+        "openai",
+        "anthropic",
+        "azure_openai",
+        "ollama_cloud",
+        "azure_speech",
+        "elevenlabs",
+    }
     return "managed_service" if runtimes and runtimes.issubset(managed) else "self_managed"
 
 

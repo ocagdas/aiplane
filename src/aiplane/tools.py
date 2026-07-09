@@ -833,23 +833,29 @@ class ToolchainManager:
             completed = _checked_command([command, "account", "show"], self.profile.workspace)
             return {
                 "ok": completed.get("returncode") == 0,
-                "reason": "logged in" if completed.get("returncode") == 0 else "not logged in or account query failed",
+                "reason": (
+                    "logged in" if completed.get("returncode") == 0 else "not logged in or account query failed"
+                ),
             }
         if name == "docker":
             completed = _checked_command([command, "info"], self.profile.workspace)
             return {
                 "ok": completed.get("returncode") == 0,
-                "reason": "daemon reachable"
-                if completed.get("returncode") == 0
-                else "docker CLI found but daemon is not reachable",
+                "reason": (
+                    "daemon reachable"
+                    if completed.get("returncode") == 0
+                    else "docker CLI found but daemon is not reachable"
+                ),
             }
         if name == "docker-compose":
             completed = _checked_command([command, "compose", "version"], self.profile.workspace)
             return {
                 "ok": completed.get("returncode") == 0,
-                "reason": "compose plugin available"
-                if completed.get("returncode") == 0
-                else "docker compose plugin not available",
+                "reason": (
+                    "compose plugin available"
+                    if completed.get("returncode") == 0
+                    else "docker compose plugin not available"
+                ),
             }
         return {"ok": True, "reason": "command found"}
 
