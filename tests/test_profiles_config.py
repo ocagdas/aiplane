@@ -696,6 +696,224 @@ class ProfileConfigTests(unittest.TestCase):
                 str((root / "agents").resolve()),
             )
 
+    def test_config_format_cli_can_set_and_show_global_and_profile_defaults(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = Path(tmp) / "config.yaml"
+            config_path.write_text("format: text\n", encoding="utf-8")
+
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = cli_main(["config", "format", "--path", str(config_path)])
+            self.assertEqual(code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertIsNone(payload["profile"])
+            self.assertIsNone(payload["command"])
+            self.assertEqual(payload["format"], "text")
+            self.assertEqual(payload["resolved_format"], "text")
+
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = cli_main(["config", "format", "json", "--path", str(config_path)])
+            self.assertEqual(code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(payload["format"], "json")
+            self.assertEqual(payload["resolved_format"], "json")
+
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = cli_main(
+                    [
+                        "config",
+                        "format",
+                        "json",
+                        "--profile",
+                        "local-dev",
+                        "--path",
+                        str(config_path),
+                    ]
+                )
+            self.assertEqual(code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(payload["profile"], "local-dev")
+            self.assertIsNone(payload["command"])
+            self.assertEqual(payload["profile_format"], "json")
+            self.assertIsNone(payload["command_format"])
+            self.assertEqual(payload["resolved_format"], "json")
+
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = cli_main(
+                    [
+                        "config",
+                        "format",
+                        "text",
+                        "--command",
+                        "models list",
+                        "--path",
+                        str(config_path),
+                    ]
+                )
+            self.assertEqual(code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertIsNone(payload["profile"])
+            self.assertEqual(payload["command"], "models list")
+            self.assertEqual(payload["command_format"], "text")
+            self.assertEqual(payload["resolved_format"], "text")
+
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = cli_main(["config", "format", "--clear", "--path", str(config_path)])
+            self.assertEqual(code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(payload["format"], "text")
+            self.assertIsNone(payload["profile"])
+            self.assertIsNone(payload["command"])
+            self.assertEqual(payload["resolved_format"], "text")
+
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = cli_main(
+                    [
+                        "config",
+                        "format",
+                        "--clear",
+                        "--profile",
+                        "local-dev",
+                        "--path",
+                        str(config_path),
+                    ]
+                )
+            self.assertEqual(code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertIsNone(payload["profile_format"])
+            self.assertEqual(payload["resolved_format"], "text")
+
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = cli_main(
+                    [
+                        "config",
+                        "format",
+                        "--clear",
+                        "--command",
+                        "models list",
+                        "--path",
+                        str(config_path),
+                    ]
+                )
+            self.assertEqual(code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertIsNone(payload["command_format"])
+            self.assertEqual(payload["resolved_format"], "text")
+
+    def test_config_verbosity_cli_can_set_and_show_global_profile_and_command_defaults(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = Path(tmp) / "config.yaml"
+            config_path.write_text("verbosity: 0\n", encoding="utf-8")
+
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = cli_main(["config", "verbosity", "--path", str(config_path)])
+            self.assertEqual(code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertIsNone(payload["profile"])
+            self.assertIsNone(payload["command"])
+            self.assertEqual(payload["verbosity"], 0)
+            self.assertEqual(payload["resolved_verbosity"], 0)
+
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = cli_main(["config", "verbosity", "1", "--path", str(config_path)])
+            self.assertEqual(code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(payload["verbosity"], 1)
+            self.assertEqual(payload["resolved_verbosity"], 1)
+
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = cli_main(
+                    [
+                        "config",
+                        "verbosity",
+                        "2",
+                        "--profile",
+                        "local-dev",
+                        "--path",
+                        str(config_path),
+                    ]
+                )
+            self.assertEqual(code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(payload["profile"], "local-dev")
+            self.assertEqual(payload["profile_verbosity"], 2)
+            self.assertIsNone(payload["command_verbosity"])
+            self.assertEqual(payload["resolved_verbosity"], 2)
+
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = cli_main(
+                    [
+                        "config",
+                        "verbosity",
+                        "1",
+                        "--command",
+                        "models list",
+                        "--path",
+                        str(config_path),
+                    ]
+                )
+            self.assertEqual(code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(payload["command"], "models list")
+            self.assertEqual(payload["command_verbosity"], 1)
+            self.assertEqual(payload["resolved_verbosity"], 1)
+
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = cli_main(["config", "verbosity", "--clear", "--path", str(config_path)])
+            self.assertEqual(code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(payload["verbosity"], 0)
+            self.assertIsNone(payload["profile"])
+            self.assertIsNone(payload["command"])
+            self.assertEqual(payload["resolved_verbosity"], 0)
+
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = cli_main(
+                    [
+                        "config",
+                        "verbosity",
+                        "--clear",
+                        "--profile",
+                        "local-dev",
+                        "--path",
+                        str(config_path),
+                    ]
+                )
+            self.assertEqual(code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertIsNone(payload["profile_verbosity"])
+            self.assertEqual(payload["resolved_verbosity"], 0)
+
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = cli_main(
+                    [
+                        "config",
+                        "verbosity",
+                        "--clear",
+                        "--command",
+                        "models list",
+                        "--path",
+                        str(config_path),
+                    ]
+                )
+            self.assertEqual(code, 0)
+            payload = json.loads(stdout.getvalue())
+            self.assertIsNone(payload["command_verbosity"])
+            self.assertEqual(payload["resolved_verbosity"], 0)
+
     def test_profiles_show_defaults_to_effective_profile(self) -> None:
         stdout = StringIO()
         with redirect_stdout(stdout):

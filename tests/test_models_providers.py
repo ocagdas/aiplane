@@ -1977,6 +1977,56 @@ class ModelProviderTests(unittest.TestCase):
             )
         self.assertEqual(code, 1)
 
+    def test_models_list_text_verbosity_zero_is_table(self) -> None:
+        stdout = StringIO()
+        with redirect_stdout(stdout):
+            code = cli_main(
+                [
+                    "models",
+                    "list",
+                    "--profile",
+                    "local-dev",
+                    "--format",
+                    "text",
+                    "--verbosity",
+                    "0",
+                    "--limit",
+                    "3",
+                ]
+            )
+        self.assertEqual(code, 0)
+        rows = [line for line in stdout.getvalue().splitlines() if line.strip()]
+        self.assertGreaterEqual(len(rows), 2)
+        self.assertEqual(rows[0], "models")
+        self.assertIn("ALIAS", rows[1])
+        self.assertIn("PROVIDER", rows[1])
+        self.assertIn("MODEL", rows[1])
+
+    def test_models_list_text_verbosity_one_falls_back_to_json_with_warning(self) -> None:
+        stdout = StringIO()
+        with redirect_stdout(stdout):
+            code = cli_main(
+                [
+                    "models",
+                    "list",
+                    "--profile",
+                    "local-dev",
+                    "--format",
+                    "text",
+                    "--verbosity",
+                    "1",
+                    "--limit",
+                    "3",
+                ]
+            )
+        self.assertEqual(code, 0)
+        output = stdout.getvalue().splitlines()
+        self.assertTrue(output[0].startswith("Warning: models list --format text with verbosity 1+ uses JSON payload."))
+        payload = json.loads("\n".join(output[1:]))
+        self.assertIsInstance(payload, list)
+        self.assertGreaterEqual(len(payload), 1)
+
+
     def test_models_list_filters_and_sorts_by_provider_popularity(self) -> None:
         source = load_profile("local-dev", Path.cwd())
         with tempfile.TemporaryDirectory() as tmp:

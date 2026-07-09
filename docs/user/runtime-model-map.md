@@ -44,6 +44,8 @@ Show the source/runtime map:
 aiplane runtimes map
 aiplane runtimes sources
 aiplane runtimes list
+aiplane runtimes list --format text
+aiplane runtimes list --format json
 ```
 
 Group configured models by runtime:
@@ -227,6 +229,14 @@ aiplane models list --group-by provider-kind
 aiplane models list --group-by runtime
 aiplane models list --group-by model
 aiplane models defaults --group-by provider
+
+For `models list`, `--format text` uses a compact table at `--verbosity 0` and falls back to JSON with a warning at higher verbosity:
+
+```bash
+aiplane models list --format text
+aiplane models list --format text --verbosity 0 --limit 5
+aiplane models list --format text --verbosity 1 --limit 5
+```
 ```
 
 Model rows include model-size and hardware requirement hints where available: `parameter_count_b`, `min_ram_gb`, `recommended_ram_gb`, `min_vram_gb`, `recommended_vram_gb`, `resource_estimate_source`, `gpu_vendor_requirement`, and `accelerator_api_requirements`. `parameter_count_b` is inferred from model ids such as `7b`, `14B`, or `40b`; if no size marker exists it is `0`. Resource values come from profile metadata, provider/discovery metadata when supported, or aiplane's current parameter-size/role heuristic for discovered models. They are meant for filtering and planning; validate with real runtime startup and benchmarks before provisioning hardware.

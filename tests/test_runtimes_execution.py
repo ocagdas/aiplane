@@ -1031,6 +1031,28 @@ exit 0
         self.assertIn("FROM python:3.13-slim", output)
         self.assertIn("Provider/Code-Large-Instruct", output)
 
+    def test_runtime_list_cli_text_format_is_lean(self) -> None:
+        stdout = StringIO()
+        with redirect_stdout(stdout):
+            code = cli_main(["runtimes", "list", "--format", "text"])
+        self.assertEqual(code, 0)
+        output = stdout.getvalue().strip().splitlines()
+        self.assertGreaterEqual(len(output), 3)
+        self.assertEqual(output[0], "runtimes")
+        self.assertIn("RUNTIME", output[1])
+        self.assertNotIn("[{", output[1])
+        self.assertGreaterEqual(len(output[2]), 1)
+        self.assertIn("ollama", "\n".join(output[2:]))
+
+    def test_runtime_list_cli_json_format_is_machine_readable(self) -> None:
+        stdout = StringIO()
+        with redirect_stdout(stdout):
+            code = cli_main(["runtimes", "list", "--format", "json"])
+        self.assertEqual(code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertIsInstance(payload, list)
+        self.assertTrue(any(item.get("name") == "ollama" for item in payload))
+
     def test_model_catalog_executes_openai_compatible_runtime(self) -> None:
         profile = load_profile("local-dev", Path.cwd())
         with TestHttpServer() as endpoint:

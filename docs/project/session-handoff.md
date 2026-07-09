@@ -76,6 +76,8 @@ PYTHONPATH=src python -m aiplane quickstart local-coding --dry-run --no-discover
 PYTHONPATH=src python -m aiplane quickstart local-coding --dry-run --no-discovery --pull-model MODEL_ALIAS
 PYTHONPATH=src python -m aiplane doctor --profile local-dev
 PYTHONPATH=src python -m aiplane doctor --profile local-dev --format json
+PYTHONPATH=src python -m aiplane config format
+PYTHONPATH=src python -m aiplane hardware show --list-types
 PYTHONPATH=src python -m pytest -q
 PYTHONPATH=src python -m aiplane tools matrix
 PYTHONPATH=src python -m aiplane tools plan opentofu
@@ -111,6 +113,7 @@ Results:
 - `machines discover azure` no longer accepts `--runtime`; Azure machine discovery is now explicitly machine/resource scoped to avoid implying runtime-specific VM properties.
 - Live `machines discover azure` results now include per-candidate retail unit pricing (when available) from Azure Retail Prices (`unit_price`, `currency`, `unit`, `unit_of_measure`) so machine candidate review can include cost context.
 - `bridge list/exec` now exposes a strict allowlisted external-runtime relay surface (currently Ollama shorthand actions only) so `aiplane` can delegate selected native commands without opening arbitrary shell passthrough.
+- `config format` and `config verbosity` now support profile-aware and command-aware defaults; `models list --format text` uses compact output at verbosity 0 and warns/falls back to JSON at verbosity 1+; `hardware show` uses `--list-types` for template discovery.
 - `models clear-cache --dry-run` passed with `include_curated: true` and zero removals on the clean cache.
 - `deploy workflow-plan --target azure_gpu_vm` passed and classified the target as `cloud_vm` with explicit cloud provisioning boundaries, `az`/SSH/IaC/Packer/Ansible tool ownership, and read-only MCP policy.
 - `deploy apply --target azure_gpu_vm` without `--yes` correctly failed before mutation with `error: deploy apply is mutating; run deploy plan first`.

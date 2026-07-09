@@ -212,6 +212,19 @@ def add_models_parser(
         help="Print only model aliases (one per line) instead of full JSON",
     )
     models_list.add_argument(
+        "--format",
+        choices=["text", "json"],
+        default=None,
+        help="Output format. JSON is full payload; text is compact table view.",
+    )
+    models_list.add_argument(
+        "--verbosity",
+        type=int,
+        choices=[0, 1, 2],
+        default=None,
+        help="Output detail level for text mode: 0=table, 1+ full payload.",
+    )
+    models_list.add_argument(
         "--group-by",
         choices=[
             "none",
@@ -593,7 +606,7 @@ def add_models_parser(
     models_benchmark.add_argument("name", help="Model alias to benchmark")
 
 
-def handle_models_command(args: argparse.Namespace, *, profile: Profile, json_dumps: JsonDumps) -> int:
+def handle_models_command(args: argparse.Namespace, *, profile: Profile, json_dumps: JsonDumps, output_format: str | None = None, output_verbosity: int | None = None) -> int:
     catalog = ModelCatalog(profile)
     if args.models_command == "defaults":
         summary = catalog.default_summary()
@@ -679,7 +692,19 @@ def handle_models_command(args: argparse.Namespace, *, profile: Profile, json_du
             if args.group_by != "none":
                 raise ValueError("--name-only cannot be combined with --group-by")
             print("\n".join([str(row.get("name") or "") for row in rows]))
-        elif args.group_by == "none":
+            return 0
+
+        resolved_verbosity = output_verbosity if output_verbosity is not None else 0
+        if output_format == "text":
+            if resolved_verbosity >= 1 or args.group_by != "none":
+                print("Warning: models list --format text with verbosity 1+ uses JSON payload.")
+                payload = rows if args.group_by == "none" else group_model_rows(profile, rows, args.group_by)
+                print(json_dumps(payload, indent=2))
+            else:
+                print(_models_list_text(rows))
+            return 0
+
+        if args.group_by == "none":
             print(json_dumps(rows, indent=2))
         else:
             print(json_dumps(group_model_rows(profile, rows, args.group_by), indent=2))
@@ -854,6 +879,50 @@ def handle_models_command(args: argparse.Namespace, *, profile: Profile, json_du
     result = catalog.test_prompt(args.name, args.task, target, dry_run=args.dry_run)
     print(result.text)
     return 0
+
+
+
+
+def _models_list_text(rows: list[dict[str, object]]) -> str:
+    if not rows:
+        return "models: none"
+
+    headers = {
+        "name": "ALIAS",
+        "provider": "PROVIDER",
+        "model": "MODEL",
+        "runtime": "RUNTIME",
+        "enabled": "ENABLED",
+    }
+    keys = list(headers)
+    widths = {key: len(value) for key, value in headers.items()}
+    normalized: list[dict[str, str]] = []
+    for row in rows:
+        supported_runtimes = row.get("supported_runtimes")
+        runtime = row.get("preferred_runtime")
+        if runtime is None and isinstance(supported_runtimes, list):
+            runtime = ", ".join(str(value) for value in supported_runtimes)
+        normalized.append(
+            {
+                "name": str(row.get("name") or ""),
+                "provider": str(row.get("provider") or ""),
+                "model": str(row.get("model") or ""),
+                "runtime": str(runtime or ""),
+                "enabled": "yes" if bool(row.get("enabled", True)) else "no",
+            }
+        )
+
+    for row in normalized:
+        for key in keys:
+            widths[key] = max(widths[key], len(row.get(key, "")))
+
+    lines = [
+        "models",
+        "".join(headers[key].ljust(widths[key] + 2) for key in keys),
+    ]
+    for row in normalized:
+        lines.append("".join(row[key].ljust(widths[key] + 2) for key in keys))
+    return "\n".join(lines)
 
 
 def refresh_cli_payload(result: dict[str, object], verbosity: int) -> dict[str, object]:

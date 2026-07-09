@@ -41,12 +41,42 @@ class HardwareMachineTests(unittest.TestCase):
             self.assertNotIn("vendor", template)
             self.assertNotIn("gpu", template)
 
-    def test_hardware_show_includes_named_profiles(self) -> None:
+    def test_hardware_show_includes_only_selection_summary_by_default(self) -> None:
         profile = load_profile("local-dev", Path.cwd())
         config = HardwareManager(profile).show()
-        self.assertIn("hardware_profiles", config)
-        self.assertIn("nvidia_dgx_spark_style", config["hardware_profiles"])
-        self.assertIn("amd_ryzen_ai_max_halo_style", config["hardware_profiles"])
+        self.assertNotIn("hardware_profiles", config)
+        self.assertIn("active_selection", config)
+        self.assertIn("effective_machine", config)
+
+    def test_hardware_show_cli_outputs_summary_payload(self) -> None:
+        stdout = StringIO()
+        with redirect_stdout(stdout):
+            code = cli_main(["hardware", "show", "--profile", "local-dev"])
+
+        self.assertEqual(code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertIn("active_selection", payload)
+        self.assertIn("effective_machine", payload)
+        self.assertNotIn("hardware_profiles", payload)
+
+    def test_hardware_show_list_types_includes_template_names(self) -> None:
+        profile = load_profile("local-dev", Path.cwd())
+        payload = HardwareManager(profile).show_types()
+        names = [row["name"] for row in payload["types"]]
+        self.assertIn("nvidia_dgx_spark_style", names)
+        self.assertIn("amd_ryzen_ai_max_halo_style", names)
+
+    def test_hardware_show_list_types_cli_outputs_available_types(self) -> None:
+        stdout = StringIO()
+        with redirect_stdout(stdout):
+            code = cli_main(["hardware", "show", "--list-types", "--profile", "local-dev"])
+
+        self.assertEqual(code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["name"], "hardware_types")
+        names = [row["name"] for row in payload["types"]]
+        self.assertIn("local_auto", names)
+        self.assertIn("cloud_gpu_vm", names)
 
     def test_hardware_discover_has_cpu_memory_and_template_matches(self) -> None:
         profile = load_profile("local-dev", Path.cwd())

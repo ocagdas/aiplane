@@ -181,6 +181,42 @@ aiplane config templates
 aiplane config init --template local
 aiplane config show
 ```
+```bash
+aiplane config format
+aiplane config format json
+aiplane config format json --profile local-dev
+aiplane config format --command "models list"
+aiplane config format --clear
+aiplane config format --clear --profile local-dev
+aiplane config format --clear --command "models list"
+```
+
+aiplane config also controls output defaults for commands that support `--format`:
+
+- command-line `--format` always wins
+- `--profile` value on `config format` overrides global default for that profile
+- `--command` value on `config format` overrides global and profile defaults for that command
+- global `config format` is the fallback default
+- default when unset is `text`
+
+```bash
+aiplane config verbosity
+aiplane config verbosity 1
+aiplane config verbosity 1 --profile local-dev
+aiplane config verbosity 1 --command "models list"
+aiplane config verbosity --clear
+aiplane config verbosity --clear --profile local-dev
+aiplane config verbosity --clear --command "models list"
+```
+
+aiplane config also controls output detail for commands that support `--verbosity`:
+
+- command-line `--verbosity` always wins
+- `--profile` value on `config verbosity` overrides global default for that profile
+- `--command` value on `config verbosity` overrides global and profile defaults for that command
+- global `config verbosity` is the fallback default
+- default when unset is `0`
+
 
 Default path:
 

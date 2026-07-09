@@ -16,11 +16,19 @@ from .benchmark_tools import BenchmarkToolManager
 from .code_tasks import CodeTaskRunner
 from .config import (
     agent_artifacts_root,
+    clear_output_format,
+    clear_output_verbosity,
     create_profile,
     default_local_config_path,
     default_profile,
     default_profiles_root,
+    get_command_output_format,
+    get_command_output_verbosity,
     get_local_config_value,
+    get_output_format_override,
+    get_output_verbosity_override,
+    get_profile_output_format,
+    get_profile_output_verbosity,
     init_local_config,
     list_config_templates,
     list_profile_templates,
@@ -32,8 +40,12 @@ from .config import (
     remove_profile,
     repair_profile,
     resolve_profile_name,
+    resolve_output_format,
+    resolve_output_verbosity,
     set_default_profile,
     set_local_config_value,
+    set_output_format,
+    set_output_verbosity,
 )
 from .deploy import DeployManager
 from .env import EnvironmentManager
@@ -204,7 +216,7 @@ def _main(argv: list[str] | None = None) -> int:
     doctor_cmd.add_argument(
         "--format",
         choices=["text", "json"],
-        default="text",
+        default=None,
         help="Output format. Text is human-readable; JSON is for scripts.",
     )
     doctor_cmd.add_argument(
@@ -307,7 +319,7 @@ def _main(argv: list[str] | None = None) -> int:
     local_coding.add_argument(
         "--format",
         choices=["json", "text"],
-        default="text",
+        default=None,
         help="Output format. Text is the default human-readable summary; use json for scripts.",
     )
 
@@ -390,6 +402,78 @@ def _main(argv: list[str] | None = None) -> int:
     config_set.add_argument(
         "--path",
         help="Optional config path. Defaults to AIPLANE_CONFIG or .aiplane/config.yaml",
+    )
+    config_format = config_sub.add_parser(
+        "format",
+        help="Show or set output format defaults",
+        description=(
+            "Show effective output format configuration or set per-profile/per-command/default format. "
+            "Command-line --format options still win on each command invocation."
+        ),
+        formatter_class=HelpFormatter,
+        allow_abbrev=False,
+    )
+    config_format.add_argument(
+        "value",
+        nargs="?",
+        choices=["text", "json"],
+        help="Output format to persist. Omit to print resolved format values.",
+    )
+    config_format_scope = config_format.add_mutually_exclusive_group()
+    config_format_scope.add_argument(
+        "--profile",
+        help="Persist/clear format only for this profile instead of the global default format.",
+    )
+    config_format_scope.add_argument(
+        "--command",
+        dest="format_command",
+        help="Persist/clear format only for this command, for example `models list`.",
+    )
+    config_format.add_argument(
+        "--path",
+        help="Optional config path. Defaults to AIPLANE_CONFIG or .aiplane/config.yaml",
+    )
+    config_format.add_argument(
+        "--clear",
+        action="store_true",
+        help="Clear selected format configuration entry (global/profile/command).",
+    )
+
+    config_verbosity = config_sub.add_parser(
+        "verbosity",
+        help="Show or set output verbosity defaults",
+        description=(
+            "Show effective output verbosity configuration or set per-profile/per-command/default verbosity. "
+            "Command-line --verbosity options still win on each command invocation."
+        ),
+        formatter_class=HelpFormatter,
+        allow_abbrev=False,
+    )
+    config_verbosity.add_argument(
+        "value",
+        nargs="?",
+        type=int,
+        choices=[0, 1, 2],
+        help="Verbosity to persist. Omit to print resolved verbosity values.",
+    )
+    config_verbosity_scope = config_verbosity.add_mutually_exclusive_group()
+    config_verbosity_scope.add_argument(
+        "--profile",
+        help="Persist/clear verbosity only for this profile instead of the global default verbosity.",
+    )
+    config_verbosity_scope.add_argument(
+        "--command",
+        dest="verbosity_command",
+        help="Persist/clear verbosity only for this command, for example `models list`.",
+    )
+    config_verbosity.add_argument(
+        "--path",
+        help="Optional path. Defaults to AIPLANE_CONFIG or .aiplane/config.yaml",
+    )
+    config_verbosity.add_argument(
+        "--clear",
+        action="store_true",
+        help="Clear selected verbosity configuration entry (global/profile/command).",
     )
 
     profiles = _command(
@@ -680,12 +764,24 @@ def _main(argv: list[str] | None = None) -> int:
     hardware_sub = hardware_cmd.add_subparsers(dest="hardware_command", required=True, metavar="command")
     hardware_show = hardware_sub.add_parser(
         "show",
-        help="Show raw hardware profile config",
-        description="Print the hardware.yaml content for the selected profile.",
+        help="Show hardware summary and effective selection",
+        description="Show the active hardware selection and effective machine. Add --list-types to list available template types.",
         formatter_class=HelpFormatter,
         allow_abbrev=False,
     )
     _profile_arg(hardware_show)
+    hardware_show.add_argument(
+        "--verbosity",
+        type=int,
+        choices=[0],
+        default=0,
+        help="Output detail level. 0 (default) keeps a short summary without template catalog values.",
+    )
+    hardware_show.add_argument(
+        "--list-types",
+        action="store_true",
+        help="Show available hardware template types and exit.",
+    )
     hardware_templates = hardware_sub.add_parser(
         "templates",
         help="List immutable hardware templates",
@@ -1355,7 +1451,7 @@ def _main(argv: list[str] | None = None) -> int:
     env_doctor.add_argument(
         "--format",
         choices=["text", "json"],
-        default="text",
+        default=None,
         help="Output format. Text is the default human-readable aligned table; use json for scripts.",
     )
 
@@ -2004,6 +2100,12 @@ def _main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Include GUI-managed runtimes such as LM Studio",
     )
+    runtimes_list.add_argument(
+        "--format",
+        choices=["text", "json"],
+        default=None,
+        help="Output format. Text is a lean table, JSON is for scripts.",
+    )
     runtimes_sources = runtimes_sub.add_parser(
         "sources",
         help="List model catalogs/sources",
@@ -2385,6 +2487,75 @@ def _main(argv: list[str] | None = None) -> int:
                 )
             )
             return 0
+        if args.config_command == "format":
+            if args.value is not None and args.clear:
+                raise ValueError("use either --clear or a format value, not both")
+            config_path = local_config_path(args.path)
+            if args.value is not None:
+                write_path = set_output_format(args.value, profile=args.profile, command=args.format_command, path=config_path)
+            elif args.clear:
+                write_path = clear_output_format(profile=args.profile, command=args.format_command, path=config_path)
+            else:
+                write_path = config_path
+            print(
+                _json(
+                    {
+                        "path": str(write_path),
+                        "format": get_output_format_override(path=write_path),
+                        "profile": args.profile,
+                        "command": args.format_command,
+                        "profile_format": get_profile_output_format(args.profile, path=write_path) if args.profile else None,
+                        "command_format": get_command_output_format(args.format_command, path=write_path) if args.format_command else None,
+                        "resolved_format": resolve_output_format(
+                            profile=args.profile,
+                            command=args.format_command,
+                            path=write_path,
+                        ),
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+            )
+            return 0
+        if args.config_command == "verbosity":
+            if args.value is not None and args.clear:
+                raise ValueError("use either --clear or a verbosity value, not both")
+            config_path = local_config_path(args.path)
+            if args.value is not None:
+                write_path = set_output_verbosity(
+                    args.value,
+                    profile=args.profile,
+                    command=args.verbosity_command,
+                    path=config_path,
+                )
+            elif args.clear:
+                write_path = clear_output_verbosity(
+                    profile=args.profile,
+                    command=args.verbosity_command,
+                    path=config_path,
+                )
+            else:
+                write_path = config_path
+            print(
+                _json(
+                    {
+                        "path": str(write_path),
+                        "verbosity": get_output_verbosity_override(path=write_path),
+                        "profile": args.profile,
+                        "command": args.verbosity_command,
+                        "profile_verbosity": get_profile_output_verbosity(args.profile, path=write_path) if args.profile else None,
+                        "command_verbosity": get_command_output_verbosity(args.verbosity_command, path=write_path) if args.verbosity_command else None,
+                        "resolved_verbosity": resolve_output_verbosity(
+                            profile=args.profile,
+                            command=args.verbosity_command,
+                            path=write_path,
+                        ),
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+            )
+            return 0
         config_path = local_config_path(args.path)
         profile_root = profiles_root(profiles_dir, config_path=config_path)
         configured_default_profile = default_profile(config_path)
@@ -2517,7 +2688,12 @@ def _main(argv: list[str] | None = None) -> int:
     if args.command == "quickstart":
         if args.quickstart_command == "local-coding":
             result = _quickstart_local_coding(args, workspace, profiles_dir)
-            if args.format == "text":
+            output_format = resolve_output_format(
+                args.format,
+                profile=args.name,
+                path=local_config_path(),
+            )
+            if output_format == "text":
                 print(_quickstart_local_coding_text(result))
             else:
                 print(_json(result, indent=2, sort_keys=True))
@@ -2531,7 +2707,12 @@ def _main(argv: list[str] | None = None) -> int:
     if args.command == "doctor":
         profile = load_profile(effective_profile, workspace, profiles_dir=profiles_dir)
         payload = local_coding_doctor(profile, include_optional=args.include_optional)
-        if args.format == "json":
+        output_format = resolve_output_format(
+            args.format,
+            profile=effective_profile,
+            path=local_config_path(),
+        )
+        if output_format == "json":
             print(_json(payload, indent=2, sort_keys=True))
         else:
             print(local_coding_doctor_text(payload))
@@ -2610,7 +2791,10 @@ def _main(argv: list[str] | None = None) -> int:
         profile = load_profile(effective_profile, workspace, profiles_dir=profiles_dir)
         manager = HardwareManager(profile)
         if args.hardware_command == "show":
-            print(_json(manager.show(), indent=2, sort_keys=True))
+            if args.list_types:
+                print(_json(manager.show_types(), indent=2, sort_keys=True))
+                return 0
+            print(_json(manager.show(verbosity=int(args.verbosity)), indent=2, sort_keys=True))
             return 0
         if args.hardware_command == "templates":
             print(_json(manager.templates(), indent=2, sort_keys=True))
@@ -2922,7 +3106,12 @@ def _main(argv: list[str] | None = None) -> int:
                 progress=progress,
             )
             progress("")
-            if args.format == "text":
+            output_format = resolve_output_format(
+                args.format,
+                profile=effective_profile,
+                path=local_config_path(),
+            )
+            if output_format == "text":
                 print(_environment_doctor_text(payload))
             else:
                 print(_json(payload, indent=2))
@@ -2949,7 +3138,30 @@ def _main(argv: list[str] | None = None) -> int:
 
     if args.command == "models":
         profile = load_profile(effective_profile, workspace, profiles_dir=profiles_dir)
-        return handle_models_command(args, profile=profile, json_dumps=_json)
+        output_format = None
+        output_verbosity = None
+        if args.models_command == "list":
+            output_format = resolve_output_format(
+                args.format,
+                profile=effective_profile,
+                command="models list",
+                path=local_config_path(),
+                default="json",
+            )
+            output_verbosity = resolve_output_verbosity(
+                args.verbosity,
+                profile=effective_profile,
+                command="models list",
+                path=local_config_path(),
+                default=0,
+            )
+        return handle_models_command(
+            args,
+            profile=profile,
+            json_dumps=_json,
+            output_format=output_format,
+            output_verbosity=output_verbosity,
+        )
 
     if args.command == "code":
         profile = load_profile(effective_profile, workspace, profiles_dir=profiles_dir)
@@ -3241,7 +3453,16 @@ def _main(argv: list[str] | None = None) -> int:
             print(_json(catalog.map(include_gui=args.include_gui), indent=2))
             return 0
         if args.runtimes_command == "list":
-            print(_json(catalog.list(include_gui=args.include_gui), indent=2))
+            rows = catalog.list(include_gui=args.include_gui)
+            output_format = resolve_output_format(
+                args.format,
+                profile=effective_profile,
+                path=local_config_path(),
+            )
+            if output_format == "text":
+                print(_runtimes_list_text(rows))
+            else:
+                print(_json(rows, indent=2))
             return 0
         if args.runtimes_command == "sources":
             print(_json(catalog.sources(), indent=2))
@@ -3783,6 +4004,45 @@ def _stderr_line_progress():
         sys.stderr.flush()
 
     return progress
+
+
+
+def _runtimes_list_text(rows: list[dict[str, object]]) -> str:
+    if not rows:
+        return "runtimes: none"
+
+    headers = {
+        "name": "RUNTIME",
+        "enabled": "ENABLED",
+        "managed_by_helper": "CONTROL",
+        "configured": "CONFIG",
+        "mode": "MODE",
+    }
+    keys = list(headers)
+    widths = {key: len(value) for key, value in headers.items()}
+    normalized: list[dict[str, str]] = []
+    for row in rows:
+        managed = "helper" if bool(row.get("managed_by_helper")) else "manual"
+        normalized.append(
+            {
+                "name": str(row.get("name") or ""),
+                "enabled": "yes" if bool(row.get("enabled")) else "no",
+                "managed_by_helper": managed,
+                "configured": "yes" if bool(row.get("configured")) else "no",
+                "mode": "gui" if bool(row.get("gui_required")) else "local",
+            }
+        )
+    for row in normalized:
+        for key in keys:
+            widths[key] = max(widths[key], len(row.get(key, "")))
+
+    lines = [
+        "runtimes",
+        "".join(headers[key].ljust(widths[key] + 2) for key in keys),
+    ]
+    for row in normalized:
+        lines.append("".join(row[key].ljust(widths[key] + 2) for key in keys))
+    return "\n".join(lines)
 
 
 def _environment_doctor_text(payload: dict[str, object]) -> str:

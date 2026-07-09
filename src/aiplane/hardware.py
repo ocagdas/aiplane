@@ -27,11 +27,36 @@ class HardwareManager:
         self.profile = profile
         self.config = profile.hardware or {}
 
-    def show(self) -> dict[str, Any]:
-        result = copy.deepcopy(self.config)
-        result["active_selection"] = self.active_config()
-        result["effective_machine"] = self.machine()
-        return result
+    def show(self, verbosity: int = 0) -> dict[str, Any]:
+        if verbosity != 0:
+            result = copy.deepcopy(self.config)
+            result["active_selection"] = self.active_config()
+            result["effective_machine"] = self.machine()
+            return result
+        return {
+            "active_selection": self.active_config(),
+            "effective_machine": self.machine(),
+        }
+
+    def show_types(self) -> dict[str, Any]:
+        types = []
+        for name, template in self.templates().items():
+            if not isinstance(template, dict):
+                continue
+            types.append(
+                {
+                    "name": name,
+                    "provider": template.get("provider"),
+                    "placement": template.get("placement"),
+                    "substrate": template.get("substrate"),
+                    "notes": template.get("notes"),
+                }
+            )
+        return {
+            "name": "hardware_types",
+            "count": len(types),
+            "types": sorted(types, key=lambda item: item["name"]),
+        }
 
     def schema(self) -> dict[str, Any]:
         schema = self.config.get("machine_schema", {})
