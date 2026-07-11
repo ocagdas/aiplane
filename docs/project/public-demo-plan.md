@@ -174,6 +174,69 @@ aiplane profiles validate
 
 For this demo plan, assume the default profile is active and keep commands profile-agnostic.
 
+## Clean-machine onboarding trial commands
+
+Add this section to the execution demo when validating Priority 9 clean-machine onboarding. It is intentionally named **Clean-machine onboarding trial commands** so results from different machines can be compared without mixing them with the rehearsed happy-path demo.
+
+Run the common block first on every trial machine. It records install, discovery, doctor, recommendation, and export evidence without requiring manual YAML edits.
+
+```bash
+# Common trial block. Start in a fresh shell on the target machine.
+git clone https://github.com/ocagdas/aiplane.git
+cd aiplane
+scripts/setup_env.sh --mode conda --conda-env aiplane --action install --editable
+conda activate aiplane
+
+mkdir -p /tmp/aiplane-onboarding-trial
+aiplane --help | tee /tmp/aiplane-onboarding-trial/00-help.txt
+aiplane quickstart local-coding --dry-run --format json | tee /tmp/aiplane-onboarding-trial/01-quickstart-dry-run.json
+aiplane quickstart local-coding --format json | tee /tmp/aiplane-onboarding-trial/02-quickstart.json
+aiplane discover --format json | tee /tmp/aiplane-onboarding-trial/03-discover.json
+aiplane doctor --format json | tee /tmp/aiplane-onboarding-trial/04-doctor.json
+aiplane recommend --format json | tee /tmp/aiplane-onboarding-trial/05-recommend.json
+aiplane export continue | tee /tmp/aiplane-onboarding-trial/06-continue.yaml
+aiplane export aider | tee /tmp/aiplane-onboarding-trial/07-aider.sh
+aiplane export vscode-mcp | tee /tmp/aiplane-onboarding-trial/08-vscode-mcp.json
+```
+
+Environment-specific additions:
+
+```bash
+# 1. Ubuntu with Ollama and Continue.
+ollama --version | tee /tmp/aiplane-onboarding-trial/ubuntu-ollama-version.txt
+code --version | tee /tmp/aiplane-onboarding-trial/ubuntu-code-version.txt
+aiplane integrations setup continue --dry-run | tee /tmp/aiplane-onboarding-trial/ubuntu-continue-setup-dry-run.json
+
+# 2. Ubuntu with vLLM or another OpenAI-compatible local endpoint.
+VLLM_ENDPOINT="${VLLM_ENDPOINT:-http://localhost:8000/v1}"
+aiplane export openai-compatible --endpoint "$VLLM_ENDPOINT" | tee /tmp/aiplane-onboarding-trial/ubuntu-vllm-openai-compatible.json
+aiplane integrations setup openai-compatible --endpoint "$VLLM_ENDPOINT" --dry-run | tee /tmp/aiplane-onboarding-trial/ubuntu-vllm-setup-dry-run.json
+
+# 3. Windows with Ollama, from PowerShell after install.
+# Use the same common commands through Conda/Miniforge PowerShell, then capture:
+ollama --version | Tee-Object -FilePath "$env:TEMP\aiplane-onboarding-trial\windows-ollama-version.txt"
+aiplane doctor --format json | Tee-Object -FilePath "$env:TEMP\aiplane-onboarding-trial\windows-doctor.json"
+aiplane export continue | Tee-Object -FilePath "$env:TEMP\aiplane-onboarding-trial\windows-continue.yaml"
+
+# 4. macOS with Apple Silicon.
+sysctl -n machdep.cpu.brand_string | tee /tmp/aiplane-onboarding-trial/macos-cpu.txt
+aiplane hardware discover | tee /tmp/aiplane-onboarding-trial/macos-hardware.json
+aiplane recommend --format json | tee /tmp/aiplane-onboarding-trial/macos-recommend.json
+
+# 5. Clean machine with no AI tools installed.
+aiplane doctor --format json | tee /tmp/aiplane-onboarding-trial/clean-no-tools-doctor.json
+aiplane recommend --format json | tee /tmp/aiplane-onboarding-trial/clean-no-tools-recommend.json
+aiplane export vscode-mcp | tee /tmp/aiplane-onboarding-trial/clean-no-tools-vscode-mcp.json
+
+# 6. Remote workstation with local client.
+aiplane hardware export-machine --name local-client | tee /tmp/aiplane-onboarding-trial/local-client.machine.json
+aiplane machines import /tmp/aiplane-onboarding-trial/local-client.machine.json --name local-client
+aiplane machines list | tee /tmp/aiplane-onboarding-trial/remote-workstation-machines.json
+aiplane remote tunnel plan --host "$REMOTE_GPU_HOST" --local-port 11434 --remote-port 11434 | tee /tmp/aiplane-onboarding-trial/remote-workstation-tunnel-plan.json
+```
+
+For every environment, record these outcomes in the demo notes: install success, discovery success, doctor findings, first generated export, elapsed time to first useful export, number of manual values entered, and whether each failure is a product defect, documentation defect, or unsupported environment.
+
 ## Section 1: Local AI Workflow Stack Readiness
 
 ### 0:00-0:25 - Tool, Philosophy, Status

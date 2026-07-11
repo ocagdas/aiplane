@@ -324,6 +324,8 @@ Track these metrics:
 
 ### Priority 12: Improve documentation structure
 
+**Status: Implemented in the user documentation entrypoints with Start here, Common workflows, and Advanced concepts sections. Clean-machine onboarding commands are added to the public demo plan for Priority 9 trials.**
+
 **Target**
 
 Split documentation by user maturity:

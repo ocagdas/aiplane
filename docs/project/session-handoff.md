@@ -20,8 +20,8 @@ Must
 
 Should
 
-1. formalize policy-state outcomes (Allowed/Allowed-with-warning/Approval required/Temporarily approved/Blocked/Overridden with audit)
-2. split docs by maturity and add command examples with mutating-state flags.
+1. Completed for current behavior: policy decisions now expose stable `allowed`, `approval_required`, and `blocked` outcomes; temporary approvals and audited overrides remain future governance work.
+2. Completed: user docs are split by maturity with Start here, Common workflows, and Advanced concepts sections, and command examples call out mutating-state behavior and verifiable outcomes.
 
 Scope freeze until sprint targets complete:
 
@@ -140,8 +140,8 @@ Orchestrator support now has stack role metadata over reviewed model aliases and
 
 ## Next Useful Work
 
-1. Must: finish the remote-workstation onboarding documentation pass and align it with the public demo workflow sequence.
-2. Must: keep policy/risk behavior regressions visible: expand blocked cloud-policy and disallowed-provider coverage beyond current stack tests.
-3. Should: keep docs/tests/command-coverage synchronized before feature-freeze gates.
-4. Should: add a reproducibility check for Continue/Aider/Cline/MCP exports from saved plan IDs for regression stability.
+1. Must: run the clean-machine onboarding trial commands from `docs/project/public-demo-plan.md` across the six Priority 9 environments and classify each failure.
+2. Must: finish the remote-workstation onboarding documentation pass and align it with the public demo workflow sequence.
+3. Must: keep policy/risk behavior regressions visible: expand blocked cloud-policy and disallowed-provider coverage beyond current stack tests.
+4. Should: keep docs/tests/command-coverage synchronized before feature-freeze gates.
 
