@@ -56,11 +56,16 @@ def local_coding_doctor(profile: Profile, include_optional: bool = False) -> dic
         for check in section.get("checks", []):
             if not isinstance(check, dict):
                 continue
+            section_name = str(section.get("name") or "general")
             check["severity"], check["action"] = _section_check_status(
                 str(profile.name),
-                str(section.get("name") or "general"),
+                section_name,
                 check,
             )
+            check.setdefault("reason", check.get("detail", ""))
+            check["impact"] = _check_impact(section_name, check)
+            if check["severity"] in {"blocking", "advisory"}:
+                check["remediation"] = _check_remediation(str(profile.name), section_name, check)
 
     blocking = sum(
         1
@@ -770,6 +775,85 @@ def _section_check_status(profile: str, section_name: str, check: dict[str, Any]
     if warning:
         return "advisory", _check_action(profile, section_name, check)
     return "pass", ""
+
+
+def _check_impact(section: str, check: dict[str, Any]) -> str:
+    name = str(check.get("name") or "")
+    if section == "profile":
+        return "Profile loading or validation may be incomplete."
+    if section == "environment":
+        return "Required local tooling or runtime prerequisites may be missing."
+    if section == "model_defaults" or name == "model_catalog":
+        return "Coding tools may not have usable model aliases for required roles."
+    if section == "endpoints":
+        return "Selected models may not be reachable by exported tools."
+    if section == "hardware":
+        return "Recommended local models may not fit or may run poorly on the active machine."
+    if section == "providers":
+        return "Model aliases may reference providers that are unavailable or disabled."
+    if section == "policy":
+        return "Policy may block model, provider, or cloud usage."
+    if section == "integrations":
+        return "Generated tool configuration may be incomplete for this integration."
+    if section == "remote":
+        return "Remote endpoints or workstation flows may not be reproducible."
+    if section == "mcp":
+        return "MCP clients may not expose the expected aiplane workflow tools."
+    return "The local AI workflow may need attention before export or use."
+
+
+def _check_remediation(profile: str, section: str, check: dict[str, Any]) -> dict[str, Any]:
+    action = _check_action(profile, section, check)
+    command = _first_command(action) or action
+    dry_run_command = _dry_run_command(command)
+    return {
+        "command": command,
+        "mutates": _command_mutates(command),
+        "dry_run_supported": dry_run_command is not None,
+        "dry_run_command": dry_run_command,
+        "description": action,
+    }
+
+
+def _first_command(action: str) -> str | None:
+    if "`" not in action:
+        return None
+    parts = action.split("`")
+    return parts[1] if len(parts) > 1 and parts[1].strip() else None
+
+
+def _dry_run_command(command: str) -> str | None:
+    if "--dry-run" in command:
+        return command
+    dry_run_capable = (
+        "aiplane models refresh",
+        "aiplane hardware discover",
+        "aiplane integrations setup",
+        "aiplane profiles repair",
+        "aiplane profiles bootstrap-local",
+        "aiplane runtimes install",
+        "aiplane runtimes start",
+        "aiplane runtimes pull",
+    )
+    if command.startswith(dry_run_capable):
+        return f"{command} --dry-run"
+    return None
+
+
+def _command_mutates(command: str) -> bool:
+    mutating_prefixes = (
+        "aiplane models promote",
+        "aiplane models use",
+        "aiplane providers enable",
+        "aiplane hardware discover --select-closest",
+        "aiplane profiles repair",
+        "aiplane profiles bootstrap-local",
+        "aiplane integrations setup",
+        "aiplane runtimes install",
+        "aiplane runtimes start",
+        "aiplane runtimes pull",
+    )
+    return command.startswith(mutating_prefixes) and "--dry-run" not in command
 
 
 def _check_action(profile: str, section: str, check: dict[str, Any]) -> str:

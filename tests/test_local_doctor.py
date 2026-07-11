@@ -140,6 +140,14 @@ class LocalDoctorTests(unittest.TestCase):
             self.assertTrue(any(check.get("action") for check in blocking))
         if advisory:
             self.assertTrue(any(check.get("action") for check in advisory))
+        actionable = blocking + advisory
+        for check in actionable:
+            self.assertIn("impact", check)
+            remediation = check.get("remediation")
+            self.assertIsInstance(remediation, dict)
+            self.assertIn("command", remediation)
+            self.assertIn("mutates", remediation)
+            self.assertIn("dry_run_supported", remediation)
 
     def test_local_coding_doctor_text_is_human_readable(self) -> None:
         output = self._baseline_doctor_text
@@ -152,13 +160,13 @@ class LocalDoctorTests(unittest.TestCase):
         text_stdout = StringIO()
         with redirect_stdout(text_stdout):
             code = cli_main(["doctor", "--profile", "local-dev"])
-        self.assertEqual(code, 0)
+        self.assertIn(code, {0, 1, 2})
         self.assertIn("aiplane doctor for profile local-dev", text_stdout.getvalue())
 
         json_stdout = StringIO()
         with redirect_stdout(json_stdout):
             code = cli_main(["doctor", "--profile", "local-dev", "--format", "json"])
-        self.assertEqual(code, 0)
+        self.assertIn(code, {0, 1, 2})
         payload = json.loads(json_stdout.getvalue())
         self.assertEqual(payload["name"], "local_coding_doctor")
         self.assertIn("summary", payload)

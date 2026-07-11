@@ -325,7 +325,16 @@ class HardwareMachineTests(unittest.TestCase):
                     "vram_gb": 94,
                 },
             )
-            result = manager.recommend()
+            with patch(
+                "aiplane.hardware.RuntimeCatalog.runtime_available",
+                return_value={
+                    "name": "ollama",
+                    "available": False,
+                    "reason": "runtime is supported but not running on this runner",
+                    "endpoint": "http://localhost:11434",
+                },
+            ):
+                result = manager.recommend()
             self.assertEqual(result["machine"]["stock"]["machine_tag"], "azure_h100_test")
             self.assertEqual(result["machine"]["gpu"]["vram_gb"], 94)
             recommended_names = {row["name"] for row in result["models"]["recommended"]}

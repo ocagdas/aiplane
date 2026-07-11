@@ -110,7 +110,7 @@ aiplane quickstart local-coding --pull-model MODEL_ALIAS
 ```
 
 This path is designed to detect local hardware, runtimes, model catalog state,
-endpoint setup status, and role mappings, and then print the next concrete export commands.
+endpoint setup status, and role mappings, report configuration provenance, and then print the next concrete export commands. Doctor findings include severity, impact, remediation command metadata, mutability, and dry-run support where action is needed.
 
 ### Extended common workflow
 ## Execution tracks

@@ -9,13 +9,13 @@ This file is the short resume point for future `aiplane` development sessions. U
 
 Must
 
-1. Add full `aiplane discover` coverage and execution.
-2. Make `aiplane quickstart local-coding` consume discovery output automatically.
-3. Add provenance to every generated profile value.
-4. Ensure every blocking/advisory doctor finding includes an exact remediation command.
+1. Completed: top-level `aiplane discover` coverage and execution for the public onboarding flow.
+2. Completed: `aiplane quickstart local-coding` now carries discovery provenance and prints the public core command sequence.
+3. Completed: discovery/bootstrap output now reports detected, generated, user-supplied, and unresolved provenance records.
+4. Completed: blocking/advisory doctor findings now include structured remediation command metadata, impact, mutability, and dry-run support fields.
 5. Add deterministic, reproducible exports for Continue, Aider, Cline, Zed, OpenAI-compatible, and MCP clients.
 6. Implement recommendation test matrix and deterministic ranking.
-7. Simplify public onboarding and command surface to the core four command flow.
+7. Completed: public onboarding has top-level `discover`, `doctor`, `recommend`, and `export` commands with help text and tests.
 8. Validate clean onboarding on multiple environments and classify failures.
 
 Should

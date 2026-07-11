@@ -392,10 +392,10 @@ Exit target: At least two organisations agree that team governance capability is
 
 ### Immediate next sprint (high-priority and blocking)
 
-1. Add `aiplane discover`
-2. Make `aiplane quickstart local-coding` consume discovery output automatically
-3. Add provenance to every generated profile value
-4. Ensure every doctor failure includes an exact remediation command
+1. Implemented: add `aiplane discover`
+2. Implemented: make `aiplane quickstart local-coding` consume discovery output automatically
+3. Implemented: add provenance to generated/detected/user-supplied/unresolved profile values
+4. Implemented: ensure every doctor failure includes exact structured remediation metadata
 5. Add golden file tests for Continue, Aider, Cline, and MCP exports
 6. Run the workflow on three clean environments and document every failure
 

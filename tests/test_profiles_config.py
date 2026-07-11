@@ -247,7 +247,9 @@ class ProfileConfigTests(unittest.TestCase):
             self.assertTrue(payload["bootstrap"]["would_create"])
             self.assertFalse((profiles_dir / "local-dev").exists())
             self.assertIn("aiplane quickstart local-coding --name local-dev", payload["commands"])
+            self.assertIn("aiplane discover --profile local-dev", payload["commands"])
             self.assertIn("aiplane doctor --profile local-dev", payload["commands"])
+            self.assertIn("aiplane recommend --profile local-dev", payload["commands"])
             self.assertIsNone(payload["doctor"])
 
     def test_quickstart_local_coding_text_lists_next_commands(self) -> None:
@@ -273,8 +275,61 @@ class ProfileConfigTests(unittest.TestCase):
             self.assertIn("local coding quickstart for profile local-dev", output)
             self.assertIn("profile validation: ok", output)
             self.assertIn("aiplane doctor --profile local-dev", output)
-            self.assertIn("aiplane integrations export continue --profile local-dev", output)
+            self.assertIn("aiplane export continue --profile local-dev", output)
             self.assertTrue((profiles_dir / "local-dev" / "models.yaml").exists())
+
+    def test_public_onboarding_commands_are_wired(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            profiles_dir = Path(tmp) / "profiles"
+            with redirect_stdout(StringIO()):
+                self.assertEqual(
+                    cli_main(
+                        [
+                            "--profiles-dir",
+                            str(profiles_dir),
+                            "quickstart",
+                            "local-coding",
+                            "--no-discovery",
+                            "--no-hardware-discovery",
+                            "--format",
+                            "json",
+                        ]
+                    ),
+                    0,
+                )
+
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                self.assertEqual(
+                    cli_main(
+                        ["--profiles-dir", str(profiles_dir), "discover", "--profile", "local-dev", "--format", "json"]
+                    ),
+                    0,
+                )
+            discover = json.loads(stdout.getvalue())
+            self.assertEqual(discover["name"], "environment_discovery")
+            self.assertIn("provenance", discover)
+            self.assertIn("detected_values", discover["provenance"]["summary"])
+            self.assertEqual(discover["next_command"], "aiplane doctor --profile local-dev")
+
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                self.assertEqual(
+                    cli_main(
+                        ["--profiles-dir", str(profiles_dir), "recommend", "--profile", "local-dev", "--format", "json"]
+                    ),
+                    0,
+                )
+            recommendation = json.loads(stdout.getvalue())
+            self.assertIn("models", recommendation)
+            self.assertIn("recommended", recommendation["models"])
+
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                self.assertEqual(
+                    cli_main(["--profiles-dir", str(profiles_dir), "export", "vscode-mcp", "--profile", "local-dev"]), 0
+                )
+            self.assertIn("mcp", stdout.getvalue().lower())
 
     def test_quickstart_local_coding_pull_model_executes_runtime_pull_by_default(
         self,
