@@ -2,6 +2,16 @@
 
 This table tracks the public CLI surface at a high level. Use it during pre-PR cleanup, release review, and recurring MCP/skills synchronization checkpoints to keep docs, tests, MCP coverage, planned/implemented agent skills, and status claims aligned.
 
+## Public command categories
+
+The primary public surface is deliberately small. Detailed commands remain available, but docs, demos, and onboarding should make it clear which category each command belongs to.
+
+| Category | Commands | Public posture |
+| --- | --- | --- |
+| Core | `discover`, `doctor`, `recommend`, `export`, `quickstart local-coding`, `profiles list/templates/create/repair/remove/bootstrap-local/show/validate`, `policy explain`, `audit tail`, `config templates/init/show/get/set/default-profile/format/verbosity` | Lead with these. They are the environment doctor, recommendation, policy, export, audit, and profile-management surface for the first successful workflow. |
+| Supporting | `hardware show/templates/schema/active/use/set/discover/clear/doctor/recommend/export-machine`, `machines import/list/show/validate/recommend/discover/cache-list/cache-clear/azure-status/import-azure-sku/profile-remote-plan`, `runtimes map/list/sources/models/model/use/prerequisites/doctor/bundle/install/start/stop/pull/repull/remove/clear`, `providers list/show/models/test/add/endpoint-types/enable/disable/remove/init-defaults/update-defaults/clear/doctor`, `models list/show/defaults/use/add/clone/remove/enable/disable/refresh/promote/clear-cache/pull/test/benchmark`, `integrations list/roles/plan/setup/export`, `mcp manifest/serve`, `tools list/matrix/doctor/plan/export/install`, `environment show/list/active/use/plan/doctor`, `remote tunnel plan/start/status/stop` | Use after onboarding or when troubleshooting a specific runtime, endpoint, hardware, integration, MCP, benchmark, or environment readiness question. |
+| Deferred from public focus | `deploy list/show/workflow-plan/plan/doctor/apply --yes`, `orchestrators list/show/doctor/setup`, `stacks setup/list/show/plan/doctor/endpoint-plan/status/export/prepare/start/stop/restart`, `agents templates/plan/export`, `run`, `chat`, `bridge list/exec`, `launch`, `session start` | Commands may exist for experiments and advanced users, but they should not lead README, demos, or beta onboarding. They must not block the external beta workflow. |
+
 | Area | Primary commands | Status | Notes |
 | --- | --- | --- | --- |
 | Core onboarding | `discover` / `doctor` / `recommend` / `export` | Implemented / primary surface | Core onboarding is wired as the primary public flow: discover, readiness check, recommendation, and artifact export are the first commands shown in onboarding docs. `quickstart` remains a composed convenience path, not required for first success. |

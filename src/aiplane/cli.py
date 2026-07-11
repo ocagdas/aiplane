@@ -187,14 +187,13 @@ def _main(argv: list[str] | None = None) -> int:
             "IDE/CLI exports, remote endpoint plans, and MCP access. It does not replace IDE agents."
         ),
         epilog=(
-            "Common flows:\n"
+            "Primary workflow:\n"
             "  aiplane discover\n"
             "  aiplane doctor\n"
             "  aiplane recommend\n"
             "  aiplane export continue\n"
-            "  aiplane quickstart local-coding\n"
-            "  aiplane launch --tool continue --model MODEL_ALIAS --dry-run\n"
-            "  aiplane session start --tool ollama --model MODEL_ALIAS\n\n"
+            "  aiplane quickstart local-coding\n\n"
+            "Advanced command categories are documented in docs/project/command-coverage.md.\n"
             "Docs: docs/user/index.md"
         ),
         formatter_class=HelpFormatter,

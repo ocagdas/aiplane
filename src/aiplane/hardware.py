@@ -685,6 +685,7 @@ def _recommendation_payload(
         }
     if policy_decision is not None:
         payload["policy_decision"] = {
+            "outcome": str(getattr(policy_decision, "outcome", "allowed")),
             "allowed": bool(policy_decision.allowed),
             "requires_approval": bool(policy_decision.requires_approval),
             "reason": policy_decision.reason,

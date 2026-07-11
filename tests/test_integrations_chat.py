@@ -747,6 +747,51 @@ class IntegrationChatTests(unittest.TestCase):
         self.assertIn("aider --model openai/", output)
         self.assertIn("OPENAI_API_BASE", output)
 
+    def test_integrations_exports_are_deterministic_for_supported_targets(self) -> None:
+        profile = load_profile("local-dev", Path.cwd())
+        manager = IntegrationManager(profile)
+        targets = {
+            "continue": {
+                "chat": "fixture-chat-small",
+                "autocomplete": "fixture-code-base",
+                "embedding": "fixture-embedding-small",
+            },
+            "aider": {"model_name": "fixture-analysis-small"},
+            "cline": {"model_name": "fixture-analysis-small"},
+            "zed": {"model_name": "fixture-analysis-small"},
+            "openai-compatible": {"model_name": "fixture-analysis-small"},
+            "vscode-mcp": {},
+        }
+        for tool, kwargs in targets.items():
+            with self.subTest(tool=tool):
+                first = manager.export(tool, **kwargs)
+                second = manager.export(tool, **kwargs)
+                self.assertEqual(first.content, second.content)
+                self.assertEqual(first.tool, tool)
+                self.assertTrue(first.notes)
+
+    def test_integrations_exports_replay_saved_plans_deterministically(self) -> None:
+        profile = load_profile("local-dev", Path.cwd())
+        manager = IntegrationManager(profile)
+        continue_plan = manager.plan(
+            "continue",
+            chat="fixture-chat-small",
+            autocomplete="fixture-code-base",
+            embedding="fixture-embedding-small",
+        )
+        first = manager.export_from_plan(continue_plan)
+        second = manager.export_from_plan(continue_plan)
+        self.assertEqual(first.content, second.content)
+        self.assertIn("version: 0.1.0", first.content)
+        self.assertIn("schema: v1", first.content)
+        self.assertIn("fixture-chat-small", first.content)
+
+        cline_plan = manager.plan("cline", model_name="fixture-analysis-small")
+        self.assertEqual(
+            manager.export_from_plan(cline_plan).content,
+            manager.export_from_plan(cline_plan).content,
+        )
+
     def test_integrations_export_cline_zed_and_aider(self) -> None:
         profile = load_profile("local-dev", Path.cwd())
         cline = IntegrationManager(profile).export("cline", "fixture-analysis-small")

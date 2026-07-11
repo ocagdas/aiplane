@@ -150,6 +150,8 @@ Every blocking or advisory finding must contain:
 
 ### Priority 5: Validate recommendation quality
 
+**Status: Implemented for deterministic fixture coverage; external calibration remains ongoing.**
+
 **Target**
 
 Create test cases covering:
@@ -179,6 +181,8 @@ For each case, define expected recommended, usable and rejected models.
 
 ### Priority 6: Prove deterministic exports
 
+**Status: Implemented for supported fixture exports and saved-plan replay coverage.**
+
 **Target**
 
 Generate stable expected outputs for:
@@ -202,6 +206,8 @@ Generate stable expected outputs for:
 
 ### Priority 7: Make policy behaviour predictable
 
+**Status: Implemented for current allow / approval-required / blocked decisions; temporary approvals, overrides, and organization audit workflows remain planned governance extensions.**
+
 **Target**
 
 Use a consistent set of policy outcomes:
@@ -224,6 +230,8 @@ Use a consistent set of policy outcomes:
 7. Policy behaviour is identical across CLI, MCP and exports
 
 ### Priority 8: Tighten the product boundary
+
+**Status: Implemented as a command category inventory in command coverage, with README and top-level help leading on the core workflow.**
 
 **Target**
 

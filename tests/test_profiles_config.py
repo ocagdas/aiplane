@@ -1014,10 +1014,13 @@ class ProfileConfigTests(unittest.TestCase):
             cli_main(["--help"])
         self.assertEqual(raised.exception.code, 0)
         output = stdout.getvalue()
-        self.assertIn("Common flows", output)
+        self.assertIn("Primary workflow", output)
         self.assertIn("Configure, check, and connect", output)
-        self.assertIn("aiplane launch --tool continue", output)
-        self.assertIn("aiplane session start --tool ollama", output)
+        self.assertIn("aiplane discover", output)
+        self.assertIn("aiplane quickstart local-coding", output)
+        self.assertIn("docs/project/command-coverage.md", output)
+        self.assertNotIn("aiplane launch --tool continue", output)
+        self.assertNotIn("aiplane session start --tool ollama", output)
         self.assertIn("hardware", output)
 
     def test_profiles_help_points_to_hardware_discovery_commands(self) -> None:
@@ -1063,8 +1066,12 @@ class ProfileConfigTests(unittest.TestCase):
     def test_policy_allows_read_and_requires_write_approval(self) -> None:
         profile = load_profile("local-dev", Path.cwd())
         policy = PolicyEngine(profile)
-        self.assertFalse(policy.tool_decision("read_file").requires_approval)
-        self.assertTrue(policy.tool_decision("write_file").requires_approval)
+        read = policy.tool_decision("read_file")
+        write = policy.tool_decision("write_file")
+        self.assertFalse(read.requires_approval)
+        self.assertEqual(read.outcome, "allowed")
+        self.assertTrue(write.requires_approval)
+        self.assertEqual(write.outcome, "approval_required")
 
     def test_policy_explain_supports_new_policy_actions(self) -> None:
         profile = load_profile("local-dev", Path.cwd())
@@ -1077,11 +1084,11 @@ class ProfileConfigTests(unittest.TestCase):
         }
 
         policy = PolicyEngine(profile)
-        self.assertTrue(policy.explain("provider:ollama").allowed)
-        self.assertTrue(policy.explain("backend:cloud").allowed)
-        self.assertTrue(policy.explain("model:policy-demo").allowed)
-        self.assertFalse(policy.explain("provider:forbidden").allowed)
-        self.assertFalse(policy.explain("model:missing-model").allowed)
+        self.assertEqual(policy.explain("provider:ollama").outcome, "allowed")
+        self.assertEqual(policy.explain("backend:cloud").outcome, "allowed")
+        self.assertEqual(policy.explain("model:policy-demo").outcome, "allowed")
+        self.assertEqual(policy.explain("provider:forbidden").outcome, "blocked")
+        self.assertEqual(policy.explain("model:missing-model").outcome, "blocked")
 
     def test_policy_explain_cli_reports_allow_and_deny_decisions(self) -> None:
         stdout_allow = StringIO()
@@ -1090,6 +1097,7 @@ class ProfileConfigTests(unittest.TestCase):
         self.assertEqual(code, 0)
         payload = json.loads(stdout_allow.getvalue())
         self.assertTrue(payload["allowed"])
+        self.assertEqual(payload["outcome"], "allowed")
         self.assertEqual(payload["matched_rule"], "repository.allowed_providers")
 
         stdout_deny = StringIO()
