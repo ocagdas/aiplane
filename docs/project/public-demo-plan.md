@@ -178,10 +178,10 @@ For this demo plan, assume the default profile is active and keep commands profi
 
 Add this section to the execution demo when validating Priority 9 clean-machine onboarding. It is intentionally named **Clean-machine onboarding trial commands** so results from different machines can be compared without mixing them with the rehearsed happy-path demo.
 
-Run the common block first on every trial machine. It records install, discovery, doctor, recommendation, and export evidence without requiring manual YAML edits.
+Run the Linux common block first on Ubuntu/Linux trial machines. It records install, discovery, doctor, recommendation, and export evidence without requiring manual YAML edits. The Bash install helper is not a Windows/macOS installer; on Windows or macOS, use the platform-native Python/Conda install path first, then run the post-install `aiplane` commands below.
 
 ```bash
-# Common trial block. Start in a fresh shell on the target machine.
+# Linux common trial block. Start in a fresh shell on the target machine.
 git clone https://github.com/ocagdas/aiplane.git
 cd aiplane
 scripts/setup_env.sh --mode conda --conda-env aiplane --action install --editable
@@ -212,14 +212,19 @@ VLLM_ENDPOINT="${VLLM_ENDPOINT:-http://localhost:8000/v1}"
 aiplane export openai-compatible --endpoint "$VLLM_ENDPOINT" | tee /tmp/aiplane-onboarding-trial/ubuntu-vllm-openai-compatible.json
 aiplane integrations setup openai-compatible --endpoint "$VLLM_ENDPOINT" --dry-run | tee /tmp/aiplane-onboarding-trial/ubuntu-vllm-setup-dry-run.json
 
-# 3. Windows with Ollama, from PowerShell after install.
-# Use the same common commands through Conda/Miniforge PowerShell, then capture:
+# 3. Windows with Ollama, from PowerShell after platform-native install.
+# Do not run scripts/setup_env.sh on Windows. Install aiplane with the Windows Python/Conda workflow first.
+New-Item -ItemType Directory -Force "$env:TEMP\aiplane-onboarding-trial"
 ollama --version | Tee-Object -FilePath "$env:TEMP\aiplane-onboarding-trial\windows-ollama-version.txt"
+aiplane quickstart local-coding --dry-run --format json | Tee-Object -FilePath "$env:TEMP\aiplane-onboarding-trial\windows-quickstart-dry-run.json"
 aiplane doctor --format json | Tee-Object -FilePath "$env:TEMP\aiplane-onboarding-trial\windows-doctor.json"
+aiplane recommend --format json | Tee-Object -FilePath "$env:TEMP\aiplane-onboarding-trial\windows-recommend.json"
 aiplane export continue | Tee-Object -FilePath "$env:TEMP\aiplane-onboarding-trial\windows-continue.yaml"
 
-# 4. macOS with Apple Silicon.
+# 4. macOS with Apple Silicon, after platform-native install.
+# Do not run scripts/setup_env.sh on macOS. Install aiplane with the macOS Python/Conda workflow first.
 sysctl -n machdep.cpu.brand_string | tee /tmp/aiplane-onboarding-trial/macos-cpu.txt
+aiplane quickstart local-coding --dry-run --format json | tee /tmp/aiplane-onboarding-trial/macos-quickstart-dry-run.json
 aiplane hardware discover | tee /tmp/aiplane-onboarding-trial/macos-hardware.json
 aiplane recommend --format json | tee /tmp/aiplane-onboarding-trial/macos-recommend.json
 

@@ -190,6 +190,14 @@ case "$ACTION" in
   *) echo "Unsupported action: $ACTION" >&2; exit 2 ;;
 esac
 
+if [[ "$ACTION" == "install" || "$ACTION" == "update" || "$ACTION" == "update-installed" ]]; then
+  if [[ "$(uname -s)" != "Linux" ]]; then
+    echo "aiplane runtime install helpers are not supported on this platform: $(uname -s)" >&2
+    echo "Install the runtime with the platform-native installer, then use aiplane discover, doctor, recommend, and export." >&2
+    exit 2
+  fi
+fi
+
 cd "$PROJECT_ROOT"
 
 dry_run_args() {

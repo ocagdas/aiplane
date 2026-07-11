@@ -6,6 +6,8 @@ editable/source-linked installs or static/snapshot installs. This is separate
 from provider setup: provider runtimes and API credentials are handled by
 `scripts/provider_helper.sh` and documented in `providers.md`.
 
+Platform support: the Bash setup helper and helper-managed runtime install/update commands are currently supported only on Linux hosts. On Windows or macOS, install `aiplane` and runtimes with platform-native Python/Conda/runtime installers, then use `aiplane discover`, `aiplane doctor`, `aiplane recommend`, and `aiplane export` to inspect and generate configuration. If a helper install command is run on an unsupported platform, it terminates with a clear unsupported-platform error.
+
 Install modes:
 
 - `--install-mode editable` or `--editable`: for local/venv/Conda, runs `pip install -e .`; source changes are visible immediately. For Docker, builds a small image and mounts this checkout at `/workspace` when commands run.

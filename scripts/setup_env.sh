@@ -214,6 +214,12 @@ case "$INSTALL_MODE" in
   *) echo "Unsupported install mode: $INSTALL_MODE" >&2; return 2 ;;
 esac
 
+if [[ "$ACTION" == "install" && "$(uname -s)" != "Linux" ]]; then
+  echo "aiplane setup_env.sh install is not supported on this platform: $(uname -s)" >&2
+  echo "Install aiplane with the platform-native Python/Conda workflow, then use aiplane discover, doctor, recommend, and export." >&2
+  return 2
+fi
+
 cd "$PROJECT_ROOT"
 
 pip_install_args() {
