@@ -7,8 +7,8 @@ It is focused on AI setup and environment operations (setup, migration, and mode
 
 `aiplane` is an environment-doctor and configuration compiler for self-managed AI development environments: it plans, prepares, and connects model runtimes rather than replacing your IDE assistant, chat UI, or model-serving endpoint.
 
-
 - [Practical Overview](overview.md): what `aiplane` does, terminology, implemented capabilities, and first useful flows.
+- [Core onboarding flow](overview.md#core-onboarding-flow): discover → doctor → recommend → export.
 - [Practical Workflows](workflows.md): end-to-end recipes for local Ollama, Continue, MCP, refresh, remote endpoints, stacks, cloud planning, and troubleshooting.
 - [Setup](setup.md): install `aiplane` with local Python, `venv`, Conda, or Docker CLI images; also covers profile execution modes.
 - [External Toolchain](tools.md): run setup/doctor checks and inspect prerequisite CLIs such as Azure CLI, OpenTofu, Docker, kubectl, Helm, SSH, Ansible, and runtime host tools.
@@ -32,15 +32,16 @@ It is focused on AI setup and environment operations (setup, migration, and mode
 ## Main Commands
 
 ```bash
-aiplane profiles list
-aiplane profiles validate
-aiplane environment doctor
-aiplane providers list
-aiplane models refresh --provider huggingface --query text-generation --limit 25 --dry-run
-aiplane tools doctor
-aiplane integrations roles continue
-aiplane launch --tool continue --dry-run
-aiplane session start --tool aider --model fixture-chat-small --dry-run
+aiplane discover
+aiplane doctor
+aiplane recommend
+aiplane export
+```
+
+If you want the single-command path (without reading docs first):
+
+```bash
+aiplane quickstart local-coding
 ```
 
 Project strategy, contributor notes, and roadmap details live under `docs/project/`,
@@ -55,13 +56,15 @@ Most commands accept `--profile`, but it is optional. `aiplane` resolves the pro
 3. `default_profile` in the local `.aiplane/config.yaml`.
 4. The only available profile, when exactly one exists.
 
-If no profile exists, start with the local AI quickstart:
+If no profile exists, run:
 
 ```bash
 aiplane quickstart local-coding
-aiplane quickstart local-coding --dry-run
+aiplane discover
+aiplane doctor
+aiplane recommend
 ```
 
-This uses the same lower-level bootstrap path as `aiplane profiles bootstrap-local`: it copies the shipped `local-dev` template into `profiles/local-dev`, validates it, can attempt bounded provider discovery into ignored `models.discovered.yaml`, runs the local doctor when the profile exists, can execute a runtime-helper model pull with `--pull-model` or preview it with `--dry-run --pull-model`, and prints the next safe export commands. Use `aiplane profiles bootstrap-local --no-discovery` when you only want the editable profile files, or `--dry-run` to preview the create/discovery steps.
+The quickstart command creates the default local profile scaffold, runs the first checks, and prints export-ready recommendations.
 
 Use `--profile` only when you need to override the default for one command.

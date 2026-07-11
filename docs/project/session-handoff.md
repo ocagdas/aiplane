@@ -2,27 +2,33 @@
 
 This file is the short resume point for future `aiplane` development sessions. Use it together with [Agent Guidance](agent-guidance.md), [Project Roadmap](roadmap.md), [Strategy](strategy.md), and [Command Coverage](command-coverage.md).
 
+
 ## Current Milestone
 
-**Completed baseline:**
+**Current target: Milestone 1 (External Beta Readiness)**
 
-1. Must: add a deterministic discovery/import workflow that builds a draft profile from detected local/runtime state, endpoint configs, editor/agent settings, and provider/runtime references.
-2. Must: make policy the default compile/export gate with explicit block/warn behavior, override path, and audit context.
-3. Must: make exported workflow config reproducible from one profile for Continue, Aider, Cline, and MCP with from-plan replay.
+Must
 
-**Priority-first execution (must, then should):**
+1. Add full `aiplane discover` coverage and execution.
+2. Make `aiplane quickstart local-coding` consume discovery output automatically.
+3. Add provenance to every generated profile value.
+4. Ensure every blocking/advisory doctor finding includes an exact remediation command.
+5. Add deterministic, reproducible exports for Continue, Aider, Cline, Zed, OpenAI-compatible, and MCP clients.
+6. Implement recommendation test matrix and deterministic ranking.
+7. Simplify public onboarding and command surface to the core four command flow.
+8. Validate clean onboarding on multiple environments and classify failures.
 
-4. Must: make diagnostics action-first with blocking/advisory classification and concrete remediation commands.
-5. Must: tighten model recommendations around hardware fit, runtime compatibility, and policy constraints with explicit ranking rationale.
-6. Should: standardize positioning and onboarding around "environment doctor and configuration compiler" terminology.
-7. Should: prioritize discovery/import and auto-provenance over manual configuration duplication.
-8. Should: keep policy-risk surfaces visible in every default onboarding step (quickstart, doctor, integration exports, MCP manifest flow).
-9. Should: keep scope expansion explicit and defer generic provisioning/proxy/chat execution unless strategy shifts.
+Should
 
-Milestone status is now stable in this planning layer: roadmap milestones 1-3 (architecture cleanup, MCP/agent skill hardening, orchestrator workflow metadata) are now implemented.
-`policy explain` and `doctor` now define what is allowed, what is blocked, and required operator action.
-Policy readiness is aligned with stack role/tool-policy checks, and risky tool permissions are explicit.
-Scope remains bounded: aiplane stays a configuration/control layer, not a coding runtime/chat UI/agent executor.
+1. formalize policy-state outcomes (Allowed/Allowed-with-warning/Approval required/Temporarily approved/Blocked/Overridden with audit)
+2. split docs by maturity and add command examples with mutating-state flags.
+
+Scope freeze until sprint targets complete:
+
+- No new orchestrators, cloud providers, benchmark frameworks, or runtime types.
+- Priority remains onboarding determinism, actionability, provenance, deterministic exports, and clean-machine evidence.
+
+## Current Public Status
 
 ## Current Public Status
 

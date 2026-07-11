@@ -5,6 +5,7 @@ These docs cover day-to-day use of `aiplane`: installing it, configuring provide
 ## Start Here
 
 - [Practical Overview](overview.md): what `aiplane` does, terminology, implemented capabilities, and first useful flows.
+- [Core onboarding flow](overview.md#core-onboarding-flow): discover → doctor → recommend → export.
 - [Practical Workflows](workflows.md): end-to-end recipes for local Ollama, Continue, MCP, refresh, remote endpoints, stacks, cloud planning, and troubleshooting.
 - [Setup](setup.md): install `aiplane` with local Python, `venv`, Conda, or Docker CLI images; also covers profile execution modes.
 - [External Toolchain](tools.md): check and install prerequisite CLIs such as Azure CLI, OpenTofu, Docker, kubectl, Helm, SSH, and Ansible.
@@ -21,13 +22,12 @@ These docs cover day-to-day use of `aiplane`: installing it, configuring provide
 ## Common First Commands
 
 ```bash
-aiplane profiles list
-aiplane profiles show --selected
-aiplane environment show
-aiplane providers list
-aiplane models refresh --provider huggingface --query text-generation --limit 25 --dry-run
-aiplane integrations roles continue
-aiplane integrations export vscode-mcp
+aiplane discover
+aiplane doctor
+aiplane recommend
+aiplane export
+
+aiplane quickstart local-coding
 ```
 
 Project strategy, developer policy, and future roadmap details live under [docs/project](../project/README.md), not in the user documentation.
@@ -41,12 +41,13 @@ Most commands accept `--profile`, but it is optional. `aiplane` resolves the pro
 3. `default_profile` in the local `.aiplane/config.yaml`.
 4. The only available profile, when exactly one exists.
 
-If no profile exists, bootstrap the default local profile with:
+If no profile exists, run the onboarding flow directly:
 
 ```bash
-aiplane profiles bootstrap-local
+aiplane quickstart local-coding
+aiplane discover
+aiplane doctor
+aiplane recommend
 ```
-
-This copies the shipped `local-dev` template into `profiles/local-dev`, validates it, and attempts a bounded provider discovery refresh into ignored `models.discovered.yaml`. Use `--no-discovery` when you only want the editable profile files, or `--dry-run` to preview the create/discovery steps.
 
 Use `--profile` only when you need to override the default for one command.

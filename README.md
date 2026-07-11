@@ -89,49 +89,30 @@ aiplane config init --template local
 aiplane config show
 ```
 
-## Quick start flow
+## Core onboarding flow
 
-Use this when you want to evaluate the project end-to-end:
+Use this when you want the first useful flow with minimal complexity:
+
+```bash
+aiplane discover
+aiplane doctor
+aiplane recommend
+aiplane export
+```
+
+The single-command equivalent is:
 
 ```bash
 aiplane quickstart local-coding
-# preview only
-
 aiplane quickstart local-coding --dry-run
-# add a model pull only when you choose one alias
+aiplane quickstart local-coding --dry-run --pull-model MODEL_ALIAS
 aiplane quickstart local-coding --pull-model MODEL_ALIAS
-
-aiplane doctor
-aiplane doctor --format json
-
-aiplane profiles show --selected
 ```
 
-`quickstart local-coding` builds a local profile baseline, runs a readiness doctor when possible, and prints the next deterministic commands.
-Model pulls remain opt-in and can always be previewed with `--dry-run`.
+This path is designed to detect local hardware, runtimes, model catalog state,
+endpoint setup status, and role mappings, and then print the next concrete export commands.
 
-### Common workflow
-
-```bash
-# 1) discover candidates
-
-aiplane providers list
-aiplane models refresh --provider huggingface --query text-generation --dry-run
-
-aiplane models list --group-by ownership --enabled-only
-
-# 2) stage runnable setup (explicitly)
-aiplane runtimes install ollama --dry-run
-aiplane integrations roles continue
-
-aiplane runtimes pull ollama --model MODEL_ALIAS --dry-run
-
-# 3) export and run
-aiplane integrations export continue --model MODEL_ALIAS
-aiplane integrations export vscode-mcp
-aiplane chat --model MODEL_ALIAS --dry-run
-```
-
+### Extended common workflow
 ## Execution tracks
 
 The current project direction is organized into three execution tracks:

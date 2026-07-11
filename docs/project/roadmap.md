@@ -41,49 +41,371 @@ Scope-change protocol: if any overlap row moves toward owning execution, marketp
 
 
 
-## Public Adoption Wedge
 
-The first public story should be narrow enough to be polished:
+## Public Adoption Wedge and Milestone Priorities
 
-```bash
-aiplane quickstart local-coding
+### Priority 1: Prove the core workflow
+
+The public wedge is now a narrow onboarding path:
+
+```text
+aiplane discover
 aiplane doctor
-aiplane integrations export continue
-aiplane integrations export aider
-aiplane mcp manifest
+aiplane recommend
+aiplane export
 ```
 
-That flow should answer: what is installed, which models/endpoints are configured, what fits this hardware, which model aliases are approved for chat/autocomplete/embedding/code roles, whether cloud escalation is allowed, what is unsafe or missing, and what config to export.
+A new user should reach a useful result with one command:
 
-Recommended public roadmap:
+```text
+aiplane quickstart local-coding
+```
 
-1. **Local AI Workflow Stack Doctor**: local Ollama/vLLM-style endpoints, Continue/Aider exports, hardware recommendations, model alias policy, doctor output, MCP read surface, and clean examples.
-2. **Remote GPU Workstation Profile**: SSH tunnel checks, remote runtime endpoint status, vLLM/Ollama model fit, stack doctor, endpoint export, and safety checks.
-3. **Team Policy and Governance**: shared profile templates, repo-level allowed-provider policy, cloud escalation rules, audit output, supportable reference stacks, and optional managed profile sync later.
+That command should automatically:
 
-Advanced cloud, Kubernetes, broad provisioning, custom IDEs, general agent execution, and full session products should not lead the public story. They remain later or explicit-change-course work.
+1. Detect hardware
+2. Detect installed runtimes
+3. Detect local models
+4. Detect supported coding tools
+5. Detect existing endpoint configuration
+6. Create a draft profile
+7. Run doctor
+8. Recommend suitable models
+9. Print exact export commands
 
-## Current Milestone: Team Policy and Governance
+**Success criteria**
 
-**Priority-first execution (must, then should):**
+1. No manual YAML editing required for the first successful run
+2. No more than two user decisions during onboarding
+3. Useful output produced within five minutes
+4. The command can run safely in dry run mode
+5. Repeated execution does not overwrite manual changes without warning
 
-**Completed in this milestone:**
+### Priority 2: Reduce configuration duplication
 
-1. Must: add a deterministic discovery/import workflow that builds a draft profile from detected local/runtime state, endpoint configs, editor/agent settings, and provider/runtime references.
-2. Must: make policy the default compile and export gate so disallowed provider/backend paths are blocked with actionable override and audit context.
-3. Must: make exported workflow config reproducible from a single profile for Continue, Aider, Cline, and MCP via stable plan IDs and from-plan replay.
-4. Must: make diagnostics action-first by classifying doctor findings as blocking/advisory, tagging each with exact missing checks and remediation commands.
-5. Must: tighten model recommendations to prioritize hardware fit + runtime compatibility + policy constraints, with explicit ranking rationale and alternatives.
-6. Should: standardize public positioning around "environment doctor and configuration compiler" across docs/onboarding and quickstarts.
+**Target**
 
-7. Should: prioritize discovery/import and auto-provenance over manual configuration duplication.
-8. Should: keep policy-risk surfaces visible in every default onboarding step (quickstart, doctor, integration exports, MCP manifest flow).
-9. Should: keep scope expansion explicit and defer broad provisioning/proxy/chat execution unless strategy changes.
+Track how much configuration is detected automatically.
 
-Policy behavior is implemented and this milestone now focuses on reproducibility and governance evidence for exports and policy drift visibility in follow-up work.
+The workflow should surface a summary like:
 
+```text
+Detected values: 24
+Generated values: 8
+User supplied values: 2
+Unresolved values: 1
+```
 
-Scope anchor: `aiplane` remains an operations configuration layer, not the coding agent, full chat UI, model runtime, general proxy, cloud platform, IDE extension, or infrastructure-tool replacement. Changing that direction is allowed only if the strategy and roadmap explicitly authorize a course change.
+**Success criteria**
+
+1. At least 80 percent of local setup values are discovered or inferred
+2. The user should manually enter no more than credentials and policy decisions
+3. Every generated value includes provenance
+4. Existing Continue, Aider, Cline and endpoint configuration can be imported
+5. The tool clearly distinguishes detected, inferred and user supplied values
+
+### Priority 3: Simplify the public command surface
+
+**Target**
+
+Make these the main commands shown in the README and onboarding:
+
+```text
+aiplane discover
+aiplane doctor
+aiplane recommend
+aiplane export
+```
+
+Existing detailed commands can remain, but should be treated as advanced commands.
+
+**Success criteria**
+
+1. The first page of the README shows no more than four primary commands
+2. A new user can complete the main workflow without understanding stacks, bridges, targets or orchestrators
+3. Advanced terminology appears only after the first successful workflow
+4. Each primary command has clear text and JSON output
+5. Each command produces a suggested next command
+
+### Priority 4: Make doctor output fully actionable
+
+**Target**
+
+Every blocking or advisory finding must contain:
+
+1. Severity
+2. Reason
+3. Impact
+4. Exact remediation command
+5. Whether the command mutates state
+6. Whether dry run is supported
+
+**Success criteria**
+
+1. 100 percent of blocking findings contain an exact remediation command
+2. 100 percent of mutating commands clearly identify themselves
+3. Doctor exit codes distinguish healthy, advisory and blocking states
+4. JSON output contains stable fields for CI usage
+5. Tests cover every doctor finding category
+
+### Priority 5: Validate recommendation quality
+
+**Target**
+
+Create test cases covering:
+
+1. CPU only machine
+2. Small NVIDIA GPU
+3. 24 GB NVIDIA GPU
+4. 32 GB NVIDIA GPU
+5. AMD GPU
+6. Apple unified memory
+7. Remote GPU endpoint
+8. Cloud managed model
+9. Policy restricted environment
+10. Unsupported runtime format
+
+For each case, define expected recommended, usable and rejected models.
+
+**Success criteria**
+
+1. Recommendation decisions are deterministic
+2. Each recommendation includes ranking rationale
+3. Policy blocked models never appear as recommended
+4. Runtime incompatible models never appear as recommended
+5. Hardware unsuitable models are clearly separated
+6. Benchmark data influences ranking only when available
+7. Missing benchmark data does not break ranking
+
+### Priority 6: Prove deterministic exports
+
+**Target**
+
+Generate stable expected outputs for:
+
+1. Continue
+2. Aider
+3. Cline
+4. Zed
+5. Generic OpenAI compatible clients
+6. MCP clients
+
+**Success criteria**
+
+1. The same profile produces byte stable output where possible
+2. Machine specific fields are clearly isolated
+3. Every export includes a plan identifier
+4. Every export can be reproduced from the plan identifier
+5. Export output records profile version and selected model aliases
+6. Client configuration changes trigger visible test failures
+7. Exporters are version aware where the client format changes
+
+### Priority 7: Make policy behaviour predictable
+
+**Target**
+
+Use a consistent set of policy outcomes:
+
+1. Allowed
+2. Allowed with warning
+3. Approval required
+4. Temporarily approved
+5. Blocked
+6. Overridden with audit record
+
+**Success criteria**
+
+1. Every model and endpoint decision returns one policy outcome
+2. Export commands block disallowed providers
+3. Overrides require an explicit reason
+4. Temporary approvals have an expiry
+5. Every override creates an audit entry
+6. Doctor reports policy drift
+7. Policy behaviour is identical across CLI, MCP and exports
+
+### Priority 8: Tighten the product boundary
+
+**Target**
+
+Create a command inventory with three categories.
+
+Core: discovery, doctor, recommendation, policy, export, profile management
+
+Supporting: runtime status, remote endpoint checks, hardware inventory, MCP inspection, benchmark summaries
+
+Deferred from public focus: broad provisioning, general agent execution, rich chat experience, cloud platform behaviour, infrastructure replacement, general workflow orchestration
+
+**Success criteria**
+
+1. README leads only with core commands
+2. Public demo spends at least 80 percent of its time on core commands
+3. New features require a written explanation of which category they belong to
+4. No new top level command is added without a scope review
+5. Deferred areas do not block the external beta
+
+### Priority 9: Test clean machine onboarding
+
+**Target**
+
+Test repeatable onboarding on at least six environments:
+
+1. Ubuntu with Ollama and Continue
+2. Ubuntu with vLLM
+3. Windows with Ollama
+4. macOS with Apple Silicon
+5. Clean machine with no AI tools installed
+6. Remote workstation with local client
+
+**Success criteria**
+
+1. Installation succeeds from documented steps
+2. Discovery completes without manual file changes
+3. Doctor produces useful findings
+4. At least one working export is generated
+5. A tester completes the flow without developer assistance
+6. Median time to first useful export is below ten minutes
+7. Every failure is classified as product defect, documentation defect or unsupported environment
+
+### Priority 10: Gather external evidence
+
+**Target**
+
+Recruit ten users from the intended audience:
+
+1. Three local AI power users
+2. Two software consultancies
+3. Two teams using local and cloud models
+4. Two privacy sensitive organisations
+5. One developer using a remote GPU workstation
+
+**Success criteria**
+
+1. At least seven complete onboarding
+2. At least five generate and use an export
+3. At least three use more than one integration
+4. At least three report that `aiplane` replaced manual configuration or scripts
+5. Record every point where users needed help
+6. Collect time to first successful result
+7. Collect the number of manual values entered
+
+### Priority 11: Define adoption metrics
+
+**Target**
+
+Track these metrics:
+
+1. Installation completion rate
+2. Discovery completion rate
+3. Doctor success rate
+4. Time to first useful export
+5. Number of detected values
+6. Number of manually entered values
+7. Number of successful integrations
+8. Number of policy blocks correctly explained
+9. Number of repeatable profile replays
+10. Number of users returning within seven days
+
+**Initial targets**
+
+1. 80 percent onboarding completion
+2. Median first export below ten minutes
+3. At least 80 percent configuration auto detected
+4. At least 70 percent of users successfully use one generated export
+5. At least 40 percent successfully use two integrations
+6. Fewer than three unexplained errors per ten onboarding sessions
+
+### Priority 12: Improve documentation structure
+
+**Target**
+
+Split documentation by user maturity:
+
+Start here:
+
+1. Install
+2. Quickstart
+3. Doctor
+4. Recommend
+5. Export
+
+Common workflows:
+
+1. Local Ollama
+2. Local vLLM
+3. Remote GPU workstation
+4. Managed provider
+5. Privacy restricted repository
+
+Advanced concepts:
+
+1. Providers
+2. Runtimes
+3. Machines
+4. Stacks
+5. Policies
+6. MCP
+7. Orchestrators
+
+**Success criteria**
+
+1. The first page contains one primary workflow
+2. No advanced concept is required to complete onboarding
+3. Every example is tested in CI where practical
+4. Every example identifies whether it mutates state
+5. Every workflow ends with a verifiable outcome
+
+### Recommended delivery order
+
+#### Milestone 1: External beta readiness
+
+1. Single command onboarding
+2. Actionable doctor output
+3. Configuration provenance
+4. Deterministic exports
+5. Recommendation test matrix
+6. Simplified README
+7. Clean machine tests
+
+Exit target: five external users complete the main workflow without developer assistance.
+
+#### Milestone 2: Team reproducibility
+
+1. Stable plan replay
+2. Policy state model
+3. Profile comparison
+4. Policy drift detection
+5. Shared profile validation
+6. Remote workstation workflow
+
+Exit target: Two teams reproduce the same approved setup across at least three machines.
+
+#### Milestone 3: Commercial validation
+
+1. Central profile registry prototype
+2. Signed policy support
+3. Central audit collection
+4. Fleet inventory
+5. Role based administration
+6. Organisation reporting
+
+Exit target: At least two organisations agree that team governance capability is valuable enough to pay for.
+
+### Immediate next sprint (high-priority and blocking)
+
+1. Add `aiplane discover`
+2. Make `aiplane quickstart local-coding` consume discovery output automatically
+3. Add provenance to every generated profile value
+4. Ensure every doctor failure includes an exact remediation command
+5. Add golden file tests for Continue, Aider, Cline, and MCP exports
+6. Run the workflow on three clean environments and document every failure
+
+### Scope freeze until the sprint completes
+
+Do not add new orchestrators, cloud providers, benchmark frameworks or runtime types until those six targets are complete.
+
+## Current Milestone: External Beta Readiness
+
+The roadmap is now actively executing the priorities above; completed work in each earlier milestone is being stabilized as execution hardens.
 
 ## Implemented
 

@@ -7,6 +7,25 @@ It is not a coding agent, chat UI, model marketplace, or production AI gateway. 
 `aiplane` is specifically aimed at the AI setup layer that people often call “AI Ops”: making environment setup, migration, and model/runtime matching repeatable so teams can focus on research, experimentation, and shipping AI features.
 The nearest analogy is not exactly Terraform, Vagrant, or a dev-container tool. Terraform provisions infrastructure, Vagrant/dev-env tools create general development machines, and Docker Compose runs containers. `aiplane` is narrower: it understands AI-specific concerns such as model catalogs, runtime compatibility, hardware/VRAM fit, provider endpoints, IDE model roles, and model setup checks.
 
+## Core onboarding flow
+
+For a first successful run, use this command sequence:
+
+```bash
+aiplane discover
+aiplane doctor
+aiplane recommend
+aiplane export
+```
+
+Or use the single command path:
+
+```bash
+aiplane quickstart local-coding
+```
+
+These are the public-first, inspect-first commands for onboarding before advanced stack/workflow features.
+
 ## What It Can Do Now
 
 - Create and use profiles that hold provider/source, model, runtime, endpoint, hardware, machine, stack, target, and environment settings.

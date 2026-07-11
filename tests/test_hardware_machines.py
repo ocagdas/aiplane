@@ -318,7 +318,7 @@ class HardwareMachineTests(unittest.TestCase):
                     "machine_tag": "azure_h100_test",
                     "provider": "azure",
                     "stock_sku": "Standard_NC40ads_H100_v5",
-                    "memory_gb": 320,
+                    "memory_gb": 256,
                     "gpu_vendor": "nvidia",
                     "gpu_model": "H100 NVL",
                     "gpu_count": 1,

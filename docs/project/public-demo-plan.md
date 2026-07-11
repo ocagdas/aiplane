@@ -49,7 +49,7 @@ A clean PR-ready demo cut is at this point when all of these are true:
 - A second runtime track is shown through vLLM/OpenAI-compatible planning/export (dry-run at minimum).
 - MCP manifest export and skills handoff are shown, and credentials are kept out of screen recordings.
 
-With current behavior and current test coverage, we are at the feature-freeze point for the **Team Policy and Governance** milestone. The next demo checkpoint should be delayed only for any remaining remote-workstation hardening changes that are still being polished outside this milestone.
+With current behavior and current test coverage, we are at the feature-freeze point for the **External Beta Readiness** milestone. Next release checkpoints should focus on the priorities in the new roadmap, especially the onboarding/discovery->doctor->recommend->export path. The next demo checkpoint should be delayed only for any remaining remote-workstation hardening changes that are still being polished outside this milestone.
 
 
 ## Demo Thesis
