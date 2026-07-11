@@ -820,10 +820,7 @@ def _recommend_model(
         if runtime_warning:
             blockers.append(runtime_warning)
         return "not_recommended", "; ".join(blockers)
-
     gaps: list[str] = []
-    if runtime_warning:
-        gaps.append(runtime_warning)
     if recommended_ram is not None and memory_gb is not None and memory_gb < recommended_ram:
         gaps.append(f"below recommended RAM ({memory_gb:g}GB < {recommended_ram:g}GB)")
     if recommended_vram is not None and gpu_vram_gb < recommended_vram:
@@ -834,8 +831,9 @@ def _recommend_model(
             f"{runtime_warning}; meets policy, runtime compatibility, and configured RAM/VRAM targets",
         )
     if gaps:
+        if runtime_warning:
+            gaps.append(runtime_warning)
         return "usable", "; ".join(gaps)
-
     return "recommended", "meets policy, runtime compatibility, and configured RAM/VRAM targets"
 
 
