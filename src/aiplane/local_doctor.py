@@ -34,8 +34,6 @@ LOCAL_CODING_MCP_TOOLS = {
 }
 
 
-
-
 def local_coding_doctor(profile: Profile, include_optional: bool = False) -> dict[str, Any]:
     catalog = ModelCatalog(profile)
     providers = catalog.providers()
@@ -136,9 +134,7 @@ def local_coding_doctor_text(payload: dict[str, Any]) -> str:
                     item += f" -> {suggestion}"
                 severity = str(
                     check.get("severity")
-                    or (
-                        "blocking" if not check.get("ok") else "advisory" if check.get("warning") else "pass"
-                    )
+                    or ("blocking" if not check.get("ok") else "advisory" if check.get("warning") else "pass")
                 )
                 if severity == "blocking":
                     blocking_items.append((section_name, item))
@@ -187,6 +183,7 @@ def local_coding_doctor_text(payload: dict[str, Any]) -> str:
         lines.append("next steps:")
         lines.extend(f"- {step}" for step in next_steps)
     return "\n".join(lines).rstrip()
+
 
 def _profile_section(profile: Profile) -> dict[str, Any]:
     checks = [
@@ -765,8 +762,6 @@ def _machine_detail(machine: dict[str, Any]) -> str:
     return ", ".join(parts) or str(machine.get("machine_tag") or machine.get("provider") or "configured")
 
 
-
-
 def _section_check_status(profile: str, section_name: str, check: dict[str, Any]) -> tuple[str, str]:
     ok = bool(check.get("ok"))
     warning = bool(check.get("warning"))
@@ -826,9 +821,7 @@ def _check_action(profile: str, section: str, check: dict[str, Any]) -> str:
 
     if section == "integrations":
         tool = name.removeprefix("integration:")
-        return (
-            f"Run `aiplane integrations roles {tool}` and `aiplane integrations plan {tool}` to fill required role gaps."
-        )
+        return f"Run `aiplane integrations roles {tool}` and `aiplane integrations plan {tool}` to fill required role gaps."
 
     if section == "policy":
         if name == "cloud_backends":
@@ -837,9 +830,7 @@ def _check_action(profile: str, section: str, check: dict[str, Any]) -> str:
             return "Update repository policy in `profile.yaml` (`classification` / `allow_cloud`) and rerun doctor."
         if name.startswith("model_policy:"):
             model_alias = name.split(":", 1)[1]
-            return (
-                f"Run `aiplane policy explain --action model:{model_alias}` and resolve model/provider policy constraints."
-            )
+            return f"Run `aiplane policy explain --action model:{model_alias}` and resolve model/provider policy constraints."
         if name == "allowed_providers":
             return "Update `allowed_providers` in the profile repository policy and re-run doctor."
         return "Run `aiplane policy explain --action backend:cloud`."
@@ -863,6 +854,7 @@ def _check_action(profile: str, section: str, check: dict[str, Any]) -> str:
         return "Run `aiplane mcp manifest` and validate read/write surface coverage."
 
     return ""
+
 
 def _next_steps(profile: str, sections: list[dict[str, Any]]) -> list[str]:
     section_ok = {section["name"]: bool(section.get("ok")) for section in sections}

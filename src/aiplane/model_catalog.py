@@ -1311,7 +1311,9 @@ class ModelCatalog:
 
     def doctor(self) -> list[ModelStatus]:
         statuses = []
-        provider_probe_cache: dict[tuple[str, str, tuple[tuple[str, str], ...]], tuple[bool, str, list[str] | None]] = {}
+        provider_probe_cache: dict[
+            tuple[str, str, tuple[tuple[str, str], ...]], tuple[bool, str, list[str] | None]
+        ] = {}
         for name, model in self.models().items():
             statuses.append(self._status(name, model, provider_probe_cache))
         return statuses

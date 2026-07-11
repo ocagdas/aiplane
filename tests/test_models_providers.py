@@ -2026,7 +2026,6 @@ class ModelProviderTests(unittest.TestCase):
         self.assertIsInstance(payload, list)
         self.assertGreaterEqual(len(payload), 1)
 
-
     def test_models_list_filters_and_sorts_by_provider_popularity(self) -> None:
         source = load_profile("local-dev", Path.cwd())
         with tempfile.TemporaryDirectory() as tmp:

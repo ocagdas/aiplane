@@ -670,9 +670,7 @@ def _recommendation_payload(
             "recommended_runtime": runtime_compatibility.get("recommended_runtime"),
             "reasoning": runtime_compatibility.get("reasoning", []),
         }
-        payload["runtime_compatibility_score"] = float(
-            runtime_compatibility.get("compatibility_score", 0.0) or 0.0
-        )
+        payload["runtime_compatibility_score"] = float(runtime_compatibility.get("compatibility_score", 0.0) or 0.0)
         payload["runtime_recommendation"] = runtime_compatibility.get("recommended_runtime")
     else:
         payload["runtime_compatibility_score"] = 0.0
@@ -762,9 +760,7 @@ def _recommendation_runtime_compatibility(
         "preferred_runtime": preferred or None,
         "recommended_runtime": preferred_runtime,
         "compatibility_score": 0.4,
-        "reasoning": [
-            "model has local runtime compatibility, but none are currently available"
-        ],
+        "reasoning": ["model has local runtime compatibility, but none are currently available"],
     }
 
 
@@ -800,14 +796,10 @@ def _recommend_model(
 
     compatibility_state = str((runtime_compatibility or {}).get("state"))
     if compatibility_state == "no_supported_runtime":
-        return "not_recommended", "; ".join((runtime_compatibility or {}).get("reasoning", ["no local runtime support"]))
+        return "not_recommended", "; ".join(
+            (runtime_compatibility or {}).get("reasoning", ["no local runtime support"])
+        )
 
-    runtime_usable = compatibility_state in {
-        "preferred_runtime_available",
-        "runtime_available",
-        "runtime_supported_only",
-        "not_local_model",
-    }
     runtime_warning = ""
     if compatibility_state == "runtime_supported_only":
         runtime_warning = "; ".join((runtime_compatibility or {}).get("reasoning", []))
@@ -836,11 +828,13 @@ def _recommend_model(
         gaps.append(f"below recommended RAM ({memory_gb:g}GB < {recommended_ram:g}GB)")
     if recommended_vram is not None and gpu_vram_gb < recommended_vram:
         gaps.append(f"below recommended VRAM ({gpu_vram_gb:.1f}GB < {recommended_vram:g}GB)")
+    if runtime_warning and not gaps:
+        return (
+            "recommended",
+            f"{runtime_warning}; meets policy, runtime compatibility, and configured RAM/VRAM targets",
+        )
     if gaps:
-        return ("usable", "; ".join(gaps)) if runtime_usable else ("not_recommended", "; ".join(gaps))
-
-    if not runtime_usable:
-        return "not_recommended", "model is local but has no runtime compatibility"
+        return "usable", "; ".join(gaps)
 
     return "recommended", "meets policy, runtime compatibility, and configured RAM/VRAM targets"
 
