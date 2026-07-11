@@ -11,12 +11,12 @@ Good design choices flow from that standard:
 - Prefer transparency over magic. Significant operations should be inspectable before they run.
 - Prefer composability over replacement. Integrate with tools developers already use rather than duplicating them.
 - Prefer explicitness over convenience at the cost of control. Profile-driven configuration is intentionally visible.
-- Prefer depth over breadth. Do the control-plane job well before expanding scope.
+- Prefer depth over breadth. Do the environment-doctor and compiler job well before expanding scope.
 - Prefer a polished local/hybrid AI workflow stack doctor over broad integration lists that are not end-to-end useful.
 
 ## Positioning
 
-`aiplane` is a local-first configuration and operations control-plane CLI for AI workflow environments across local, remote, VM, and cloud-adjacent machines. Its sharpest wedge is making local and hybrid AI workflow stacks reproducible, inspectable, policy-aware, and portable from one profile.
+`aiplane` is a local-first configuration and operations environment-doctor and configuration compiler for AI workflow environments across local, remote, VM, and cloud-adjacent machines. Its sharpest wedge is making local and hybrid AI workflow stacks reproducible, inspectable, policy-aware, and portable from one profile.
 
 It is not a coding agent, IDE assistant, full chat UI, inference server, model marketplace, model proxy, or cloud platform. Existing tools such as Continue, Cline, Cursor, Codex-like CLIs, Claude Code, Aider, OpenHands, Ollama, LM Studio, vLLM, TGI, llama.cpp, LocalAI, OpenAI, Anthropic, and Azure OpenAI already cover large parts of those domains. `aiplane` should configure, check, plan, export, and govern those pieces rather than replacing them.
 The aim of `aiplane` is to make environment setup, migration, and model/runtime pairing an explicit, repeatable operations layer so teams can focus on AI experiments, model work, and code outcomes instead.

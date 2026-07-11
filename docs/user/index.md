@@ -5,7 +5,7 @@ It is focused on AI setup and environment operations (setup, migration, and mode
 
 ## Start Here
 
-`aiplane` is a control-plane CLI for self-managed AI development environments: it plans, prepares, and connects model runtimes rather than replacing your IDE assistant, chat UI, or model-serving endpoint.
+`aiplane` is an environment-doctor and configuration compiler for self-managed AI development environments: it plans, prepares, and connects model runtimes rather than replacing your IDE assistant, chat UI, or model-serving endpoint.
 
 
 - [Practical Overview](overview.md): what `aiplane` does, terminology, implemented capabilities, and first useful flows.
@@ -39,6 +39,8 @@ aiplane providers list
 aiplane models refresh --provider huggingface --query text-generation --limit 25 --dry-run
 aiplane tools doctor
 aiplane integrations roles continue
+aiplane launch --tool continue --dry-run
+aiplane session start --tool aider --model fixture-chat-small --dry-run
 ```
 
 Project strategy, contributor notes, and roadmap details live under `docs/project/`,

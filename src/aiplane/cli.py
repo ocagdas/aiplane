@@ -1,17 +1,21 @@
 from __future__ import annotations
 
+from pathlib import Path
+from datetime import datetime, timezone
 import argparse
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
 import threading
-from pathlib import Path
+import uuid
 
 from .agents import AgentManager
 from .approvals import ApprovalHandler
 from .audit import AuditLogger
+from .models import AuditEvent
 from .benchmark_tools import BenchmarkToolManager
 from .code_tasks import CodeTaskRunner
 from .config import (
@@ -138,6 +142,8 @@ _BRIDGE_ACTIONS: dict[str, dict[str, object]] = {
     },
 }
 
+_LAUNCH_TOOLS = ("aider", "continue", "ollama")
+
 
 def _integration_selection_args(parser) -> None:
     parser.add_argument(
@@ -177,7 +183,7 @@ def _main(argv: list[str] | None = None) -> int:
         prog="aiplane",
         description=(
             "Configure, check, and connect local/cloud AI coding environments.\n\n"
-            "aiplane is a control-plane CLI: it manages profiles, providers, models, hardware fit,\n"
+            "aiplane is an environment-doctor and configuration compiler: it manages profiles, providers, models, hardware fit,\n"
             "IDE/CLI exports, remote endpoint plans, and MCP access. It does not replace IDE agents."
         ),
         epilog=(
@@ -188,6 +194,8 @@ def _main(argv: list[str] | None = None) -> int:
             "  aiplane hardware recommend\n"
             "  aiplane models benchmark MODEL_ALIAS --dry-run\n"
             "  aiplane integrations export continue --model MODEL_ALIAS\n"
+            "  aiplane launch --tool continue --model MODEL_ALIAS --dry-run\n"
+            "  aiplane session start --tool ollama --model MODEL_ALIAS\n"
             "  aiplane mcp serve\n\n"
             "Docs: docs/user/index.md"
         ),
@@ -229,7 +237,7 @@ def _main(argv: list[str] | None = None) -> int:
         subparsers,
         "quickstart",
         "Start a guided local AI coding setup",
-        "Run narrow, control-plane quickstarts for reproducible local/hybrid AI coding profiles.",
+        "Run a focused environment-doctor workflow that discovers, validates, and compiles reproducible local/hybrid AI coding profiles.",
         "Examples:\n  aiplane quickstart local-coding\n  aiplane quickstart local-coding --dry-run\n  aiplane quickstart local-coding --no-discovery",
     )
     quickstart_sub = quickstart_cmd.add_subparsers(dest="quickstart_command", required=True, metavar="command")
@@ -890,7 +898,7 @@ def _main(argv: list[str] | None = None) -> int:
     hardware_recommend = hardware_sub.add_parser(
         "recommend",
         help="Recommend models for active/discovered hardware",
-        description="Return hardware-aware model recommendations, sorted by capability score within recommendation groups.",
+        description="Return hardware- and policy-aware model recommendations using hardware fit, runtime compatibility, and ranking rationale.",
         formatter_class=HelpFormatter,
         allow_abbrev=False,
     )
@@ -1756,6 +1764,73 @@ def _main(argv: list[str] | None = None) -> int:
         help="Print the resolved external command without executing it",
     )
 
+    launch_cmd = _command(
+        subparsers,
+        "launch",
+        "Launch a configured assistant tool",
+        "Launch a configured assistant tool with profile-driven model selection.",
+        "Examples:\n  aiplane launch --tool aider --model fixture-chat-small\n  aiplane launch --tool ollama --app vscode\n  aiplane launch --tool continue --model fixture-chat-small --dry-run",
+    )
+    launch_cmd.add_argument(
+        "--tool",
+        choices=sorted(_LAUNCH_TOOLS),
+        required=True,
+        help="Target assistant/tool wrapper to launch",
+    )
+    _profile_arg(launch_cmd)
+    launch_cmd.add_argument(
+        "--model",
+        help="Model alias to apply when building launch arguments and endpoint metadata. If omitted, defaults to chat_model.",
+    )
+    launch_cmd.add_argument(
+        "--app",
+        help="Target application name for `aiplane launch --tool ollama`",
+    )
+    launch_cmd.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print the launch plan without starting any process",
+    )
+
+    session_cmd = _command(
+        subparsers,
+        "session",
+        "Track a minimal model session",
+        "Create thin, local session metadata for model-facing tooling without implementing a custom chat UI.",
+        "Examples:\n  aiplane session start --tool aider --model fixture-chat-small\n  aiplane session start --tool ollama --app vscode --transcript /tmp/session.log\n  aiplane session start --tool continue --model fixture-chat-small --dry-run",
+    )
+    session_sub = session_cmd.add_subparsers(dest="session_command", required=True, metavar="command")
+    session_start = session_sub.add_parser(
+        "start",
+        help="Start a minimal session metadata record",
+        description="Start a minimal session metadata record (model, command, transcript path, audit metadata).",
+        formatter_class=HelpFormatter,
+        allow_abbrev=False,
+    )
+    session_start.add_argument(
+        "--tool",
+        choices=sorted(_LAUNCH_TOOLS),
+        required=True,
+        help="Tool name to launch from aiplane session metadata.",
+    )
+    _profile_arg(session_start)
+    session_start.add_argument(
+        "--model",
+        help="Model alias to apply. If omitted, defaults to chat_model.",
+    )
+    session_start.add_argument(
+        "--app",
+        help="Target application name for `aiplane session start --tool ollama`.",
+    )
+    session_start.add_argument(
+        "--transcript",
+        help="Optional transcript file path. Defaults to .aiplane/sessions/<session-id>.log under workspace.",
+    )
+    session_start.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Preview the session metadata without writing it or emitting an audit event.",
+    )
     deploy_cmd = _command(
         subparsers,
         "deploy",
@@ -2498,7 +2573,9 @@ def _main(argv: list[str] | None = None) -> int:
                 raise ValueError("use either --clear or a format value, not both")
             config_path = local_config_path(args.path)
             if args.value is not None:
-                write_path = set_output_format(args.value, profile=args.profile, command=args.format_command, path=config_path)
+                write_path = set_output_format(
+                    args.value, profile=args.profile, command=args.format_command, path=config_path
+                )
             elif args.clear:
                 write_path = clear_output_format(profile=args.profile, command=args.format_command, path=config_path)
             else:
@@ -2510,8 +2587,12 @@ def _main(argv: list[str] | None = None) -> int:
                         "format": get_output_format_override(path=write_path),
                         "profile": args.profile,
                         "command": args.format_command,
-                        "profile_format": get_profile_output_format(args.profile, path=write_path) if args.profile else None,
-                        "command_format": get_command_output_format(args.format_command, path=write_path) if args.format_command else None,
+                        "profile_format": get_profile_output_format(args.profile, path=write_path)
+                        if args.profile
+                        else None,
+                        "command_format": get_command_output_format(args.format_command, path=write_path)
+                        if args.format_command
+                        else None,
                         "resolved_format": resolve_output_format(
                             profile=args.profile,
                             command=args.format_command,
@@ -2549,8 +2630,12 @@ def _main(argv: list[str] | None = None) -> int:
                         "verbosity": get_output_verbosity_override(path=write_path),
                         "profile": args.profile,
                         "command": args.verbosity_command,
-                        "profile_verbosity": get_profile_output_verbosity(args.profile, path=write_path) if args.profile else None,
-                        "command_verbosity": get_command_output_verbosity(args.verbosity_command, path=write_path) if args.verbosity_command else None,
+                        "profile_verbosity": get_profile_output_verbosity(args.profile, path=write_path)
+                        if args.profile
+                        else None,
+                        "command_verbosity": get_command_output_verbosity(args.verbosity_command, path=write_path)
+                        if args.verbosity_command
+                        else None,
                         "resolved_verbosity": resolve_output_verbosity(
                             profile=args.profile,
                             command=args.verbosity_command,
@@ -3343,6 +3428,92 @@ def _main(argv: list[str] | None = None) -> int:
             return int(completed.returncode)
         raise ValueError(f"unknown bridge command: {args.bridge_command}")
 
+    if args.command == "launch":
+        profile = load_profile(effective_profile, workspace, profiles_dir=profiles_dir)
+        plan = _launch_plan(profile, args.tool, model=args.model, app=args.app)
+        payload = {
+            "name": "launch_plan",
+            "tool": args.tool,
+            "profile": profile.name,
+            "dry_run": bool(args.dry_run),
+            **plan,
+        }
+        if args.dry_run:
+            payload["ok"] = True
+            print(_json(payload, indent=2))
+            return 0
+        executable = str(plan["command"][0]) if plan.get("command") else ""
+        if executable and not shutil.which(executable):
+            payload["ok"] = False
+            payload["reason"] = f"required executable not found on PATH: {executable}"
+            print(_json(payload, indent=2))
+            return 2
+        completed = subprocess.run(
+            [str(part) for part in plan["command"]],
+            cwd=workspace,
+            env=plan.get("env"),
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if completed.stdout:
+            print(completed.stdout, end="")
+        if completed.stderr:
+            print(completed.stderr, end="", file=sys.stderr)
+        payload["returncode"] = int(completed.returncode)
+        return int(completed.returncode)
+
+    if args.command == "session":
+        profile = load_profile(effective_profile, workspace, profiles_dir=profiles_dir)
+        launch_plan = _launch_plan(profile, args.tool, model=args.model, app=args.app)
+        session_id = _new_session_id()
+        transcript_path = _default_session_transcript(args.transcript, workspace, session_id)
+        payload = {
+            "name": "session_start",
+            "session_id": session_id,
+            "tool": args.tool,
+            "profile": profile.name,
+            "model": launch_plan["selection"]["name"],
+            "dry_run": bool(args.dry_run),
+            "transcript": str(transcript_path),
+            "launch": launch_plan,
+        }
+        if args.dry_run:
+            print(_json(payload, indent=2))
+            return 0
+        metadata_path = _session_metadata_path(workspace, session_id)
+        metadata_path.parent.mkdir(parents=True, exist_ok=True)
+        transcript_path.parent.mkdir(parents=True, exist_ok=True)
+        session_record = {
+            "name": "session_record",
+            "session_id": session_id,
+            "tool": args.tool,
+            "profile": profile.name,
+            "model": launch_plan["selection"]["name"],
+            "command": launch_plan["command"],
+            "transcript": str(transcript_path),
+            "created": datetime.now(timezone.utc).isoformat(),
+        }
+        metadata_path.write_text(_json(session_record, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        launch_event = AuditEvent(
+            event_type="session",
+            profile=profile.name,
+            action="session.start",
+            decision="allowed",
+            details={
+                "session_id": session_id,
+                "tool": args.tool,
+                "model": launch_plan["selection"]["name"],
+                "transcript": str(transcript_path),
+                "command": launch_plan["command"],
+                "selection": launch_plan["selection"],
+            },
+        )
+        AuditLogger(profile).record(launch_event)
+        payload["record"] = str(metadata_path)
+        print(_json(payload, indent=2))
+        return 0
+
     if args.command == "deploy":
         profile = load_profile(effective_profile, workspace, profiles_dir=profiles_dir)
         manager = DeployManager(profile)
@@ -3577,12 +3748,40 @@ def _main(argv: list[str] | None = None) -> int:
                     )
                 )
                 return 2
+            install_reporter: _RuntimeInstallReporter | None = None
             if args.runtimes_command == "install" and not args.dry_run:
+                install_reporter = _RuntimeInstallReporter()
+                install_reporter.step(
+                    "checking prerequisites", command=f"internal: runtimes prerequisites {args.runtime}"
+                )
                 prerequisites = catalog.prerequisites(args.runtime)
                 if not prerequisites.get("ok"):
+                    install_reporter.complete(f"prerequisites failed: {args.runtime}")
                     print(_json(prerequisites, indent=2))
                     return 2
             substrate = _runtime_helper_substrate(profile, args.runtime, args.substrate)
+            helper_command = _provider_helper_command(
+                args.runtime,
+                helper_action,
+                effective_profile,
+                args.model,
+                substrate=substrate,
+                dry_run=args.dry_run,
+            )
+            if install_reporter:
+                install_reporter.step(f"running helper action: {helper_action}", command=helper_command)
+                preview = _run_provider_helper(
+                    args.runtime,
+                    helper_action,
+                    effective_profile,
+                    args.model,
+                    substrate=substrate,
+                    dry_run=True,
+                    profiles_dir=profiles_dir,
+                )
+                preview_command = _extract_helper_inner_command(preview)
+                if preview_command:
+                    install_reporter.step("running runtime install command", command=preview_command)
             completed = _run_provider_helper(
                 args.runtime,
                 helper_action,
@@ -3592,6 +3791,8 @@ def _main(argv: list[str] | None = None) -> int:
                 dry_run=args.dry_run,
                 profiles_dir=profiles_dir,
             )
+            if install_reporter:
+                install_reporter.complete(f"install finished (exit {completed.returncode}): {args.runtime}")
             if completed.stdout:
                 print(completed.stdout, end="")
             if completed.stderr:
@@ -3622,6 +3823,101 @@ def _main(argv: list[str] | None = None) -> int:
         return 0
 
     return 1
+
+
+def _launch_plan(
+    profile,
+    tool: str,
+    model: str | None = None,
+    app: str | None = None,
+) -> dict[str, object]:
+    if app and tool != "ollama":
+        raise ValueError("--app is only supported with --tool ollama")
+    manager = IntegrationManager(profile)
+    plan_args: dict[str, object] = {}
+    if tool == "continue":
+        if model:
+            plan_args["chat"] = model
+    elif tool == "ollama":
+        if model:
+            plan_args["model_name"] = model
+        plan_args["runtime"] = "ollama"
+    else:
+        if model:
+            plan_args["model_name"] = model
+    plan = manager.plan("openai-compatible" if tool == "ollama" else tool, **plan_args)
+    selections = plan.get("selection", {})
+    if not isinstance(selections, dict):
+        raise ValueError("integration plan did not include a selection map")
+    if tool == "continue":
+        selected = selections.get("chat")
+        if not isinstance(selected, dict):
+            raise ValueError("integration plan is missing continue chat selection")
+    else:
+        selected = selections.get("primary")
+        if not isinstance(selected, dict):
+            raise ValueError("integration plan is missing primary selection")
+
+    model_name = str(selected.get("name") or "")
+    if not model_name:
+        raise ValueError("selected model name is missing")
+
+    decision = PolicyEngine(profile).model_decision(model_name)
+    if not decision.allowed:
+        raise ValueError(f"launch blocked: {decision.reason}")
+
+    if tool == "ollama":
+        model_id = str(selected.get("model") or "")
+        command = ["ollama", "launch", model_id]
+        if app:
+            command.extend(["--app", app])
+        return {
+            "tool": tool,
+            "selection": selected,
+            "command": command,
+        }
+
+    if tool == "aider":
+        api_key_env = str(selected.get("api_key_env") or "")
+        model_id = str(selected.get("model") or "")
+        if not model_id:
+            raise ValueError("selected model has no model id")
+        command = ["aider", "--model", f"openai/{model_id}"]
+        launch_env: dict[str, str] = os.environ.copy()
+        launch_env["OPENAI_API_BASE"] = str(selected.get("endpoint") or "")
+        if api_key_env:
+            if api_key_env not in launch_env:
+                raise ValueError(f"required environment variable {api_key_env} for aider is not set")
+            launch_env[api_key_env] = os.environ.get(api_key_env, "")
+        return {
+            "tool": tool,
+            "selection": selected,
+            "command": command,
+            "env": launch_env,
+        }
+
+    if tool == "continue":
+        return {
+            "tool": tool,
+            "selection": selected,
+            "command": ["continue"],
+        }
+
+    raise ValueError(f"unsupported launch tool: {tool}")
+
+
+def _new_session_id() -> str:
+    return uuid.uuid4().hex
+
+
+def _default_session_transcript(transcript_arg: str | Path | None, workspace: Path, session_id: str) -> Path:
+    if transcript_arg:
+        return Path(transcript_arg).expanduser()
+    return workspace / ".aiplane" / "sessions" / f"{session_id}.log"
+
+
+def _session_metadata_path(workspace: Path, session_id: str) -> Path:
+    return workspace / ".aiplane" / "sessions" / f"{session_id}.json"
 
 
 def _runtime_helper_substrate(profile: object, runtime: str, override: str | None = None) -> str:
@@ -3664,6 +3960,30 @@ def _run_provider_helper(
     helper = Path(__file__).resolve().parents[2] / "scripts" / "provider_helper.sh"
     if not helper.exists():
         raise FileNotFoundError(f"provider helper not found: {helper}")
+    command = _provider_helper_command(runtime, action, profile, model, substrate=substrate, dry_run=dry_run)
+    env = None
+    if profiles_dir is not None:
+        env = os.environ.copy()
+        env["AIPLANE_PROFILES_DIR"] = str(profiles_dir)
+    return subprocess.run(
+        command,
+        cwd=helper.parents[1],
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+
+def _provider_helper_command(
+    runtime: str,
+    action: str,
+    profile: str,
+    model: str,
+    substrate: str = "native",
+    dry_run: bool = False,
+) -> list[str]:
+    helper = Path(__file__).resolve().parents[2] / "scripts" / "provider_helper.sh"
     command = [
         str(helper),
         "--provider",
@@ -3679,18 +3999,20 @@ def _run_provider_helper(
     ]
     if dry_run:
         command.append("--dry-run")
-    env = None
-    if profiles_dir is not None:
-        env = os.environ.copy()
-        env["AIPLANE_PROFILES_DIR"] = str(profiles_dir)
-    return subprocess.run(
-        command,
-        cwd=helper.parents[1],
-        env=env,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
+    return command
+
+
+def _extract_helper_inner_command(completed: subprocess.CompletedProcess[str]) -> str | None:
+    output = f"{completed.stdout}\n{completed.stderr}".splitlines()
+    for line in output:
+        stripped = line.strip()
+        if not stripped.startswith("+ "):
+            continue
+        command_text = stripped[2:].strip()
+        if "provider_helper.sh" in command_text:
+            continue
+        return command_text
+    return None
 
 
 def _profile_summary(profile, default_name: str | None = None) -> dict[str, object]:
@@ -4003,6 +4325,64 @@ class _AzCommandReporter:
             sys.stderr.flush()
 
 
+class _RuntimeInstallReporter:
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._has_status_line = False
+        self._dot_thread: threading.Thread | None = None
+        self._dot_stop: threading.Event | None = None
+
+    def step(self, message: str, command: str | list[str] | None = None) -> None:
+        self._stop_dot_line(clear_line=True)
+        if self._has_status_line:
+            self._write("\x1b[1A\r\x1b[2K")
+        if isinstance(command, list):
+            command_text = _redact_command_for_stderr([str(part) for part in command])
+        else:
+            command_text = str(command or "").strip()
+        if command_text:
+            self._write(f"[runtime] {message}: {command_text}\n")
+        else:
+            self._write(f"[runtime] {message}\n")
+        self._has_status_line = True
+        self._start_dot_line()
+
+    def complete(self, message: str) -> None:
+        self._stop_dot_line(clear_line=True)
+        if self._has_status_line:
+            self._write("\x1b[1A\r\x1b[2K")
+        self._write(f"[runtime] {message}\n")
+        self._has_status_line = False
+
+    def _start_dot_line(self) -> None:
+        stop = threading.Event()
+        self._dot_stop = stop
+        thread = threading.Thread(target=self._dot_worker, args=(stop,), daemon=True)
+        self._dot_thread = thread
+        thread.start()
+
+    def _dot_worker(self, stop: threading.Event) -> None:
+        while not stop.wait(2):
+            self._write(".")
+
+    def _stop_dot_line(self, clear_line: bool) -> None:
+        stop = self._dot_stop
+        thread = self._dot_thread
+        self._dot_stop = None
+        self._dot_thread = None
+        if stop:
+            stop.set()
+        if thread:
+            thread.join(timeout=3)
+        if clear_line:
+            self._write("\r\x1b[2K\r")
+
+    def _write(self, text: str) -> None:
+        with self._lock:
+            sys.stderr.write(text)
+            sys.stderr.flush()
+
+
 def _stderr_line_progress():
     longest = 0
 
@@ -4020,7 +4400,6 @@ def _stderr_line_progress():
         sys.stderr.flush()
 
     return progress
-
 
 
 def _runtimes_list_text(rows: list[dict[str, object]]) -> str:
@@ -4154,6 +4533,7 @@ def _hardware_show_text(payload: dict[str, object]) -> str:
             effective_lines,
         ]
     )
+
 
 def _environment_doctor_text(payload: dict[str, object]) -> str:
     summary = payload.get("summary", {}) if isinstance(payload.get("summary"), dict) else {}
@@ -4387,7 +4767,7 @@ def _quickstart_local_coding(args, workspace: Path, profiles_dir: Path | None) -
         "doctor": doctor_payload,
         "commands": commands,
         "notes": [
-            "This quickstart stays in the control-plane lane: it creates or previews a local profile, runs discovery/doctor checks, optionally delegates an explicit model pull, and prints export commands.",
+            "This quickstart stays in the environment-doctor workflow lane: it creates or previews a local profile, runs discovery/doctor checks, optionally delegates an explicit model pull, and prints export commands.",
             "Use --dry-run with --pull-model to preview the existing runtime helper pull path without pulling model weights.",
             "It does not install runtimes, edit IDE configuration, start cloud resources, or run an agent conversation.",
         ],

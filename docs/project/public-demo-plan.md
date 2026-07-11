@@ -92,15 +92,17 @@ aiplane models refresh --provider ollama --query code --limit 10
 aiplane models refresh --provider ollama --query embed --limit 10
 aiplane models list --group-by runtime --limit 10
 aiplane models list --runtime ollama --role chat --capability 'general_chat>=2' --fits-hardware --enabled-only --sort-by role --limit 3
-aiplane models list --runtime ollama --role chat --ram-gb 16 --vram-gb 0 --sort-by role --limit 3
-aiplane models list --runtime ollama --role chat --ram-gb 32 --vram-gb 8 --sort-by role --limit 3
-aiplane models list --runtime ollama --role autocomplete --ram-gb 16 --vram-gb 0 --sort-by role --limit 3
-aiplane models list --runtime ollama --role embedding --ram-gb 16 --vram-gb 0 --sort-by role --limit 3
+aiplane models list --runtime vllm --role chat --capability 'general_chat>=2' --fits-hardware --enabled-only --sort-by role --limit 3
+aiplane models list --runtime ollama --role autocomplete --fits-hardware --enabled-only --sort-by role --limit 3
+aiplane models list --runtime ollama --role embedding --fits-hardware --enabled-only --sort-by role --limit 3
 CHAT_ALIAS="$(aiplane models list --runtime ollama --role chat --capability 'general_chat>=2' --fits-hardware --enabled-only --sort-by role --limit 1 --name-only)"
 printf 'chat_alias=%s\n' "$CHAT_ALIAS"
+VLLM_ALIAS="$(aiplane models list --runtime vllm --role chat --capability 'general_chat>=2' --fits-hardware --enabled-only --sort-by role --limit 1 --name-only)"
+printf 'vllm_alias=%s\n' "$VLLM_ALIAS"
 
 # Review/add/promote the chosen alias before exporting or running.
 aiplane models show "$CHAT_ALIAS"
+aiplane models show "$VLLM_ALIAS"
 aiplane integrations roles continue
 
 # Pull preview versus execution. Run the non-dry command only on a prepared recording machine.
@@ -119,15 +121,16 @@ aiplane integrations export continue --chat "$CHAT_ALIAS"
 aiplane integrations export aider --chat "$CHAT_ALIAS"
 
 # Second runtime track: vLLM/OpenAI-compatible endpoint planning and runner dry-runs.
-VLLM_ALIAS="vllm_demo_chat"
-aiplane models add "$VLLM_ALIAS" --provider local_file --model /models/TinyLlama-1.1B-Chat-v1.0 --role chat --runtime vllm --preferred-runtime vllm --set min_ram_gb=16 --set min_vram_gb=8 --dry-run
-aiplane models add "$VLLM_ALIAS" --provider local_file --model /models/TinyLlama-1.1B-Chat-v1.0 --role chat --runtime vllm --preferred-runtime vllm --set min_ram_gb=16 --set min_vram_gb=8 --overwrite
-aiplane models show "$VLLM_ALIAS"
 aiplane runtimes prerequisites vllm
+aiplane runtimes install vllm --dry-run
 aiplane runtimes bundle vllm --model "$VLLM_ALIAS" --mode docker --format dockerfile
 aiplane runtimes start vllm --model "$VLLM_ALIAS" --dry-run
+aiplane runtimes status vllm
 aiplane integrations export openai-compatible --model "$VLLM_ALIAS" --endpoint http://localhost:8000/v1
 aiplane chat --model "$VLLM_ALIAS" --prompt "Say hello from the vLLM endpoint" --dry-run
+# Run without --dry-run only when a reachable vLLM/OpenAI-compatible endpoint is already up.
+aiplane chat --model "$VLLM_ALIAS" --prompt "Say hello from the vLLM endpoint"
+aiplane code analyze --model "$VLLM_ALIAS" src/aiplane/cli.py --dry-run
 
 # Section 3: MCP, skills, and repeatability surfaces.
 aiplane integrations export vscode-mcp
@@ -263,7 +266,7 @@ aiplane models refresh --provider ollama --query chat --limit 10
 aiplane models refresh --provider ollama --query code --limit 10
 aiplane models refresh --provider ollama --query embed --limit 10
 aiplane models list --group-by runtime --limit 10
-aiplane models list --provider ollama --role chat --ram-gb 16 --vram-gb 0 --sort-by role --limit 5
+aiplane models list --runtime ollama --role chat --capability 'general_chat>=2' --fits-hardware --enabled-only --sort-by role --limit 5
 aiplane models list --provider ollama --role chat --ram-gb 32 --vram-gb 8 --sort-by role --limit 5
 aiplane models list --provider ollama --role chat --gpu-vendor nvidia --accelerator-api cuda --sort-by role --limit 5
 CHAT_ALIAS="$(aiplane models list --provider ollama --role chat --enabled-only --sort-by role --limit 1 --name-only)"
@@ -372,18 +375,21 @@ Recording note: `aiplane chat` resolves the model entry and uses the configured 
 
 ### 0:35-1:05 - Second Runtime: vLLM/OpenAI-Compatible Endpoint
 
-Use vLLM as the second runtime story. Keep it dry-run unless the recording machine or a remote GPU box already has a reachable OpenAI-compatible endpoint.
+Use vLLM as the second runtime story with a second model alias that already fits the current machine profile. Keep it dry-run unless the recording machine or a remote GPU box already has a reachable OpenAI-compatible endpoint.
 
 ```bash
-VLLM_ALIAS="vllm_demo_chat"
-aiplane models add "$VLLM_ALIAS" --provider local_file --model /models/TinyLlama-1.1B-Chat-v1.0 --role chat --runtime vllm --preferred-runtime vllm --set min_ram_gb=16 --set min_vram_gb=8 --dry-run
-aiplane models add "$VLLM_ALIAS" --provider local_file --model /models/TinyLlama-1.1B-Chat-v1.0 --role chat --runtime vllm --preferred-runtime vllm --set min_ram_gb=16 --set min_vram_gb=8 --overwrite
+VLLM_ALIAS="$(aiplane models list --runtime vllm --role chat --capability 'general_chat>=2' --fits-hardware --enabled-only --sort-by role --limit 1 --name-only)"
+printf 'vllm_alias=%s\n' "$VLLM_ALIAS"
 aiplane models show "$VLLM_ALIAS"
 aiplane runtimes prerequisites vllm
+aiplane runtimes install vllm --dry-run
 aiplane runtimes bundle vllm --model "$VLLM_ALIAS" --mode docker --format dockerfile
 aiplane runtimes start vllm --model "$VLLM_ALIAS" --dry-run
+aiplane runtimes status vllm
 aiplane integrations export openai-compatible --model "$VLLM_ALIAS" --endpoint http://localhost:8000/v1
 aiplane chat --model "$VLLM_ALIAS" --prompt "Say hello from the vLLM endpoint" --dry-run
+aiplane chat --model "$VLLM_ALIAS" --prompt "Say hello from the vLLM endpoint"
+aiplane code analyze --model "$VLLM_ALIAS" src/aiplane/cli.py --dry-run
 ```
 
 Voiceover:
@@ -569,16 +575,16 @@ aiplane models refresh --provider ollama --query chat --dry-run --limit 5
 aiplane models refresh --provider ollama --query chat --limit 10
 aiplane models refresh --provider ollama --query code --limit 10
 aiplane models refresh --provider ollama --query embed --limit 10
-aiplane models list --provider ollama --role chat --ram-gb 16 --vram-gb 0 --sort-by role --limit 5
+aiplane models list --runtime ollama --role chat --capability 'general_chat>=2' --fits-hardware --enabled-only --sort-by role --limit 5
 aiplane integrations plan continue --chat "$CHAT_ALIAS" --autocomplete "$AUTOCOMPLETE_ALIAS" --embedding "$EMBEDDING_ALIAS"
 aiplane integrations export continue --chat "$CHAT_ALIAS" --autocomplete "$AUTOCOMPLETE_ALIAS" --embedding "$EMBEDDING_ALIAS"
 aiplane integrations export vscode-mcp
 aiplane integrations export continue-mcp
 aiplane mcp manifest
 sed -n '1,90p' skills/aiplane/SKILL.md
-VLLM_ALIAS="vllm_demo_chat"
-aiplane models add "$VLLM_ALIAS" --provider local_file --model /models/TinyLlama-1.1B-Chat-v1.0 --role chat --runtime vllm --preferred-runtime vllm --set min_ram_gb=16 --set min_vram_gb=8 --dry-run
-aiplane models add "$VLLM_ALIAS" --provider local_file --model /models/TinyLlama-1.1B-Chat-v1.0 --role chat --runtime vllm --preferred-runtime vllm --set min_ram_gb=16 --set min_vram_gb=8 --overwrite
+VLLM_ALIAS="$(aiplane models list --runtime vllm --role chat --capability 'general_chat>=2' --fits-hardware --enabled-only --sort-by role --limit 1 --name-only)"
+aiplane models list --runtime vllm --role chat --capability 'general_chat>=2' --fits-hardware --enabled-only --sort-by role --limit 3
+aiplane runtimes install vllm --dry-run
 aiplane runtimes bundle vllm --model "$VLLM_ALIAS" --mode docker --format dockerfile
 aiplane machines discover azure --region uksouth --workload inference_small --gpu-vendor nvidia --min-vram-gb 16 --verbosity 1 --limit 5
 ```

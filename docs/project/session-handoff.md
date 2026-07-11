@@ -4,36 +4,25 @@ This file is the short resume point for future `aiplane` development sessions. U
 
 ## Current Milestone
 
-**Team Policy and Governance** is now the active milestone.
+**Completed baseline:**
 
-Policy is the focus this cycle.
-- `policy explain` and doctor surfaces now define what is allowed, what is blocked, and what operator action is required.
-- Policy readiness is aligned with stack role/tool-policy checks, and risky tool permissions are explicit.
-- Scope remains bounded: aiplane stays a control plane and never becomes a coding runtime/chat UI/agent executor.
-- Remote workflow behavior stays stable while policy and escalation visibility is hardened for the next milestone.
+1. Must: add a deterministic discovery/import workflow that builds a draft profile from detected local/runtime state, endpoint configs, editor/agent settings, and provider/runtime references.
+2. Must: make policy the default compile/export gate with explicit block/warn behavior, override path, and audit context.
+3. Must: make exported workflow config reproducible from one profile for Continue, Aider, Cline, and MCP with from-plan replay.
 
-Scope anchor: `aiplane` remains the control plane, not the coding agent, full chat UI, model runtime, general proxy, cloud platform, IDE extension, or infrastructure-tool replacement. Changing that direction is allowed only if the strategy and roadmap explicitly authorize a course change.
+**Priority-first execution (must, then should):**
 
+4. Must: make diagnostics action-first with blocking/advisory classification and concrete remediation commands.
+5. Must: tighten model recommendations around hardware fit, runtime compatibility, and policy constraints with explicit ranking rationale.
+6. Should: standardize positioning and onboarding around "environment doctor and configuration compiler" terminology.
+7. Should: prioritize discovery/import and auto-provenance over manual configuration duplication.
+8. Should: keep policy-risk surfaces visible in every default onboarding step (quickstart, doctor, integration exports, MCP manifest flow).
+9. Should: keep scope expansion explicit and defer generic provisioning/proxy/chat execution unless strategy shifts.
 
-## Product Boundary
-
-`aiplane` is a control-plane CLI for AI model development environments (self-managed and managed). It configures and checks profiles, providers, models, runtimes, machines, stacks, tools, credentials references, IDE/MCP snippets, and supporting workflows.
-
-It should not become a coding agent, model runtime, general model proxy, IDE extension, or hidden cloud deployment engine.
-
-## Local Direction Notes
-
-If `docs/project/.strategy/` exists, read it before roadmap, strategy, release-readiness, or positioning changes. It is intentionally gitignored local context and should not be copied into tracked public docs unless the human owner explicitly asks.
-
-## Recent Repository Event
-
-The GitHub history was rewritten to remove sensitive tracked planning files from earlier history. As part of the beta-hardening milestone, clean public versions of the core project planning docs were restored in the current working tree:
-
-- `docs/project/strategy.md`
-- `docs/project/roadmap.md`
-- `docs/project/session-handoff.md`
-
-These restored docs are public-facing contributor context and intentionally avoid private business/financial positioning.
+Milestone status is now stable in this planning layer: roadmap milestones 1-3 (architecture cleanup, MCP/agent skill hardening, orchestrator workflow metadata) are now implemented.
+`policy explain` and `doctor` now define what is allowed, what is blocked, and required operator action.
+Policy readiness is aligned with stack role/tool-policy checks, and risky tool permissions are explicit.
+Scope remains bounded: aiplane stays a configuration/control layer, not a coding runtime/chat UI/agent executor.
 
 ## Current Public Status
 
@@ -145,6 +134,8 @@ Orchestrator support now has stack role metadata over reviewed model aliases and
 
 ## Next Useful Work
 
-1. Finish the remote-workstation onboarding documentation pass and align it with the public demo plan sequence.
-2. Keep policy/risk behavior regressions visible: blocked cloud-policy and disallowed-provider-path tests are now covered in `tests/test_stacks_orchestrators.py`; extend coverage next to remote-workstation policy surfaces.
-3. Keep docs/tests/command-coverage synchronized before the feature-freeze gate.
+1. Must: finish the remote-workstation onboarding documentation pass and align it with the public demo workflow sequence.
+2. Must: keep policy/risk behavior regressions visible: expand blocked cloud-policy and disallowed-provider coverage beyond current stack tests.
+3. Should: keep docs/tests/command-coverage synchronized before feature-freeze gates.
+4. Should: add a reproducibility check for Continue/Aider/Cline/MCP exports from saved plan IDs for regression stability.
+

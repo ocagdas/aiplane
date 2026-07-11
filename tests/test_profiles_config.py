@@ -961,6 +961,8 @@ class ProfileConfigTests(unittest.TestCase):
         output = stdout.getvalue()
         self.assertIn("Common flows", output)
         self.assertIn("Configure, check, and connect", output)
+        self.assertIn("aiplane launch --tool continue", output)
+        self.assertIn("aiplane session start --tool ollama", output)
         self.assertIn("hardware", output)
 
     def test_profiles_help_points_to_hardware_discovery_commands(self) -> None:
@@ -982,6 +984,26 @@ class ProfileConfigTests(unittest.TestCase):
         self.assertIn("Print configuration", output)
         self.assertIn("Override provider endpoint", output)
         self.assertIn("Endpoint examples", output)
+
+    def test_launch_and_session_help_mentions_command_shapes(self) -> None:
+        stdout = StringIO()
+        with redirect_stdout(stdout), self.assertRaises(SystemExit) as raised:
+            cli_main(["launch", "--help"])
+        self.assertEqual(raised.exception.code, 0)
+        output = stdout.getvalue()
+        self.assertIn("Launch a configured assistant tool", output)
+        self.assertIn("aiplane launch --tool aider --model fixture-chat-small", output)
+        self.assertIn("--tool", output)
+
+    def test_session_help_mentions_start_recording(self) -> None:
+        stdout = StringIO()
+        with redirect_stdout(stdout), self.assertRaises(SystemExit) as raised:
+            cli_main(["session", "start", "--help"])
+        self.assertEqual(raised.exception.code, 0)
+        output = stdout.getvalue()
+        self.assertIn("Start a minimal session metadata record", output)
+        self.assertIn("--tool", output)
+        self.assertIn("--transcript", output)
 
     def test_policy_allows_read_and_requires_write_approval(self) -> None:
         profile = load_profile("local-dev", Path.cwd())

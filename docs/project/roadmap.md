@@ -1,5 +1,4 @@
 # Project Roadmap
-
 This document is the developer-facing status map. It separates what is implemented from what is in progress, planned, or deferred. For product boundary and architecture direction, see [Strategy](strategy.md).
 
 ## Status Labels
@@ -14,7 +13,7 @@ This document is the developer-facing status map. It separates what is implement
 
 These anchors are deliberate product constraints, not incidental wording. Change them only with an explicit roadmap/strategy update that says the project is changing course.
 
-- `aiplane` is a local-first control plane for AI model application environments: profiles, providers, model aliases, runtimes, endpoints, hardware fit, readiness checks, exports, MCP inspection, policy, and audit.
+- `aiplane` is a local-first environment-doctor and configuration compiler for AI workflow environments: profiles, providers, model aliases, runtimes, endpoints, hardware fit, readiness checks, exports, MCP inspection, policy, and audit.
 - The strongest public wedge is: **make local and hybrid AI model workflow stacks reproducible, inspectable, policy-aware, and portable from one profile**.
 - `aiplane` configures and checks tools such as Ollama, vLLM, Continue, Aider, Cline, MCP clients, OpenAI-compatible endpoints, Anthropic, OpenAI, and Azure OpenAI; it does not replace them.
 - Do not grow `aiplane` into a coding agent, full chat UI, inference runtime, general model proxy, model marketplace, IDE extension, production cloud platform, or Terraform/Ansible/Docker replacement.
@@ -66,15 +65,25 @@ Advanced cloud, Kubernetes, broad provisioning, custom IDEs, general agent execu
 
 ## Current Milestone: Team Policy and Governance
 
-Goal: make policy and governance outcomes explicit and enforceable before adding broader workflow breadth.
+**Priority-first execution (must, then should):**
 
-Required outcomes:
+**Completed in this milestone:**
 
-1. Finalize profile policy surface in docs + UX: allowed-providers policy, repo classification, cloud escalation controls, and policy explain output.
-2. Add focused tests for `policy explain`, policy-readiness blocks in doctor, and policy-aware behavior on stack role/tool-policy risk checks.
-3. Close `local-doctor`/`tools matrix` alignment for policy readiness signals and missing-config risk surfacing.
-4. Update demo/onboarding narrative to show where policy blocks, warns, and what approval/override actions are needed.
-5. Keep remote workflow artifacts stable by moving to read-only demo/coverage checks; no regression in existing remote milestone.
+1. Must: add a deterministic discovery/import workflow that builds a draft profile from detected local/runtime state, endpoint configs, editor/agent settings, and provider/runtime references.
+2. Must: make policy the default compile and export gate so disallowed provider/backend paths are blocked with actionable override and audit context.
+3. Must: make exported workflow config reproducible from a single profile for Continue, Aider, Cline, and MCP via stable plan IDs and from-plan replay.
+4. Must: make diagnostics action-first by classifying doctor findings as blocking/advisory, tagging each with exact missing checks and remediation commands.
+5. Must: tighten model recommendations to prioritize hardware fit + runtime compatibility + policy constraints, with explicit ranking rationale and alternatives.
+6. Should: standardize public positioning around "environment doctor and configuration compiler" across docs/onboarding and quickstarts.
+
+7. Should: prioritize discovery/import and auto-provenance over manual configuration duplication.
+8. Should: keep policy-risk surfaces visible in every default onboarding step (quickstart, doctor, integration exports, MCP manifest flow).
+9. Should: keep scope expansion explicit and defer broad provisioning/proxy/chat execution unless strategy changes.
+
+Policy behavior is implemented and this milestone now focuses on reproducibility and governance evidence for exports and policy drift visibility in follow-up work.
+
+
+Scope anchor: `aiplane` remains an operations configuration layer, not the coding agent, full chat UI, model runtime, general proxy, cloud platform, IDE extension, or infrastructure-tool replacement. Changing that direction is allowed only if the strategy and roadmap explicitly authorize a course change.
 
 ## Implemented
 
@@ -118,21 +127,21 @@ Required outcomes:
 
 ### Post-Merge Foundation
 
-1. **Architecture and codebase cleanup** - Implemented foundation / ongoing cleanup
+1. **Architecture and codebase cleanup** - Implemented
    - `src/aiplane/cli.py` now delegates integration and model command registration/handling to focused modules while keeping one public `aiplane` entrypoint. Continue splitting command families when it reduces real ownership pressure.
    - Shared CLI parsing/progress helpers live outside the monolithic CLI so provider refresh, profile bootstrap, hardware/machine/stack settings, and future command modules do not duplicate low-level parsing behavior.
    - Model filter parser choices and MCP schema choices are shared definitions; integration roles are shared contracts. Keep moving shared definitions only where they prevent drift.
    - Keep shell helpers as thin delegates to official tools; avoid growing provider-specific business logic in Bash when Python catalog/runtime code already owns the decision.
    - Preserve inspect-first behavior and coherent early-beta interfaces; do not keep inconsistent flags or compatibility shims until a released interface requires them.
 
-2. **MCP and agent skill hardening** - Implemented foundation
+2. **MCP and agent skill hardening** - Implemented / hardening
    - Audit MCP against the current CLI/options and docs; close useful read/planning/export gaps such as newer model filters, integration role planning, stack/orchestrator inspection, machine recommendations, and command coverage where safe.
    - Keep risky operations out of MCP until they have explicit approval, audit, dry-run, and rollback semantics. Runtime installs, model pulls, cloud apply, secret writes, and arbitrary shell execution remain blocked or CLI-only by default.
    - Add a versioned `aiplane` skill target for Codex-style and other skill-capable assistants. The skill should explain the product boundary, profile/provider/model/runtime concepts, preferred commands, MCP usage, docs/test maintenance, and pre-PR/release checks.
    - Add focused tests that compare MCP schemas and behavior with the CLI surfaces they intentionally mirror.
    - Treat MCP/skills synchronization as a recurring checkpoint and pre-PR cleanup task, not a requirement after every small feature.
 
-3. **Orchestrator and multi-agent workflow metadata** - Implemented foundation / ongoing hardening
+3. **Orchestrator and multi-agent workflow metadata** - Implemented / hardening
    - Stack setup can carry optional role metadata such as planner, coder, reviewer, researcher, tool-runner, and summarizer while preserving one primary lifecycle model for runtime install/pull/start actions.
    - Role metadata binds reviewed model aliases to provider/runtime or managed endpoint ownership plus tool policy, approval mode, limits, and audit labels; stack plan/doctor/status/export surface the metadata, and doctor warns on disabled role models, missing managed endpoints, and risky tool-policy/approval combinations.
    - Framework starter exports now emit reviewed role/endpoint/tool/approval/audit metadata for LangGraph, CrewAI, AutoGen, Semantic Kernel, LlamaIndex Workflows, and OpenHands; next harden framework-specific templates where stable APIs justify it.
@@ -177,13 +186,12 @@ Required outcomes:
    - Add cache mounts, richer GPU flags, environment variables, and auth notes.
    - Keep image builds, registry pushes, VM creation, and cloud apply explicit and previewable.
 
-9. **IDE, launch, and session integrations** - Planned
-   - Maintain Continue, Cline, Zed, Aider, generic OpenAI-compatible, and MCP config exports as config-level integrations.
-   - Keep model endpoint export separate from MCP tool export.
-   - Research deeper Cursor, JetBrains, Windsurf, Copilot, Codex, and Claude Code integration before adding brittle custom paths.
-   - Add launch wrappers only where a stable tool-native CLI exists and `aiplane` can export/check the needed environment first.
-   - Research an optional Ollama `launch` adapter for Ollama-specific coding-tool setup so `aiplane` can plan/validate model, endpoint, hardware, and policy decisions while delegating tool-native launch/install behavior to Ollama instead of duplicating its menu.
-   - Keep any future `aiplane session` layer thin: selected model, endpoint, transcript path, and audit metadata, not a full custom chat product.
+9. **IDE, launch, and session integrations** - Implemented / hardening
+   - Continue, Cline, Zed, Aider, generic OpenAI-compatible, and MCP config exports are implemented at config level.
+   - `aiplane launch` is implemented for stable tools (`continue`, `ollama`, `aider`) with profile-driven model selection, policy checks, and optional `--app` for Ollama tool launching.
+   - `aiplane session start` is implemented for thin session handoff metadata, transcript defaults, and local audit records.
+   - Add launch wrappers for additional stable CLIs (Codex, Cursor, Claude Code) only when contracts and usage patterns are stable.
+   - Keep future `aiplane session` extensions thin: selected model, endpoint, transcript path, and audit metadata, not a full custom chat product.
 
 10. **Benchmark and recommendation quality** - Planned
    - Add repeated benchmark runs, timing/token metrics, and local result summaries.
@@ -200,8 +208,6 @@ Required outcomes:
 
 ## Planned But Not Implemented
 
-- `aiplane launch` wrappers for Continue, Codex, Claude Code, Cursor, or an optional Ollama `launch` adapter.
-- `aiplane session` active chat/session management.
 - Provider-specific production-ready Vagrant/Packer/OpenTofu/Terraform/Pulumi/Ansible/Dev Container modules and apply workflows.
 - Custom VS Code extension or marketplace publishing.
 - Full custom coding agent, agent orchestrator, autocomplete engine, inference runtime, or general model proxy.

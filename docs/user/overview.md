@@ -1,6 +1,6 @@
 # Practical Overview
 
-`aiplane` is a control-plane CLI for self-managed AI development environments. It helps you describe, inspect, prepare, and connect local or remote model runtimes across laptops, shared GPU workstations, Docker hosts, cloud VMs, and cluster targets.
+`aiplane` is an environment-doctor and configuration compiler for self-managed AI development environments. It helps you describe, inspect, prepare, and connect local or remote model runtimes across laptops, shared GPU workstations, Docker hosts, cloud VMs, and cluster targets.
 
 It is not a coding agent, chat UI, model marketplace, or production AI gateway. Those tools sit above or beside it. `aiplane` focuses on the operational layer that makes self-managed model environments reproducible and connectable.
 
@@ -93,7 +93,7 @@ For end-to-end command sequences and combinations, see [Practical Workflows](wor
 
 ## AI Workflow Stack Doctor
 
-Start with `aiplane quickstart local-coding` when evaluating a laptop, workstation, or hybrid AI workflow profile. It creates or previews the editable local profile through the same bootstrap path, runs the AI workflow doctor when the profile exists, and prints the next export commands. Use `aiplane doctor` when you only want to inspect an already configured profile. It aggregates the control-plane checks that matter for AI workflow readiness: profile files, required environment tools, runtime prerequisites, model defaults with provider/endpoint details, selected role-default endpoint readiness, active hardware and role-model fit, provider state, Continue/Aider role capability readiness, and MCP manifest and local AI read-surface readiness. The doctor itself is read-only. The quickstart does not install runtimes, edit IDE config, or mutate cloud resources; model pulls are opt-in with `--pull-model`; use `--dry-run` to preview without pulling model weights.
+Start with `aiplane quickstart local-coding` when evaluating a laptop, workstation, or hybrid AI workflow profile. It creates or previews the editable local profile through the same bootstrap path, runs the AI workflow doctor when the profile exists, and prints the next export commands. Use `aiplane doctor` when you only want to inspect an already configured profile. It aggregates the environment-doctor checks that matter for AI workflow readiness: profile files, required environment tools, runtime prerequisites, model defaults with provider/endpoint details, selected role-default endpoint readiness, active hardware and role-model fit, provider state, Continue/Aider role capability readiness, and MCP manifest and local AI read-surface readiness. The doctor itself is read-only. The quickstart does not install runtimes, edit IDE config, or mutate cloud resources; model pulls are opt-in with `--pull-model`; use `--dry-run` to preview without pulling model weights.
 
 ```bash
 aiplane quickstart local-coding

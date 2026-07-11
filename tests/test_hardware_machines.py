@@ -62,14 +62,16 @@ class HardwareMachineTests(unittest.TestCase):
     def test_hardware_show_cli_outputs_text_when_format_text(self) -> None:
         stdout = StringIO()
         with redirect_stdout(stdout):
-            code = cli_main([
-                "hardware",
-                "show",
-                "--profile",
-                "local-dev",
-                "--format",
-                "text",
-            ])
+            code = cli_main(
+                [
+                    "hardware",
+                    "show",
+                    "--profile",
+                    "local-dev",
+                    "--format",
+                    "text",
+                ]
+            )
         self.assertEqual(code, 0)
         rows = [line for line in stdout.getvalue().splitlines() if line.strip()]
         self.assertEqual(rows[0], "hardware show")
@@ -110,6 +112,7 @@ class HardwareMachineTests(unittest.TestCase):
     def test_hardware_closest_profiles_excludes_zero_score_gpu_templates(self) -> None:
         profile = load_profile("local-dev", Path.cwd())
         manager = HardwareManager(profile)
+
         discovered = {"gpus": [], "memory_gb": 64}
         closest = manager._closest_profiles(discovered)
         names = {row["name"] for row in closest}
@@ -232,6 +235,23 @@ class HardwareMachineTests(unittest.TestCase):
         scores = [row["capability_avg_score"] for row in result["models"]["recommended"]]
         self.assertEqual(scores, sorted(scores, reverse=True))
 
+    def test_hardware_recommend_includes_runtime_and_policy_metadata(self) -> None:
+        profile = load_profile("local-dev", Path.cwd())
+        result = HardwareManager(profile).recommend()
+        rows = [row for group in result["models"].values() for row in group]
+        local_rows = [
+            row
+            for row in rows
+            if row["runtime_compatibility_score"] >= 0 and row["runtime_compatibility"]["state"] != "not_applicable"
+        ]
+        self.assertTrue(local_rows)
+        sample = local_rows[0]
+        self.assertIn("runtime_compatibility", sample)
+        self.assertIn("runtime_compatibility_score", sample)
+        self.assertIn("runtime_recommendation", sample)
+        self.assertIn("policy_decision", sample)
+        self.assertIn("allowed", sample["policy_decision"])
+
     def test_hardware_recommend_can_include_not_recommended(self) -> None:
         profile = load_profile("local-dev", Path.cwd())
         result = HardwareManager(profile).recommend(include_not_recommended=True)
@@ -290,6 +310,8 @@ class HardwareMachineTests(unittest.TestCase):
                 targets=source.targets,
             )
             manager = HardwareManager(profile)
+            profile.models["models"]["local-code-large"]["enabled"] = True
+
             manager.use_template(
                 "cloud_gpu_vm",
                 {

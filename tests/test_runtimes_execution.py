@@ -19,6 +19,7 @@ from .support import (
     ollama_model_id,
     os,
     patch,
+    redirect_stderr,
     redirect_stdout,
     runtime_pull_support,
     shutil,
@@ -944,6 +945,41 @@ exit 0
         output = stdout.getvalue()
         self.assertIn("vllm.entrypoints.openai.api_server", output)
         self.assertIn("Provider/Code-Large-Instruct", output)
+
+    def test_runtime_install_reports_stderr_progress(self) -> None:
+        stdout = StringIO()
+        stderr = StringIO()
+
+        def _slow_helper(*args, **kwargs):
+            import time
+
+            if kwargs.get("dry_run"):
+                return subprocess.CompletedProcess(
+                    args=["provider_helper"],
+                    returncode=0,
+                    stdout="+ python -m pip install vllm huggingface_hub\n",
+                    stderr="",
+                )
+            time.sleep(2.1)
+            return subprocess.CompletedProcess(args=["provider_helper"], returncode=0, stdout="", stderr="")
+
+        with (
+            patch("aiplane.runtime_catalog.shutil.which", return_value="/usr/bin/fake"),
+            patch("aiplane.cli._run_provider_helper", side_effect=_slow_helper),
+            redirect_stdout(stdout),
+            redirect_stderr(stderr),
+        ):
+            code = cli_main(["runtimes", "install", "--profile", "local-dev", "vllm"])
+        self.assertEqual(code, 0)
+        rendered = stderr.getvalue()
+        self.assertIn("[runtime] checking prerequisites: internal: runtimes prerequisites vllm", rendered)
+        self.assertIn("[runtime] running helper action: install", rendered)
+        self.assertIn("scripts/provider_helper.sh --provider vllm --action install", rendered)
+        self.assertIn("[runtime] running runtime install command: python -m pip install vllm huggingface_hub", rendered)
+        self.assertIn("[runtime] install finished (exit 0): vllm", rendered)
+        self.assertIn(".", rendered)
+        self.assertIn("\x1b[1A", rendered)
+        self.assertIn("\x1b[2K", rendered)
 
     def test_aiplane_runtime_update_installed_and_repull_dry_runs(self) -> None:
         stdout = StringIO()
