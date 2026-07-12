@@ -111,9 +111,12 @@ For Python source formatting, use the project helper scripts directly rather tha
 ```bash
 scripts/format.sh check
 scripts/format.sh fix
+scripts/check.sh quick
 scripts/check.sh
 ```
 
+The scripts use the currently active Python environment. To run the full check in
+Conda explicitly, use `conda run --no-capture-output -n aiplane scripts/check.sh`.
 The versions used by those scripts are pinned in the `dev` optional dependency group in `pyproject.toml`. CI installs `.[dev]` and runs the same `scripts/check.sh` wrapper.
 
 ## Provisioning and Setup Layers

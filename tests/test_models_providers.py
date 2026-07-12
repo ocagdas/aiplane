@@ -2414,7 +2414,10 @@ class ModelProviderTests(unittest.TestCase):
     def test_provider_enable_disable_cli_updates_user_provider_config(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            shutil.copytree(Path.cwd() / "profiles" / "local-dev", root / "local-dev")
+            shutil.copytree(
+                Path(os.environ.get("AIPLANE_TEST_PROFILES_DIR", Path.cwd() / "profiles")) / "local-dev",
+                root / "local-dev",
+            )
             profile = load_profile("local-dev", Path.cwd(), profiles_dir=root)
             disabled = ProviderRegistry(profile).set_enabled("ollama", False)
             self.assertFalse(disabled["enabled"])
@@ -2567,7 +2570,10 @@ class ModelProviderTests(unittest.TestCase):
     def test_provider_clear_cli_defaults_to_all_config(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            shutil.copytree(Path.cwd() / "profiles" / "local-dev", root / "local-dev")
+            shutil.copytree(
+                Path(os.environ.get("AIPLANE_TEST_PROFILES_DIR", Path.cwd() / "profiles")) / "local-dev",
+                root / "local-dev",
+            )
             stdout = StringIO()
             with redirect_stdout(stdout):
                 code = cli_main(
@@ -2589,7 +2595,10 @@ class ModelProviderTests(unittest.TestCase):
     def test_provider_add_and_remove_use_user_provider_config(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            shutil.copytree(Path.cwd() / "profiles" / "local-dev", root / "local-dev")
+            shutil.copytree(
+                Path(os.environ.get("AIPLANE_TEST_PROFILES_DIR", Path.cwd() / "profiles")) / "local-dev",
+                root / "local-dev",
+            )
             profile = load_profile("local-dev", Path.cwd(), profiles_dir=root)
             registry = ProviderRegistry(profile)
             added = registry.add(

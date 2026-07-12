@@ -63,6 +63,7 @@ Examples:
   scripts/setup_env.sh --mode venv --action install --editable
   scripts/setup_env.sh --mode venv --action install --static
   scripts/setup_env.sh --mode venv --action doctor
+  scripts/setup_env.sh --mode conda --conda-env aiplane --action test
   source scripts/setup_env.sh --mode conda --conda-env aiplane --action install --editable
   scripts/setup_env.sh --mode conda --conda-env aiplane --action install --static --activate 0
   scripts/setup_env.sh --mode local --action install --static
@@ -465,7 +466,7 @@ test_mode() {
       run_shell "PYTHONDONTWRITEBYTECODE=1 '$VENV_PATH/bin/python' -m pytest -q"
       ;;
     conda)
-      run conda run -n "$CONDA_ENV" env PYTHONDONTWRITEBYTECODE=1 python -m pytest -q
+      run conda run --no-capture-output -n "$CONDA_ENV" env PYTHONDONTWRITEBYTECODE=1 python -m pytest -q
       ;;
     docker)
       docker_run_shell "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src python -m pytest -q"

@@ -63,31 +63,31 @@ Known in-progress areas:
 Latest checks from this session:
 
 ```bash
-PYTHONPATH=src python -m aiplane profiles validate local-dev
-PYTHONPATH=src python -m aiplane environment doctor --required-only
-PYTHONPATH=src python -m aiplane environment doctor --required-only --format json
-PYTHONPATH=src python -m aiplane quickstart local-coding --dry-run --no-discovery
-PYTHONPATH=src python -m aiplane quickstart local-coding --dry-run --no-discovery --format json
-PYTHONPATH=src python -m aiplane quickstart local-coding --dry-run --no-discovery --pull-model MODEL_ALIAS
-PYTHONPATH=src python -m aiplane doctor --profile local-dev
-PYTHONPATH=src python -m aiplane doctor --profile local-dev --format json
-PYTHONPATH=src python -m aiplane config format
-PYTHONPATH=src python -m aiplane hardware show --list-types
-PYTHONPATH=src python -m pytest -q
-PYTHONPATH=src python -m aiplane tools matrix
-PYTHONPATH=src python -m aiplane tools plan opentofu
-PYTHONPATH=src python -m aiplane agents templates
-PYTHONPATH=src python -m aiplane stacks list
-PYTHONPATH=src python -m aiplane models list
-PYTHONPATH=src python -m aiplane models clear-cache --dry-run
-PYTHONPATH=src python -m aiplane deploy workflow-plan --target azure_gpu_vm
-PYTHONPATH=src python -m aiplane deploy apply --target azure_gpu_vm
-PYTHONPATH=src python -m aiplane models refresh --provider huggingface --query text-to-video --dry-run --verbosity 2 --limit 2
-PYTHONPATH=src python -m pytest -q tests/test_models_providers.py tests/test_runtimes_execution.py tests/test_integrations_chat.py -k "models_list_and_defaults_support_grouping or managed_service_models_do_not_mix_into_runtime_groups or model_catalog_cloud_doctor_checks_env_var or runtime_catalog_maps_sources_and_models or integrations_export_continue_uses_planner_constraints"
-PYTHONPATH=src python -m aiplane models list --profile local-dev --group-by provider-kind
-PYTHONPATH=src python -m aiplane models list --profile local-dev --group-by runtime
-PYTHONPATH=src python -m pytest tests/test_models_providers.py -q -k "models_add or models_clone or models_promote"
-conda run -n aiplane scripts/check.sh
+python -m aiplane profiles validate local-dev
+python -m aiplane environment doctor --required-only
+python -m aiplane environment doctor --required-only --format json
+python -m aiplane quickstart local-coding --dry-run --no-discovery
+python -m aiplane quickstart local-coding --dry-run --no-discovery --format json
+python -m aiplane quickstart local-coding --dry-run --no-discovery --pull-model MODEL_ALIAS
+python -m aiplane doctor --profile local-dev
+python -m aiplane doctor --profile local-dev --format json
+python -m aiplane config format
+python -m aiplane hardware show --list-types
+python -m pytest -q
+python -m aiplane tools matrix
+python -m aiplane tools plan opentofu
+python -m aiplane agents templates
+python -m aiplane stacks list
+python -m aiplane models list
+python -m aiplane models clear-cache --dry-run
+python -m aiplane deploy workflow-plan --target azure_gpu_vm
+python -m aiplane deploy apply --target azure_gpu_vm
+python -m aiplane models refresh --provider huggingface --query text-to-video --dry-run --verbosity 2 --limit 2
+python -m pytest -q tests/test_models_providers.py tests/test_runtimes_execution.py tests/test_integrations_chat.py -k "models_list_and_defaults_support_grouping or managed_service_models_do_not_mix_into_runtime_groups or model_catalog_cloud_doctor_checks_env_var or runtime_catalog_maps_sources_and_models or integrations_export_continue_uses_planner_constraints"
+python -m aiplane models list --profile local-dev --group-by provider-kind
+python -m aiplane models list --profile local-dev --group-by runtime
+python -m pytest tests/test_models_providers.py -q -k "models_add or models_clone or models_promote"
+conda run --no-capture-output -n aiplane scripts/check.sh
 ```
 
 Results:
@@ -97,7 +97,7 @@ Results:
 - JSON environment doctor passed with mandatory tools installed and runtime prerequisite rows for Ollama and vLLM.
 - `aiplane quickstart local-coding --dry-run --no-discovery` passed in JSON and text modes, previewing the local profile bootstrap and printing the doctor/export/MCP command sequence without writing profile files; quickstart model pulls are opt-in with `--pull-model MODEL_ALIAS` once a profile-owned or discovered alias exists, and `--dry-run --pull-model MODEL_ALIAS` previews without pulling model weights.
 - Top-level `aiplane doctor --profile local-dev` passed in text and JSON modes. It is read-only and summarizes profile status, required/optional environment checks, configured model defaults with provider/endpoint details, selected role-default endpoint readiness, active hardware and role-model fit, provider readiness, Continue/Aider role capability readiness, MCP manifest and local AI read-surface readiness, and next safe steps.
-- Latest local gate passed after explicit test imports, focused fixture split, and local doctor coverage: `scripts/check.sh` completed with formatter check, Ruff lint, and `306 passed, 3 subtests passed in 64.55s`. Runtime helper subprocesses now receive `AIPLANE_PROFILES_DIR` for custom profile roots. The original `tests/test_mvp.py` monolith is now a legacy pointer; MVP coverage lives in focused domain modules with shared setup in `tests/support.py`, `tests/profile_fixtures.py`, and `tests/http_fixtures.py`. Earlier full-gate baselines reported `253 passed` before the chat/task behavior tests and split.
+- The full suite now uses a session-scoped copy of shipped profile templates plus synthetic model fixtures, never the ignored local provider-discovery cache; external network access remains blocked. The Conda run passed `334 tests in 38.62s`, down from `119.85s` with the developer cache loaded. `scripts/check.sh quick` passed formatting, lint, and 6 synthetic contract tests in `0.11s` of pytest time. Runtime helper subprocesses receive `AIPLANE_PROFILES_DIR` for custom profile roots.
 - `tools matrix` passed and reported `16` tools, `2` mandatory, `14` optional, `11` installable by `aiplane`, `7` exports available, and `9` workflow categories: `4` complete, `1` partial, and `4` needing setup on this machine.
 - `tools plan opentofu` passed and reported OpenTofu as optional/manual with non-mutating IaC plan guidance.
 - `models list` returned an empty list for the clean structural profile template until discovery or local model entries are added.

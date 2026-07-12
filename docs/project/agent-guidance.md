@@ -69,10 +69,10 @@ Concrete normal pattern for repeated `apply_patch` failures:
 Before claiming a release-ready or beta-ready state, run the focused smoke checks that match the change plus the full test suite:
 
 ```bash
-PYTHONPATH=src python -m aiplane profiles validate local-dev
-PYTHONPATH=src python -m aiplane environment doctor --required-only
-PYTHONPATH=src python -m aiplane environment doctor --required-only --format json
-PYTHONPATH=src python -m pytest
+python -m aiplane profiles validate local-dev
+python -m aiplane environment doctor --required-only
+python -m aiplane environment doctor --required-only --format json
+python -m pytest
 ```
 
 For tool, provider, integration, or stack work, also run representative CLI commands and update the handoff with the latest successful validation summary.

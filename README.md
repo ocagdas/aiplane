@@ -74,9 +74,18 @@ aiplane profiles list
 aiplane environment doctor --required-only
 ```
 
-Alternative flows are supported for local Python, venv, Docker CLI images, and static installs; use `scripts/setup_env.sh --help` for supported modes.
+Because the installer is sourced, it activates the `aiplane` Conda environment
+in the current shell after installation. Conda is the recommended flow here;
+local Python, `venv`, Docker CLI images, and static installs are also supported.
+Use `scripts/setup_env.sh --help` for those modes.
 
 If you already have the package installed:
+
+```bash
+aiplane profiles bootstrap-local --no-discovery
+```
+
+To run directly from a repository checkout without installing it:
 
 ```bash
 PYTHONPATH=src python -m aiplane profiles bootstrap-local --no-discovery
@@ -164,10 +173,16 @@ More command detail in:
 Before relying on a branch for demos or review, run:
 
 ```bash
-conda run -n aiplane scripts/check.sh
-# and a representative smoke set for your area
-PYTHONPATH=src python -m pytest tests/test_* -k "smoke or critical"
+# Full format, lint, and test gate in the named Conda environment
+conda run --no-capture-output -n aiplane scripts/check.sh
+
+# Fast format, lint, and synthetic contract checks
+conda run --no-capture-output -n aiplane scripts/check.sh quick
 ```
+
+`scripts/check.sh` uses the currently active Python environment; wrapping it in
+`conda run` selects Conda explicitly. Use `scripts/format.sh check` to check
+formatting only, or `scripts/format.sh fix` to apply formatting fixes.
 
 Use [command coverage](docs/project/command-coverage.md), [strategy](docs/project/strategy.md), and [session handoff](docs/project/session-handoff.md) to keep behavior, docs, and tests synchronized.
 

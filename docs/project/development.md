@@ -96,7 +96,10 @@ workflows use the same source of truth.
 
 ## Running Tests
 
-`make test` runs the suite in your current working environment.
+`make test` runs the suite in your current working environment. Pytest uses a
+session-scoped copy of the shipped profile templates plus synthetic model data;
+it does not load ignored local discovery caches, and external network access is
+blocked.
 
 ```bash
 make test
@@ -123,6 +126,21 @@ make test-clean TEST_PROFILE_TEMPLATE=local-dev TEST_PROFILE_NAME=ci-test
 - `make test`: run tests in the current environment
 - `make test-clean`: run tests in isolated temp profiles
 - `make check`: `format + lint + test-clean` (full local gate)
+
+The equivalent environment helper commands are:
+
+```bash
+scripts/setup_env.sh --mode venv --action test
+scripts/setup_env.sh --mode conda --conda-env aiplane --action test
+scripts/setup_env.sh --mode local --action test
+scripts/setup_env.sh --mode docker --action test
+```
+
+The Conda form uses the named environment and streams pytest output. The simpler
+`scripts/check.sh` uses the currently active Python environment; run
+`conda run --no-capture-output -n aiplane scripts/check.sh` to select Conda
+explicitly. Use `scripts/check.sh quick` for formatting, linting, and the fast
+synthetic contract suite.
 
 ### Git Pre-Push Hook
 
@@ -189,12 +207,12 @@ order matters to users.
 ## Useful Smoke Checks
 
 ```bash
-PYTHONPATH=src python -m aiplane profiles bootstrap-local --no-discovery
-PYTHONPATH=src python -m aiplane profiles list
-PYTHONPATH=src python -m aiplane providers list --profile local-dev
-PYTHONPATH=src python -m aiplane providers models --profile local-dev ollama
-PYTHONPATH=src python -m aiplane environment doctor --required-only
-PYTHONPATH=src python -m aiplane integrations plan continue --select-best --runtime ollama
+python -m aiplane profiles bootstrap-local --no-discovery
+python -m aiplane profiles list
+python -m aiplane providers list --profile local-dev
+python -m aiplane providers models --profile local-dev ollama
+python -m aiplane environment doctor --required-only
+python -m aiplane integrations plan continue --select-best --runtime ollama
 ```
 
 ## Documentation Split

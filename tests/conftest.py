@@ -1,9 +1,19 @@
 from __future__ import annotations
 
 import ipaddress
+import os
+import shutil
 import socket
+import tempfile
+from pathlib import Path
 
 import pytest
+
+
+_TEST_PROFILES_TEMP = tempfile.TemporaryDirectory(prefix="aiplane-tests-")
+_TEST_PROFILES_ROOT = Path(_TEST_PROFILES_TEMP.name) / "profiles"
+shutil.copytree(Path.cwd() / "profile-templates", _TEST_PROFILES_ROOT)
+os.environ["AIPLANE_TEST_PROFILES_DIR"] = str(_TEST_PROFILES_ROOT)
 
 
 def _is_loopback_host(host: str) -> bool:
