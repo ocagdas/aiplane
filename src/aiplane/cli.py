@@ -3824,6 +3824,20 @@ def _main(argv: list[str] | None = None) -> int:
                 print(_json(payload, indent=2))
                 return 2
             helper_action = "list" if args.runtimes_command == "list-runtime-models" else args.runtimes_command
+            if args.runtimes_command in {"remove", "clear"} and not args.dry_run and not args.yes:
+                print(
+                    _json(
+                        {
+                            "name": "runtime_destructive_confirmation_required",
+                            "runtime": args.runtime,
+                            "action": args.runtimes_command,
+                            "model": args.model,
+                            "reason": "runtime model deletion requires --yes; use --dry-run to preview",
+                        },
+                        indent=2,
+                    )
+                )
+                return 2
             if args.runtimes_command in {"install", "update", "update-installed"} and platform.system() != "Linux":
                 print(
                     _json(
