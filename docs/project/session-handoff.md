@@ -11,7 +11,7 @@ Must
 
 1. Completed: top-level `aiplane discover` coverage and execution for the public onboarding flow.
 2. Completed: `aiplane quickstart local-coding` now carries discovery provenance and prints the public core command sequence.
-3. Completed: discovery/bootstrap output now reports detected, generated, user-supplied, and unresolved provenance records.
+3. Completed: discovery/bootstrap output now distinguishes detected, built-in, provider-discovered cache, profile-configured, and unresolved provenance records.
 4. Completed: blocking/advisory doctor findings now include structured remediation command metadata, impact, mutability, and dry-run support fields.
 5. Add deterministic, reproducible exports for Continue, Aider, Cline, Zed, OpenAI-compatible, and MCP clients.
 6. Implement recommendation test matrix and deterministic ranking.

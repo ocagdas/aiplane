@@ -4749,6 +4749,7 @@ def _public_discover(profile) -> dict[str, object]:
             "enabled": bool(provider.get("enabled", True)),
             "api_key_env": provider.get("api_key_env"),
             "ownership": provider.get("ownership"),
+            "origin": provider.get("origin", "built_in"),
         }
         for name, provider in sorted(providers.items())
         if isinstance(provider, dict) and (provider.get("endpoint") or provider.get("api_key_env"))
@@ -4759,6 +4760,7 @@ def _public_discover(profile) -> dict[str, object]:
             "model": model.get("model"),
             "provider": model.get("provider"),
             "enabled": bool(model.get("enabled", True)),
+            "origin": "discovered_cache" if name in catalog.generated_config.get("models", {}) else "profile",
         }
         for name, model in sorted(models.items())
         if isinstance(model, dict) and bool(model.get("local", False))
@@ -4793,10 +4795,11 @@ def _public_discover_text(payload: dict[str, object]) -> str:
         f"aiplane discover for profile {payload.get('profile', 'unknown')}",
         f"hardware: CPU={hardware.get('cpu_count', 'unknown')}; RAM={hardware.get('memory_gb', 'unknown')}GB; GPUs={len(hardware.get('gpus', []) or [])}",
         f"runtimes: {len(payload.get('runtimes', []) or [])}; local_models: {len(payload.get('local_models', []) or [])}; endpoints: {len(payload.get('endpoints', []) or [])}; coding_tools: {len(payload.get('coding_tools', []) or [])}",
-        "configuration provenance: "
+        "configuration sources (counted records): "
         f"detected={summary.get('detected_values', 0)}, "
-        f"generated={summary.get('generated_values', 0)}, "
-        f"user_supplied={summary.get('user_supplied_values', 0)}, "
+        f"built_in={summary.get('generated_values', 0)}, "
+        f"discovered_cache={summary.get('discovered_values', 0)}, "
+        f"profile_configured={summary.get('user_supplied_values', 0)}, "
         f"unresolved={summary.get('unresolved_values', 0)}",
         "",
         f"next command: {payload.get('next_command')}",
@@ -4887,10 +4890,15 @@ def _profile_provenance(
             add("generated", "integration_contracts", f"integration.{tool.get('name')}", tool.get("description"))
     for model in local_models or []:
         if isinstance(model, dict):
-            add("user_supplied", "profile.models", f"model.{model.get('name')}", model.get("model"))
+            if model.get("origin") == "discovered_cache":
+                add("discovered", "models.discovered.yaml", f"model.{model.get('name')}", model.get("model"))
+            else:
+                add("user_supplied", "profile.models", f"model.{model.get('name')}", model.get("model"))
     for endpoint in endpoints or []:
         if isinstance(endpoint, dict):
-            add("user_supplied", "profile.providers", f"endpoint.{endpoint.get('provider')}", endpoint.get("endpoint"))
+            state = "user_supplied" if endpoint.get("origin") == "profile" else "generated"
+            source = "profile.providers" if state == "user_supplied" else "provider_defaults"
+            add(state, source, f"endpoint.{endpoint.get('provider')}", endpoint.get("endpoint"))
     defaults = profile.models.get("defaults", {}) if isinstance(profile.models, dict) else {}
     if isinstance(defaults, dict):
         for key, value in sorted(defaults.items()):
@@ -4903,6 +4911,7 @@ def _profile_provenance(
     summary = {
         "detected_values": sum(1 for row in values if row["state"] == "detected"),
         "generated_values": sum(1 for row in values if row["state"] == "generated"),
+        "discovered_values": sum(1 for row in values if row["state"] == "discovered"),
         "user_supplied_values": sum(1 for row in values if row["state"] == "user_supplied"),
         "unresolved_values": sum(1 for row in values if row["state"] == "unresolved"),
     }

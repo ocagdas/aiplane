@@ -79,19 +79,27 @@ in the current shell after installation. Conda is the recommended flow here;
 local Python, `venv`, Docker CLI images, and static installs are also supported.
 Use `scripts/setup_env.sh --help` for those modes.
 
-If you already have the package installed:
+After installation, create the editable `profiles/local-dev/` profile used by
+the CLI. It contains the local hardware, provider, model, runtime, tool, policy,
+and environment configuration. This safe first-run form keeps an existing
+profile, detects local hardware, validates the profile, and skips provider model
+catalog queries:
 
 ```bash
-aiplane profiles bootstrap-local --no-discovery
+aiplane profiles bootstrap-local --no-overwrite --no-discovery
 ```
 
-To run directly from a repository checkout without installing it:
+To run that same command directly from a repository checkout without installing
+the package, expose the `src/` directory to Python explicitly:
 
 ```bash
-PYTHONPATH=src python -m aiplane profiles bootstrap-local --no-discovery
+PYTHONPATH=src python -m aiplane profiles bootstrap-local --no-overwrite --no-discovery
 ```
 
-When you want per-machine local defaults:
+Local CLI preferences are separate and optional. The following creates the
+ignored `.aiplane/config.yaml`, where you can set the default profile, output
+format, verbosity, and custom paths; it does not create a profile or discover
+hardware or models:
 
 ```bash
 aiplane config init --template local
@@ -119,7 +127,7 @@ aiplane quickstart local-coding --pull-model MODEL_ALIAS
 ```
 
 This path is designed to detect local hardware, runtimes, model catalog state,
-endpoint setup status, and role mappings, report configuration provenance, and then print the next concrete export commands. Doctor findings include severity, impact, remediation command metadata, mutability, and dry-run support where action is needed.
+endpoint setup status, and role mappings, report configuration sources (detected, built-in, provider-discovered cache, profile-configured, and unresolved records), and then print the next concrete export commands. Doctor findings include severity, impact, remediation command metadata, mutability, and dry-run support where action is needed.
 
 Command categories are explicit in [command coverage](docs/project/command-coverage.md): core commands lead onboarding, supporting commands troubleshoot specific subsystems, and deferred commands stay out of the public beta path unless a scope review moves them.
 
@@ -173,16 +181,20 @@ More command detail in:
 Before relying on a branch for demos or review, run:
 
 ```bash
-# Full format, lint, and test gate in the named Conda environment
-conda run --no-capture-output -n aiplane scripts/check.sh
+# Full format, lint, and test gate
+scripts/check.sh
 
 # Fast format, lint, and synthetic contract checks
-conda run --no-capture-output -n aiplane scripts/check.sh quick
+scripts/check.sh quick
 ```
 
-`scripts/check.sh` uses the currently active Python environment; wrapping it in
-`conda run` selects Conda explicitly. Use `scripts/format.sh check` to check
-formatting only, or `scripts/format.sh fix` to apply formatting fixes.
+Run the scripts from an environment where the project development dependencies
+are installed, such as the activated Conda environment or `venv`. The scripts
+use that environment's `python` executable. If you do not want to activate a
+Conda environment first, you can select it explicitly with
+`conda run --no-capture-output -n aiplane scripts/check.sh`. Use
+`scripts/format.sh check` to check formatting only, or `scripts/format.sh fix`
+to apply formatting fixes.
 
 Use [command coverage](docs/project/command-coverage.md), [strategy](docs/project/strategy.md), and [session handoff](docs/project/session-handoff.md) to keep behavior, docs, and tests synchronized.
 

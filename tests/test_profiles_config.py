@@ -310,7 +310,20 @@ class ProfileConfigTests(unittest.TestCase):
             self.assertEqual(discover["name"], "environment_discovery")
             self.assertIn("provenance", discover)
             self.assertIn("detected_values", discover["provenance"]["summary"])
+            self.assertIn("discovered_values", discover["provenance"]["summary"])
             self.assertEqual(discover["next_command"], "aiplane doctor --profile local-dev")
+
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                self.assertEqual(
+                    cli_main(["--profiles-dir", str(profiles_dir), "discover", "--profile", "local-dev"]),
+                    0,
+                )
+            discover_text = stdout.getvalue()
+            self.assertIn("configuration sources (counted records):", discover_text)
+            self.assertIn("built_in=", discover_text)
+            self.assertIn("discovered_cache=", discover_text)
+            self.assertIn("profile_configured=", discover_text)
 
             stdout = StringIO()
             with redirect_stdout(stdout):
