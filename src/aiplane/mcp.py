@@ -571,7 +571,7 @@ class AiplaneMcpServer:
         except Exception as exc:  # noqa: BLE001 - JSON-RPC errors should be returned to the client.
             if request_id is None:
                 return None
-            return _error(request_id, -32000, str(exc))
+            return _error(request_id, -32000, f"{type(exc).__name__}: operation failed; see local audit log")
 
     def call_tool(self, name: str, arguments: dict[str, Any]) -> Any:
         if name == "aiplane.docs.list":
@@ -596,7 +596,7 @@ class AiplaneMcpServer:
             result = self._call_profile_tool(name, arguments, profile)
         except Exception as exc:
             if mutates:
-                self._audit(profile, name, "failed", {"arguments": arguments, "error": str(exc)})
+                self._audit(profile, name, "failed", {"arguments": arguments, "error_type": type(exc).__name__})
             raise
         if mutates:
             self._audit(profile, name, "allowed", {"arguments": arguments})

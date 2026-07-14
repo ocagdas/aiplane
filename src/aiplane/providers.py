@@ -11,6 +11,7 @@ from typing import Any
 from urllib.request import Request
 
 from .boundaries import HttpTransport, UrllibHttpTransport
+from .persistence import atomic_write_text
 from .config import dump_yaml, parse_yaml
 from .model_catalog import ModelCatalog, ModelStatus, model_source
 from .models import Profile
@@ -274,7 +275,7 @@ class ProviderRegistry:
         if path.exists() and not overwrite:
             raise ValueError(f"model provider defaults already exist: {path}")
         providers = self.default_model_providers()
-        path.write_text(dump_yaml(providers), encoding="utf-8")
+        atomic_write_text(path, dump_yaml(providers))
         return {
             "name": "model_provider_defaults",
             "path": str(path),
@@ -299,7 +300,7 @@ class ProviderRegistry:
                 updated.append(name)
             else:
                 added.append(name)
-        path.write_text(dump_yaml(providers), encoding="utf-8")
+        atomic_write_text(path, dump_yaml(providers))
         return {
             "name": "model_provider_defaults_update",
             "path": str(path),
@@ -334,7 +335,7 @@ class ProviderRegistry:
                 path.unlink()
                 removed.append(str(path))
         if scope in {"embedded", "all"}:
-            defaults_path.write_text("", encoding="utf-8")
+            atomic_write_text(defaults_path, "")
             if str(defaults_path) not in removed:
                 removed.append(str(defaults_path))
         return {
@@ -400,7 +401,7 @@ class ProviderRegistry:
     def _write_user_source_provider_config(self, config: dict[str, Any]) -> Path:
         path = self.profile.root / USER_MODEL_PROVIDERS_FILE
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(dump_yaml(config), encoding="utf-8")
+        atomic_write_text(path, dump_yaml(config))
         return path
 
     def _group(

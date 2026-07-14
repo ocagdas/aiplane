@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from .persistence import atomic_write_text
 from .config import dump_yaml
 from .models import Profile
 
@@ -60,7 +61,7 @@ class EnvironmentManager:
             raise ValueError(f"unknown environment mode: {mode}")
         self.config["active"] = mode
         path = self.profile.root / "environment.yaml"
-        path.write_text(dump_yaml(self.config), encoding="utf-8")
+        atomic_write_text(path, dump_yaml(self.config))
         return {
             "active": mode,
             "path": str(path),

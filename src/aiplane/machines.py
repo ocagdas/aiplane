@@ -11,6 +11,7 @@ from urllib.error import URLError
 from urllib.parse import quote_plus
 
 from .boundaries import CommandRunner, HttpTransport, SubprocessCommandRunner, UrllibHttpTransport
+from .persistence import atomic_write_text
 from .config import dump_yaml, parse_yaml
 from .hardware import HardwareManager
 from .model_catalog import ModelCatalog
@@ -675,7 +676,7 @@ class MachineManager:
 
     def _write_discovery_cache(self, cache: dict[str, Any]) -> None:
         path = self._discovery_cache_path()
-        path.write_text(json.dumps(cache, indent=2), encoding="utf-8")
+        atomic_write_text(path, json.dumps(cache, indent=2))
 
     def _discovery_cache_path(self) -> Path:
         return self.profile.root / "machine-discovery-cache.json"
@@ -691,7 +692,7 @@ class MachineManager:
 
     def _write_config(self) -> None:
         path = self.profile.root / "hardware.yaml"
-        path.write_text(dump_yaml(self.config), encoding="utf-8")
+        atomic_write_text(path, dump_yaml(self.config))
 
 
 def validate_machine(machine: dict[str, Any]) -> dict[str, Any]:

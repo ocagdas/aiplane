@@ -407,3 +407,22 @@ aiplane profiles create local-dev --template local-dev
 ```
 
 Use `--profile` only when you need to override the default for one command.
+
+## Reading Audit Logs Safely
+
+`aiplane audit tail` prints recent valid audit events as JSON lines:
+
+```bash
+aiplane audit tail
+aiplane audit tail --limit 50
+```
+
+If a process was interrupted while appending a record, or a record is otherwise
+malformed, the command skips that record and continues searching backward until it
+has the requested number of valid events. Stdout remains JSONL for scripts. A
+metadata-only warning containing the line number and error category is written to
+stderr; corrupt record content is never repeated in the warning. An unterminated
+malformed final line is reported as `truncated_final_record`.
+
+
+Audit records deliberately minimize data: tool events record the action, decision, argument count, and a safe file target where applicable, but not raw command arguments, command output, or exception messages. Sensitive structured fields, secret-bearing command flags, common token formats, and PEM material are redacted before the record is appended. Configuration and audit writes are serialized across processes with bounded waits; lock contention fails with a timeout rather than waiting indefinitely.

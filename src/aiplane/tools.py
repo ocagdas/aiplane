@@ -10,6 +10,7 @@ from .boundaries import CommandRunner, SubprocessCommandRunner
 from .approvals import ApprovalHandler
 from .audit import AuditLogger
 from .env import EnvironmentManager
+from .persistence import atomic_write_text
 from .models import AuditEvent, Profile
 from .policy import PolicyEngine
 from .runtime_catalog import RuntimeCatalog
@@ -47,10 +48,10 @@ class ToolExecutor:
             raise ValueError(f"unknown tool: {tool_name}")
         try:
             output = handler(args)
-            self._audit(action, "allowed", {"args": args, "output": output[-1000:]})
+            self._audit(action, "allowed", self._audit_details(tool_name, args))
             return output
         except Exception as exc:
-            self._audit(action, "failed", {"args": args, "error": str(exc)})
+            self._audit(action, "failed", {**self._audit_details(tool_name, args), "error_type": type(exc).__name__})
             raise
 
     def _tool_read_file(self, args: list[str]) -> str:
@@ -61,7 +62,7 @@ class ToolExecutor:
         path = self._workspace_path(_arg(args, 0, "path"))
         content = _arg(args, 1, "content")
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(content, encoding="utf-8")
+        atomic_write_text(path, content)
         return f"wrote {path}"
 
     def _tool_grep(self, args: list[str]) -> str:
@@ -127,6 +128,12 @@ class ToolExecutor:
         if result.returncode and not allow_failure:
             raise RuntimeError(output or f"command failed: {actual_command}")
         return output
+
+    def _audit_details(self, tool_name: str, args: list[str]) -> dict[str, object]:
+        details: dict[str, object] = {"argument_count": len(args)}
+        if tool_name in {"read_file", "write_file"} and args:
+            details["target"] = args[0]
+        return details
 
     def _audit(self, action: str, decision: str, details: dict[str, object]) -> None:
         self.audit.record(AuditEvent("tool", self.profile.name, action, decision, details))

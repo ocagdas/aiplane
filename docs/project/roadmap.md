@@ -569,3 +569,19 @@ The prioritized July 2026 code-quality and safety findings are tracked in
 SEC-1 is implemented: `aiplane tool` no longer assumes approval; risky operations
 require an interactive confirmation or explicit per-invocation `--yes`, while
 read-only tools remain non-interactive.
+
+Audit log reads are crash-tolerant: `audit tail` skips malformed/non-object JSONL
+records, distinguishes a likely interrupted final append, returns the requested
+number of recent valid events where available, and emits metadata-only recovery
+warnings on stderr without exposing corrupt content.
+
+SSH tunnel lifecycle state is now identity-safe and collision-resistant. Start saves
+versioned atomic JSON containing the PID and captured process identity; status/stop
+verify that identity, Linux termination uses `pidfd` when available, stale or reused
+PIDs are never signalled, malformed state fails closed, and identity-capture failure
+terminates the new unowned process without persisting state.
+
+
+Configuration and state snapshots now use a shared atomic persistence boundary. Writes use same-directory fsynced temporary files followed by atomic replacement, while audit JSONL uses a serialized fsynced append. Cross-process advisory locks have a bounded deadline, nonblocking jittered polling, and reject nested persistence locks to avoid lock-order deadlocks; transactional YAML mutation preserves concurrent changes.
+
+Audit hardening now minimizes recorded tool data and broadens secret sanitation for sensitive keys, command flags, common provider tokens, bearer values, and PEM material. Tool output, raw command arguments, and exception messages are not persisted or returned through MCP failure details.

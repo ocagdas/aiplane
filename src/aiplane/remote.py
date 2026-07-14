@@ -1,19 +1,100 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import shutil
 import signal
+import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from .boundaries import CommandRunner, SubprocessCommandRunner
 from .models import Profile
 
+_STATE_VERSION = 1
+
+
+class ProcessInspector(Protocol):
+    def capture(self, pid: int) -> dict[str, Any] | None: ...
+
+    def matches(self, pid: int, identity: dict[str, Any]) -> bool: ...
+
+    def terminate_if_matches(self, pid: int, identity: dict[str, Any]) -> bool: ...
+
+
+class SystemProcessInspector:
+    """Capture and verify process identity before signalling a stored PID."""
+
+    def __init__(self, command_runner: CommandRunner | None = None):
+        self.command_runner = command_runner or SubprocessCommandRunner()
+
+    def capture(self, pid: int) -> dict[str, Any] | None:
+        if pid <= 0:
+            return None
+        proc_identity = _linux_proc_identity(pid)
+        if proc_identity is not None:
+            return proc_identity
+        if os.name == "posix":
+            return self._ps_identity(pid)
+        return None
+
+    def matches(self, pid: int, identity: dict[str, Any]) -> bool:
+        current = self.capture(pid)
+        return current is not None and current == identity
+
+    def terminate_if_matches(self, pid: int, identity: dict[str, Any]) -> bool:
+        pidfd_open = getattr(os, "pidfd_open", None)
+        pidfd_send_signal = getattr(signal, "pidfd_send_signal", None)
+        if callable(pidfd_open) and callable(pidfd_send_signal):
+            try:
+                pidfd = pidfd_open(pid)
+            except OSError:
+                return False
+            try:
+                if not self.matches(pid, identity):
+                    return False
+                pidfd_send_signal(pidfd, signal.SIGTERM)
+                return True
+            except OSError:
+                return False
+            finally:
+                os.close(pidfd)
+
+        if not self.matches(pid, identity):
+            return False
+        try:
+            os.kill(pid, signal.SIGTERM)
+            return True
+        except OSError:
+            return False
+
+    def _ps_identity(self, pid: int) -> dict[str, Any] | None:
+        try:
+            result = self.command_runner.run(
+                ["ps", "-p", str(pid), "-o", "lstart=", "-o", "command="],
+                check=False,
+                text=True,
+                capture_output=True,
+            )
+        except OSError:
+            return None
+        output = str(result.stdout or "").strip()
+        if result.returncode != 0 or not output:
+            return None
+        return {"source": "posix_ps", "fingerprint": hashlib.sha256(output.encode("utf-8")).hexdigest()}
+
 
 class RemoteManager:
-    def __init__(self, profile: Profile, command_runner: CommandRunner | None = None):
+    def __init__(
+        self,
+        profile: Profile,
+        command_runner: CommandRunner | None = None,
+        process_inspector: ProcessInspector | None = None,
+    ):
         self.profile = profile
         self.command_runner = command_runner or SubprocessCommandRunner()
+        self.process_inspector = process_inspector or SystemProcessInspector(self.command_runner)
         self.config = profile.targets or {}
 
     def tunnel_plan(self, name: str) -> dict[str, Any]:
@@ -60,7 +141,7 @@ class RemoteManager:
             "required_tools": ["ssh"],
             "tool_available": shutil.which("ssh") is not None,
             "command": command,
-            "pid_file": str(self._pid_file(name)),
+            "state_file": str(self._state_file(name)),
             "endpoint": endpoint,
             "connection": {
                 "local_bind": f"{local_host}:{local_port}",
@@ -79,14 +160,35 @@ class RemoteManager:
 
     def tunnel_status(self, name: str) -> dict[str, Any]:
         plan = self.tunnel_plan(name)
-        pid_file = self._pid_file(name)
-        pid = _read_pid(pid_file)
-        running = _pid_running(pid) if pid is not None else False
+        state_file = self._state_file(name)
+        try:
+            state = _read_state(state_file, expected_target=name)
+        except ValueError as exc:
+            return {
+                "target": name,
+                "running": False,
+                "pid": None,
+                "state": "invalid",
+                "state_error": str(exc),
+                "state_file": str(state_file),
+                "endpoint": plan["endpoint"],
+                "command": plan["command"],
+            }
+        if state is None:
+            state_name = "absent"
+            running = False
+            pid = None
+        else:
+            stored_pid = int(state["pid"])
+            running = self.process_inspector.matches(stored_pid, state["identity"])
+            pid = stored_pid if running else None
+            state_name = "running" if running else "stale_or_reused"
         return {
             "target": name,
             "running": running,
-            "pid": pid if running else None,
-            "pid_file": str(pid_file),
+            "pid": pid,
+            "state": state_name,
+            "state_file": str(state_file),
             "endpoint": plan["endpoint"],
             "command": plan["command"],
         }
@@ -97,6 +199,8 @@ class RemoteManager:
                 "remote tunnel start is mutating; run remote tunnel plan first or use the CLI start command when ready"
             )
         status = self.tunnel_status(name)
+        if status["state"] == "invalid":
+            raise RuntimeError(f"tunnel state is invalid; inspect or remove {status['state_file']}")
         if status["running"]:
             return {"target": name, "status": "already_running", **status}
 
@@ -104,9 +208,9 @@ class RemoteManager:
         if not plan["tool_available"]:
             raise RuntimeError("ssh is not available on PATH")
 
-        pid_file = self._pid_file(name)
+        state_file = self._state_file(name)
         log_file = self._log_file(name)
-        pid_file.parent.mkdir(parents=True, exist_ok=True)
+        state_file.parent.mkdir(parents=True, exist_ok=True)
         with log_file.open("ab") as log:
             process = self.command_runner.popen(
                 plan["command"],
@@ -115,12 +219,26 @@ class RemoteManager:
                 stderr=log,
                 start_new_session=True,
             )
-        pid_file.write_text(str(process.pid), encoding="utf-8")
+        identity = self.process_inspector.capture(process.pid)
+        if identity is None:
+            terminate = getattr(process, "terminate", None)
+            if callable(terminate):
+                terminate()
+            raise RuntimeError("could not capture SSH process identity; tunnel was terminated and state was not saved")
+        state = {
+            "version": _STATE_VERSION,
+            "target": name,
+            "pid": process.pid,
+            "identity": identity,
+            "command": plan["command"],
+        }
+        _write_state(state_file, state)
         return {
             "target": name,
             "status": "started",
             "pid": process.pid,
-            "pid_file": str(pid_file),
+            "state": "running",
+            "state_file": str(state_file),
             "log_file": str(log_file),
             "endpoint": plan["endpoint"],
             "command": plan["command"],
@@ -129,30 +247,31 @@ class RemoteManager:
     def tunnel_stop(self, name: str, yes: bool = False) -> dict[str, Any]:
         if not yes:
             raise PermissionError("remote tunnel stop is mutating; use the CLI stop command when ready")
-        pid_file = self._pid_file(name)
-        pid = _read_pid(pid_file)
-        if pid is None:
-            return {"target": name, "status": "not_running", "pid_file": str(pid_file)}
-
-        if _pid_running(pid):
-            os.kill(pid, signal.SIGTERM)
-            status = "stopped"
-        else:
-            status = "stale_pid_removed"
+        state_file = self._state_file(name)
         try:
-            pid_file.unlink()
+            state = _read_state(state_file, expected_target=name)
+        except ValueError as exc:
+            raise RuntimeError(f"tunnel state is invalid; refusing to signal any process: {exc}") from exc
+        if state is None:
+            return {"target": name, "status": "not_running", "state_file": str(state_file)}
+
+        pid = int(state["pid"])
+        stopped = self.process_inspector.terminate_if_matches(pid, state["identity"])
+        status = "stopped" if stopped else "stale_or_reused_state_removed"
+        try:
+            state_file.unlink()
         except FileNotFoundError:
             pass
-        return {"target": name, "status": status, "pid": pid, "pid_file": str(pid_file)}
+        return {"target": name, "status": status, "pid": pid, "state_file": str(state_file)}
 
     def _state_dir(self) -> Path:
         return self.profile.workspace / ".aiplane" / "remote"
 
-    def _pid_file(self, name: str) -> Path:
-        return self._state_dir() / f"{_safe_name(name)}.pid"
+    def _state_file(self, name: str) -> Path:
+        return self._state_dir() / f"{_state_name(name)}.json"
 
     def _log_file(self, name: str) -> Path:
-        return self._state_dir() / f"{_safe_name(name)}.log"
+        return self._state_dir() / f"{_state_name(name)}.log"
 
     def _target(self, name: str) -> dict[str, Any]:
         targets = self.config.get("targets", {})
@@ -199,22 +318,77 @@ def _coerce_port(value: object, field: str, default: int) -> int:
     return port
 
 
-def _read_pid(path: Path) -> int | None:
+def _linux_proc_identity(pid: int) -> dict[str, Any] | None:
+    stat_path = Path("/proc") / str(pid) / "stat"
+    cmdline_path = Path("/proc") / str(pid) / "cmdline"
     try:
-        return int(path.read_text(encoding="utf-8").strip())
-    except (OSError, ValueError):
-        return None
-
-
-def _pid_running(pid: int | None) -> bool:
-    if pid is None or pid <= 0:
-        return False
-    try:
-        os.kill(pid, 0)
-        return True
+        stat = stat_path.read_text(encoding="utf-8")
+        close_paren = stat.rfind(")")
+        if close_paren < 0:
+            return None
+        fields = stat[close_paren + 2 :].split()
+        if len(fields) <= 19 or fields[0] == "Z":
+            return None
+        start_time_ticks = fields[19]
+        command = [part.decode("utf-8", errors="replace") for part in cmdline_path.read_bytes().split(b"\0") if part]
     except OSError:
-        return False
+        return None
+    if not command:
+        return None
+    return {"source": "linux_proc", "start_time_ticks": start_time_ticks, "command": command}
 
 
-def _safe_name(value: str) -> str:
-    return "".join(ch.lower() if ch.isalnum() else "_" for ch in value).strip("_") or "tunnel"
+def _read_state(path: Path, *, expected_target: str) -> dict[str, Any] | None:
+    if not path.exists():
+        return None
+    try:
+        state = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"cannot read {path}: {type(exc).__name__}") from exc
+    if not isinstance(state, dict):
+        raise ValueError(f"state file {path} is not a JSON object")
+    if state.get("version") != _STATE_VERSION:
+        raise ValueError(f"state file {path} has unsupported version")
+    if state.get("target") != expected_target:
+        raise ValueError(f"state file {path} belongs to a different target")
+    pid = state.get("pid")
+    identity = state.get("identity")
+    command = state.get("command")
+    if not isinstance(pid, int) or pid <= 0:
+        raise ValueError(f"state file {path} has an invalid pid")
+    if not isinstance(identity, dict) or not identity:
+        raise ValueError(f"state file {path} has no process identity")
+    if not isinstance(command, list) or not all(isinstance(part, str) for part in command):
+        raise ValueError(f"state file {path} has an invalid command")
+    return state
+
+
+def _write_state(path: Path, state: dict[str, Any]) -> None:
+    temporary: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as stream:
+            temporary = Path(stream.name)
+            json.dump(state, stream, indent=2, sort_keys=True)
+            stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    finally:
+        if temporary is not None:
+            try:
+                temporary.unlink()
+            except FileNotFoundError:
+                pass
+
+
+def _state_name(value: str) -> str:
+    slug = "".join(ch.lower() if ch.isalnum() else "_" for ch in value).strip("_") or "tunnel"
+    digest = hashlib.sha256(value.encode("utf-8")).hexdigest()[:12]
+    return f"{slug[:48]}-{digest}"

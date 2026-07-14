@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from .boundaries import CommandRunner, SubprocessCommandRunner
+from .persistence import atomic_write_text
 from .config import dump_yaml
 from .model_catalog import ModelCatalog, capability_profile
 from .runtime_catalog import RuntimeCatalog
@@ -213,7 +214,7 @@ class HardwareManager:
 
     def _write_config(self) -> None:
         path = self.profile.root / "hardware.yaml"
-        path.write_text(dump_yaml(self.config), encoding="utf-8")
+        atomic_write_text(path, dump_yaml(self.config))
 
     def discover(self) -> dict[str, Any]:
         discovered: dict[str, Any] = {

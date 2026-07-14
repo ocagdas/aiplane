@@ -4,6 +4,7 @@ import importlib.util
 from typing import Any
 
 from .boundaries import CommandRunner, SubprocessCommandRunner
+from .persistence import atomic_write_text
 from .config import dump_yaml
 from .env import EnvironmentManager
 from .model_catalog import ModelCatalog
@@ -364,7 +365,7 @@ class OrchestratorCatalog:
 
     def _write_config(self) -> None:
         path = self.profile.root / "orchestrators.yaml"
-        path.write_text(dump_yaml(self.config), encoding="utf-8")
+        atomic_write_text(path, dump_yaml(self.config))
 
 
 def _dockerfile(name: str, packages: list[str]) -> str:

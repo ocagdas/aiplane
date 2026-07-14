@@ -246,3 +246,10 @@ Keep external effects behind injectable boundaries and patch the module that own
 behavior in tests. The architecture contract in `tests/test_contracts.py` limits the
 composition root to fewer than 500 lines and prevents extracted responsibilities
 from being reintroduced there.
+
+
+## Configuration persistence and audit privacy
+
+Configuration and generated state files are written with same-directory atomic replacement, so interruption does not expose a partially written destination. Concurrent writers are serialized across threads and processes with a bounded lock wait; timeout raises a clear error instead of hanging indefinitely. Lock nesting is rejected to prevent cross-file lock-order deadlocks. Local read-modify-write code should use the transactional YAML helper so concurrent changes are merged under the same lock.
+
+Audit records are local JSONL. They store action metadata and sanitized details, not tool command output, raw tool arguments, or exception messages. Sensitive mapping keys, adjacent or assigned secret flags, common token forms, and PEM material are redacted before append.

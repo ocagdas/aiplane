@@ -5,6 +5,7 @@ import socket
 from typing import Any
 
 from .boundaries import CommandRunner, SubprocessCommandRunner
+from .persistence import atomic_write_text
 from .config import dump_yaml, provider_helper_path
 from .env import EnvironmentManager
 from .integrations import IntegrationManager
@@ -655,7 +656,7 @@ class StackManager:
 
     def _write_config(self) -> None:
         path = self.profile.root / "hardware.yaml"
-        path.write_text(dump_yaml(self.config), encoding="utf-8")
+        atomic_write_text(path, dump_yaml(self.config))
 
 
 def _normalize_endpoint_auth(endpoint_auth: dict[str, object]) -> dict[str, Any]:

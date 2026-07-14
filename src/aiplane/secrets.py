@@ -5,24 +5,33 @@ import re
 from pathlib import Path
 from typing import Any
 
-
+REDACTED = "[REDACTED_SECRET]"
+_PEM_PATTERN = re.compile(r"-----BEGIN (?:RSA |DSA |EC |OPENSSH |)PRIVATE KEY-----|-----BEGIN CERTIFICATE-----")
 SECRET_PATTERNS = [
-    re.compile(r"-----BEGIN (?:RSA |DSA |EC |OPENSSH |)PRIVATE KEY-----"),
-    re.compile(r"-----BEGIN CERTIFICATE-----"),
-    re.compile(r"(?i)\b(api[_-]?key|secret|token|password)\b\s*[:=]\s*['\"]?([A-Za-z0-9_\-./+=]{12,})"),
-    re.compile(r"\b(?:sk|pk|ghp|github_pat|xoxb|xoxp)_[A-Za-z0-9_\-]{16,}\b"),
+    re.compile(
+        r"(?i)\b(api[_-]?key|secret|token|password|authorization|credential)\b\s*[:=]\s*['\"]?([A-Za-z0-9_\-./+=:]{8,})"
+    ),
+    re.compile(r"\b(?:sk|pk|ghp|github_pat|xoxb|xoxp)[_-][A-Za-z0-9_\-]{12,}\b"),
     re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
+    re.compile(r"(?i)\bBearer\s+[A-Za-z0-9_\-./+=]{8,}"),
 ]
 
-
-SENSITIVE_KEYS = {
-    "api_key",
+_SENSITIVE_KEY_MARKERS = {
+    "apikey",
+    "accesstoken",
+    "refreshtoken",
     "token",
     "secret",
     "password",
-    "client_secret",
-    "subscription_key",
-    "bearer_token",
+    "clientsecret",
+    "subscriptionkey",
+    "bearertoken",
+    "authorization",
+    "credential",
+    "credentials",
+    "privatekey",
+    "connectionstring",
+    "sastoken",
 }
 
 
@@ -44,25 +53,57 @@ def credentials_path(path: Path | str | None = None, config_path: Path | str | N
 
 def contains_secret(value: Any) -> bool:
     text = _stringify(value)
-    return any(pattern.search(text) for pattern in SECRET_PATTERNS)
+    return bool(_PEM_PATTERN.search(text)) or any(pattern.search(text) for pattern in SECRET_PATTERNS)
 
 
 def redact(value: Any) -> Any:
     if isinstance(value, dict):
         return {
-            key: ("[REDACTED_SECRET]" if str(key).lower() in SENSITIVE_KEYS and inner else redact(inner))
+            key: (REDACTED if _is_sensitive_key(str(key)) and inner not in (None, "", [], {}) else redact(inner))
             for key, inner in value.items()
         }
-    if isinstance(value, list):
-        return [redact(inner) for inner in value]
+    if isinstance(value, (list, tuple)):
+        return _redact_sequence(value)
     if not isinstance(value, str):
         return value
+    if _PEM_PATTERN.search(value):
+        return REDACTED
     redacted = value
     for pattern in SECRET_PATTERNS:
-        redacted = pattern.sub("[REDACTED_SECRET]", redacted)
-    redacted = redacted.replace("[REDACTED_SECRET]'", "[REDACTED_SECRET]")
-    redacted = redacted.replace('[REDACTED_SECRET]"', "[REDACTED_SECRET]")
-    return redacted
+        redacted = pattern.sub(REDACTED, redacted)
+    return redacted.replace(f"{REDACTED}'", REDACTED).replace(f'{REDACTED}"', REDACTED)
+
+
+def _redact_sequence(value: list[Any] | tuple[Any, ...]) -> list[Any]:
+    result: list[Any] = []
+    redact_next = False
+    for item in value:
+        if redact_next:
+            result.append(REDACTED if item not in (None, "") else item)
+            redact_next = False
+            continue
+        if isinstance(item, str):
+            flag, separator, assigned = item.partition("=")
+            if _is_sensitive_flag(flag):
+                if separator:
+                    result.append(f"{flag}={REDACTED}" if assigned else item)
+                else:
+                    result.append(item)
+                    redact_next = True
+                continue
+        result.append(redact(item))
+    return result
+
+
+def _is_sensitive_flag(value: str) -> bool:
+    return value.startswith("-") and _is_sensitive_key(value.lstrip("-"))
+
+
+def _is_sensitive_key(value: str) -> bool:
+    normalized = re.sub(r"[^a-z0-9]", "", value.lower())
+    return normalized in _SENSITIVE_KEY_MARKERS or any(
+        normalized.endswith(marker) for marker in _SENSITIVE_KEY_MARKERS if len(marker) >= 6
+    )
 
 
 class CredentialStore:
@@ -90,10 +131,7 @@ class CredentialStore:
                         "notes": value.get("notes"),
                     }
                 )
-        return {
-            "name": "credentials",
-            "credentials": rows,
-        }
+        return {"name": "credentials", "credentials": rows}
 
     def show(self, ref: str) -> dict[str, Any]:
         provider, account = parse_credential_ref(ref)
@@ -172,6 +210,6 @@ def _stringify(value: Any) -> str:
         return value
     if isinstance(value, dict):
         return "\n".join(f"{key}: {_stringify(inner)}" for key, inner in value.items())
-    if isinstance(value, list):
+    if isinstance(value, (list, tuple)):
         return "\n".join(_stringify(inner) for inner in value)
     return str(value)

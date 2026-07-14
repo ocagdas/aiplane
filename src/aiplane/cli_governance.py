@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 from typing import Any, Callable
 
@@ -78,7 +79,7 @@ def add_governance_parsers(
     tail = audit_sub.add_parser(
         "tail",
         help="Show recent audit events",
-        description="Print the last N audit events as JSON lines.",
+        description="Print the last N valid audit events as JSON lines. Malformed records are skipped with metadata-only warnings on stderr.",
         formatter_class=formatter_class,
     )
     profile_arg(tail)
@@ -127,7 +128,18 @@ def handle_governance_command(
         return serve_stdio(workspace, default_profile=effective_profile, profiles_dir=profiles_dir)
     if args.command == "audit":
         profile = load_profile(effective_profile, workspace, profiles_dir=profiles_dir)
-        for event in AuditLogger(profile).tail(args.limit):
+        report = AuditLogger(profile).tail_report(args.limit)
+        for warning in report.warnings:
+            print(
+                f"warning: skipped audit {warning['kind']} at line {warning['line']}",
+                file=sys.stderr,
+            )
+        if report.malformed_records > len(report.warnings):
+            print(
+                f"warning: skipped {report.malformed_records - len(report.warnings)} additional malformed audit records",
+                file=sys.stderr,
+            )
+        for event in report.events:
             print(json_dumps(event, sort_keys=True))
         return 0
     if args.command == "policy":

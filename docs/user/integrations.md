@@ -289,6 +289,8 @@ aiplane integrations export continue --endpoint http://localhost:11434/v1
 In the tunnel plan, `local_bind` is the address opened on your laptop,
 `remote_service` is what the remote SSH host can reach, and `ide_endpoint` is
 what Continue/Cline/Aider should use. This is normal SSH `-L` local forwarding;
+Tunnel start stores versioned process identity under `.aiplane/remote/`; status and stop verify that identity before signalling, so stale or reused PIDs are not treated as owned tunnel processes. Malformed state is preserved and stop fails closed.
+
 it does not require a reverse tunnel unless the network path only works in the
 opposite direction.
 

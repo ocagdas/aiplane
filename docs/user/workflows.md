@@ -230,6 +230,8 @@ Practical tips:
 - The remote service endpoint is what the SSH host can reach.
 - The IDE endpoint is the local forwarded URL.
 - Start the runtime on the remote host separately unless the stack lifecycle path owns it.
+- Tunnel state is versioned JSON under `.aiplane/remote/`. Status and stop verify the stored process identity before treating a PID as the helper-started SSH process; stale or reused PIDs are never signalled.
+- If state is malformed, stop fails closed and preserves the file for inspection. If identity cannot be captured at start, the new SSH process is terminated and no state is saved.
 
 ## Workflow 9: Machines and Stacks
 

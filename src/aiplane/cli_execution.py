@@ -11,6 +11,7 @@ from .agents import AgentManager
 from .approvals import ApprovalHandler
 from .audit import AuditLogger
 from .code_tasks import CodeTaskRunner
+from .persistence import atomic_write_text
 from .config import load_profile
 from .integrations import IntegrationManager
 from .models import AuditEvent
@@ -675,7 +676,7 @@ def handle_execution_command(
             "transcript": str(transcript_path),
             "created": datetime.now(timezone.utc).isoformat(),
         }
-        metadata_path.write_text(json_dumps(session_record, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        atomic_write_text(metadata_path, json_dumps(session_record, indent=2, sort_keys=True) + "\n")
         launch_event = AuditEvent(
             event_type="session",
             profile=profile.name,

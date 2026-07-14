@@ -9,6 +9,7 @@ from typing import Any
 
 from .boundaries import HttpTransport, UrllibHttpTransport
 from .backends import OllamaBackend, OpenAICompatibleBackend
+from .persistence import atomic_write_text
 from .config import dump_yaml, parse_yaml
 from .models import Profile
 from .runtime_definitions import (
@@ -217,7 +218,7 @@ class RuntimeCatalog:
             )
         model["preferred_runtime"] = runtime
         path = self.profile.root / "models.yaml"
-        path.write_text(dump_yaml(self.models_config), encoding="utf-8")
+        atomic_write_text(path, dump_yaml(self.models_config))
         return {"name": model_name, "preferred_runtime": runtime, "path": str(path)}
 
     def bundle_plan(self, runtime: str, model_name: str, mode: str = "docker") -> dict[str, Any]:

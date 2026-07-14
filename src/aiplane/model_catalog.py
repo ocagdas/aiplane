@@ -9,6 +9,7 @@ from .backends import (
     BackendResult,
 )
 from .model_refresh import ModelRefreshCoordinator
+from .persistence import atomic_write_text
 from .models import Profile
 from .model_resources import (
     accelerator_api_requirements as _accelerator_api_requirements,
@@ -106,7 +107,7 @@ class ModelCatalog:
         path = self.profile.root / "models.yaml"
         from .config import dump_yaml
 
-        path.write_text(dump_yaml(self.config), encoding="utf-8")
+        atomic_write_text(path, dump_yaml(self.config))
         return {
             "role": role,
             "name": name,
@@ -368,7 +369,7 @@ class ModelCatalog:
         from .config import dump_yaml
 
         path = self.profile.root / "models.yaml"
-        path.write_text(dump_yaml(self.config), encoding="utf-8")
+        atomic_write_text(path, dump_yaml(self.config))
         return path
 
     def list(self) -> list[dict[str, Any]]:
@@ -601,7 +602,7 @@ class ModelCatalog:
             from .config import dump_yaml
 
             path = self.profile.root / "models.yaml"
-            path.write_text(dump_yaml(self.config), encoding="utf-8")
+            atomic_write_text(path, dump_yaml(self.config))
             return {"name": name, "enabled": bool(enabled), "path": str(path)}
         if name in generated:
             raise ValueError(
@@ -895,7 +896,7 @@ class ModelCatalog:
             curated_models[target] = promoted
             self.config["models"] = curated_models
             curated_path = self.profile.root / "models.yaml"
-            curated_path.write_text(dump_yaml(self.config), encoding="utf-8")
+            atomic_write_text(curated_path, dump_yaml(self.config))
             if not keep_discovered:
                 generated_models.pop(name, None)
                 self.generated_config["models"] = generated_models
@@ -993,7 +994,7 @@ class ModelCatalog:
             self.config["models"] = curated_models
             self.generated_config["models"] = generated_models
             if curated_dirty:
-                (self.profile.root / "models.yaml").write_text(dump_yaml(self.config), encoding="utf-8")
+                atomic_write_text(self.profile.root / "models.yaml", dump_yaml(self.config))
             if generated_dirty:
                 self._write_generated_config()
         provider_counts = [{"name": source, "count": count} for source, count in sorted(removed_counts.items())]
@@ -1037,10 +1038,7 @@ class ModelCatalog:
         from .config import dump_yaml
 
         path = self._generated_path()
-        path.write_text(
-            DISCOVERED_MODELS_BANNER + dump_yaml(self.generated_config),
-            encoding="utf-8",
-        )
+        atomic_write_text(path, DISCOVERED_MODELS_BANNER + dump_yaml(self.generated_config))
         return path
 
     def _execution(self):

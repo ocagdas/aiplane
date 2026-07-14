@@ -20,6 +20,7 @@ class ModelRefreshCoordinator:
         verbose: bool,
     ) -> dict[str, Any]:
         from .config import dump_yaml
+        from .persistence import atomic_write_text
         from .model_catalog import (
             _dict_of_dicts,
             _discovered_model_entry,
@@ -150,7 +151,7 @@ class ModelRefreshCoordinator:
             catalog.config["models"] = curated_models
             catalog.generated_config["models"] = generated_models
             if curated_dirty:
-                path.write_text(dump_yaml(catalog.config), encoding="utf-8")
+                atomic_write_text(path, dump_yaml(catalog.config))
             if generated_dirty:
                 catalog._write_generated_config()
 
