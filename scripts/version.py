@@ -54,12 +54,7 @@ def run(command: list[str], *, expected: tuple[int, ...] = (0,)) -> subprocess.C
 
 
 def pyproject_version() -> str:
-    text = PYPROJECT.read_text(encoding="utf-8")
-    match = re.search(r'(?m)^version = "([^"]+)"$', text)
-    if not match:
-        raise ValueError("pyproject.toml does not contain a simple [project] version field")
-    Version.parse(match.group(1))
-    return match.group(1)
+    return pyproject_version_from_text(PYPROJECT.read_text(encoding="utf-8"))
 
 
 def init_version() -> str:
@@ -69,6 +64,21 @@ def init_version() -> str:
         raise ValueError("src/aiplane/__init__.py does not contain __version__")
     Version.parse(match.group(1))
     return match.group(1)
+
+
+def pyproject_version_from_text(text: str) -> str:
+    match = re.search(r'(?m)^version = "([^"]+)"$', text)
+    if not match:
+        raise ValueError("text does not contain a simple [project] version field")
+    Version.parse(match.group(1))
+    return match.group(1)
+
+
+def version_at_ref(ref: str) -> str | None:
+    completed = run(["git", "show", f"{ref}:pyproject.toml"], expected=(0, 128))
+    if completed.returncode != 0:
+        return None
+    return pyproject_version_from_text(completed.stdout)
 
 
 def check_versions() -> str:
@@ -140,9 +150,12 @@ def classify_from_data(
     author: str,
     changed_files: set[str],
     matching_tag_points_at_head: bool,
+    associated_pull_request: bool = False,
+    parent_version: str | None = None,
 ) -> dict[str, object]:
     current = Version.parse(version)
-    version_changed = bool(changed_files & VERSION_FILES)
+    version_files_changed = bool(changed_files & VERSION_FILES)
+    version_value_changed = parent_version is not None and parent_version != version
     mode = "none"
     reason = "not a main push"
     if event == "push" and ref == "refs/heads/main":
@@ -152,12 +165,12 @@ def classify_from_data(
         elif matching_tag_points_at_head:
             mode = "validate_only"
             reason = "matching version tag already points at HEAD"
-        elif parent_count > 1:
+        elif parent_count > 1 or associated_pull_request:
             mode = "ci_patch_after_merge"
-            reason = "merge commit on main"
-        elif version_changed:
+            reason = "pull-request merge on main"
+        elif version_files_changed and version_value_changed:
             mode = "maintainer_direct_main_version_commit"
-            reason = "direct main commit changed version files"
+            reason = "direct main commit changed tracked version value"
         else:
             mode = "validate_only"
             reason = "direct main commit without version change"
@@ -170,7 +183,10 @@ def classify_from_data(
         "tag": f"v{next_version}",
         "parent_count": parent_count,
         "author": author,
-        "version_changed": version_changed,
+        "version_changed": version_value_changed,
+        "version_files_changed": version_files_changed,
+        "associated_pull_request": associated_pull_request,
+        "parent_version": parent_version,
     }
 
 
@@ -179,15 +195,18 @@ def classify_ci() -> dict[str, object]:
     ref = os.environ.get("GITHUB_REF", "")
     version = check_versions()
     tag = f"v{version}"
+    parent_count = head_parent_count()
     return classify_from_data(
         event=event,
         ref=ref,
         version=version,
-        parent_count=head_parent_count(),
+        parent_count=parent_count,
         message=head_message(),
         author=head_author(),
         changed_files=changed_files_at_head(),
         matching_tag_points_at_head=tag_points_at_head(tag),
+        associated_pull_request=os.environ.get("AIPLANE_ASSOCIATED_PR", "").lower() == "true",
+        parent_version=version_at_ref("HEAD^1") if parent_count else None,
     )
 
 

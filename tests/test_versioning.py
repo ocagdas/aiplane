@@ -28,6 +28,8 @@ def classify(**overrides):
         "author": "Human <human@example.com>",
         "changed_files": set(),
         "matching_tag_points_at_head": False,
+        "associated_pull_request": False,
+        "parent_version": "0.1.0",
     }
     values.update(overrides)
     return version_script.classify_from_data(**values)
@@ -47,10 +49,20 @@ def test_ci_version_classification_does_not_recurse_on_ci_version_commit() -> No
 
 
 def test_ci_version_classification_respects_direct_maintainer_version_commit() -> None:
-    result = classify(changed_files={"pyproject.toml", "src/aiplane/__init__.py"})
+    result = classify(
+        version="0.2.0",
+        parent_version="0.1.0",
+        changed_files={"pyproject.toml", "src/aiplane/__init__.py"},
+    )
     assert result["mode"] == "maintainer_direct_main_version_commit"
-    assert result["next_version"] == "0.1.0"
-    assert result["tag"] == "v0.1.0"
+    assert result["next_version"] == "0.2.0"
+    assert result["tag"] == "v0.2.0"
+
+
+def test_ci_version_classification_does_not_treat_unchanged_version_file_as_user_versioning() -> None:
+    result = classify(changed_files={"pyproject.toml", "src/aiplane/__init__.py"}, parent_version="0.1.0")
+    assert result["mode"] == "validate_only"
+    assert result["version_changed"] is False
 
 
 def test_ci_version_classification_skips_when_matching_tag_already_points_at_head() -> None:
@@ -73,9 +85,13 @@ def test_ci_version_classification_validates_direct_main_non_version_commits_wit
 
 def test_ci_version_classification_distinguishes_main_merge_from_pr_branch_build() -> None:
     main_merge = classify(event="push", ref="refs/heads/main", parent_count=2)
-    pr_branch = classify(event="push", ref="refs/heads/feature/demo", parent_count=2)
-    pull_request = classify(event="pull_request", ref="refs/pull/12/merge", parent_count=2)
+    squash_merge = classify(event="push", ref="refs/heads/main", parent_count=1, associated_pull_request=True)
+    pr_branch = classify(event="push", ref="refs/heads/feature/demo", parent_count=2, associated_pull_request=True)
+    pull_request = classify(
+        event="pull_request", ref="refs/pull/12/merge", parent_count=2, associated_pull_request=True
+    )
     assert main_merge["mode"] == "ci_patch_after_merge"
+    assert squash_merge["mode"] == "ci_patch_after_merge"
     assert pr_branch["mode"] == "none"
     assert pull_request["mode"] == "none"
 
