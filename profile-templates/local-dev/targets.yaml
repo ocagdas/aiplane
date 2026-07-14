@@ -73,6 +73,7 @@ targets:
   gpu_workstation_ssh:
     type: ssh_tunnel
     ssh:
+      # DNS name or IPv4/IPv6 address; never an SSH option or user value.
       host: gpu-workstation.example.com
       user: null
       port: 22
@@ -81,6 +82,7 @@ targets:
       local_port: 11434
       remote_host: 127.0.0.1
       remote_port: 11434
+    # IDE-facing URL; only http and https URLs without embedded credentials are accepted.
     endpoint: http://localhost:11434/v1
     auth:
       mode: ssh

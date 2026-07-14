@@ -1,19 +1,15 @@
 from __future__ import annotations
 
-import os
-import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
-from urllib.error import URLError
 
+from .boundaries import CommandRunner, HttpTransport, SubprocessCommandRunner, UrllibHttpTransport
 from .backends import (
-    AnthropicMessagesBackend,
-    AzureOpenAIBackend,
     BackendResult,
-    OllamaBackend,
-    OpenAICompatibleBackend,
 )
+from .model_refresh import ModelRefreshCoordinator
+from .model_store import ModelCatalogStore
 from .models import Profile
 from .model_resources import (
     accelerator_api_requirements as _accelerator_api_requirements,
@@ -26,8 +22,6 @@ from .model_resources import (
     resource_guess as _resource_guess,
     size_bonus as _size_bonus,
 )
-from .runtime_pull import runtime_model_id
-from .secrets import CredentialStore
 
 
 DISCOVERED_MODELS_FILE = "models.discovered.yaml"
@@ -36,7 +30,6 @@ DISCOVERED_MODELS_BANNER = (
     "# Do not edit it manually; use `aiplane models refresh`, `aiplane models add`, or `aiplane models promote`.\n"
     "# Promote/add reviewed entries into models.yaml for durable profile configuration.\n"
 )
-_GENERATED_CONFIG_CACHE: dict[tuple[Path, int, int], dict[str, Any]] = {}
 
 
 @dataclass(frozen=True)
@@ -49,10 +42,18 @@ class ModelStatus:
 
 
 class ModelCatalog:
-    def __init__(self, profile: Profile):
+    def __init__(
+        self,
+        profile: Profile,
+        command_runner: CommandRunner | None = None,
+        http_transport: HttpTransport | None = None,
+    ):
         self.profile = profile
+        self.command_runner = command_runner or SubprocessCommandRunner()
+        self.http_transport = http_transport or UrllibHttpTransport()
         self.config = profile.models or {}
-        self.generated_config = self._load_generated_config()
+        self.store = ModelCatalogStore(profile.root, DISCOVERED_MODELS_FILE, DISCOVERED_MODELS_BANNER)
+        self.generated_config = self.store.load_generated()
 
     def providers(self) -> dict[str, dict[str, Any]]:
         from .runtime_catalog import PROVIDER_ENDPOINT_DEFAULTS
@@ -103,10 +104,7 @@ class ModelCatalog:
             raise ValueError("default role must be a simple name")
         model = self.get(name)
         self.config.setdefault("defaults", {})[role] = name
-        path = self.profile.root / "models.yaml"
-        from .config import dump_yaml
-
-        path.write_text(dump_yaml(self.config), encoding="utf-8")
+        path = self.store.write_curated(self.config)
         return {
             "role": role,
             "name": name,
@@ -365,11 +363,7 @@ class ModelCatalog:
         return name, dict(entry)
 
     def _write_curated_config(self) -> Path:
-        from .config import dump_yaml
-
-        path = self.profile.root / "models.yaml"
-        path.write_text(dump_yaml(self.config), encoding="utf-8")
-        return path
+        return self.store.write_curated(self.config)
 
     def list(self) -> list[dict[str, Any]]:
         rows = []
@@ -598,10 +592,7 @@ class ModelCatalog:
         if name in curated:
             curated[name]["enabled"] = bool(enabled)
             self.config["models"] = curated
-            from .config import dump_yaml
-
-            path = self.profile.root / "models.yaml"
-            path.write_text(dump_yaml(self.config), encoding="utf-8")
+            path = self.store.write_curated(self.config)
             return {"name": name, "enabled": bool(enabled), "path": str(path)}
         if name in generated:
             raise ValueError(
@@ -621,9 +612,7 @@ class ModelCatalog:
         progress: Callable[[str, str, str], None] | None = None,
         verbose: bool = False,
     ) -> dict[str, Any]:
-        from .config import dump_yaml
         from .providers import ProviderRegistry
-        from .runtime_catalog import RuntimeCatalog
 
         registry = ProviderRegistry(self.profile)
         configured_providers = registry.model_providers()
@@ -669,184 +658,17 @@ class ModelCatalog:
             )
         if progress:
             progress("succeeded", provider_name, f"{len(discovered.models)} source model(s)")
-        runtime_catalog = RuntimeCatalog(self.profile)
-        all_models = self.models()
-        curated_models = _dict_of_dicts(self.config.get("models", {}))
-        generated_models = _dict_of_dicts(self.generated_config.get("models", {}))
-        provider_models = [model for model in all_models.values() if model_source(model) == provider_name]
-        provider_imported_models = [model for model in provider_models if _is_refresh_imported_model(model)]
-        provider_curated_models = [model for model in provider_models if not _is_refresh_imported_model(model)]
-        existing_by_id = {
-            str(model.get("model")): name
-            for name, model in all_models.items()
-            if model_source(model) == provider_name and model.get("model")
-        }
-        existing = set(existing_by_id)
-        changed_rows = []
-        matched_count = 0
-        new_count = 0
-        update_count = 0
-        source_api_contacted = discovered.source in {"provider_api", "source_api"}
-        metadata_by_model = discovered.model_metadata or {}
-        curated_dirty = False
-        generated_dirty = False
-        for model_id in discovered.models:
-            source_metadata = metadata_by_model.get(str(model_id), {})
-            if model_id in existing:
-                matched_count += 1
-                name = existing_by_id[model_id]
-                model = all_models.get(name, {})
-                if source_api_contacted and isinstance(model, dict):
-                    merged = _merge_source_discovered_model(model, provider_name, str(model_id), source_metadata)
-                    if merged != model:
-                        status = "updated" if write else "would_update"
-                        changed_rows.append(
-                            _refresh_model_row(
-                                name,
-                                merged,
-                                runtime_catalog,
-                                refresh_status=status,
-                                provider_visible=True,
-                                provider_reason=discovered.reason,
-                            )
-                        )
-                        update_count += 1
-                        if write:
-                            if name in curated_models and not _is_refresh_imported_model(curated_models[name]):
-                                curated_models[name] = merged
-                                curated_dirty = True
-                            else:
-                                if name in curated_models:
-                                    curated_models.pop(name, None)
-                                    curated_dirty = True
-                                generated_models[name] = merged
-                                generated_dirty = True
-                continue
-            name = _unique_model_alias(all_models, provider_name, model_id)
-            entry = _discovered_model_entry(provider_name, model_id, enable=enable, source_metadata=source_metadata)
-            status = "imported" if write else "would_import"
-            changed_rows.append(
-                _refresh_model_row(
-                    name,
-                    entry,
-                    runtime_catalog,
-                    refresh_status=status,
-                    provider_visible=True,
-                    provider_reason=discovered.reason,
-                )
-            )
-            new_count += 1
-            if write:
-                generated_models[name] = entry
-                all_models[name] = entry
-                generated_dirty = True
-                existing.add(model_id)
-                existing_by_id[model_id] = name
-
-        prune_enabled = (
-            source_api_contacted
-            and query is None
-            and (discovered.source == "provider_api" or len(discovered.models) < int(limit))
+        return ModelRefreshCoordinator().run(
+            self,
+            discovered,
+            provider_name,
+            write=write,
+            enable=enable,
+            online=online,
+            query=query,
+            limit=limit,
+            verbose=verbose,
         )
-        remove_count = 0
-        discovered_ids = {str(model_id) for model_id in discovered.models}
-        if prune_enabled:
-            for name, model in list(all_models.items()):
-                if model_source(model) != provider_name:
-                    continue
-                if not _is_refresh_imported_model(model):
-                    continue
-                model_id = str(model.get("model") or "")
-                if model_id in discovered_ids:
-                    continue
-                status = "removed" if write else "would_remove"
-                changed_rows.append(
-                    _refresh_model_row(
-                        name,
-                        model,
-                        runtime_catalog,
-                        refresh_status=status,
-                        provider_visible=False,
-                        provider_reason=discovered.reason,
-                    )
-                )
-                remove_count += 1
-                if write:
-                    if name in generated_models:
-                        generated_models.pop(name, None)
-                        generated_dirty = True
-                    elif name in curated_models:
-                        curated_models.pop(name, None)
-                        curated_dirty = True
-                    all_models.pop(name, None)
-
-        path = self.profile.root / "models.yaml"
-        discovered_path = self._generated_path()
-        if write and (curated_dirty or generated_dirty):
-            self.config["models"] = curated_models
-            self.generated_config["models"] = generated_models
-            if curated_dirty:
-                path.write_text(dump_yaml(self.config), encoding="utf-8")
-            if generated_dirty:
-                self._write_generated_config()
-
-        changed_rows = sorted(
-            changed_rows,
-            key=lambda row: (
-                str(row.get("runtime_endpoint")),
-                str(row.get("refresh_status")),
-                str(row.get("name")),
-            ),
-        )
-        changes = {
-            "imported": new_count if write else 0,
-            "would_import": new_count if not write else 0,
-            "updated": update_count if write else 0,
-            "would_update": update_count if not write else 0,
-            "removed": remove_count if write else 0,
-            "would_remove": remove_count if not write else 0,
-        }
-        provider_config = self.providers().get(provider_name, {})
-        provider_result = {
-            "ownership": str(
-                provider_config.get("ownership")
-                or (
-                    "managed_service"
-                    if provider_name in {"openai", "anthropic", "azure_openai", "ollama_cloud"}
-                    else "self_managed"
-                )
-            ),
-            "status": _refresh_status(changes),
-            "source_contacted": source_api_contacted,
-            "prune_enabled": prune_enabled,
-            "source_discovery_method": discovered.source,
-            "source_discovery_reason": discovered.reason,
-            "source_models_returned": len(discovered.models),
-            "profile_models_before_refresh": len(provider_models),
-            "profile_curated_models_before_refresh": len(provider_curated_models),
-            "profile_refresh_imported_models_before_refresh": len(provider_imported_models),
-            "source_models_already_profiled": matched_count,
-            "source_models_to_import": new_count,
-            "source_models_to_update": update_count,
-            "model_changes_count": len(changed_rows),
-            "changes": changes,
-        }
-        if verbose:
-            provider_result["model_changes"] = changed_rows
-        return {
-            "name": "model_catalog_refresh",
-            "write": write,
-            "new_entries_enabled": enable,
-            "online": online,
-            "query": query,
-            "limit": limit,
-            "verbose": verbose,
-            "path": str(path),
-            "discovered_path": str(discovered_path),
-            "changes": changes,
-            "results": {provider_name: provider_result},
-            "next_steps": _refresh_next_steps(write, changes, provider_name=provider_name),
-        }
 
     def _refresh_failure_result(
         self,
@@ -1039,8 +861,6 @@ class ModelCatalog:
         keep_discovered: bool = True,
         overwrite: bool = False,
     ) -> dict[str, Any]:
-        from .config import dump_yaml
-
         if not name or "/" in name or "\\" in name:
             raise ValueError("model entry name must be a simple name")
         target = new_name or name
@@ -1063,8 +883,7 @@ class ModelCatalog:
         if write:
             curated_models[target] = promoted
             self.config["models"] = curated_models
-            curated_path = self.profile.root / "models.yaml"
-            curated_path.write_text(dump_yaml(self.config), encoding="utf-8")
+            self.store.write_curated(self.config)
             if not keep_discovered:
                 generated_models.pop(name, None)
                 self.generated_config["models"] = generated_models
@@ -1124,8 +943,6 @@ class ModelCatalog:
         write: bool = False,
         include_curated: bool = True,
     ) -> dict[str, Any]:
-        from .config import dump_yaml
-
         curated_models = _dict_of_dicts(self.config.get("models", {}))
         generated_models = _dict_of_dicts(self.generated_config.get("models", {}))
         removed_counts: dict[str, int] = {}
@@ -1162,7 +979,7 @@ class ModelCatalog:
             self.config["models"] = curated_models
             self.generated_config["models"] = generated_models
             if curated_dirty:
-                (self.profile.root / "models.yaml").write_text(dump_yaml(self.config), encoding="utf-8")
+                self.store.write_curated(self.config)
             if generated_dirty:
                 self._write_generated_config()
         provider_counts = [{"name": source, "count": count} for source, count in sorted(removed_counts.items())]
@@ -1183,517 +1000,41 @@ class ModelCatalog:
         }
 
     def _generated_path(self) -> Path:
-        return self.profile.root / DISCOVERED_MODELS_FILE
-
-    def _load_generated_config(self) -> dict[str, Any]:
-        from .config import parse_yaml
-
-        path = self._generated_path()
-        if not path.exists():
-            return {}
-        stat = path.stat()
-        cache_key = (path.resolve(), stat.st_mtime_ns, stat.st_size)
-        cached = _GENERATED_CONFIG_CACHE.get(cache_key)
-        if cached is not None:
-            return cached
-        data = parse_yaml(path.read_text(encoding="utf-8"))
-        parsed = data if isinstance(data, dict) else {}
-        _GENERATED_CONFIG_CACHE.clear()
-        _GENERATED_CONFIG_CACHE[cache_key] = parsed
-        return parsed
+        return self.store.generated_path
 
     def _write_generated_config(self) -> Path:
-        from .config import dump_yaml
+        return self.store.write_generated(self.generated_config)
 
-        path = self._generated_path()
-        path.write_text(
-            DISCOVERED_MODELS_BANNER + dump_yaml(self.generated_config),
-            encoding="utf-8",
-        )
-        return path
+    def _execution(self):
+        from .model_execution import ModelExecution
 
-    def pull_plan(
-        self,
-        name: str | None = None,
-        source: str | None = None,
-        model_id: str | None = None,
-        for_runtime: str | None = None,
-        file: str | None = None,
-    ) -> dict[str, Any]:
-        if name:
-            model = self.get(name)
-            source = source or model_source(model)
-            model_id = model_id or str(model.get("model") or "")
-            for_runtime = for_runtime or str(model.get("preferred_runtime") or model.get("provider") or "")
-        if not source or not model_id:
-            raise ValueError("pull planning requires a model alias, or both --source and --model-id")
-        command: list[str]
-        if source == "ollama":
-            command = ["ollama", "pull", model_id]
-        elif source == "huggingface":
-            command = [
-                "python",
-                "-c",
-                f"from huggingface_hub import snapshot_download; snapshot_download('{model_id}')",
-            ]
-        elif source == "huggingface_gguf":
-            if file:
-                command = [
-                    "python",
-                    "-c",
-                    f"from huggingface_hub import hf_hub_download; hf_hub_download('{model_id}', filename='{file}')",
-                ]
-            else:
-                command = [
-                    "python",
-                    "-c",
-                    f"from huggingface_hub import snapshot_download; snapshot_download('{model_id}')",
-                ]
-        elif source == "civitai":
-            command = [
-                "python",
-                "-m",
-                "aiplane",
-                "providers",
-                "models",
-                "civitai",
-                "--online",
-                "--query",
-                model_id,
-            ]
-        elif source == "modelscope":
-            command = ["provider-native-pull", "modelscope", model_id]
-        elif source == "local_file":
-            command = ["test", "-f", model_id]
-        else:
-            command = ["provider-native-pull", source, model_id]
-        return {
-            "name": name,
-            "source": source,
-            "model": model_id,
-            "runtime": for_runtime,
-            "file": file,
-            "command": command,
-        }
+        return ModelExecution(self)
+
+    def pull_plan(self, name=None, source=None, model_id=None, for_runtime=None, file=None):
+        return self._execution().pull_plan(name, source, model_id, for_runtime, file)
 
     def get(self, name: str) -> dict[str, Any]:
-        models = self.models()
-        if name not in models:
-            raise ValueError(f"unknown model: {name}")
-        return models[name]
+        return self._execution().get(name)
 
     def show(self, name: str) -> dict[str, Any]:
-        model = {"name": name, **dict(self.get(name))}
-        provider_name = str(model.get("provider", ""))
-        provider = self.providers().get(provider_name, {})
-        model["source"] = model_source(model)
-        model["ownership"] = ownership_for_model(model, provider)
-        from .runtime_catalog import RuntimeCatalog
-
-        supported_runtimes = RuntimeCatalog(self.profile).compatible_runtimes_for_entry(model, include_gui=True)
-        runtime_value = (
-            None
-            if model["ownership"] == "managed_service"
-            else (model.get("preferred_runtime") or provider.get("runtime") or provider_name)
-        )
-        model["runtime"] = runtime_value
-        model["runtime_endpoint"] = None if model["ownership"] == "managed_service" else provider_name
-        model["supported_runtimes"] = supported_runtimes
-        model["provider_config"] = provider
-        model["capabilities"] = capability_profile(model)
-        model["capability_avg_score"] = _capability_average(model["capabilities"])
-        from .benchmarks import latest_benchmark_summary
-
-        model["latest_benchmark"] = latest_benchmark_summary(self.profile, name)
-        model["capability_tags"] = capability_tags(model["capabilities"])
-        model["top_capabilities"] = top_capabilities(model["capabilities"])
-        return model
+        return self._execution().show(name)
 
     def doctor(self) -> list[ModelStatus]:
-        statuses = []
-        provider_probe_cache: dict[
-            tuple[str, str, tuple[tuple[str, str], ...]], tuple[bool, str, list[str] | None]
-        ] = {}
-        for name, model in self.models().items():
-            statuses.append(self._status(name, model, provider_probe_cache))
-        return statuses
+        return self._execution().doctor()
 
     def pull(self, name: str) -> str:
-        model = self.get(name)
-        if model.get("provider") != "ollama":
-            raise ValueError("pull is only supported for Ollama models")
-        model_id = str(model.get("model"))
-        result = subprocess.run(
-            ["ollama", "pull", model_id],
-            cwd=self.profile.workspace,
-            text=True,
-            capture_output=True,
-            check=False,
-        )
-        output = (result.stdout + result.stderr).strip()
-        if result.returncode:
-            raise RuntimeError(output or f"ollama pull failed for {model_id}")
-        return output
+        return self._execution().pull(name)
 
     def complete(
-        self,
-        name: str,
-        prompt: str,
-        timeout_seconds: int | None = None,
-        purpose: str = "chat",
+        self, name: str, prompt: str, timeout_seconds: int | None = None, purpose: str = "chat"
     ) -> BackendResult:
-        model = self.get(name)
-        self.require_execution_capability(name, model, purpose)
-        provider_name = self._runtime_for_model(name, model)
-        if provider_name in {"ollama", "ollama_cloud"}:
-            return self._ollama_backend(provider_name, timeout_seconds=timeout_seconds).chat(
-                self._execution_model_id(provider_name, model), prompt
-            )
-        if self._is_openai_compatible(provider_name):
-            return self._openai_compatible_backend(provider_name, model, timeout_seconds=timeout_seconds).chat(
-                str(model.get("model")), prompt
-            )
-        if self._is_azure_openai(provider_name):
-            return self._azure_openai_backend(provider_name, model, timeout_seconds=timeout_seconds).chat(
-                str(model.get("model")), prompt
-            )
-        if self._is_anthropic(provider_name):
-            return self._anthropic_backend(provider_name, model, timeout_seconds=timeout_seconds).chat(
-                str(model.get("model")), prompt
-            )
-        raise ValueError(
-            f"execution is not wired for runtime/provider: {provider_name}; "
-            "supported protocols are ollama_api, openai_compatible, azure_openai, and anthropic_api"
-        )
+        return self._execution().complete(name, prompt, timeout_seconds, purpose)
 
     def require_execution_capability(self, name: str, model: dict[str, Any], purpose: str) -> None:
-        roles = {str(role) for role in model.get("roles", []) or []}
-        scores = model.get("capability_scores")
-        if not isinstance(scores, dict):
-            capabilities = model.get("capabilities")
-            if isinstance(capabilities, dict):
-                scores = capabilities.get("scores")
-        score_names = {key for key, value in (scores or {}).items() if self._positive_score(value)}
-        purpose_roles = {
-            "chat": {"chat", "generation"},
-            "analysis": {"analysis", "chat"},
-            "completion": {"completion", "autocomplete", "code", "chat"},
-            "write": {"generation", "refactor", "code", "chat"},
-        }
-        purpose_scores = {
-            "chat": {"general_chat", "reasoning", "tool_use"},
-            "analysis": {"code_analysis", "reasoning", "general_chat"},
-            "completion": {"code_completion", "code_generation", "general_chat"},
-            "write": {"code_generation", "debugging_refactor", "general_chat"},
-        }
-        allowed_roles = purpose_roles.get(purpose, purpose_roles["chat"])
-        allowed_scores = purpose_scores.get(purpose, purpose_scores["chat"])
-        if roles.intersection(allowed_roles) or score_names.intersection(allowed_scores):
-            return
-        provider_name = str(model.get("provider") or "unknown")
-        model_id = str(model.get("model") or "")
-        role_text = ", ".join(sorted(roles)) or "none"
-        role_hint = next(iter(sorted(allowed_roles)))
-        raise ValueError(
-            f"model {name!r} is not suitable for {purpose} execution: roles={role_text}. "
-            f"Use `aiplane models list --role {role_hint} --enabled-only` to select a compatible model, "
-            "or promote/add a reviewed chat/task-capable alias. "
-            f"Provider={provider_name!r}, model={model_id!r}."
-        )
-
-    @staticmethod
-    def _positive_score(value: Any) -> bool:
-        try:
-            return float(value) > 0
-        except (TypeError, ValueError):
-            return False
-
-    def _execution_model_id(self, runtime_name: str, model: dict[str, Any]) -> str:
-        return runtime_model_id(self.profile, runtime_name, model)
-
-    def _runtime_for_model(self, name: str, model: dict[str, Any]) -> str:
-        provider_name = str(model.get("provider") or "")
-        provider = self.providers().get(provider_name, {})
-        if ownership_for_model(model, provider) == "managed_service":
-            runtime_fields = [field for field in ["preferred_runtime", "supported_runtimes"] if model.get(field)]
-            if runtime_fields:
-                raise ValueError(
-                    f"managed-service model {name!r} cannot define local runtime fields: {', '.join(runtime_fields)}"
-                )
-            return provider_name
-
-        from .runtime_catalog import RuntimeCatalog
-
-        runtime_catalog = RuntimeCatalog(self.profile)
-        selection = runtime_catalog.select_runtime(name)
-        preferred = str(model.get("preferred_runtime") or model.get("provider") or "")
-        if selection["available"] and selection["selected"]:
-            return str(selection["selected"])
-        supported = ", ".join(selection["supported_runtimes"]) or preferred or "none"
-        details = "; ".join(f"{status['name']}: {status['reason']}" for status in selection["statuses"])
-        raise RuntimeError(
-            f"No supported runtime is running for model {name}. Supported runtimes: {supported}. {details}"
-        )
-
-    def _ollama_backend(self, provider_name: str, timeout_seconds: int | None = None) -> OllamaBackend:
-        provider = self.providers().get(provider_name, {})
-        endpoint = str(
-            provider.get(
-                "endpoint",
-                ("http://localhost:11434" if provider_name == "ollama" else "https://ollama.com"),
-            )
-        )
-        timeout = int(timeout_seconds or provider.get("timeout_seconds", 60))
-        headers = {}
-        credential_ref = str(provider.get("credential_ref") or "")
-        api_key = CredentialStore().api_key(credential_ref) if credential_ref else None
-        key_env = provider.get("api_key_env")
-        if not api_key and key_env and os.environ.get(str(key_env)):
-            api_key = os.environ[str(key_env)]
-        if api_key:
-            headers["Authorization"] = "Bearer " + api_key
-        return OllamaBackend(endpoint, timeout, headers)
-
-    def _openai_compatible_backend(
-        self,
-        provider_name: str,
-        model: dict[str, Any] | None = None,
-        timeout_seconds: int | None = None,
-    ) -> OpenAICompatibleBackend:
-        provider = self.providers().get(provider_name, {})
-        endpoint = self._openai_compatible_endpoint(provider_name, provider)
-        timeout = int(timeout_seconds or provider.get("timeout_seconds", 60))
-        headers = {}
-        api_key = self._api_key(provider, model)
-        if api_key:
-            headers["Authorization"] = "Bearer " + api_key
-        return OpenAICompatibleBackend(endpoint, timeout, headers)
-
-    def _azure_openai_backend(
-        self,
-        provider_name: str,
-        model: dict[str, Any] | None = None,
-        timeout_seconds: int | None = None,
-    ) -> AzureOpenAIBackend:
-        provider = self.providers().get(provider_name, {})
-        endpoint = str(provider.get("endpoint") or "")
-        if not endpoint:
-            raise ValueError(f"provider {provider_name!r} is missing endpoint")
-        timeout = int(timeout_seconds or provider.get("timeout_seconds", 60))
-        headers = {}
-        api_key = self._api_key(provider, model)
-        if api_key:
-            headers["api-key"] = api_key
-        return AzureOpenAIBackend(endpoint, str(provider.get("api_version") or "2024-02-01"), timeout, headers)
-
-    def _anthropic_backend(
-        self,
-        provider_name: str,
-        model: dict[str, Any] | None = None,
-        timeout_seconds: int | None = None,
-    ) -> AnthropicMessagesBackend:
-        provider = self.providers().get(provider_name, {})
-        endpoint = str(provider.get("endpoint") or "https://api.anthropic.com")
-        timeout = int(timeout_seconds or provider.get("timeout_seconds", 60))
-        headers = {}
-        api_key = self._api_key(provider, model)
-        if api_key:
-            headers["x-api-key"] = api_key
-        return AnthropicMessagesBackend(endpoint, timeout, headers, str(provider.get("api_version") or "2023-06-01"))
-
-    def _api_key(self, provider: dict[str, Any], model: dict[str, Any] | None = None) -> str | None:
-        model = model or {}
-        credential_ref = str(model.get("credential_ref") or provider.get("credential_ref") or "")
-        api_key = CredentialStore().api_key(credential_ref) if credential_ref else None
-        key_env = model.get("api_key_env") or provider.get("api_key_env")
-        if not api_key and key_env and os.environ.get(str(key_env)):
-            api_key = os.environ[str(key_env)]
-        return api_key
-
-    def _openai_compatible_endpoint(self, provider_name: str, provider: dict[str, Any] | None = None) -> str:
-        provider = provider or self.providers().get(provider_name, {})
-        endpoint = str(provider.get("endpoint", ""))
-        if not endpoint and provider_name == "openai":
-            endpoint = "https://api.openai.com/v1"
-        if not endpoint:
-            raise ValueError(f"provider {provider_name!r} is missing endpoint")
-        return endpoint.rstrip("/")
-
-    def _is_openai_compatible(self, provider_name: str) -> bool:
-        provider = self.providers().get(provider_name, {})
-        protocol = str(provider.get("protocol", ""))
-        return protocol == "openai_compatible" or provider_name in {
-            "vllm",
-            "lmstudio",
-            "llamacpp",
-            "tgi",
-            "localai",
-            "openai",
-        }
-
-    def _is_azure_openai(self, provider_name: str) -> bool:
-        provider = self.providers().get(provider_name, {})
-        return provider_name == "azure_openai" or str(provider.get("protocol") or "") == "azure_openai"
-
-    def _is_anthropic(self, provider_name: str) -> bool:
-        provider = self.providers().get(provider_name, {})
-        return provider_name == "anthropic" or str(provider.get("protocol") or "") in {
-            "anthropic_api",
-            "anthropic_messages",
-        }
+        self._execution().require_execution_capability(name, model, purpose)
 
     def test_prompt(self, name: str, task: str, target: Path | None = None, dry_run: bool = False) -> BackendResult:
-        model = self.get(name)
-        prompt = build_smoke_prompt(task, target)
-        if dry_run:
-            return BackendResult("dry_run", prompt, False)
-        provider_name = str(model.get("provider"))
-        if (
-            provider_name not in {"ollama", "ollama_cloud"}
-            and not self._is_openai_compatible(provider_name)
-            and not self._is_azure_openai(provider_name)
-            and not self._is_anthropic(provider_name)
-        ):
-            raise ValueError(
-                "model test cannot execute this provider yet; use --dry-run or configure an Ollama, "
-                "OpenAI-compatible, Azure OpenAI, or Anthropic Messages endpoint"
-            )
-        return self.complete(name, prompt)
-
-    def _status(
-        self,
-        name: str,
-        model: dict[str, Any],
-        provider_probe_cache: dict[tuple[str, str, tuple[tuple[str, str], ...]], tuple[bool, str, list[str] | None]],
-    ) -> ModelStatus:
-        provider_name = str(model.get("provider", ""))
-        provider = self.providers().get(provider_name, {})
-        if not bool(model.get("enabled", True)):
-            return ModelStatus(name, provider_name, True, False, "model is disabled")
-        if provider_name in {"ollama", "ollama_cloud"}:
-            if (
-                provider_name == "ollama_cloud"
-                and provider.get("api_key_env")
-                and not os.environ.get(str(provider.get("api_key_env")))
-            ):
-                return ModelStatus(
-                    name,
-                    provider_name,
-                    True,
-                    False,
-                    f"missing env var {provider.get('api_key_env')}",
-                )
-            backend = self._ollama_backend(provider_name)
-            probe_key = self._provider_probe_cache_key(provider_name, backend.endpoint, backend.headers)
-            reachable, reason, available = provider_probe_cache.get(probe_key) or self._probe_ollama_backend(backend)
-            provider_probe_cache.setdefault(probe_key, (reachable, reason, available))
-            if not reachable:
-                return ModelStatus(name, provider_name, True, False, reason)
-            model_id = str(model.get("model", ""))
-            pulled = model_id in (available or [])
-            return ModelStatus(
-                name,
-                provider_name,
-                True,
-                pulled,
-                ("model is pulled" if pulled else f"model is not pulled: ollama pull {model_id}"),
-            )
-        if self._is_openai_compatible(provider_name):
-            credential_problem = self._credential_problem(model, provider)
-            if credential_problem:
-                return ModelStatus(name, provider_name, True, False, credential_problem)
-            if not bool(provider.get("enabled", True)):
-                return ModelStatus(name, provider_name, True, False, "provider is disabled")
-            backend = self._openai_compatible_backend(provider_name, model)
-            probe_key = self._provider_probe_cache_key(provider_name, backend.endpoint, backend.headers)
-            reachable, reason, available = provider_probe_cache.get(probe_key) or self._probe_openai_compatible_backend(
-                backend
-            )
-            provider_probe_cache.setdefault(probe_key, (reachable, reason, available))
-            if not reachable:
-                return ModelStatus(name, provider_name, True, False, reason)
-            model_id = str(model.get("model", ""))
-            usable = not available or model_id in available
-            return ModelStatus(
-                name,
-                provider_name,
-                True,
-                usable,
-                ("model is available" if usable else f"model was not listed by provider: {model_id}"),
-            )
-        if self._is_azure_openai(provider_name) or self._is_anthropic(provider_name):
-            credential_problem = self._credential_problem(model, provider)
-            if credential_problem:
-                return ModelStatus(name, provider_name, True, False, credential_problem)
-            if not bool(provider.get("enabled", True)):
-                return ModelStatus(name, provider_name, True, False, "provider is disabled")
-            if self._is_azure_openai(provider_name) and not provider.get("endpoint"):
-                return ModelStatus(name, provider_name, True, False, "provider is missing endpoint")
-            return ModelStatus(name, provider_name, True, True, "model endpoint is configured")
-        credential_ref = str(model.get("credential_ref") or provider.get("credential_ref") or "")
-        if credential_ref:
-            present = bool(CredentialStore().api_key(credential_ref))
-            return ModelStatus(
-                name,
-                provider_name,
-                True,
-                present,
-                (f"credential {credential_ref} is present" if present else f"missing credential {credential_ref}"),
-            )
-        key_env = provider.get("api_key_env")
-        if key_env:
-            present = bool(os.environ.get(str(key_env)))
-            return ModelStatus(
-                name,
-                provider_name,
-                True,
-                present,
-                (f"env var {key_env} is present" if present else f"missing env var {key_env}"),
-            )
-        return ModelStatus(
-            name,
-            provider_name,
-            bool(provider),
-            False,
-            "provider has no usable local check yet",
-        )
-
-    def _credential_problem(self, model: dict[str, Any], provider: dict[str, Any]) -> str | None:
-        credential_ref = str(model.get("credential_ref") or provider.get("credential_ref") or "")
-        key_env = model.get("api_key_env") or provider.get("api_key_env")
-        if credential_ref and not CredentialStore().api_key(credential_ref):
-            return f"missing credential {credential_ref}"
-        if not credential_ref and key_env and not os.environ.get(str(key_env)):
-            return f"missing env var {key_env}"
-        return None
-
-    @staticmethod
-    def _provider_probe_cache_key(
-        provider_name: str, endpoint: str, headers: dict[str, Any]
-    ) -> tuple[str, str, tuple[tuple[str, str], ...]]:
-        return (
-            provider_name,
-            endpoint,
-            tuple(sorted((str(key), str(value)) for key, value in headers.items())),
-        )
-
-    @staticmethod
-    def _probe_ollama_backend(backend: OllamaBackend) -> tuple[bool, str, list[str] | None]:
-        try:
-            available = backend.available_models()
-            return True, "Ollama is reachable", available
-        except (URLError, TimeoutError, OSError, ConnectionError) as exc:
-            return False, f"Ollama is not reachable: {exc}", None
-
-    @staticmethod
-    def _probe_openai_compatible_backend(
-        backend: OpenAICompatibleBackend,
-    ) -> tuple[bool, str, list[str] | None]:
-        try:
-            available = backend.available_models()
-            return True, "OpenAI-compatible endpoint is reachable", available
-        except (URLError, TimeoutError, OSError, ConnectionError) as exc:
-            return False, f"OpenAI-compatible endpoint is not reachable: {exc}", None
+        return self._execution().test_prompt(name, task, target, dry_run)
 
 
 def capability_profile(model: dict[str, Any]) -> dict[str, Any]:

@@ -195,6 +195,11 @@ WRITE_TOOLS: list[dict[str, Any]] = [
 
 
 MUTATING_TOOL_NAMES = {str(tool["name"]) for tool in WRITE_TOOLS if tool.get("mutates")}
+_WRITE_CONFIRM_PROPERTY = {
+    "type": "boolean",
+    "default": False,
+    "description": "Explicitly confirm this individual mutation; the server must also be started with --allow-writes.",
+}
 
 
 TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
@@ -521,12 +526,16 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
 }
 
 
+for _mutating_tool_name in MUTATING_TOOL_NAMES:
+    TOOL_SCHEMAS[_mutating_tool_name]["properties"]["confirm"] = dict(_WRITE_CONFIRM_PROPERTY)
+
+
 def mcp_manifest() -> dict[str, Any]:
     return {
         "name": "aiplane-mcp",
         "status": "guarded_write_stdio_available",
         "transport": "stdio",
-        "policy": "MCP tools must call existing aiplane managers and must not bypass policy/audit checks. Mutating tools execute through the same managers as the CLI.",
+        "policy": "The MCP server is read-only by default. Mutations require operator startup with --allow-writes plus confirm=true on each call, then execute through existing managers and local audit.",
         "tools": READ_ONLY_TOOLS + WRITE_TOOLS,
         "write_tools": WRITE_TOOLS,
         "deferred_write_tools": [
@@ -543,10 +552,18 @@ def mcp_manifest() -> dict[str, Any]:
 
 
 class AiplaneMcpServer:
-    def __init__(self, workspace, default_profile: str | None = None, profiles_dir=None):
+    def __init__(
+        self,
+        workspace,
+        default_profile: str | None = None,
+        profiles_dir=None,
+        *,
+        allow_writes: bool = False,
+    ):
         self.workspace = workspace
         self.default_profile = default_profile
         self.profiles_dir = profiles_dir
+        self.allow_writes = allow_writes
 
     def handle_message(self, message: dict[str, Any]) -> dict[str, Any] | None:
         method = message.get("method")
@@ -571,7 +588,7 @@ class AiplaneMcpServer:
         except Exception as exc:  # noqa: BLE001 - JSON-RPC errors should be returned to the client.
             if request_id is None:
                 return None
-            return _error(request_id, -32000, str(exc))
+            return _error(request_id, -32000, f"{type(exc).__name__}: operation failed; see local audit log")
 
     def call_tool(self, name: str, arguments: dict[str, Any]) -> Any:
         if name == "aiplane.docs.list":
@@ -591,15 +608,25 @@ class AiplaneMcpServer:
         )
         profile = load_profile(profile_name, self.workspace, profiles_dir=self.profiles_dir)
 
-        mutates = name in MUTATING_TOOL_NAMES
+        mutates = _call_mutates(name, arguments)
+        if mutates and not self.allow_writes:
+            self._audit(profile, name, "blocked", {"reason": "server_read_only"})
+            raise PermissionError(
+                "MCP writes are disabled; restart with --allow-writes and confirm the individual call"
+            )
+        if mutates and arguments.get("confirm") is not True:
+            self._audit(profile, name, "blocked", {"reason": "confirmation_required"})
+            raise PermissionError("mutating MCP calls require confirm=true")
+        call_arguments = dict(arguments)
+        call_arguments.pop("confirm", None)
         try:
-            result = self._call_profile_tool(name, arguments, profile)
+            result = self._call_profile_tool(name, call_arguments, profile)
         except Exception as exc:
             if mutates:
-                self._audit(profile, name, "failed", {"arguments": arguments, "error": str(exc)})
+                self._audit(profile, name, "failed", {"arguments": call_arguments, "error_type": type(exc).__name__})
             raise
         if mutates:
-            self._audit(profile, name, "allowed", {"arguments": arguments})
+            self._audit(profile, name, "allowed", {"arguments": call_arguments})
         return result
 
     def _call_profile_tool(self, name: str, arguments: dict[str, Any], profile: Profile) -> Any:
@@ -814,8 +841,25 @@ class AiplaneMcpServer:
         }
 
 
-def serve_stdio(workspace, default_profile: str | None = None, profiles_dir=None) -> int:
-    server = AiplaneMcpServer(workspace, default_profile=default_profile, profiles_dir=profiles_dir)
+def _call_mutates(name: str, arguments: dict[str, Any]) -> bool:
+    if name == "aiplane.models.refresh" and bool(arguments.get("dry_run", False)):
+        return False
+    return name in MUTATING_TOOL_NAMES
+
+
+def serve_stdio(
+    workspace,
+    default_profile: str | None = None,
+    profiles_dir=None,
+    *,
+    allow_writes: bool = False,
+) -> int:
+    server = AiplaneMcpServer(
+        workspace,
+        default_profile=default_profile,
+        profiles_dir=profiles_dir,
+        allow_writes=allow_writes,
+    )
     while True:
         message = _read_message(sys.stdin.buffer)
         if message is None:

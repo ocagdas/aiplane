@@ -335,7 +335,7 @@ WORKDIR /opt/aiplane
 COPY . /opt/aiplane
 RUN python -m pip install --upgrade pip \
     && python -m pip install -e /opt/aiplane \
-    && python -m aiplane profiles bootstrap-local --no-discovery
+    && python -m aiplane profiles bootstrap-local --no-overwrite --no-discovery
 WORKDIR /opt/aiplane
 EOF
       ;;
@@ -368,16 +368,16 @@ docker_run_shell() {
 bootstrap_local_profile() {
   case "$MODE" in
     local)
-      run "$PYTHON_BIN" -m aiplane profiles bootstrap-local --no-discovery
+      run "$PYTHON_BIN" -m aiplane profiles bootstrap-local --no-overwrite --no-discovery
       ;;
     venv)
-      run "$VENV_PATH/bin/python" -m aiplane profiles bootstrap-local --no-discovery
+      run "$VENV_PATH/bin/python" -m aiplane profiles bootstrap-local --no-overwrite --no-discovery
       ;;
     conda)
-      run conda run -n "$CONDA_ENV" python -m aiplane profiles bootstrap-local --no-discovery
+      run conda run -n "$CONDA_ENV" python -m aiplane profiles bootstrap-local --no-overwrite --no-discovery
       ;;
     docker)
-      docker_run_aiplane profiles bootstrap-local --no-discovery
+      docker_run_aiplane profiles bootstrap-local --no-overwrite --no-discovery
       ;;
   esac
 }

@@ -67,6 +67,7 @@ from .profile_fixtures import (
     _isolated_profiles_dir,
     _isolated_test_profile,
     _load_profile_with_test_models,
+    _materialize_test_models,
     _test_model_fixture,
     load_profile,
 )
@@ -111,6 +112,7 @@ __all__ = [
     "_isolated_profiles_dir",
     "_isolated_test_profile",
     "_load_profile_with_test_models",
+    "_materialize_test_models",
     "_read_message",
     "_test_model_fixture",
     "_write_message",

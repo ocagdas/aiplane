@@ -247,7 +247,7 @@ The model provider remains `ollama`, `vllm`, or another OpenAI-compatible runtim
 
 ### SSH Tunnel Target Commands
 
-The default profile includes an example `gpu_workstation_ssh` target. Edit `profiles/<profile>/targets.yaml` and replace the host/user before use.
+The default profile includes an example `gpu_workstation_ssh` target. Edit `profiles/<profile>/targets.yaml` and replace the host/user before use. Tunnel hosts must be DNS names or IPv4/IPv6 addresses, users must use restricted SSH account syntax, ports must be 1-65535, and endpoints must use `http` or `https` without URL-embedded credentials. Values that could be interpreted as SSH options are rejected before command construction.
 
 Render the tunnel command:
 

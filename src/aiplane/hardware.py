@@ -5,16 +5,18 @@ import json
 import os
 import platform
 import shutil
-import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from .boundaries import CommandRunner, SubprocessCommandRunner
+from .persistence import atomic_write_text
 from .config import dump_yaml
 from .model_catalog import ModelCatalog, capability_profile
 from .runtime_catalog import RuntimeCatalog
 from .policy import PolicyEngine
 from .models import Profile
+from .platform_support import HostPlatform, detect_host_platform
 
 
 @dataclass(frozen=True)
@@ -25,8 +27,15 @@ class HardwareFit:
 
 
 class HardwareManager:
-    def __init__(self, profile: Profile):
+    def __init__(
+        self,
+        profile: Profile,
+        command_runner: CommandRunner | None = None,
+        host_platform: HostPlatform | None = None,
+    ):
         self.profile = profile
+        self.command_runner = command_runner or SubprocessCommandRunner()
+        self.host_platform = host_platform or detect_host_platform()
         self.config = profile.hardware or {}
 
     def show(self, verbosity: int = 0) -> dict[str, Any]:
@@ -212,20 +221,27 @@ class HardwareManager:
 
     def _write_config(self) -> None:
         path = self.profile.root / "hardware.yaml"
-        path.write_text(dump_yaml(self.config), encoding="utf-8")
+        atomic_write_text(path, dump_yaml(self.config))
 
     def discover(self) -> dict[str, Any]:
+        linux_probes = self.host_platform.linux_hardware_probes_supported
         discovered: dict[str, Any] = {
             "platform": platform.platform(),
+            "platform_support": self.host_platform.summary(),
             "machine": platform.machine(),
             "processor": platform.processor(),
             "cpu_count": os.cpu_count(),
-            "memory_gb": _memory_gb(),
+            "memory_gb": _memory_gb() if linux_probes else None,
             "gpus": [],
             "notes": [],
         }
-        discovered["gpus"].extend(_nvidia_gpus())
-        discovered["gpus"].extend(_amd_gpus())
+        if linux_probes:
+            discovered["gpus"].extend(_nvidia_gpus(self.command_runner))
+            discovered["gpus"].extend(_amd_gpus(self.command_runner))
+        else:
+            discovered["notes"].append(
+                "Linux procfs, nvidia-smi, rocm-smi, and lspci discovery probes were skipped on this platform"
+            )
         if not discovered["gpus"]:
             discovered["notes"].append("No NVIDIA/AMD GPU discovered through available CLI tools")
         discovered["closest_profiles"] = self._closest_profiles(discovered)
@@ -518,10 +534,10 @@ def _memory_gb() -> float | None:
     return None
 
 
-def _nvidia_gpus() -> list[dict[str, Any]]:
+def _nvidia_gpus(command_runner: CommandRunner) -> list[dict[str, Any]]:
     if not shutil.which("nvidia-smi"):
         return []
-    result = subprocess.run(
+    result = command_runner.run(
         [
             "nvidia-smi",
             "--query-gpu=name,memory.total,uuid",
@@ -548,11 +564,11 @@ def _nvidia_gpus() -> list[dict[str, Any]]:
     return gpus
 
 
-def _amd_gpus() -> list[dict[str, Any]]:
+def _amd_gpus(command_runner: CommandRunner) -> list[dict[str, Any]]:
     # Prefer rocminfo/rocm-smi when available; fall back to lspci names only.
     gpus: list[dict[str, Any]] = []
     if shutil.which("rocm-smi"):
-        result = subprocess.run(
+        result = command_runner.run(
             ["rocm-smi", "--showproductname", "--showmeminfo", "vram"],
             text=True,
             capture_output=True,
@@ -568,7 +584,7 @@ def _amd_gpus() -> list[dict[str, Any]]:
             )
             return gpus
     if shutil.which("lspci"):
-        result = subprocess.run(["lspci"], text=True, capture_output=True, check=False)
+        result = command_runner.run(["lspci"], text=True, capture_output=True, check=False)
         if result.returncode == 0:
             for line in result.stdout.splitlines():
                 lower = line.lower()

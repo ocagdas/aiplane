@@ -95,6 +95,7 @@ class EnvironmentToolBenchmarkTests(unittest.TestCase):
                         "tool",
                         "--profile",
                         "local-dev",
+                        "--yes",
                         "run_tests",
                         "python",
                         "-c",

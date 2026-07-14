@@ -53,9 +53,9 @@ class BridgeCliTests(unittest.TestCase):
     def test_bridge_exec_runs_allowlisted_command(self) -> None:
         stdout = StringIO()
         with (
-            patch("aiplane.cli.shutil.which", return_value="/usr/bin/ollama"),
+            patch("aiplane.cli_execution.shutil.which", return_value="/usr/bin/ollama"),
             patch(
-                "aiplane.cli.subprocess.run",
+                "aiplane.boundaries.subprocess.run",
                 return_value=subprocess.CompletedProcess(
                     args=["ollama", "list"],
                     returncode=0,
@@ -123,13 +123,13 @@ class BridgeCliTests(unittest.TestCase):
             with _isolated_profiles_dir("local-dev") as profiles_dir:
                 with patch.dict(
                     os.environ,
-                    {"AIPLANE_TEST_PROFILES_DIR": str(profiles_dir)},
+                    {"AIPLANE_PROFILES_DIR": str(profiles_dir)},
                 ):
                     stdout = StringIO()
                     with (
-                        patch("aiplane.cli.shutil.which", return_value="/usr/bin/continue"),
+                        patch("aiplane.cli_execution.shutil.which", return_value="/usr/bin/continue"),
                         patch(
-                            "aiplane.cli.subprocess.run",
+                            "aiplane.boundaries.subprocess.run",
                             return_value=subprocess.CompletedProcess(
                                 args=["continue"], returncode=0, stdout="ok\n", stderr=""
                             ),
@@ -161,12 +161,12 @@ class BridgeCliTests(unittest.TestCase):
             with _isolated_profiles_dir("local-dev") as profiles_dir:
                 with patch.dict(
                     os.environ,
-                    {"AIPLANE_TEST_PROFILES_DIR": str(profiles_dir)},
+                    {"AIPLANE_PROFILES_DIR": str(profiles_dir)},
                 ):
                     stdout = StringIO()
                     with (
-                        patch("aiplane.cli.shutil.which", return_value=None),
-                        patch("aiplane.cli.subprocess.run") as run,
+                        patch("aiplane.cli_execution.shutil.which", return_value=None),
+                        patch("aiplane.boundaries.subprocess.run") as run,
                         redirect_stdout(stdout),
                     ):
                         code = cli_main(
@@ -190,7 +190,7 @@ class BridgeCliTests(unittest.TestCase):
             with _isolated_profiles_dir("local-dev") as profiles_dir:
                 with patch.dict(
                     os.environ,
-                    {"AIPLANE_TEST_PROFILES_DIR": str(profiles_dir)},
+                    {"AIPLANE_PROFILES_DIR": str(profiles_dir)},
                 ):
                     stdout = StringIO()
                     with redirect_stdout(stdout):
@@ -217,8 +217,10 @@ class BridgeCliTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as workspace:
             with _isolated_profiles_dir("local-dev") as profiles_dir:
                 with (
-                    patch.dict(os.environ, {"AIPLANE_TEST_PROFILES_DIR": str(profiles_dir)}),
-                    patch("aiplane.cli.uuid.uuid4", return_value=SimpleNamespace(hex="session1234567890")),
+                    patch.dict(os.environ, {"AIPLANE_PROFILES_DIR": str(profiles_dir)}),
+                    patch(
+                        "aiplane.cli_launch_support.uuid.uuid4", return_value=SimpleNamespace(hex="session1234567890")
+                    ),
                 ):
                     stdout = StringIO()
                     with redirect_stdout(stdout):

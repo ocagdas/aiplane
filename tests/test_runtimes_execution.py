@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from aiplane.cli_runtimes import _RuntimeInstallReporter
+from aiplane.platform_support import HostPlatform
+
 from .support import (
     AuditLogger,
     BackendResult,
@@ -32,13 +35,19 @@ from .support import (
 class RuntimeExecutionTests(unittest.TestCase):
     def test_runtime_install_helper_rejects_non_linux_platforms(self) -> None:
         stdout = StringIO()
-        with patch("aiplane.cli.platform.system", return_value="Darwin"), redirect_stdout(stdout):
+        with (
+            patch(
+                "aiplane.cli_runtimes.detect_host_platform",
+                return_value=HostPlatform("Darwin", None, (), "arm64"),
+            ),
+            redirect_stdout(stdout),
+        ):
             code = cli_main(["runtimes", "install", "ollama", "--dry-run"])
         self.assertEqual(code, 2)
         payload = json.loads(stdout.getvalue())
-        self.assertEqual(payload["name"], "runtime_helper_platform_unsupported")
-        self.assertEqual(payload["platform"], "Darwin")
-        self.assertIn("Linux", payload["supported_platforms"])
+        self.assertEqual(payload["name"], "unsupported_platform")
+        self.assertEqual(payload["platform"]["system"], "Darwin")
+        self.assertIn("Ubuntu Linux", payload["supported_platforms"])
         self.assertIn("not supported", payload["reason"])
 
     def test_router_blocks_secret_cloud_escalation(self) -> None:
@@ -256,7 +265,7 @@ class RuntimeExecutionTests(unittest.TestCase):
                 return_value={"name": "ollama", "available": True, "reason": "ok"},
             ),
             patch(
-                "aiplane.model_catalog.ModelCatalog._ollama_backend",
+                "aiplane.model_execution.ModelExecution._ollama_backend",
                 return_value=FakeOllama(),
             ),
         ):
@@ -268,7 +277,7 @@ class RuntimeExecutionTests(unittest.TestCase):
 
     def test_ollama_backend_timeout_message_points_to_runtime_commands(self) -> None:
         backend = OllamaBackend(timeout_seconds=3)
-        with patch("aiplane.backends.urlopen", side_effect=TimeoutError("timed out")):
+        with patch("aiplane.boundaries.urlopen", side_effect=TimeoutError("timed out")):
             with self.assertRaisesRegex(RuntimeError, "Ollama request timed out") as raised:
                 backend.chat("hf.co/Example/Chat-GGUF", "hello")
         message = str(raised.exception)
@@ -349,7 +358,7 @@ class RuntimeExecutionTests(unittest.TestCase):
 
         with (
             patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}),
-            patch("aiplane.backends.urlopen", return_value=FakeResponse()) as opened,
+            patch("aiplane.boundaries.urlopen", return_value=FakeResponse()) as opened,
         ):
             result = ModelCatalog(profile).complete("openai-main", "hello")
         self.assertEqual(result.backend, "openai_compatible")
@@ -388,7 +397,7 @@ class RuntimeExecutionTests(unittest.TestCase):
 
         with (
             patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}),
-            patch("aiplane.backends.urlopen", return_value=FakeResponse()) as opened,
+            patch("aiplane.boundaries.urlopen", return_value=FakeResponse()) as opened,
         ):
             result = ModelCatalog(profile).complete("claude-main", "hello")
         self.assertEqual(result.backend, "anthropic_messages")
@@ -429,7 +438,7 @@ class RuntimeExecutionTests(unittest.TestCase):
 
         with (
             patch.dict(os.environ, {"AZURE_OPENAI_API_KEY": "test-key"}),
-            patch("aiplane.backends.urlopen", return_value=FakeResponse()) as opened,
+            patch("aiplane.boundaries.urlopen", return_value=FakeResponse()) as opened,
         ):
             result = ModelCatalog(profile).complete("azure-main", "hello")
         self.assertEqual(result.backend, "azure_openai")
@@ -601,7 +610,7 @@ class RuntimeExecutionTests(unittest.TestCase):
             check=False,
         )
         self.assertEqual(completed.returncode, 0, completed.stderr)
-        bootstrap = "python -m aiplane profiles bootstrap-local --no-discovery"
+        bootstrap = "python -m aiplane profiles bootstrap-local --no-overwrite --no-discovery"
         doctor = "python -m aiplane profiles list"
         self.assertIn(bootstrap, completed.stdout)
         self.assertIn(doctor, completed.stdout)
@@ -866,7 +875,7 @@ exit 0
                     0,
                 )
             completed = subprocess.CompletedProcess(args=["provider_helper"], returncode=0, stdout="", stderr="")
-            with patch("aiplane.cli.subprocess.run", return_value=completed) as run:
+            with patch("aiplane.boundaries.subprocess.run", return_value=completed) as run:
                 code = cli_main(
                     [
                         "--profiles-dir",
@@ -971,12 +980,13 @@ exit 0
                     stdout="+ python -m pip install vllm huggingface_hub\n",
                     stderr="",
                 )
-            time.sleep(2.1)
+            time.sleep(0.03)
             return subprocess.CompletedProcess(args=["provider_helper"], returncode=0, stdout="", stderr="")
 
         with (
             patch("aiplane.runtime_catalog.shutil.which", return_value="/usr/bin/fake"),
-            patch("aiplane.cli._run_provider_helper", side_effect=_slow_helper),
+            patch("aiplane.cli_runtimes._run_provider_helper", side_effect=_slow_helper),
+            patch("aiplane.cli_runtimes._RuntimeInstallReporter", lambda: _RuntimeInstallReporter(0.01)),
             redirect_stdout(stdout),
             redirect_stderr(stderr),
         ):
@@ -1050,7 +1060,7 @@ exit 0
         profile.models["providers"]["ollama"]["substrate"] = "docker"
         stdout = StringIO()
         with (
-            patch("aiplane.cli.load_profile", return_value=profile),
+            patch("aiplane.cli_runtimes.load_profile", return_value=profile),
             redirect_stdout(stdout),
         ):
             code = cli_main(["runtimes", "start", "--profile", "local-dev", "ollama", "--dry-run"])

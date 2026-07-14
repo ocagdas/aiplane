@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import importlib.util
-import subprocess
 from typing import Any
 
+from .boundaries import CommandRunner, SubprocessCommandRunner
+from .persistence import atomic_write_text
 from .config import dump_yaml
 from .env import EnvironmentManager
 from .model_catalog import ModelCatalog
@@ -90,8 +91,9 @@ ORCHESTRATOR_DEFINITIONS: dict[str, dict[str, Any]] = {
 
 
 class OrchestratorCatalog:
-    def __init__(self, profile: Profile):
+    def __init__(self, profile: Profile, command_runner: CommandRunner | None = None):
         self.profile = profile
+        self.command_runner = command_runner or SubprocessCommandRunner()
         self.config = profile.orchestrators or {}
         self.environment = EnvironmentManager(profile)
 
@@ -220,7 +222,7 @@ class OrchestratorCatalog:
             return payload
         results = []
         if install and install_plan:
-            completed = subprocess.run(
+            completed = self.command_runner.run(
                 install_plan.command,
                 cwd=install_plan.cwd,
                 text=True,
@@ -363,7 +365,7 @@ class OrchestratorCatalog:
 
     def _write_config(self) -> None:
         path = self.profile.root / "orchestrators.yaml"
-        path.write_text(dump_yaml(self.config), encoding="utf-8")
+        atomic_write_text(path, dump_yaml(self.config))
 
 
 def _dockerfile(name: str, packages: list[str]) -> str:

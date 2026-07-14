@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from aiplane.integration_contracts import EXPORT_CONTRACT_VERSION, TIER1_EXPORT_TOOLS
+
 from .support import (
     IntegrationManager,
     Path,
@@ -9,6 +11,7 @@ from .support import (
     _REAL_LOAD_PROFILE,
     _isolated_profiles_dir,
     _isolated_test_profile,
+    _materialize_test_models,
     agent_config,
     cli_main,
     create_profile,
@@ -204,7 +207,7 @@ class IntegrationChatTests(unittest.TestCase):
             )
             stderr = StringIO()
             with redirect_stderr(stderr):
-                completed = IntegrationManager._run_with_progress(
+                completed = IntegrationManager(load_profile("local-dev", Path.cwd()))._run_with_progress(
                     [sys.executable, str(script)],
                     cwd=Path.cwd(),
                     label="setup: pull ollama for local_chat",
@@ -498,6 +501,7 @@ class IntegrationChatTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             profiles_dir = Path(tmp) / "profiles"
             create_profile("local-dev", profiles_dir=profiles_dir)
+            _materialize_test_models(profiles_dir / "local-dev")
             stdout = StringIO()
             with redirect_stdout(stdout):
                 code = cli_main(
@@ -545,6 +549,7 @@ class IntegrationChatTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             profiles_dir = Path(tmp) / "profiles"
             create_profile("local-dev", profiles_dir=profiles_dir)
+            _materialize_test_models(profiles_dir / "local-dev")
             config_path = Path(tmp) / "config.yaml"
             configured = Path(tmp) / "agents-config"
             config_path.write_text(f"agent_artifacts_dir: {configured}\n", encoding="utf-8")
@@ -656,6 +661,7 @@ class IntegrationChatTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             profiles_dir = Path(tmp) / "profiles"
             shutil.copytree(Path("profile-templates") / "local-dev", profiles_dir / "local-dev")
+            _materialize_test_models(profiles_dir / "local-dev")
             stdout = StringIO()
             with redirect_stdout(stdout):
                 code = cli_main(
@@ -679,6 +685,7 @@ class IntegrationChatTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             profiles_dir = Path(tmp) / "profiles"
             shutil.copytree(Path("profile-templates") / "local-dev", profiles_dir / "local-dev")
+            _materialize_test_models(profiles_dir / "local-dev")
             stdout = StringIO()
             with redirect_stdout(stdout):
                 code = cli_main(
@@ -701,6 +708,7 @@ class IntegrationChatTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             profiles_dir = Path(tmp) / "profiles"
             shutil.copytree(Path("profile-templates") / "local-dev", profiles_dir / "local-dev")
+            _materialize_test_models(profiles_dir / "local-dev")
             stdout = StringIO()
             with redirect_stdout(stdout):
                 code = cli_main(
@@ -726,6 +734,7 @@ class IntegrationChatTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             profiles_dir = Path(tmp) / "profiles"
             shutil.copytree(Path("profile-templates") / "local-dev", profiles_dir / "local-dev")
+            _materialize_test_models(profiles_dir / "local-dev")
             stdout = StringIO()
             with redirect_stdout(stdout):
                 code = cli_main(
@@ -746,6 +755,58 @@ class IntegrationChatTests(unittest.TestCase):
         output = stdout.getvalue()
         self.assertIn("aider --model openai/", output)
         self.assertIn("OPENAI_API_BASE", output)
+
+    def test_tier1_exports_match_versioned_golden_files(self) -> None:
+        self.assertEqual(EXPORT_CONTRACT_VERSION, "1.0")
+        self.assertEqual(
+            TIER1_EXPORT_TOOLS,
+            ("continue", "aider", "openai-compatible", "generic-mcp"),
+        )
+        with _isolated_test_profile() as profile:
+            manager = IntegrationManager(profile)
+            exports = {
+                "continue.yaml": manager.export(
+                    "continue",
+                    chat="fixture-chat-small",
+                    autocomplete="fixture-code-base",
+                    embedding="fixture-embedding-small",
+                ).content,
+                "aider.sh": manager.export("aider", model_name="fixture-analysis-small").content,
+                "openai-compatible.json": manager.export(
+                    "openai-compatible", model_name="fixture-analysis-small"
+                ).content,
+                "generic-mcp.json": manager.export("generic-mcp").content,
+            }
+
+        golden_root = Path("tests/golden/integrations/v1")
+        for filename, content in exports.items():
+            with self.subTest(filename=filename):
+                self.assertEqual(content, (golden_root / filename).read_text(encoding="utf-8"))
+
+        self.assertIn("schema: v1", exports["continue.yaml"])
+        self.assertIn("aider --model openai/", exports["aider.sh"])
+        self.assertEqual(json.loads(exports["openai-compatible.json"])["provider"], "ollama")
+        self.assertEqual(
+            json.loads(exports["generic-mcp.json"])["mcpServers"]["aiplane"]["args"],
+            ["mcp", "serve"],
+        )
+
+    def test_integration_list_marks_only_release_blocking_tier1_exports(self) -> None:
+        with _isolated_test_profile() as profile:
+            rows = IntegrationManager(profile).list()
+        tiers = {row["name"]: row for row in rows}
+        self.assertEqual(
+            {name for name, row in tiers.items() if row["support_tier"] == "tier1"},
+            set(TIER1_EXPORT_TOOLS),
+        )
+        self.assertTrue(all(tiers[name]["contract_version"] == "1.0" for name in TIER1_EXPORT_TOOLS))
+        self.assertTrue(
+            all(
+                row["contract_version"] == "unversioned"
+                for name, row in tiers.items()
+                if name not in TIER1_EXPORT_TOOLS
+            )
+        )
 
     def test_integrations_exports_are_deterministic_for_supported_targets(self) -> None:
         profile = load_profile("local-dev", Path.cwd())

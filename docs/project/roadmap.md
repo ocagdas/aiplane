@@ -13,7 +13,7 @@ This document is the developer-facing status map. It separates what is implement
 
 These anchors are deliberate product constraints, not incidental wording. Change them only with an explicit roadmap/strategy update that says the project is changing course.
 
-- `aiplane` is a local-first environment-doctor and configuration compiler for AI workflow environments: profiles, providers, model aliases, runtimes, endpoints, hardware fit, readiness checks, exports, MCP inspection, policy, and audit.
+- `aiplane` is a local-first environment doctor and configuration compiler for AI workflow environments: profiles, providers, model aliases, runtimes, endpoints, hardware fit, readiness checks, exports, MCP inspection, policy, and audit.
 - The strongest public wedge is: **make local and hybrid AI model workflow stacks reproducible, inspectable, policy-aware, and portable from one profile**.
 - `aiplane` configures and checks tools such as Ollama, vLLM, Continue, Aider, Cline, MCP clients, OpenAI-compatible endpoints, Anthropic, OpenAI, and Azure OpenAI; it does not replace them.
 - Do not grow `aiplane` into a coding agent, full chat UI, inference runtime, general model proxy, model marketplace, IDE extension, production cloud platform, or Terraform/Ansible/Docker replacement.
@@ -31,7 +31,7 @@ This register tracks overlap by layer so scope drift is intentional rather than 
 | Local inference runtimes | Ollama, vLLM, TGI, llama.cpp, LocalAI, LM Studio | Serve local model inference and model lifecycle | Provider/runtime mapping, helper wrappers, endpoint-aware runner checks, lifecycle ops where helper exists | Thin delegate only: native tools remain lifecycle authority |
 | Managed APIs / services | OpenAI, Anthropic, Azure OpenAI | Hosted APIs with auth and endpoint contracts | Catalog adapters, endpoint/protocol metadata, provider tests, and task/chat execution for supported protocols | In-scope as configured endpoint caller, not marketplace or gateway |
 | IDE integration surfaces | VS Code + Continue, Zed, IDE MCP clients | Connect editors/workflow tools to endpoints and MCP | Config snippets, MCP manifests, integration plan/export | In-scope only as config and readiness surfaces |
-| Model catalogs | Hugging Face, NVIDIA on HF, local files, media sources | Resolve model IDs/artifacts and discovery metadata | Multiple catalog adapters, discovered cache, add/promote/clone, provider-kind grouping | Core in-scope control plane function |
+| Model catalogs | Hugging Face, NVIDIA on HF, local files, media sources | Resolve model IDs/artifacts and discovery metadata | Multiple catalog adapters, discovered cache, add/promote/clone, provider-kind grouping | Core in-scope configuration function |
 | Infrastructure tooling | Docker/Compose, OpenSSH, Dev Containers, Terraform/OpenTofu, Vagrant, Packer, Ansible, Helm, kubectl | Build runtime/machine/container/workspace targets | Readiness checks, non-mutating plans, guarded helper calls and generated exports | Boundary is explicit: planning+readiness, not ownership of infra platform |
 | Orchestration / workflow frameworks | LangGraph, CrewAI, AutoGen, Semantic Kernel, LlamaIndex, OpenHands | Run autonomous agent/workflow execution in application runtime | Stack role metadata, policy labels, starter exports, stack doctor/planner | In-scope as setup/binding/export only |
 | Benchmark and validation | lm-eval, vLLM serving benchmarks, Locust | Compare quality/throughput/latency on a workload | Smoke/custom benchmark scaffolding and planning commands | In-scope as aid-to-selection, not a benchmark SaaS replacement |
@@ -52,7 +52,7 @@ The public wedge is now a narrow onboarding path:
 aiplane discover
 aiplane doctor
 aiplane recommend
-aiplane export
+aiplane export continue
 ```
 
 A new user should reach a useful result with one command:
@@ -114,7 +114,7 @@ Make these the main commands shown in the README and onboarding:
 aiplane discover
 aiplane doctor
 aiplane recommend
-aiplane export
+aiplane export continue
 ```
 
 Existing detailed commands can remain, but should be treated as advanced commands.
@@ -415,7 +415,11 @@ Do not add new orchestrators, cloud providers, benchmark frameworks or runtime t
 
 ## Current Milestone: External Beta Readiness
 
-The roadmap is now actively executing the priorities above; completed work in each earlier milestone is being stabilized as execution hardens.
+The roadmap is now actively executing the priorities above; completed work in each earlier milestone is being stabilized as execution hardens. P0 quickstart sufficiency is implemented with offline-safe defaults, idempotent profile preservation, bounded no-model guidance, and one exact next action.
+
+P0.6 stable doctor contract v1 is implemented with uniform findings and authoritative 0/1/2 exit semantics.
+P0.7 Tier-1 export contracts are implemented with four versioned golden formats and cross-OS installed-wheel verification.
+P0.8 public profile schema v1 is implemented with external validation and canonical rendering.
 
 ## Implemented
 
@@ -425,6 +429,7 @@ The roadmap is now actively executing the priorities above; completed work in ea
 - Local config now supports profile-aware and command-aware format/verbosity defaults (`text`/`json`, `0`/`1`/`2`) via `config format`/`config verbosity` with precedence: CLI `--format`/`--verbosity` > command override > profile override > global default.
 - External tool catalog, doctors, guarded install previews, non-mutating plans, and starter exports for Azure CLI, OpenTofu/Terraform, Pulumi, Vagrant, Packer, Docker/Compose, Dev Container CLI, kubectl, Helm, OpenSSH, Ansible, and benchmark helpers.
 - Provider/model catalog foundations for Ollama, Ollama Cloud placeholder, OpenAI-compatible runtimes, OpenAI, Anthropic, Azure OpenAI, ElevenLabs TTS, Hugging Face, NVIDIA Hugging Face-scoped open model repos, GGUF/local files, and user-defined discovery providers. Shipped profile templates keep `models.yaml` structural, runtime/provider endpoint values live as conventional built-in defaults with local override support, and model grouping separates managed-service providers from self-managed runtime sources while preserving managed endpoint metadata for exports, stacks, and orchestrator plans.
+- Non-destructive bootstrap plus install/activation flows preserve existing editable profiles unless `--overwrite` is explicit; static wheels include shipped config/profile templates and runtime helper scripts and are verified in a clean venv.
 - Ignored discovered provider/model cache flow plus `profiles bootstrap-local`, `models add`, `models clone`, and `models promote` as reviewed paths into editable local profile YAML; `models clear-cache` clears discovered entries and profile-owned review entries by default so discovery can be repopulated from providers, and `models refresh --reset-cache` combines clearing and repopulating for refreshed providers.
 - Runtime/source mapping for Ollama, Hugging Face, NVIDIA Hugging Face-style repos, GGUF/local files, vLLM, TGI, Transformers, llama.cpp, LocalAI, LM Studio, and selected media runtimes.
 - Runtime helper delegation through `aiplane runtimes ...` where supported by `scripts/provider_helper.sh`, including Ollama native and Docker substrate paths, guarded Ollama pulled-model remove/clear, plus vLLM/TGI-style runtimes.
@@ -460,7 +465,7 @@ The roadmap is now actively executing the priorities above; completed work in ea
 ### Post-Merge Foundation
 
 1. **Architecture and codebase cleanup** - Implemented
-   - `src/aiplane/cli.py` now delegates integration and model command registration/handling to focused modules while keeping one public `aiplane` entrypoint. Continue splitting command families when it reduces real ownership pressure.
+   - `src/aiplane/cli.py` delegates every command family to focused owners and is limited to parser composition and dispatch. Launch/session planning, profile views/validation, presentation/progress reporting, and public onboarding workflows live in dedicated modules. The root decreased from 3,171 to 456 lines while preserving one public `aiplane` entrypoint.
    - Shared CLI parsing/progress helpers live outside the monolithic CLI so provider refresh, profile bootstrap, hardware/machine/stack settings, and future command modules do not duplicate low-level parsing behavior.
    - Model filter parser choices and MCP schema choices are shared definitions; integration roles are shared contracts. Keep moving shared definitions only where they prevent drift.
    - Keep shell helpers as thin delegates to official tools; avoid growing provider-specific business logic in Bash when Python catalog/runtime code already owns the decision.
@@ -531,11 +536,17 @@ The roadmap is now actively executing the priorities above; completed work in ea
    - Defer automated code execution grading until sandboxing and language runners are designed.
 
 11. **Test-suite structure, performance, and isolation** - Structurally complete / incremental
+   - Production loaders are no longer globally replaced by the test harness; temporary profile roots contain deterministic synthetic model data and exercise normal disk loading.
+   - The quick gate now runs ten contracts plus four intentional smoke checks; the empty legacy aggregate module is no longer included.
+   - Shared injectable command/HTTP boundaries now cover every production process and HTTP owner; only `boundaries.py` calls `subprocess` or `urllib` directly, enforced by a contract test.
+   - Model refresh reconciliation, stack lifecycle, static tool catalog data, and provider-registry tests now live in focused modules instead of their former large mixed owners.
+   - Model pull/execution/endpoint readiness now lives in `model_execution.py`; stack role normalization/policy checks live in `stack_roles.py`. Oversized model and profile/config test owners are split into focused refresh, mutation, listing, lifecycle, config, and governance modules.
+   - CI keeps the full Python 3.11 gate and validates contracts plus clean static-wheel installation on Python 3.12 and 3.13.
    - Split the large MVP test module into focused files by area so slow tests and ownership are easier to see. Start with behavior boundaries that already exist in code: profiles/config, providers/models, runtimes/execution, integrations/chat, MCP, machines/stacks, deployment, and CLI smoke coverage.
-   - Extract shared test fixtures and helpers for isolated profiles, local model caches, mocked HTTP endpoints, mocked subprocess boundaries, and CLI stdout/stderr capture.
+   - Shared test infrastructure now separates isolated profile/model materialization (`profile_fixtures.py`), recording process/HTTP fakes (`boundary_fakes.py`), and in-process CLI output capture (`cli_fixtures.py`). Continue migrating repeated local doubles when touching their owning suites.
    - Keep the full automated suite useful as a PR gate without letting local discovery caches or external-machine state dominate runtime.
-   - Continue replacing repeated full-catalog enrichment with cached or single-pass helpers where behavior is unchanged.
-   - Evaluate `pytest-xdist` only after filesystem, environment-variable, and profile-fixture isolation are strong enough for safe parallel execution.
+   - Runtime progress timing is injectable for tests, eliminating a two-second sleep while retaining real threaded reporter coverage; synthetic hardware recommendation matrices no longer probe host GPU tools. Continue replacing repeated full-catalog enrichment with cached or single-pass helpers where behavior is unchanged.
+   - `pytest-xdist` 3.8.0 is pinned for development. The full gate uses four workers with file-level scheduling after three clean parallel full-suite runs; `AIPLANE_TEST_WORKERS` can tune the count or select `0` for serial troubleshooting.
    - Keep quality intact: move tests and optimize fixtures, not assertions or behavioral coverage.
 
 ## Planned But Not Implemented
@@ -554,3 +565,75 @@ The roadmap is now actively executing the priorities above; completed work in ea
 - Implementing model inference engines inside `aiplane`.
 - Becoming a general model proxy competing with LiteLLM/OpenRouter-style tools.
 - Hidden IDE policy bypasses or direct model edits without review.
+
+### Repository Safety Review Register
+
+The prioritized July 2026 code-quality and safety findings are tracked in
+[Code Quality and Safety Review — July 2026](code-quality-review-2026-07.md).
+SEC-1 is implemented: `aiplane tool` no longer assumes approval; risky operations
+require an interactive confirmation or explicit per-invocation `--yes`, while
+read-only tools remain non-interactive.
+
+Audit log reads are crash-tolerant: `audit tail` skips malformed/non-object JSONL
+records, distinguishes a likely interrupted final append, returns the requested
+number of recent valid events where available, and emits metadata-only recovery
+warnings on stderr without exposing corrupt content.
+
+SSH tunnel lifecycle state is now identity-safe and collision-resistant. Start saves
+versioned atomic JSON containing the PID and captured process identity; status/stop
+verify that identity, Linux termination uses `pidfd` when available, stale or reused
+PIDs are never signalled, malformed state fails closed, and identity-capture failure
+terminates the new unowned process without persisting state.
+
+
+Configuration and state snapshots now use a shared atomic persistence boundary. Writes use same-directory fsynced temporary files followed by atomic replacement, while audit JSONL uses a serialized fsynced append. Cross-process advisory locks have a bounded deadline, nonblocking jittered polling, and reject nested persistence locks to avoid lock-order deadlocks; transactional YAML mutation preserves concurrent changes.
+
+Audit hardening now minimizes recorded tool data and broadens secret sanitation for sensitive keys, command flags, common provider tokens, bearer values, and PEM material. Tool output, raw command arguments, and exception messages are not persisted or returned through MCP failure details.
+
+
+SSH command planning now uses a shared strict network-input boundary. Tunnel and remote-profile plans reject option-like or malformed hosts/users, validate ports, accept only credential-free HTTP(S) endpoint URLs, render IPv6 forwarding safely, and shell-quote the remote `aiplane` command.
+
+
+MCP stdio now fails closed for writes: the server defaults to read-only, operator startup must explicitly pass `--allow-writes`, and each actual mutation must also carry `confirm=true`. Blocked attempts never reach domain managers and are audited without raw payloads.
+
+The CLI process boundary now redacts expected error text, suppresses unexpected exception details by default, handles broken pipes quietly, and returns 130 for interruption. `--debug` or `AIPLANE_DEBUG=true` is an explicit diagnostic opt-in and may expose sensitive local traceback context.
+
+
+Platform behavior is now an explicit capability contract rather than scattered OS checks. Portable operations work independently of mutation helpers; native Ubuntu/Debian is the supported runtime-helper mutation path, WSL is inspection-only for those helpers, and non-Linux hardware discovery skips Linux commands with visible coverage notes.
+
+Model catalog persistence is isolated in `ModelCatalogStore`, provider reconciliation remains in `ModelRefreshCoordinator`, Azure retail pricing is an injectable HTTP service, and Azure CLI execution/redaction/timeouts are a separate adapter. Structural tests prevent those responsibilities returning to the large domain modules.
+
+The external MVP/adoption review was evaluated against current code and recorded as [Product, Adoption, and Monetization Backlog — July 2026](product-adoption-backlog-2026-07.md), including services-first monetization and evidence gates for team/enterprise work.
+
+
+DOC-1 is complete: public onboarding examples use concrete export targets, the empty README workflow heading is removed, and focused contract tests enforce concrete export commands, nonempty sections, and sequential workflow numbering.
+
+
+The positioning and default-help pass is complete. README, package metadata, user entrypoints, strategy, launch review, demo framing, and CLI help lead with the environment doctor and configuration compiler outcome. Top-level help groups all commands into Core workflow, Advanced and supporting, and Experimental tiers, prints one safe next command, and fails its contract test if a command is unclassified.
+
+
+Standard no-clone installation and release automation are implemented. Versioned GitHub Release wheels are the declared evaluation channel; normal CI validates `pip`, `pipx`, and `uv tool` install/verify/upgrade-or-replace/uninstall lifecycles on Linux, macOS, and Windows. Tag builds must match package version, rebuild wheel and sdist, pass all installer checks, and only then create the release. Bare package-index commands remain deliberately undocumented as available until trusted publishing is enabled and verified.
+
+
+README and package metadata now keep the environment-doctor/configuration-compiler wedge dominant throughout the page, not only in the opening. Broad parallel execution tracks and specialist feature inventories were replaced by a subordinate advanced/experimental maturity link; package keywords now emphasize environment diagnostics, configuration, and reproducibility. A final P0 public-surface consistency sweep remains explicitly scheduled after all numbered P0 work and the user demonstrations.
+
+
+The P0 platform CI matrix is implemented. Every Ubuntu, macOS, and Windows packaging job runs the synthetic capability suite and a built-wheel portable workflow from clean temporary workspaces through pip, pipx, and uv. The smoke covers bootstrap, validation, hardware discovery, recommendation, policy, and offline deterministic export. Unsupported runtime mutations and Windows SSH lifecycle status/start/stop fail with `unsupported_platform` before helper execution, process spawn, or state access; tunnel planning remains portable.
+
+
+P0.9 practical threat modeling is complete. The tracked model covers credential references, redaction and debug limits, generated-config disclosure, external helper boundaries, two-stage MCP write guards, identity-safe tunnel ownership, unsigned profile trust, and local audit sensitivity. Every control row cites deterministic regression tests and every row states its residual limitation. Focused security validation passes 62 tests.
+
+An interim P0 README/documentation consistency sweep followed items 8-9. It corrected quickstart's stale “three next commands” wording to its tested one-action contract, removed remaining positive “control plane” positioning from user/project entrypoints, aligned help and strategy with the narrow product promise, and corrected the P0 range after converting item 10 into an unnumbered gate. This is not the final gate result: repeat the sweep after the three user demonstrations. Focused consistency gate: 76 passed; full suite: 449 passed.
+
+The public demo plan is now a bounded three-video onboarding set: local Ollama readiness/export, local-only policy plus YAML backup/restore and deterministic replay, and laptop-to-existing-remote-GPU planning/export. Each section targets less than three minutes at normal speed, distinguishes template repair from restoration of user configuration, and keeps an advanced automation/MCP video deferred until user evidence justifies it.
+
+The July test profile found one duplicated integration boundary: `test_packaging.py` built and installed a wheel, then launched the complete pip install/reinstall/uninstall verifier that CI and release workflows already run independently. Removing only that nested lifecycle reduced the packaging test from 25.45s to 8.69s and the four-worker full suite from 37.04s to 20.26s, with all 450 tests passing. Six workers measured 17.78s locally but remain opt-in to avoid oversubscribing shared runners.
+
+The latest external dev/mvp_0.5 review is evaluated in `docs/project/reviews/dev-mvp-0.5-latest-review-evaluation.md`. The numbered P0 backlog is replaced with the remaining release/adoption work: adoption-cut hierarchy, first public artifact, no-clone public verification, mandatory release-path CI, standardized trial evidence, a breadth freeze, and portable review provenance. The two unnumbered P0 completion gates remain open. Drift moves to the front of P1, and schema tightening is explicitly evidence-led.
+
+Cross-platform install verification now uses an OS-neutral relative synthetic model ID for Tier-1 exports. It always checks tunnel planning without mutation, checks runtime-helper rejection on macOS/Windows, and checks tunnel-lifecycle rejection only on Windows. macOS is never asked to start an SSH tunnel during install verification. Focused verifier/contracts/platform/packaging coverage passes 41 tests, and a rebuilt-wheel pip install/verify/reinstall/uninstall lifecycle passes locally.
+P0.1 is complete: the public demo hierarchy now has one five-command adoption cut, while privacy/replay and remote-GPU flows are explicitly validation recordings. P0.2 is repository-ready but remains open until a maintainer creates the approved immutable tag and public GitHub Release; the release workflow now runs the full gate, verifies checksums, consumes versioned notes, and publishes wheel, source distribution, and checksum manifest.
+
+P0.3-P0.6 local implementation is complete: clean-wheel lifecycle verification has a canonical evidence format; `CI / Release gate` aggregates quality, compatibility, and cross-OS install jobs; repository protection requirements are explicit; trial records have a deterministic sanitizer/shape validator; and the preview scope freeze has an exception contract. Public-artifact evidence, hosted ruleset activation, and independent-user trials remain maintainer/external actions.
+
+Post-merge no-clone candidates are now automated: a successful protected `main` push builds a wheel only after `CI / Release gate`, verifies its SHA-256 manifest, writes commit/run provenance, and uploads a 30-day artifact named with package version plus the full merge SHA. This is prerelease test evidence, not the immutable public P0 release.

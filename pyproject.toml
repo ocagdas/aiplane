@@ -5,12 +5,12 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "aiplane"
 version = "0.1.0"
-description = "AI control plane for local and self-managed LLM environments"
+description = "Environment doctor and configuration compiler for local and hybrid AI development"
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.11"
 dependencies = []
-keywords = ["llm", "ai", "models", "runtimes", "ollama", "vllm", "mcp"]
+keywords = ["ai-development", "environment", "configuration", "diagnostics", "reproducibility", "local-ai", "cli"]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Environment :: Console",
@@ -23,12 +23,20 @@ classifiers = [
   "Topic :: Software Development :: Build Tools",
 ]
 
+[project.urls]
+Homepage = "https://github.com/ocagdas/aiplane"
+Documentation = "https://github.com/ocagdas/aiplane/tree/main/docs/user"
+Repository = "https://github.com/ocagdas/aiplane.git"
+Issues = "https://github.com/ocagdas/aiplane/issues"
+
 [project.scripts]
 aiplane = "aiplane.cli:main"
 
 [project.optional-dependencies]
 dev = [
   "pytest==8.4.2",
+  "pytest-xdist==3.8.0",
+  "setuptools==83.0.0",
   "ruff==0.12.0",
   "black==25.9.0",
 ]
@@ -36,6 +44,28 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+
+[tool.setuptools]
+script-files = ["scripts/provider_helper.sh", "scripts/ollama_helper.sh"]
+
+[tool.setuptools.data-files]
+"config-templates" = [
+  "config-templates/local.yaml",
+  "config-templates/credentials.example.yaml",
+]
+"schemas" = ["schemas/aiplane-profile-v1.schema.json"]
+"profile-templates/local-dev" = [
+  "profile-templates/local-dev/approvals.yaml",
+  "profile-templates/local-dev/backends.yaml",
+  "profile-templates/local-dev/environment.yaml",
+  "profile-templates/local-dev/hardware.yaml",
+  "profile-templates/local-dev/model-providers.yaml",
+  "profile-templates/local-dev/models.yaml",
+  "profile-templates/local-dev/orchestrators.yaml",
+  "profile-templates/local-dev/repository.yaml",
+  "profile-templates/local-dev/targets.yaml",
+  "profile-templates/local-dev/tools.yaml",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]

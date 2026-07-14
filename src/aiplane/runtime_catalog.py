@@ -7,7 +7,9 @@ import shutil
 from pathlib import Path
 from typing import Any
 
+from .boundaries import HttpTransport, UrllibHttpTransport
 from .backends import OllamaBackend, OpenAICompatibleBackend
+from .persistence import atomic_write_text
 from .config import dump_yaml, parse_yaml
 from .models import Profile
 from .runtime_definitions import (
@@ -18,8 +20,9 @@ from .runtime_definitions import (
 
 
 class RuntimeCatalog:
-    def __init__(self, profile: Profile):
+    def __init__(self, profile: Profile, http_transport: HttpTransport | None = None):
         self.profile = profile
+        self.http_transport = http_transport or UrllibHttpTransport()
         self.models_config = profile.models or {}
         self.generated_models_config = self._load_generated_models_config()
 
@@ -215,7 +218,7 @@ class RuntimeCatalog:
             )
         model["preferred_runtime"] = runtime
         path = self.profile.root / "models.yaml"
-        path.write_text(dump_yaml(self.models_config), encoding="utf-8")
+        atomic_write_text(path, dump_yaml(self.models_config))
         return {"name": model_name, "preferred_runtime": runtime, "path": str(path)}
 
     def bundle_plan(self, runtime: str, model_name: str, mode: str = "docker") -> dict[str, Any]:
@@ -260,7 +263,11 @@ class RuntimeCatalog:
         definition = RUNTIME_DEFINITIONS.get(runtime, {})
         if runtime == "ollama":
             endpoint = str(provider.get("endpoint", "http://localhost:11434"))
-            reachable, reason = OllamaBackend(endpoint, int(provider.get("timeout_seconds", 5))).is_reachable()
+            reachable, reason = OllamaBackend(
+                endpoint,
+                int(provider.get("timeout_seconds", 5)),
+                http_transport=self.http_transport,
+            ).is_reachable()
             payload = {
                 "name": runtime,
                 "available": reachable,
@@ -294,7 +301,9 @@ class RuntimeCatalog:
                     "suggested_actions": _runtime_suggestions(runtime, "configure"),
                 }
             reachable, reason = OpenAICompatibleBackend(
-                endpoint, int(provider.get("timeout_seconds", 5))
+                endpoint,
+                int(provider.get("timeout_seconds", 5)),
+                http_transport=self.http_transport,
             ).is_reachable()
             payload = {
                 "name": runtime,

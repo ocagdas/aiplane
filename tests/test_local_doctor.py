@@ -149,11 +149,75 @@ class LocalDoctorTests(unittest.TestCase):
             self.assertIn("mutates", remediation)
             self.assertIn("dry_run_supported", remediation)
 
+    def test_doctor_contract_v1_covers_every_finding_and_exit_semantics(self) -> None:
+        payload = self._baseline_payload()
+        self.assertEqual(payload["contract_version"], "1.0")
+        self.assertEqual(
+            payload["exit_codes"],
+            {
+                "healthy": {"code": 0, "meaning": "all findings pass"},
+                "advisory": {"code": 1, "meaning": "no blockers; one or more advisory findings"},
+                "blocking": {"code": 2, "meaning": "one or more blocking findings"},
+            },
+        )
+        expected_outcome = (
+            "blocking"
+            if payload["summary"]["blocking"]
+            else "advisory"
+            if payload["summary"]["warnings"]
+            else "healthy"
+        )
+        self.assertEqual(payload["outcome"], expected_outcome)
+        self.assertEqual(payload["exit_code"], payload["exit_codes"][expected_outcome]["code"])
+
+        findings = [check for section in payload["sections"] for check in section["checks"]]
+        self.assertEqual(len({finding["id"] for finding in findings}), len(findings))
+        for finding in findings:
+            self.assertIn(finding["severity"], {"blocking", "advisory", "pass"})
+            self.assertIsInstance(finding["reason"], str)
+            self.assertTrue(finding["impact"])
+            self.assertEqual(finding["affected_resource"]["profile"], "local-dev")
+            self.assertTrue(finding["affected_resource"]["type"])
+            self.assertTrue(finding["affected_resource"]["name"])
+            remediation = finding["remediation"]
+            self.assertIn(remediation["mutation"], {"none", "read_only", "mutating"})
+            self.assertIsInstance(remediation["mutates"], bool)
+            self.assertIsInstance(remediation["dry_run_supported"], bool)
+            if finding["severity"] == "pass":
+                self.assertIsNone(remediation["command"])
+            else:
+                self.assertTrue(remediation["command"].startswith("aiplane "))
+
+    def test_every_blocker_has_a_deterministic_non_placeholder_next_action(self) -> None:
+        profile = copy.deepcopy(self._baseline_profile)
+        for provider in profile.models.get("providers", {}).values():
+            if isinstance(provider, dict):
+                provider["enabled"] = False
+        first = local_coding_doctor(profile)
+        second = local_coding_doctor(profile)
+        first_actions = {
+            finding["id"]: finding["remediation"]["command"]
+            for section in first["sections"]
+            for finding in section["checks"]
+            if finding["severity"] == "blocking"
+        }
+        second_actions = {
+            finding["id"]: finding["remediation"]["command"]
+            for section in second["sections"]
+            for finding in section["checks"]
+            if finding["severity"] == "blocking"
+        }
+        self.assertTrue(first_actions)
+        self.assertEqual(first_actions, second_actions)
+        self.assertTrue(all(command and "<" not in command for command in first_actions.values()))
+        self.assertTrue(all(not command.startswith("aiplane doctor ") for command in first_actions.values()))
+
     def test_local_coding_doctor_text_is_human_readable(self) -> None:
         output = self._baseline_doctor_text
         self.assertIn("aiplane doctor for profile local-dev", output)
         self.assertIn("model_defaults", output)
         self.assertIn("integrations", output)
+        self.assertIn("contract: 1.0; exit_code:", output)
         self.assertIn("next steps:", output)
 
     def test_doctor_cli_outputs_text_and_json(self) -> None:
@@ -168,6 +232,7 @@ class LocalDoctorTests(unittest.TestCase):
             code = cli_main(["doctor", "--profile", "local-dev", "--format", "json"])
         self.assertIn(code, {0, 1, 2})
         payload = json.loads(json_stdout.getvalue())
+        self.assertEqual(code, payload["exit_code"])
         self.assertEqual(payload["name"], "local_coding_doctor")
         self.assertIn("summary", payload)
 

@@ -55,8 +55,10 @@ Security-sensitive areas include:
 - cloud, SSH, Docker, Kubernetes, and deployment planning/apply paths;
 - audit logs and command output that might expose sensitive local or account data.
 
+The [practical threat model](docs/project/threat-model.md) maps these areas to current regression evidence and states the residual limitations that operators must account for.
+
 Known intentional boundaries:
 
-- `aiplane` is a control-plane CLI, not a production secret manager, model proxy, runtime sandbox, or cloud security product.
+- `aiplane` is an environment doctor and configuration compiler, not a production secret manager, model proxy, runtime sandbox, or cloud security product.
 - Local credentials belong in ignored local files or environment variables, not in tracked profile templates.
 - Broad shell execution, secret writes through MCP, and broad cloud apply are intentionally out of scope unless explicit guardrails are implemented and documented.

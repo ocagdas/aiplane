@@ -1,0 +1,56 @@
+{
+  "record_version": 1,
+  "trial_id": "trial-YYYYMMDD-NNN",
+  "classification": "rehearsal",
+  "workflow": "primary-adoption",
+  "artifact": {
+    "release_url": null,
+    "version": "0.1.0",
+    "sha256": "REPLACE_WITH_64_LOWERCASE_HEX_CHARACTERS",
+    "commit": "REPLACE_WITH_FULL_COMMIT_SHA"
+  },
+  "environment": {
+    "os": "Linux",
+    "os_version": "REPLACE_WITH_VERSION",
+    "architecture": "x86_64",
+    "python": "3.13.0",
+    "install_channel": "pipx",
+    "runtime": "ollama",
+    "model": "sanitized-model-alias"
+  },
+  "start_state": {
+    "clean_machine_or_vm": true,
+    "repository_checkout_present": false,
+    "existing_profile": false,
+    "notes": "Sanitized preparation facts only."
+  },
+  "timing": {
+    "started_at": "2026-07-14T12:00:00Z",
+    "ended_at": "2026-07-14T12:02:30Z",
+    "elapsed_seconds": 150
+  },
+  "commands": [
+    {
+      "command": "aiplane --help",
+      "exit_code": 0,
+      "elapsed_seconds": 1.0,
+      "outcome": "Help displayed the core workflow.",
+      "written_paths": []
+    }
+  ],
+  "first_failure": null,
+  "assistance": {"beyond_written_workflow": false, "details": "None."},
+  "outcome": {
+    "completed": true,
+    "files_written_understood": true,
+    "export_non_mutating_understood": true,
+    "feedback": "Sanitized participant feedback."
+  },
+  "sanitization": {
+    "no_credentials_or_tokens": true,
+    "no_personal_identifiers": true,
+    "no_private_hosts_or_account_ids": true,
+    "relative_written_paths_only": true,
+    "human_reviewed": true
+  }
+}

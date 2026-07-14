@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import shutil
-import subprocess
 from dataclasses import dataclass
 from typing import Any
 
+from .boundaries import CommandRunner, SubprocessCommandRunner
 from .models import Profile
 
 
@@ -16,8 +16,9 @@ class CommandStep:
 
 
 class DeployManager:
-    def __init__(self, profile: Profile):
+    def __init__(self, profile: Profile, command_runner: CommandRunner | None = None):
         self.profile = profile
+        self.command_runner = command_runner or SubprocessCommandRunner()
         self.config = profile.targets or {}
 
     def list(self) -> list[dict[str, Any]]:
@@ -141,7 +142,9 @@ class DeployManager:
             )
 
         if shutil.which("az"):
-            checks.append(_run_check("az:account", ["az", "account", "show", "--output", "json"]))
+            checks.append(
+                _run_check("az:account", ["az", "account", "show", "--output", "json"], runner=self.command_runner)
+            )
             resource_group = str(target.get("resource_group") or "")
             cluster = str(target.get("cluster") or "")
             vm_name = str(target.get("name") or "")
@@ -160,6 +163,7 @@ class DeployManager:
                             "--output",
                             "json",
                         ],
+                        runner=self.command_runner,
                     )
                 )
             if resource_group and cluster:
@@ -177,6 +181,7 @@ class DeployManager:
                             "--output",
                             "json",
                         ],
+                        runner=self.command_runner,
                     )
                 )
             if region and size:
@@ -195,6 +200,7 @@ class DeployManager:
                             "--output",
                             "json",
                         ],
+                        runner=self.command_runner,
                     )
                 )
             if resource_group and vm_name:
@@ -212,6 +218,7 @@ class DeployManager:
                             "--output",
                             "json",
                         ],
+                        runner=self.command_runner,
                     )
                 )
         else:
@@ -236,7 +243,7 @@ class DeployManager:
             raise ValueError(f"deploy apply is not implemented for target type: {target.get('type')}")
         results = []
         for step in apply_steps:
-            completed = subprocess.run(step.command, text=True, capture_output=True, check=False)
+            completed = self.command_runner.run(step.command, text=True, capture_output=True, check=False)
             results.append(
                 {
                     "name": step.name,
@@ -569,7 +576,7 @@ def _azure_aks_apply_steps(target: dict[str, Any]) -> list[CommandStep]:
     return [step for step in _azure_aks_steps(target) if step.mutates]
 
 
-def _run_check(name: str, command: list[str]) -> dict[str, Any]:
-    completed = subprocess.run(command, text=True, capture_output=True, check=False)
+def _run_check(name: str, command: list[str], *, runner: CommandRunner) -> dict[str, Any]:
+    completed = runner.run(command, text=True, capture_output=True, check=False)
     detail = completed.stdout.strip() or completed.stderr.strip() or f"exit {completed.returncode}"
     return {"name": name, "ok": completed.returncode == 0, "detail": detail[-2000:]}

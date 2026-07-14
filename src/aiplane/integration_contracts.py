@@ -4,6 +4,10 @@ from typing import Any
 
 from .model_catalog import ROLE_CAPABILITY_MAP
 
+EXPORT_CONTRACT_VERSION = "1.0"
+TIER1_EXPORT_TOOLS = ("continue", "aider", "openai-compatible", "generic-mcp")
+TIER1_EXPORT_TOOL_SET = frozenset(TIER1_EXPORT_TOOLS)
+
 MCP_EXPORT_TOOLS = {"vscode-mcp", "continue-mcp", "cline-mcp", "generic-mcp"}
 ONE_MODEL_TOOLS = {"cline", "zed", "aider", "openai-compatible"}
 MODEL_SELECTING_TOOLS = {"continue", *ONE_MODEL_TOOLS}
@@ -48,7 +52,15 @@ REQUIRED_INTEGRATION_ROLES = {"chat"}
 
 
 def integration_list() -> list[dict[str, str]]:
-    return [{"name": name, "description": INTEGRATION_DESCRIPTIONS[name]} for name in ALL_INTEGRATION_TOOLS]
+    return [
+        {
+            "name": name,
+            "description": INTEGRATION_DESCRIPTIONS[name],
+            "support_tier": "tier1" if name in TIER1_EXPORT_TOOL_SET else "advanced",
+            "contract_version": EXPORT_CONTRACT_VERSION if name in TIER1_EXPORT_TOOL_SET else "unversioned",
+        }
+        for name in ALL_INTEGRATION_TOOLS
+    ]
 
 
 def required_roles(tool: str) -> list[dict[str, Any]]:

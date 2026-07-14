@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from aiplane import cli_presenters
+
 from .support import (
     HardwareManager,
     MachineManager,
@@ -8,7 +10,6 @@ from .support import (
     StringIO,
     agent_config,
     cli_main,
-    cli_module,
     create_profile,
     json,
     load_profile,
@@ -329,14 +330,17 @@ class HardwareMachineTests(unittest.TestCase):
                     mutate(profile)
                 manager = HardwareManager(profile)
                 manager.use_template("cloud_gpu_vm", overrides)
-                with patch(
-                    "aiplane.hardware.RuntimeCatalog.runtime_available",
-                    return_value={
-                        "name": "ollama",
-                        "available": False,
-                        "reason": "runtime is supported but not running on this runner",
-                        "endpoint": "http://localhost:11434",
-                    },
+                with (
+                    patch.object(manager, "discover", return_value={"gpus": []}),
+                    patch(
+                        "aiplane.hardware.RuntimeCatalog.runtime_available",
+                        return_value={
+                            "name": "ollama",
+                            "available": False,
+                            "reason": "runtime is supported but not running on this runner",
+                            "endpoint": "http://localhost:11434",
+                        },
+                    ),
                 ):
                     return manager.recommend(include_not_recommended=True)
 
@@ -644,9 +648,9 @@ class HardwareMachineTests(unittest.TestCase):
 
             with (
                 patch("aiplane.machines.shutil.which", return_value="/usr/bin/az"),
-                patch("aiplane.machines.subprocess.run", side_effect=fake_run),
+                patch("aiplane.boundaries.subprocess.run", side_effect=fake_run),
                 patch(
-                    "aiplane.machines.urlopen",
+                    "aiplane.boundaries.urlopen",
                     return_value=PriceResponse(
                         {
                             "Items": [
@@ -767,8 +771,8 @@ class HardwareMachineTests(unittest.TestCase):
             stderr = StringIO()
             with (
                 patch("aiplane.machines.shutil.which", return_value="/usr/bin/az"),
-                patch("aiplane.machines.subprocess.run", side_effect=fake_run),
-                patch("aiplane.machines.urlopen", return_value=PriceResponse({"Items": []})),
+                patch("aiplane.boundaries.subprocess.run", side_effect=fake_run),
+                patch("aiplane.boundaries.urlopen", return_value=PriceResponse({"Items": []})),
                 redirect_stdout(stdout),
                 redirect_stderr(stderr),
             ):
@@ -800,8 +804,8 @@ class HardwareMachineTests(unittest.TestCase):
             stderr = StringIO()
             with (
                 patch("aiplane.machines.shutil.which", return_value="/usr/bin/az"),
-                patch("aiplane.machines.subprocess.run", side_effect=fake_run),
-                patch("aiplane.machines.urlopen", return_value=PriceResponse({"Items": []})),
+                patch("aiplane.boundaries.subprocess.run", side_effect=fake_run),
+                patch("aiplane.boundaries.urlopen", return_value=PriceResponse({"Items": []})),
                 redirect_stdout(stdout),
                 redirect_stderr(stderr),
             ):
@@ -831,7 +835,7 @@ class HardwareMachineTests(unittest.TestCase):
             self.assertIn('"id": "[redacted]"', verbose_progress)
 
     def test_az_command_progress_redacts_sensitive_command_values(self) -> None:
-        rendered = cli_module._redact_command_for_stderr(
+        rendered = cli_presenters._redact_command_for_stderr(
             [
                 "az",
                 "vm",
@@ -893,8 +897,8 @@ class HardwareMachineTests(unittest.TestCase):
 
             with (
                 patch("aiplane.machines.shutil.which", return_value="/usr/bin/az"),
-                patch("aiplane.machines.subprocess.run", return_value=Completed()),
-                patch("aiplane.machines.urlopen", return_value=PriceResponse({"Items": []})),
+                patch("aiplane.boundaries.subprocess.run", return_value=Completed()),
+                patch("aiplane.boundaries.urlopen", return_value=PriceResponse({"Items": []})),
             ):
                 live = manager.discover_azure("uksouth", workload="inference_large", limit=2)
             self.assertEqual(live["discovery"]["method"], "live")
@@ -950,7 +954,7 @@ class HardwareMachineTests(unittest.TestCase):
 
             with (
                 patch("aiplane.machines.shutil.which", return_value="/usr/bin/az"),
-                patch("aiplane.machines.subprocess.run", return_value=AccountCompleted()),
+                patch("aiplane.boundaries.subprocess.run", return_value=AccountCompleted()),
             ):
                 logged_in = manager.azure_status()
             self.assertEqual(logged_in["account"]["user_name"], "[redacted]")

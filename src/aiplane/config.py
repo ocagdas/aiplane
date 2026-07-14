@@ -3,8 +3,10 @@ from __future__ import annotations
 from pathlib import Path
 import os
 import shutil
+import sys
 from typing import Any
 
+from .persistence import atomic_update_yaml, atomic_write_text
 from .models import Profile
 
 
@@ -32,8 +34,32 @@ OUTPUT_VERBOSITY_PROFILE_OVERRIDES_KEY = "profile_verbosity"
 OUTPUT_VERBOSITY_COMMAND_OVERRIDES_KEY = "command_verbosity"
 
 
+def resource_root() -> Path:
+    source_root = Path(__file__).resolve().parents[2]
+    if (source_root / "profile-templates").is_dir():
+        return source_root
+    return Path(sys.prefix).resolve()
+
+
 def project_root() -> Path:
-    return Path(__file__).resolve().parents[2]
+    source_root = Path(__file__).resolve().parents[2]
+    if (source_root / "profile-templates").is_dir():
+        return source_root
+    return Path.cwd().resolve()
+
+
+def provider_helper_path() -> Path:
+    source_helper = resource_root() / "scripts" / "provider_helper.sh"
+    if source_helper.is_file():
+        return source_helper
+    for scripts_dir in (Path(sys.prefix) / "bin", Path(sys.prefix) / "Scripts"):
+        installed_helper = scripts_dir / "provider_helper.sh"
+        if installed_helper.is_file():
+            return installed_helper.resolve()
+    installed_helper = shutil.which("provider_helper.sh")
+    if installed_helper:
+        return Path(installed_helper).resolve()
+    raise FileNotFoundError("provider helper is not installed")
 
 
 def default_local_config_path() -> Path:
@@ -50,7 +76,7 @@ def local_config_path(path: Path | str | None = None) -> Path:
 
 
 def config_templates_root() -> Path:
-    return project_root() / "config-templates"
+    return resource_root() / "config-templates"
 
 
 def list_config_templates() -> list[str]:
@@ -152,7 +178,7 @@ def set_output_format(
     else:
         config[OUTPUT_FORMAT_CONFIG_KEY] = value
     config_path.parent.mkdir(parents=True, exist_ok=True)
-    config_path.write_text(dump_yaml(config), encoding="utf-8")
+    atomic_write_text(config_path, dump_yaml(config))
     return config_path
 
 
@@ -170,7 +196,7 @@ def clear_output_format(
         if command is None:
             config.pop(OUTPUT_FORMAT_CONFIG_KEY, None)
             config_path.parent.mkdir(parents=True, exist_ok=True)
-            config_path.write_text(dump_yaml(config), encoding="utf-8")
+            atomic_write_text(config_path, dump_yaml(config))
             return config_path
         command_formats = config.get(OUTPUT_FORMAT_COMMAND_OVERRIDES_KEY, {})
         if not isinstance(command_formats, dict):
@@ -187,7 +213,7 @@ def clear_output_format(
             profile_formats.pop(profile)
         config[OUTPUT_FORMAT_PROFILE_OVERRIDES_KEY] = profile_formats
     config_path.parent.mkdir(parents=True, exist_ok=True)
-    config_path.write_text(dump_yaml(config), encoding="utf-8")
+    atomic_write_text(config_path, dump_yaml(config))
     return config_path
 
 
@@ -266,7 +292,7 @@ def set_output_verbosity(
     else:
         config[OUTPUT_VERBOSITY_CONFIG_KEY] = verbosity
     config_path.parent.mkdir(parents=True, exist_ok=True)
-    config_path.write_text(dump_yaml(config), encoding="utf-8")
+    atomic_write_text(config_path, dump_yaml(config))
     return config_path
 
 
@@ -284,7 +310,7 @@ def clear_output_verbosity(
         if command is None:
             config.pop(OUTPUT_VERBOSITY_CONFIG_KEY, None)
             config_path.parent.mkdir(parents=True, exist_ok=True)
-            config_path.write_text(dump_yaml(config), encoding="utf-8")
+            atomic_write_text(config_path, dump_yaml(config))
             return config_path
         command_verbosity = config.get(OUTPUT_VERBOSITY_COMMAND_OVERRIDES_KEY, {})
         if not isinstance(command_verbosity, dict):
@@ -302,7 +328,7 @@ def clear_output_verbosity(
         config[OUTPUT_VERBOSITY_PROFILE_OVERRIDES_KEY] = profile_verbosity
 
     config_path.parent.mkdir(parents=True, exist_ok=True)
-    config_path.write_text(dump_yaml(config), encoding="utf-8")
+    atomic_write_text(config_path, dump_yaml(config))
     return config_path
 
 
@@ -352,10 +378,7 @@ def set_local_config_value(key: str, value: Any, path: Path | str | None = None)
     if not key or "." in key:
         raise ValueError("config set currently supports one top-level key")
     config_path = local_config_path(path)
-    config = load_local_config(config_path)
-    config[key] = value
-    config_path.parent.mkdir(parents=True, exist_ok=True)
-    config_path.write_text(dump_yaml(config), encoding="utf-8")
+    atomic_update_yaml(config_path, lambda config: config | {key: value})
     return config_path
 
 
@@ -392,7 +415,7 @@ def profiles_root(path: Path | str | None = None, config_path: Path | str | None
 
 
 def profile_templates_root() -> Path:
-    return project_root() / "profile-templates"
+    return resource_root() / "profile-templates"
 
 
 def list_profile_templates() -> list[str]:

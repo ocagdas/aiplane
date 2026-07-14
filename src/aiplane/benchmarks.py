@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import json
-import subprocess
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .boundaries import CommandRunner, SubprocessCommandRunner
+from .persistence import atomic_write_text
 from .config import parse_yaml
 from .env import EnvironmentManager
 from .model_catalog import ModelCatalog, capability_profile
@@ -43,8 +44,9 @@ class BenchmarkRun:
 
 
 class BenchmarkRunner:
-    def __init__(self, profile: Profile):
+    def __init__(self, profile: Profile, command_runner: CommandRunner | None = None):
         self.profile = profile
+        self.command_runner = command_runner or SubprocessCommandRunner()
         self.catalog = ModelCatalog(profile)
         self.environment = EnvironmentManager(profile)
 
@@ -185,8 +187,8 @@ class BenchmarkRunner:
         safe_task = "".join(ch if ch.isalnum() or ch in {"-", "_"} else "_" for ch in task) or "task"
         prompt_file = workdir / f"{safe_task}-prompt.txt"
         output_file = workdir / f"{safe_task}-output.txt"
-        prompt_file.write_text(prompt, encoding="utf-8")
-        output_file.write_text(output, encoding="utf-8")
+        atomic_write_text(prompt_file, prompt)
+        atomic_write_text(output_file, output)
         replacements = {
             "{prompt_file}": str(prompt_file),
             "{output_file}": str(output_file),
@@ -202,7 +204,7 @@ class BenchmarkRunner:
                 "cwd": str(plan.cwd),
                 "reason": "dry run",
             }
-        completed = subprocess.run(
+        completed = self.command_runner.run(
             plan.command,
             cwd=plan.cwd,
             text=True,
@@ -234,7 +236,7 @@ class BenchmarkRunner:
         root.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         path = root / f"{timestamp}-{model_name}.json"
-        path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        atomic_write_text(path, json.dumps(payload, indent=2))
         return path
 
 

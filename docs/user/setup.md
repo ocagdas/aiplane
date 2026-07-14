@@ -6,7 +6,84 @@ editable/source-linked installs or static/snapshot installs. This is separate
 from provider setup: provider runtimes and API credentials are handled by
 `scripts/provider_helper.sh` and documented in `providers.md`.
 
-Platform support: the Bash setup helper and helper-managed runtime install/update commands are currently supported only on Linux hosts. On Windows or macOS, install `aiplane` and runtimes with platform-native Python/Conda/runtime installers, then use `aiplane discover`, `aiplane doctor`, `aiplane recommend`, and `aiplane export` to inspect and generate configuration. If a helper install command is run on an unsupported platform, it terminates with a clear unsupported-platform error.
+Platform behavior is documented in [Platform support](platform-support.md). Portable profile, validation, recommendation, and export operations are distinct from host-mutating helpers. Runtime install/update helpers are supported on native Ubuntu/Debian only; WSL, other Linux distributions, macOS, and Windows use vendor-native runtime installers. Unsupported mutations return `unsupported_platform` before running host commands.
+
+## Standard wheel install (no repository clone)
+
+Download the `.whl` attached to the [latest GitHub Release](https://github.com/ocagdas/aiplane/releases/latest). The wheel is the standard evaluation channel and contains the CLI, profile and config templates, and packaged runtime helper scripts. You do not need Git or a source checkout.
+
+Download `SHA256SUMS` from the same release and verify the wheel before installation. Linux can use `sha256sum --check SHA256SUMS`; macOS can use `shasum -a 256 --check SHA256SUMS`; on Windows compare `Get-FileHash -Algorithm SHA256` output with the manifest.
+
+Choose one installation owner:
+
+```bash
+# Recommended: an isolated command managed by uv.
+uv tool install ./aiplane-0.1.0-py3-none-any.whl
+
+# Equivalent isolated command managed by pipx.
+pipx install ./aiplane-0.1.0-py3-none-any.whl
+
+# Install into the currently active venv or Conda environment.
+python -m pip install ./aiplane-0.1.0-py3-none-any.whl
+```
+
+Replace the illustrative version with the downloaded filename. Do not run all three commands: use `uv tool` or `pipx` for a dedicated application environment, or `pip` when you deliberately want `aiplane` in an already active venv/Conda environment.
+
+Verify and create a local editable profile in the working directory where you want to use it:
+
+```bash
+aiplane --help
+aiplane profiles templates
+aiplane profiles bootstrap-local --no-overwrite --no-discovery
+aiplane quickstart local-coding --dry-run
+```
+
+Upgrade from a newer downloaded wheel:
+
+```bash
+uv tool install --force ./aiplane-NEW_VERSION-py3-none-any.whl
+pipx uninstall aiplane
+pipx install ./aiplane-NEW_VERSION-py3-none-any.whl
+python -m pip install --upgrade ./aiplane-NEW_VERSION-py3-none-any.whl
+```
+
+For rollback, preserve the reviewed profile YAML, uninstall the current version with its installation owner, verify the previously downloaded wheel against its release checksum, and reinstall that immutable wheel. Runtime weights, credentials, caches, audit logs, and tunnel state remain outside the portable profile and should be recovered through their owning systems.
+
+Uninstall with the same owner used for installation:
+
+```bash
+uv tool uninstall aiplane
+pipx uninstall aiplane
+python -m pip uninstall aiplane
+```
+
+When an official Python package index publication is enabled, the corresponding commands become `uv tool install aiplane`, `pipx install aiplane`, or `python -m pip install aiplane`, with `uv tool upgrade aiplane`, `pipx upgrade aiplane`, or `python -m pip install --upgrade aiplane` for upgrades. Do not assume index publication until a release announcement names that channel.
+
+The portable profile, doctor, recommendation, and export surface is supported on Linux, macOS, and Windows and is validated from the built wheel in CI. Runtime install/update helpers remain limited to native Ubuntu/Debian; see [Platform support](platform-support.md).
+
+## Local source-checkout wheel snapshot
+
+Contributors can build a local wheel without creating a release tag or committing generated artifacts:
+
+```bash
+python scripts/build_local_wheel.py --clean
+# or
+make wheel-local
+```
+
+The output goes under `.aiplane/wheelhouse/`, which is ignored by git. It contains the wheel, `SHA256SUMS`, and `provenance.json`. This is a local snapshot for testing the wheel install path from the current checkout. It is not a CI artifact and not a GitHub Release artifact. The wheel uses the tracked base version from `pyproject.toml` plus PEP 440 local metadata containing the current Git short SHA and UTC timestamp, for example `0.1.0+gabc1234.20260714t153000z`; if the working tree is dirty, provenance records `version_source: local_dirty_checkout`.
+
+Install the local wheel with one owner:
+
+```bash
+python -m pip install --force-reinstall .aiplane/wheelhouse/aiplane-VERSION-py3-none-any.whl
+pipx install --force .aiplane/wheelhouse/aiplane-VERSION-py3-none-any.whl
+uv tool install --force .aiplane/wheelhouse/aiplane-VERSION-py3-none-any.whl
+```
+
+Use `python scripts/build_local_wheel.py --clean --validate-pip` when you want the same pip-channel smoke validation used by CI for the built artifact.
+
+## Source-checkout install modes
 
 Install modes:
 
@@ -86,9 +163,9 @@ and prints activation commands. The helper verifies that the Conda environment
 is visible after creation and, during install, repairs an existing Conda
 environment that is missing Python by installing `python=3.13` into it. During
 install, it also runs
-`aiplane profiles bootstrap-local --no-discovery` before the profile-aware sanity
+`aiplane profiles bootstrap-local --no-overwrite --no-discovery` before the profile-aware sanity
 check, so a fresh clone gets an ignored `profiles/local-dev` directory from the
-shipped template.
+shipped template while an existing edited profile is preserved.
 
 Check Conda environments with:
 
@@ -407,3 +484,27 @@ aiplane profiles create local-dev --template local-dev
 ```
 
 Use `--profile` only when you need to override the default for one command.
+
+## Reading Audit Logs Safely
+
+`aiplane audit tail` prints recent valid audit events as JSON lines:
+
+```bash
+aiplane audit tail
+aiplane audit tail --limit 50
+```
+
+If a process was interrupted while appending a record, or a record is otherwise
+malformed, the command skips that record and continues searching backward until it
+has the requested number of valid events. Stdout remains JSONL for scripts. A
+metadata-only warning containing the line number and error category is written to
+stderr; corrupt record content is never repeated in the warning. An unterminated
+malformed final line is reported as `truncated_final_record`.
+
+
+Audit records deliberately minimize data: tool events record the action, decision, argument count, and a safe file target where applicable, but not raw command arguments, command output, or exception messages. Sensitive structured fields, secret-bearing command flags, common token formats, and PEM material are redacted before the record is appended. Configuration and audit writes are serialized across processes with bounded waits; lock contention fails with a timeout rather than waiting indefinitely.
+
+
+## Error output and debugging
+
+Normal operational errors are printed after secret redaction and without tracebacks. Unexpected internal failures show only their exception type. If maintainers need a traceback, place the global `--debug` option before the command, or set `AIPLANE_DEBUG=true`; use either only in a controlled environment because traceback context can contain sensitive paths or values. Piping output through tools such as `head` exits quietly when the reader closes the pipe.

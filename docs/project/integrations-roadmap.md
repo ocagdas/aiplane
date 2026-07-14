@@ -2,7 +2,7 @@
 
 See also: [Strategy](strategy.md) and [Project Roadmap](roadmap.md).
 
-The platform is being built as an orchestration/governance/setup control plane first. Integrations should attach
+The product is an environment doctor and configuration compiler first. Integrations should attach
 to the same profile, provider, model, runtime, endpoint, policy, tool, approval, and audit layers
 instead of each integration inventing its own configuration.
 

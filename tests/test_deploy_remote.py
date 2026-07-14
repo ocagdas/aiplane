@@ -88,7 +88,7 @@ class DeployRemoteTests(unittest.TestCase):
             stdout = "ok"
             stderr = ""
 
-        with patch("aiplane.deploy.subprocess.run", return_value=Completed()) as run:
+        with patch("aiplane.boundaries.subprocess.run", return_value=Completed()) as run:
             result = DeployManager(profile).apply("azure_gpu_vm", yes=True)
         self.assertEqual(result["target"], "azure_gpu_vm")
         self.assertTrue(result["results"])
@@ -100,7 +100,7 @@ class DeployRemoteTests(unittest.TestCase):
         stderr = StringIO()
         with _isolated_profiles_dir() as profiles_dir:
             with (
-                patch("aiplane.deploy.subprocess.run") as run,
+                patch("aiplane.boundaries.subprocess.run") as run,
                 redirect_stdout(stdout),
                 redirect_stderr(stderr),
             ):
@@ -124,7 +124,7 @@ class DeployRemoteTests(unittest.TestCase):
         stdout = StringIO()
         with _isolated_profiles_dir() as profiles_dir:
             with (
-                patch("aiplane.deploy.subprocess.run", return_value=completed) as run,
+                patch("aiplane.boundaries.subprocess.run", return_value=completed) as run,
                 redirect_stdout(stdout),
             ):
                 code = cli_main(
@@ -242,7 +242,7 @@ class DeployRemoteTests(unittest.TestCase):
         with self.assertRaises(ValueError) as exc:
             RemoteManager(profile).tunnel_plan("gpu_workstation_ssh")
 
-        self.assertIn("must include a URL scheme", str(exc.exception))
+        self.assertIn("must use http or https", str(exc.exception))
 
     def test_remote_tunnel_plan_uses_ssh_local_forwarding(self) -> None:
         profile = load_profile("local-dev", Path.cwd())
@@ -314,7 +314,7 @@ class DeployRemoteTests(unittest.TestCase):
         self.assertEqual(payload["steps"][1]["command"][3], "dev@gpu-workstation.example.internal")
         self.assertIn("export machine profile", payload["steps"][1]["name"])
 
-    def test_remote_tunnel_lifecycle_is_guarded_and_status_uses_pid_file(self) -> None:
+    def test_remote_tunnel_lifecycle_is_guarded_and_identity_verified(self) -> None:
         source = load_profile("local-dev", Path.cwd())
         with tempfile.TemporaryDirectory() as tmp:
             workspace = Path(tmp)
@@ -331,25 +331,40 @@ class DeployRemoteTests(unittest.TestCase):
                 models=source.models,
                 targets=source.targets,
             )
-            manager = RemoteManager(profile)
-            with self.assertRaises(PermissionError):
-                manager.tunnel_start("gpu_workstation_ssh")
+
+            class Inspector:
+                identity = {"source": "fake", "start": "one"}
+                terminated: list[int] = []
+
+                def capture(self, pid):
+                    return dict(self.identity)
+
+                def matches(self, pid, identity):
+                    return identity == self.identity
+
+                def terminate_if_matches(self, pid, identity):
+                    if not self.matches(pid, identity):
+                        return False
+                    self.terminated.append(pid)
+                    return True
 
             class Process:
                 pid = 12345
 
+            inspector = Inspector()
+            manager = RemoteManager(profile, process_inspector=inspector)
+            with self.assertRaises(PermissionError):
+                manager.tunnel_start("gpu_workstation_ssh")
             with (
                 patch("aiplane.remote.shutil.which", return_value="/usr/bin/ssh"),
-                patch("aiplane.remote.subprocess.Popen", return_value=Process()),
+                patch("aiplane.boundaries.subprocess.Popen", return_value=Process()),
             ):
                 started = manager.tunnel_start("gpu_workstation_ssh", yes=True)
+
             self.assertEqual(started["status"], "started")
-            self.assertTrue((workspace / ".aiplane" / "remote" / "gpu_workstation_ssh.pid").exists())
-            with patch("aiplane.remote.os.kill") as kill:
-                status = manager.tunnel_status("gpu_workstation_ssh")
-            self.assertTrue(status["running"])
-            kill.assert_called_with(12345, 0)
-            with patch("aiplane.remote.os.kill") as kill:
-                stopped = manager.tunnel_stop("gpu_workstation_ssh", yes=True)
+            self.assertTrue(Path(started["state_file"]).exists())
+            self.assertEqual(manager.tunnel_status("gpu_workstation_ssh")["state"], "running")
+            stopped = manager.tunnel_stop("gpu_workstation_ssh", yes=True)
             self.assertEqual(stopped["status"], "stopped")
-            kill.assert_called_with(12345, 15)
+            self.assertEqual(inspector.terminated, [12345])
+            self.assertFalse(Path(started["state_file"]).exists())

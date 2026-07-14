@@ -115,7 +115,7 @@ scripts/check.sh quick
 scripts/check.sh
 ```
 
-The scripts use the currently active Python environment. To run the full check in
+The scripts use the currently active Python environment. The full gate uses four file-scheduled pytest workers by default; set `AIPLANE_TEST_WORKERS=0` for serial execution. To run the full check in
 Conda explicitly, use `conda run --no-capture-output -n aiplane scripts/check.sh`.
 The versions used by those scripts are pinned in the `dev` optional dependency group in `pyproject.toml`. CI installs `.[dev]` and runs the same `scripts/check.sh` wrapper.
 
@@ -178,3 +178,27 @@ These installs are not pure Python dependencies. Some tools can be installed wit
 - Ansible can often be installed with `pip` inside a venv or Conda environment, but using it against remote hosts still depends on SSH.
 
 `aiplane` detects the platform and package manager where possible, currently focusing on Ubuntu/Debian/Fedora/macOS style installs.
+
+## Profile-Configured Tool Execution
+
+The singular `aiplane tool` command executes only tools allowed by the active
+profile. Read-only tools run without confirmation. A tool classified by profile
+policy as risky prompts for approval on an interactive terminal and fails closed
+when standard input is not interactive:
+
+```bash
+aiplane tool read_file README.md
+aiplane tool write_file note.txt hello
+```
+
+For an intentional unattended invocation, approve that invocation explicitly by
+placing `--yes` before the tool name:
+
+```bash
+aiplane tool --yes write_file note.txt hello
+aiplane tool --yes run_tests python -m pytest -q
+```
+
+`--yes` does not add a tool to the profile allowlist or bypass workspace path
+checks. It only satisfies an approval already required by policy for that one
+command. Tool decisions and outcomes are written to the local profile audit log.

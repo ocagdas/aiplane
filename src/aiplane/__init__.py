@@ -1,3 +1,3 @@
-"""Hybrid AI model control plane MVP."""
+"""AI environment doctor and configuration compiler."""
 
 __version__ = "0.1.0"

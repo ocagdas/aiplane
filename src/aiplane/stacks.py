@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import os
 import socket
-import subprocess
-import time
 from typing import Any
 
-from .config import dump_yaml, project_root
+from .boundaries import CommandRunner, SubprocessCommandRunner
+from .persistence import atomic_write_text
+from .config import dump_yaml, provider_helper_path
 from .env import EnvironmentManager
 from .integrations import IntegrationManager
 from .machines import MachineManager
@@ -14,9 +14,10 @@ from .model_catalog import ModelCatalog
 from .models import Profile
 from .orchestrators import OrchestratorCatalog
 from .runtime_catalog import RuntimeCatalog
+from .stack_lifecycle import StackLifecycle
+from .stack_roles import StackRolePlanner
 from .runtime_definitions import PROVIDER_ENDPOINT_DEFAULTS
 from .remote import RemoteManager
-from .policy import PolicyEngine
 
 
 FRAMEWORK_EXPORT_ARTIFACTS = {
@@ -30,8 +31,9 @@ FRAMEWORK_EXPORT_ARTIFACTS = {
 
 
 class StackManager:
-    def __init__(self, profile: Profile):
+    def __init__(self, profile: Profile, command_runner: CommandRunner | None = None):
         self.profile = profile
+        self.command_runner = command_runner or SubprocessCommandRunner()
         self.config = profile.hardware or {}
 
     def list(self) -> list[dict[str, Any]]:
@@ -191,7 +193,7 @@ class StackManager:
             {
                 "name": "install or update runtime",
                 "command": [
-                    str(project_root() / "scripts" / "provider_helper.sh"),
+                    str(provider_helper_path()),
                     "--provider",
                     runtime,
                     "--action",
@@ -206,7 +208,7 @@ class StackManager:
             {
                 "name": "pull model",
                 "command": [
-                    str(project_root() / "scripts" / "provider_helper.sh"),
+                    str(provider_helper_path()),
                     "--provider",
                     runtime,
                     "--action",
@@ -221,7 +223,7 @@ class StackManager:
             {
                 "name": "start runtime",
                 "command": [
-                    str(project_root() / "scripts" / "provider_helper.sh"),
+                    str(provider_helper_path()),
                     "--provider",
                     runtime,
                     "--action",
@@ -620,358 +622,27 @@ class StackManager:
             "docker_resources": docker_resources,
         }
 
+    def _role_planner(self):
+        return StackRolePlanner(self.profile)
+
     def _normalize_roles(
-        self,
-        roles: dict[str, str],
-        primary_model: str,
-        primary_runtime: str,
-        endpoint: str | None,
-        limits: dict[str, object],
-        tools: dict[str, object],
-        approval_mode: str | None,
-        audit_label: str,
-    ) -> dict[str, Any]:
-        if not roles:
-            return {}
-        catalog = ModelCatalog(self.profile)
-        normalized = {}
-        for role, model_alias in sorted(roles.items()):
-            role_name = str(role).strip()
-            if not role_name or "/" in role_name or "\\" in role_name:
-                raise ValueError("role names must be simple names")
-            alias = str(model_alias).strip()
-            if not alias:
-                raise ValueError(f"role {role_name!r} model alias is empty")
-            model_config = catalog.show(alias)
-            provider_name = str(model_config.get("provider") or model_config.get("source") or "")
-            if model_config.get("ownership") == "managed_service":
-                role_runtime = provider_name
-                provider_config = (
-                    model_config.get("provider_config") if isinstance(model_config.get("provider_config"), dict) else {}
-                )
-                role_endpoint = endpoint or provider_config.get("endpoint") or _default_endpoint(provider_name)
-            else:
-                role_runtime = model_config.get("runtime") or primary_runtime
-                role_endpoint = endpoint or _default_endpoint(str(role_runtime or primary_runtime))
-            normalized[role_name] = {
-                "model": alias,
-                "provider": provider_name,
-                "ownership": model_config.get("ownership"),
-                "runtime": role_runtime,
-                "endpoint": role_endpoint,
-                "approval_mode": approval_mode or "ask",
-                "audit_label": f"{audit_label}.{role_name}",
-                "limits": limits,
-                "tools": tools,
-                "uses_primary_model": alias == primary_model,
-            }
-        return normalized
-
-    def _role_plan(self, stack: dict[str, Any], endpoint: object) -> dict[str, Any]:
-        roles = stack.get("roles", {})
-        if isinstance(roles, dict) and roles:
-            return roles
-        model = str(stack.get("model") or "")
-        runtime = str(stack.get("runtime") or "")
-        model_config = ModelCatalog(self.profile).show(model)
-        return {
-            "primary": {
-                "model": model,
-                "provider": model_config.get("provider") or model_config.get("source"),
-                "ownership": model_config.get("ownership"),
-                "runtime": runtime,
-                "endpoint": str(endpoint or _default_endpoint(runtime)),
-                "approval_mode": stack.get("approval_mode") or "ask",
-                "audit_label": stack.get("audit_label") or "primary",
-                "limits": stack.get("limits", {}),
-                "tools": stack.get("tools", {}),
-                "uses_primary_model": True,
-            }
-        }
-
-    def _role_checks(self, roles: object) -> list[dict[str, Any]]:
-        checks: list[dict[str, Any]] = []
-        role_map = roles if isinstance(roles, dict) else {}
-        catalog = ModelCatalog(self.profile)
-        known_runtimes = {row["name"] for row in RuntimeCatalog(self.profile).list(include_gui=True)}
-        known_endpoint_families = {
-            name
-            for name, provider in PROVIDER_ENDPOINT_DEFAULTS.items()
-            if provider.get("ownership") == "managed_service"
-        }
-        for role, binding in sorted(role_map.items()):
-            if not isinstance(binding, dict):
-                checks.append(
-                    {
-                        "name": f"role_binding:{role}",
-                        "ok": False,
-                        "detail": "role binding must be a mapping",
-                    }
-                )
-                continue
-            model_alias = str(binding.get("model") or "")
-            model_config: dict[str, Any] = {}
-            try:
-                model_config = catalog.show(model_alias)
-                model_ok = True
-                model_detail = model_config.get("model")
-            except Exception as exc:  # noqa: BLE001 - report config health.
-                model_ok = False
-                model_detail = str(exc)
-            checks.append(
-                {
-                    "name": f"role_model:{role}",
-                    "ok": model_ok,
-                    "detail": model_detail,
-                }
-            )
-            if model_ok:
-                policy = PolicyEngine(self.profile).model_decision(model_alias)
-                checks.append(
-                    {
-                        "name": f"role_model_enabled:{role}",
-                        "ok": bool(model_config.get("enabled", True)),
-                        "detail": ("enabled" if model_config.get("enabled", True) else "disabled"),
-                    }
-                )
-                checks.append(
-                    {
-                        "name": f"role_model_policy:{role}",
-                        "ok": policy.allowed,
-                        "detail": policy.reason,
-                        "provider": str(model_config.get("provider") or ""),
-                        "requires_approval": policy.requires_approval,
-                    }
-                )
-            runtime = str(binding.get("runtime") or "")
-            ownership = str(binding.get("ownership") or model_config.get("ownership") or "")
-            if runtime:
-                runtime_known = runtime in known_runtimes or (
-                    ownership == "managed_service" and runtime in known_endpoint_families
-                )
-                checks.append(
-                    {
-                        "name": f"role_runtime_or_endpoint:{role}",
-                        "ok": runtime_known,
-                        "detail": runtime,
-                    }
-                )
-            endpoint = str(binding.get("endpoint") or "")
-            if ownership == "managed_service":
-                checks.append(
-                    {
-                        "name": f"role_endpoint:{role}",
-                        "ok": bool(endpoint),
-                        "detail": endpoint or "managed-service role needs an endpoint",
-                    }
-                )
-            checks.extend(self._role_tool_policy_checks(str(role), binding))
-        return checks
-
-    def _role_tool_policy_checks(self, role: str, binding: dict[str, Any]) -> list[dict[str, Any]]:
-        tools = binding.get("tools") if isinstance(binding.get("tools"), dict) else {}
-        approval_mode = str(binding.get("approval_mode") or "ask").lower()
-        risky_approval = approval_mode in {"auto", "none", "silent", "unattended"}
-        risky_tools = {
-            "shell",
-            "exec",
-            "command",
-            "filesystem",
-            "network",
-            "browser",
-            "code_execution",
-        }
-        open_policies = {
-            "allow",
-            "allowed",
-            "always",
-            "auto",
-            "none",
-            "unrestricted",
-            "write",
-        }
-        checks: list[dict[str, Any]] = []
-        for tool, policy in sorted(tools.items()):
-            tool_name = str(tool).lower()
-            policy_name = str(policy).lower()
-            risky = tool_name in risky_tools and (policy_name in open_policies or risky_approval)
-            checks.append(
-                {
-                    "name": f"role_tool_policy:{role}:{tool}",
-                    "ok": not risky,
-                    "warning": risky,
-                    "detail": (
-                        "risky tool policy should use guarded/read_only/workspace_only with ask/manual approval"
-                        if risky
-                        else f"{policy}"
-                    ),
-                }
-            )
-        return checks
-
-    def _lifecycle(self, name: str, action: str, dry_run: bool = False) -> dict[str, Any]:
-        stack = self._stack(name)
-        runtime = str(stack.get("runtime") or "")
-        model = str(stack.get("model") or "")
-        orchestrator = str(stack.get("orchestrator") or "")
-        commands = self._lifecycle_commands(name, action, runtime, model, orchestrator)
-        executable, reason = self._lifecycle_executable(stack)
-        if dry_run or not executable:
-            return {
-                "name": name,
-                "action": action,
-                "dry_run": dry_run,
-                "status": "planned" if dry_run else "planned_not_executed",
-                "reason": None if executable else reason,
-                "execution_mode": "same_host" if executable else "planned_remote",
-                "endpoint_security": self.endpoint_plan(name),
-                "commands": commands,
-            }
-        results = []
-        failed_step = None
-        runtime_status_before = RuntimeCatalog(self.profile).runtime_available(runtime)
-        started_at = time.time()
-        for item in commands:
-            completed = subprocess.run(
-                item["command"],
-                cwd=item.get("cwd") or self.profile.workspace,
-                text=True,
-                capture_output=True,
-                check=False,
-            )
-            row = {
-                "name": item["name"],
-                "command": item["command"],
-                "returncode": completed.returncode,
-                "stdout": completed.stdout[-4000:],
-                "stderr": completed.stderr[-4000:],
-            }
-            results.append(row)
-            if completed.returncode != 0:
-                failed_step = row
-                break
-        finished_at = time.time()
-        runtime_status_after = RuntimeCatalog(self.profile).runtime_available(runtime)
-        outcome = "completed" if failed_step is None and len(results) == len(commands) else "failed"
-        return {
-            "name": name,
-            "action": action,
-            "dry_run": False,
-            "status": "executed",
-            "outcome": outcome,
-            "steps_total": len(commands),
-            "steps_executed": len(results),
-            "failed_step": failed_step,
-            "execution_mode": "same_host",
-            "started_at": round(started_at, 3),
-            "finished_at": round(finished_at, 3),
-            "duration_seconds": round(max(0.0, finished_at - started_at), 3),
-            "runtime_status_before": runtime_status_before,
-            "runtime_status_after": runtime_status_after,
-            "results": results,
-            "notes": [
-                "Same-host lifecycle execution ran local helper commands directly; runtime_status_after is a best-effort post-action readiness snapshot."
-            ],
-        }
-
-    def _lifecycle_commands(
-        self, stack_name: str, action: str, runtime: str, model: str, orchestrator: str
-    ) -> list[dict[str, Any]]:
-        if action == "prepare":
-            commands = [
-                self._runtime_helper_command("install runtime", runtime, "install", model),
-                self._runtime_helper_command("pull model", runtime, "pull", model),
-            ]
-            if orchestrator:
-                packages = OrchestratorCatalog(self.profile).show(orchestrator).get("packages", [])
-                if packages:
-                    plan = EnvironmentManager(self.profile).plan(
-                        [
-                            "python",
-                            "-m",
-                            "pip",
-                            "install",
-                            *[str(package) for package in packages],
-                        ]
-                    )
-                    commands.append(
-                        {
-                            "name": "install orchestrator packages",
-                            "command": plan.command,
-                            "cwd": str(plan.cwd),
-                            "environment_mode": plan.mode,
-                        }
-                    )
-            return commands
-        if action in {"start", "stop", "restart"}:
-            return [self._runtime_helper_command(f"{action} runtime", runtime, action, model)]
-        raise ValueError(f"unknown stack lifecycle action: {action}")
-
-    def _runtime_helper_command(self, name: str, runtime: str, action: str, model: str) -> dict[str, Any]:
-        helper = project_root() / "scripts" / "provider_helper.sh"
-        return {
-            "name": name,
-            "command": [
-                str(helper),
-                "--provider",
-                runtime,
-                "--action",
-                action,
-                "--profile",
-                self.profile.name,
-                "--model",
-                model,
-            ],
-            "cwd": str(project_root()),
-        }
-
-    def _lifecycle_executable(self, stack: dict[str, Any]) -> tuple[bool, str | None]:
-        access = str(stack.get("access") or "")
-        machine_name = str(stack.get("machine") or "")
-        try:
-            machine = MachineManager(self.profile).show(machine_name)["machine"]
-        except Exception as exc:  # noqa: BLE001 - report as lifecycle planning reason.
-            return False, f"machine lookup failed: {exc}"
-        placement = str(machine.get("placement") or "") if isinstance(machine, dict) else ""
-        if access in {"same_host", "local"} or placement == "same_host":
-            return True, None
-        return (
-            False,
-            "automatic stack lifecycle execution is currently limited to same-host/local stacks; use --dry-run output for remote/SSH/Azure/AKS targets",
+        self, roles, primary_model, primary_runtime, endpoint, limits, tools, approval_mode, audit_label
+    ):
+        return self._role_planner()._normalize_roles(
+            roles, primary_model, primary_runtime, endpoint, limits, tools, approval_mode, audit_label
         )
 
+    def _role_plan(self, stack: dict[str, Any], endpoint: object) -> dict[str, Any]:
+        return self._role_planner()._role_plan(stack, endpoint)
+
+    def _role_checks(self, roles: object) -> list[dict[str, Any]]:
+        return self._role_planner()._role_checks(roles)
+
+    def _lifecycle(self, name: str, action: str, dry_run: bool = False) -> dict[str, Any]:
+        return StackLifecycle(self)._lifecycle(name, action, dry_run)
+
     def deploy(self, name: str, yes: bool = False) -> dict[str, Any]:
-        if not yes:
-            raise PermissionError("stack deploy is mutating; run stacks plan and stacks doctor first")
-        plan = self.plan(name)
-        access = str(plan.get("access") or "")
-        machine = plan.get("machine_config", {})
-        placement = str(machine.get("placement") or "") if isinstance(machine, dict) else ""
-        if access not in {"same_host", "local"} and placement != "same_host":
-            return {
-                "name": name,
-                "status": "planned_not_executed",
-                "reason": "automatic stack execution is currently limited to same-host/local stacks; use the rendered plan for SSH/Azure targets",
-                "next_manual_steps": plan["steps"],
-            }
-        results = []
-        for step in plan["steps"]:
-            command = step.get("command") if isinstance(step, dict) else None
-            if not command or not step.get("mutates"):
-                continue
-            completed = subprocess.run(command, text=True, capture_output=True, check=False)
-            results.append(
-                {
-                    "name": step.get("name"),
-                    "command": command,
-                    "returncode": completed.returncode,
-                    "stdout": completed.stdout[-2000:],
-                    "stderr": completed.stderr[-2000:],
-                }
-            )
-            if completed.returncode != 0:
-                break
-        return {"name": name, "status": "executed_same_host_steps", "results": results}
+        return StackLifecycle(self).deploy(name, yes)
 
     def _stack(self, name: str) -> dict[str, Any]:
         stack = self._stacks().get(name)
@@ -985,7 +656,7 @@ class StackManager:
 
     def _write_config(self) -> None:
         path = self.profile.root / "hardware.yaml"
-        path.write_text(dump_yaml(self.config), encoding="utf-8")
+        atomic_write_text(path, dump_yaml(self.config))
 
 
 def _normalize_endpoint_auth(endpoint_auth: dict[str, object]) -> dict[str, Any]:

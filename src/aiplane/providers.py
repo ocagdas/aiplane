@@ -8,8 +8,10 @@ from pathlib import Path
 from urllib.parse import urlencode
 from dataclasses import dataclass
 from typing import Any
-from urllib.request import Request, urlopen
+from urllib.request import Request
 
+from .boundaries import HttpTransport, UrllibHttpTransport
+from .persistence import atomic_write_text
 from .config import dump_yaml, parse_yaml
 from .model_catalog import ModelCatalog, ModelStatus, model_source
 from .models import Profile
@@ -61,8 +63,9 @@ class ProviderRegistry:
     RuntimeCatalog, not here.
     """
 
-    def __init__(self, profile: Profile):
+    def __init__(self, profile: Profile, http_transport: HttpTransport | None = None):
         self.profile = profile
+        self.http_transport = http_transport or UrllibHttpTransport()
         self.catalog = ModelCatalog(profile)
 
     def list(
@@ -272,7 +275,7 @@ class ProviderRegistry:
         if path.exists() and not overwrite:
             raise ValueError(f"model provider defaults already exist: {path}")
         providers = self.default_model_providers()
-        path.write_text(dump_yaml(providers), encoding="utf-8")
+        atomic_write_text(path, dump_yaml(providers))
         return {
             "name": "model_provider_defaults",
             "path": str(path),
@@ -297,7 +300,7 @@ class ProviderRegistry:
                 updated.append(name)
             else:
                 added.append(name)
-        path.write_text(dump_yaml(providers), encoding="utf-8")
+        atomic_write_text(path, dump_yaml(providers))
         return {
             "name": "model_provider_defaults_update",
             "path": str(path),
@@ -332,7 +335,7 @@ class ProviderRegistry:
                 path.unlink()
                 removed.append(str(path))
         if scope in {"embedded", "all"}:
-            defaults_path.write_text("", encoding="utf-8")
+            atomic_write_text(defaults_path, "")
             if str(defaults_path) not in removed:
                 removed.append(str(defaults_path))
         return {
@@ -398,7 +401,7 @@ class ProviderRegistry:
     def _write_user_source_provider_config(self, config: dict[str, Any]) -> Path:
         path = self.profile.root / USER_MODEL_PROVIDERS_FILE
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(dump_yaml(config), encoding="utf-8")
+        atomic_write_text(path, dump_yaml(config))
         return path
 
     def _group(
@@ -493,7 +496,7 @@ class ProviderRegistry:
                 )
                 base = endpoint[:-7] if endpoint.endswith("/openai") else endpoint
                 url = f"{base}/openai/deployments?" + urlencode({"api-version": api_version})
-                payload = _json_get(url, timeout=timeout_seconds, headers={"api-key": api_key})
+                payload = self._json_get(url, timeout=timeout_seconds, headers={"api-key": api_key})
                 items = payload.get("data") if isinstance(payload, dict) else None
                 if items is None and isinstance(payload, dict):
                     items = payload.get("value")
@@ -512,7 +515,7 @@ class ProviderRegistry:
             if name == "elevenlabs":
                 endpoint = endpoint or "https://api.elevenlabs.io/v1"
                 url = f"{endpoint}/voices"
-                payload = _json_get(url, timeout=timeout_seconds, headers={"xi-api-key": api_key})
+                payload = self._json_get(url, timeout=timeout_seconds, headers={"xi-api-key": api_key})
                 voices = payload.get("voices") if isinstance(payload, dict) else None
                 result.update(
                     {
@@ -537,7 +540,7 @@ class ProviderRegistry:
             ):
                 endpoint = endpoint or "https://api.openai.com/v1"
                 url = f"{endpoint}/models"
-                payload = _json_get(
+                payload = self._json_get(
                     url,
                     timeout=timeout_seconds,
                     headers={"Authorization": f"Bearer {api_key}"},
@@ -666,7 +669,7 @@ class ProviderRegistry:
             need = f"credential {credential_ref}" if credential_ref else f"env var {key_env or 'provider api_key_env'}"
             raise ValueError(f"{name} discovery needs {need}")
         url = f"{endpoint}/models"
-        payload = _json_get(
+        payload = self._json_get(
             url,
             timeout=int(provider_config.get("timeout_seconds") or defaults.get("timeout_seconds") or 20),
             headers={"Authorization": f"Bearer {api_key}"},
@@ -724,7 +727,7 @@ class ProviderRegistry:
             raise ValueError(f"Azure OpenAI discovery needs {need}")
         base = endpoint[:-7] if endpoint.endswith("/openai") else endpoint
         url = f"{base}/openai/deployments?" + urlencode({"api-version": api_version})
-        payload = _json_get(
+        payload = self._json_get(
             url,
             timeout=int(runtime_provider.get("timeout_seconds", 20)),
             headers={"api-key": api_key},
@@ -779,7 +782,7 @@ class ProviderRegistry:
             need = f"credential {credential_ref}" if credential_ref else f"env var {key_env}"
             raise ValueError(f"ElevenLabs voice discovery needs {need}")
         url = f"{endpoint}/voices"
-        payload = _json_get(
+        payload = self._json_get(
             url,
             timeout=int(runtime_provider.get("timeout_seconds", 20)),
             headers={"xi-api-key": api_key},
@@ -852,7 +855,7 @@ class ProviderRegistry:
                 search = (search + " GGUF").strip()
             params["search"] = search or "GGUF"
         url = "https://huggingface.co/api/models?" + urlencode(params)
-        payload = _json_get(url, timeout=20)
+        payload = self._json_get(url, timeout=20)
         if not isinstance(payload, list):
             raise RuntimeError("Hugging Face returned an unexpected model catalog response")
         ids = []
@@ -901,7 +904,7 @@ class ProviderRegistry:
                 params["query"] = query
             url = "https://civitai.com/api/v1/models?" + urlencode(params)
             urls.append(url)
-            payload = _json_get(url, timeout=20)
+            payload = self._json_get(url, timeout=20)
             if not isinstance(payload, dict) or not isinstance(payload.get("items"), list):
                 raise RuntimeError("Civitai returned an unexpected model catalog response")
             items = payload.get("items", [])
@@ -941,7 +944,7 @@ class ProviderRegistry:
         if query:
             params["q"] = query
         url = "https://ollama.com/library" + (("?" + urlencode(params)) if params else "")
-        html = _text_get(url, timeout=20)
+        html = self._text_get(url, timeout=20)
         ids = []
         metadata: dict[str, dict[str, Any]] = {}
         for match in re.finditer(r'href="/library/([a-zA-Z0-9_.-]+)"[^>]*>\s*([^<]+)', html):
@@ -970,9 +973,26 @@ class ProviderRegistry:
             {model_id: metadata.get(model_id, {}) for model_id in ids[: max(1, int(limit))]},
         )
 
+    def _json_get(self, url: str, timeout: int = 20, headers: dict[str, str] | None = None) -> Any:
+        return _json_get(url, timeout=timeout, headers=headers, transport=self.http_transport)
 
-def _json_get(url: str, timeout: int = 20, headers: dict[str, str] | None = None) -> Any:
-    return json.loads(_text_get(url, timeout=timeout, accept="application/json", headers=headers))
+    def _text_get(
+        self,
+        url: str,
+        timeout: int = 20,
+        accept: str = "text/html,application/json,text/plain",
+        headers: dict[str, str] | None = None,
+    ) -> str:
+        return _text_get(url, timeout=timeout, accept=accept, headers=headers, transport=self.http_transport)
+
+
+def _json_get(
+    url: str,
+    timeout: int = 20,
+    headers: dict[str, str] | None = None,
+    transport: HttpTransport | None = None,
+) -> Any:
+    return json.loads(_text_get(url, timeout=timeout, accept="application/json", headers=headers, transport=transport))
 
 
 def _text_get(
@@ -980,10 +1000,12 @@ def _text_get(
     timeout: int = 20,
     accept: str = "text/html,application/json,text/plain",
     headers: dict[str, str] | None = None,
+    transport: HttpTransport | None = None,
 ) -> str:
+    transport = transport or UrllibHttpTransport()
     request_headers = {"Accept": accept, "User-Agent": "aiplane/0.1", **(headers or {})}
     request = Request(url, headers=request_headers)
-    with urlopen(request, timeout=timeout) as response:
+    with transport.open(request, timeout=timeout) as response:
         return response.read().decode("utf-8", errors="replace")
 
 

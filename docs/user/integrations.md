@@ -286,15 +286,30 @@ aiplane remote tunnel start --target gpu_workstation_ssh
 aiplane integrations export continue --endpoint http://localhost:11434/v1
 ```
 
+SSH target fields are validated before a command is rendered: hosts and forward hosts must be DNS names or IPv4/IPv6 addresses, usernames use restricted SSH account syntax, ports must be 1-65535, and the IDE endpoint must be an `http` or `https` URL without embedded credentials or a fragment. Option-like destinations are rejected.
+
 In the tunnel plan, `local_bind` is the address opened on your laptop,
 `remote_service` is what the remote SSH host can reach, and `ide_endpoint` is
 what Continue/Cline/Aider should use. This is normal SSH `-L` local forwarding;
+Tunnel start stores versioned process identity under `.aiplane/remote/`; status and stop verify that identity before signalling, so stale or reused PIDs are not treated as owned tunnel processes. Malformed state is preserved and stop fails closed.
+
 it does not require a reverse tunnel unless the network path only works in the
 opposite direction.
 
-## Other Plan And Export Targets
+## Export support tiers
 
-Continue is the first VS Code path, but the plan/export surface is broader:
+Release-blocking Tier-1 exports use contract version `1.0` and exact golden files:
+
+| Tier-1 target | Output | Verification |
+| --- | --- | --- |
+| Continue | YAML model, autocomplete, and embedding configuration | Golden file plus installed-wheel structure checks |
+| Aider | Shell environment and launch command | Golden file plus installed-wheel command checks |
+| Generic OpenAI-compatible | Neutral JSON endpoint/model payload | Golden file plus JSON parsing from the installed wheel |
+| Generic MCP | Common `mcpServers` JSON | Golden file plus a real initialize and `tools/list` stdio exchange |
+
+The installed-wheel verifier runs on Linux, macOS, and Windows CI. Cline, Zed, VS Code MCP, Continue MCP, and Cline MCP exporters remain available as advanced, unversioned conveniences; they do not block a developer-preview release. `aiplane integrations list` reports `support_tier` and `contract_version` explicitly.
+
+The broader plan/export surface remains available:
 
 ```bash
 aiplane integrations list

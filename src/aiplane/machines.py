@@ -2,19 +2,23 @@ from __future__ import annotations
 
 import json
 import platform
+import shlex
 import shutil
-import subprocess
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
-from urllib.error import URLError
-from urllib.parse import quote_plus
-from urllib.request import urlopen
 
+from .azure_cli import account_status as _az_account_status
+from .azure_cli import command_status as _az_command_status
+from .azure_cli import run_az as _run_az
+from .azure_inventory import AzureRetailPricing
+from .boundaries import CommandRunner, HttpTransport, SubprocessCommandRunner, UrllibHttpTransport
+from .persistence import atomic_write_text
 from .config import dump_yaml, parse_yaml
 from .hardware import HardwareManager
 from .model_catalog import ModelCatalog
 from .models import Profile
+from .network_validation import validate_port, validate_ssh_host, validate_ssh_user
 from .runtime_catalog import RuntimeCatalog
 
 AZURE_CLI_TIMEOUT_SECONDS = 10
@@ -124,8 +128,15 @@ AZURE_SKU_HINTS: dict[str, dict[str, Any]] = {
 
 
 class MachineManager:
-    def __init__(self, profile: Profile):
+    def __init__(
+        self,
+        profile: Profile,
+        command_runner: CommandRunner | None = None,
+        http_transport: HttpTransport | None = None,
+    ):
         self.profile = profile
+        self.command_runner = command_runner or SubprocessCommandRunner()
+        self.http_transport = http_transport or UrllibHttpTransport()
         self.config = profile.hardware or {}
 
     def export_machine(self, name: str, origin: str = "local", include_discovery: bool = False) -> dict[str, Any]:
@@ -256,7 +267,7 @@ class MachineManager:
         skus = []
         quota = {"method": "not_checked", "items": []}
         if azure_cli["cli_available"]:
-            completed = _run_az(command, verbosity=verbosity, az_event_sink=az_event_sink)
+            completed = _run_az(command, verbosity=verbosity, event_sink=az_event_sink, runner=self.command_runner)
             azure_cli["sku_query"] = _az_command_status(completed)
             if completed.returncode == 0 and completed.stdout.strip():
                 live_values = json.loads(completed.stdout)
@@ -283,7 +294,7 @@ class MachineManager:
                 for machine in skus
                 if isinstance(machine, dict)
             ]
-            pricing = _azure_retail_price_map(region, sku_names)
+            pricing = AzureRetailPricing(self.http_transport).prices(region, sku_names)
         candidates = []
         for machine in skus:
             fit = _machine_fit(machine, criteria)
@@ -343,7 +354,8 @@ class MachineManager:
         account = _run_az(
             ["az", "account", "show", "--output", "json"],
             verbosity=verbosity,
-            az_event_sink=az_event_sink,
+            event_sink=az_event_sink,
+            runner=self.command_runner,
         )
         status["account"] = _az_account_status(account)
         if run_sku_probe and region:
@@ -361,7 +373,8 @@ class MachineManager:
                     "json",
                 ],
                 verbosity=verbosity,
-                az_event_sink=az_event_sink,
+                event_sink=az_event_sink,
+                runner=self.command_runner,
             )
             status["sku_query"] = _az_command_status(query)
         return status
@@ -380,7 +393,7 @@ class MachineManager:
                 "items": [],
             }
         command = ["az", "vm", "list-usage", "--location", region, "--output", "json"]
-        completed = _run_az(command, verbosity=verbosity, az_event_sink=az_event_sink)
+        completed = _run_az(command, verbosity=verbosity, event_sink=az_event_sink, runner=self.command_runner)
         if completed.returncode != 0 or not completed.stdout.strip():
             return {
                 "method": "live",
@@ -538,8 +551,11 @@ class MachineManager:
         }
 
     def profile_remote_plan(self, name: str, host: str, user: str | None = None, port: int = 22) -> dict[str, Any]:
-        destination = f"{user + '@' if user else ''}{host}"
-        remote = f"aiplane hardware export-machine --profile {self.profile.name} --name {name}"
+        host = validate_ssh_host(host, "host")
+        user = validate_ssh_user(user, "user")
+        port = validate_port(port, "port")
+        destination = f"{user}@{host}" if user else host
+        remote = shlex.join(["aiplane", "hardware", "export-machine", "--profile", self.profile.name, "--name", name])
         return {
             "name": name,
             "mode": "ssh_remote_profile",
@@ -666,7 +682,7 @@ class MachineManager:
 
     def _write_discovery_cache(self, cache: dict[str, Any]) -> None:
         path = self._discovery_cache_path()
-        path.write_text(json.dumps(cache, indent=2), encoding="utf-8")
+        atomic_write_text(path, json.dumps(cache, indent=2))
 
     def _discovery_cache_path(self) -> Path:
         return self.profile.root / "machine-discovery-cache.json"
@@ -682,7 +698,7 @@ class MachineManager:
 
     def _write_config(self) -> None:
         path = self.profile.root / "hardware.yaml"
-        path.write_text(dump_yaml(self.config), encoding="utf-8")
+        atomic_write_text(path, dump_yaml(self.config))
 
 
 def validate_machine(machine: dict[str, Any]) -> dict[str, Any]:
@@ -750,112 +766,6 @@ def load_machine_profile(
     return {"name": machine_name, "machine": machine, "validation": validation}
 
 
-def _az_account_status(completed: subprocess.CompletedProcess[str]) -> dict[str, Any]:
-    if completed.returncode != 0:
-        return {
-            "ok": False,
-            "reason": f"az account show failed (exit {completed.returncode})",
-        }
-    try:
-        account = json.loads(completed.stdout or "{}")
-    except json.JSONDecodeError:
-        return {"ok": False, "reason": "az account show returned non-JSON output"}
-    if not isinstance(account, dict):
-        return {"ok": False, "reason": "az account show returned unexpected JSON shape"}
-    user = account.get("user") if isinstance(account.get("user"), dict) else {}
-    subscription_id = str(account.get("id") or "")
-    tenant_id = str(account.get("tenantId") or "")
-    user_name = str(user.get("name") or "")
-    subscription_name = str(account.get("name") or "")
-    return {
-        "ok": True,
-        "environment": account.get("environmentName"),
-        "state": account.get("state"),
-        "is_default": account.get("isDefault"),
-        "subscription_name": _redact_if_present(subscription_name),
-        "subscription_id": _redact_if_present(subscription_id),
-        "subscription_id_hint": _last4_hint(subscription_id),
-        "tenant_id": _redact_if_present(tenant_id),
-        "tenant_id_hint": _last4_hint(tenant_id),
-        "user_name": _redact_if_present(user_name),
-        "user_name_hint": _user_hint(user_name),
-        "user_type": user.get("type"),
-        "redacted": True,
-    }
-
-
-def _redact_if_present(value: str) -> str | None:
-    return "[redacted]" if value else None
-
-
-def _last4_hint(value: str) -> str | None:
-    return f"...{value[-4:]}" if len(value) >= 4 else None
-
-
-def _user_hint(value: str) -> str | None:
-    return "[redacted]" if value else None
-
-
-def _az_command_status(completed: subprocess.CompletedProcess[str]) -> dict[str, Any]:
-    return {
-        "ok": completed.returncode == 0 and bool((completed.stdout or "").strip()),
-        "returncode": completed.returncode,
-        "reason": (
-            "query succeeded"
-            if completed.returncode == 0 and (completed.stdout or "").strip()
-            else f"query failed or returned no output (exit {completed.returncode})"
-        ),
-    }
-
-
-class _AzTimeoutResult:
-    def __init__(self, command: list[str], timeout_seconds: int):
-        self.returncode = 124
-        self.stdout = ""
-        self.stderr = f"command timed out after {timeout_seconds}s: {' '.join(command)}"
-
-
-def _run_az(
-    command: list[str],
-    verbosity: int = 0,
-    az_event_sink: Callable[[dict[str, Any]], None] | None = None,
-):
-    if az_event_sink:
-        az_event_sink({"phase": "start", "command": command})
-    try:
-        completed = subprocess.run(
-            command,
-            text=True,
-            capture_output=True,
-            check=False,
-            timeout=AZURE_CLI_TIMEOUT_SECONDS,
-        )
-        if az_event_sink:
-            event: dict[str, Any] = {
-                "phase": "complete",
-                "command": command,
-                "returncode": completed.returncode,
-            }
-            if verbosity >= 1:
-                event["stdout"] = completed.stdout
-                event["stderr"] = completed.stderr
-            az_event_sink(event)
-        return completed
-    except subprocess.TimeoutExpired:
-        timeout = _AzTimeoutResult(command, AZURE_CLI_TIMEOUT_SECONDS)
-        if az_event_sink:
-            event = {
-                "phase": "complete",
-                "command": command,
-                "returncode": timeout.returncode,
-            }
-            if verbosity >= 1:
-                event["stdout"] = timeout.stdout
-                event["stderr"] = timeout.stderr
-            az_event_sink(event)
-        return timeout
-
-
 def _read_payload(path: Path) -> dict[str, Any]:
     text = path.read_text(encoding="utf-8")
     try:
@@ -899,98 +809,6 @@ def _azure_sku_restrictions(item: dict[str, Any]) -> list[dict[str, Any]]:
             }
         )
     return rows
-
-
-def _azure_retail_price_map(region: str, skus: list[str]) -> dict[str, Any]:
-    unique_skus = sorted({sku for sku in skus if sku})
-    if not unique_skus:
-        return {"method": "skipped", "ok": False, "reason": "no SKU names available", "items": {}}
-    sku_filter = " or ".join(f"armSkuName eq '{sku}'" for sku in unique_skus)
-    filter_expr = (
-        "serviceName eq 'Virtual Machines' and "
-        f"armRegionName eq '{region}' and "
-        "priceType eq 'Consumption' and "
-        f"({sku_filter})"
-    )
-    encoded_filter = quote_plus(filter_expr)
-    url = f"https://prices.azure.com/api/retail/prices?$filter={encoded_filter}"
-    try:
-        with urlopen(url, timeout=4) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-    except URLError as exc:
-        return {
-            "method": "azure_retail_prices_api",
-            "ok": False,
-            "reason": str(exc),
-            "items": {},
-            "failed_skus": unique_skus,
-        }
-    except Exception as exc:
-        return {
-            "method": "azure_retail_prices_api",
-            "ok": False,
-            "reason": str(exc),
-            "items": {},
-            "failed_skus": unique_skus,
-        }
-
-    values = payload.get("Items", []) if isinstance(payload, dict) else []
-    if not isinstance(values, list):
-        return {
-            "method": "azure_retail_prices_api",
-            "ok": False,
-            "reason": "unexpected retail prices response shape",
-            "items": {},
-            "failed_skus": unique_skus,
-        }
-    best_by_sku: dict[str, dict[str, Any]] = {}
-    for item in values:
-        if not isinstance(item, dict):
-            continue
-        arm_sku = str(item.get("armSkuName") or "")
-        if not arm_sku or arm_sku not in unique_skus:
-            continue
-        unit_price = _float(item.get("unitPrice"))
-        if unit_price is None:
-            continue
-        meter_name = str(item.get("meterName") or "")
-        if "spot" in meter_name.lower():
-            continue
-        existing = best_by_sku.get(arm_sku)
-        if existing is None or (_float(existing.get("unitPrice")) or 0.0) > unit_price:
-            best_by_sku[arm_sku] = item
-
-    items: dict[str, dict[str, Any]] = {}
-    for sku, selected in best_by_sku.items():
-        unit_of_measure = str(selected.get("unitOfMeasure") or "")
-        items[sku] = {
-            "currency": selected.get("currencyCode"),
-            "unit_price": _float(selected.get("unitPrice")),
-            "unit_of_measure": unit_of_measure,
-            "unit": _normalize_price_unit(unit_of_measure),
-            "meter_name": selected.get("meterName"),
-            "product_name": selected.get("productName"),
-            "sku_name": selected.get("skuName"),
-            "source": "azure_retail_prices_api",
-        }
-    return {
-        "method": "azure_retail_prices_api",
-        "ok": bool(items),
-        "items": items,
-        "missing_skus": [sku for sku in unique_skus if sku not in items],
-        "failed_skus": [],
-    }
-
-
-def _normalize_price_unit(unit_of_measure: str) -> str:
-    lowered = unit_of_measure.strip().lower()
-    if "hour" in lowered:
-        return "per_hour"
-    if "month" in lowered:
-        return "per_month"
-    if "second" in lowered:
-        return "per_second"
-    return unit_of_measure or "unknown"
 
 
 def _discovery_cache_key(provider: str, region: str, criteria: dict[str, Any]) -> str:

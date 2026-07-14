@@ -26,3 +26,271 @@ jobs:
 
       - name: Quality gate
         run: make check
+
+  compatibility:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install dev dependencies
+        run: python -m pip install ".[dev]"
+
+      - name: Validate supported Python and static wheel
+        run: python -m pytest -q tests/test_contracts.py tests/test_packaging.py
+
+  install-channels:
+    name: Install channels (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-14, windows-latest]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Install packaging tools
+        run: python -m pip install pipx pytest setuptools==83.0.0
+
+      - name: Validate synthetic platform contracts
+        run: python -m pytest -q tests/test_platform_support.py
+
+      - name: Build wheel artifact
+        run: python -m pip wheel . --no-deps --no-build-isolation --wheel-dir dist
+
+      - name: Validate pip, pipx, and uv tool lifecycle
+        run: python scripts/verify_install_channels.py dist
+
+  release-gate:
+    name: Release gate
+    if: ${{ always() }}
+    needs: [checks, compatibility, install-channels]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every release-path check
+        env:
+          CHECKS: ${{ needs.checks.result }}
+          COMPATIBILITY: ${{ needs.compatibility.result }}
+          INSTALL_CHANNELS: ${{ needs.install-channels.result }}
+        run: |
+          test "$CHECKS" = success
+          test "$COMPATIBILITY" = success
+          test "$INSTALL_CHANNELS" = success
+
+  classify-main-push:
+    name: Classify main push
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    needs: [release-gate]
+    runs-on: ubuntu-latest
+    outputs:
+      mode: ${{ steps.classify.outputs.mode }}
+      current_version: ${{ steps.classify.outputs.current_version }}
+      next_version: ${{ steps.classify.outputs.next_version }}
+      tag: ${{ steps.classify.outputs.tag }}
+      reason: ${{ steps.classify.outputs.reason }}
+    steps:
+      - name: Check out main with full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Classify version action
+        id: classify
+        run: python scripts/version.py classify-ci --github-output
+
+  ci-version-bump-and-tag:
+    name: CI patch version and tag
+    if: ${{ needs.classify-main-push.outputs.mode == 'ci_patch_after_merge' }}
+    needs: [classify-main-push]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.result.outputs.version }}
+      tag: ${{ steps.result.outputs.tag }}
+      version_commit: ${{ steps.result.outputs.version_commit }}
+      source_commit: ${{ steps.result.outputs.source_commit }}
+      version_source: ${{ steps.result.outputs.version_source }}
+    steps:
+      - name: Check out main with full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ github.token }}
+
+      - name: Configure release bot identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Apply next patch version
+        run: python scripts/version.py set "${{ needs.classify-main-push.outputs.next_version }}"
+
+      - name: Commit version bump
+        run: |
+          git add pyproject.toml src/aiplane/__init__.py
+          git commit -m "chore(release): v${{ needs.classify-main-push.outputs.next_version }} [skip ci-version]"
+
+      - name: Create CI artifact tag
+        run: python scripts/version.py tag --ci-artifact
+
+      - name: Push version commit and tag
+        run: |
+          git push origin HEAD:main
+          git push origin "${{ needs.classify-main-push.outputs.tag }}"
+
+      - name: Emit resolved version commit
+        id: result
+        run: |
+          echo "version=${{ needs.classify-main-push.outputs.next_version }}" >> "$GITHUB_OUTPUT"
+          echo "tag=${{ needs.classify-main-push.outputs.tag }}" >> "$GITHUB_OUTPUT"
+          echo "version_commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "source_commit=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          echo "version_source=ci_patch_after_merge" >> "$GITHUB_OUTPUT"
+
+  direct-version-tag:
+    name: Ensure direct version tag
+    if: ${{ needs.classify-main-push.outputs.mode == 'maintainer_direct_main_version_commit' }}
+    needs: [classify-main-push]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.result.outputs.version }}
+      tag: ${{ steps.result.outputs.tag }}
+      version_commit: ${{ steps.result.outputs.version_commit }}
+      source_commit: ${{ steps.result.outputs.source_commit }}
+      version_source: ${{ steps.result.outputs.version_source }}
+    steps:
+      - name: Check out direct version commit
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ github.token }}
+
+      - name: Configure release bot identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Ensure CI artifact tag exists
+        run: python scripts/version.py tag --ci-artifact
+
+      - name: Push tag
+        run: git push origin "${{ needs.classify-main-push.outputs.tag }}"
+
+      - name: Emit resolved version commit
+        id: result
+        run: |
+          echo "version=${{ needs.classify-main-push.outputs.current_version }}" >> "$GITHUB_OUTPUT"
+          echo "tag=${{ needs.classify-main-push.outputs.tag }}" >> "$GITHUB_OUTPUT"
+          echo "version_commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "source_commit=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          echo "version_source=maintainer_direct_main_version_commit" >> "$GITHUB_OUTPUT"
+
+  main-versioned-wheel:
+    name: Main versioned wheel artifact
+    if: ${{ needs.ci-version-bump-and-tag.result == 'success' || needs.direct-version-tag.result == 'success' }}
+    needs: [ci-version-bump-and-tag, direct-version-tag]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Resolve versioned commit
+        id: resolved
+        run: |
+          if [ "${{ needs.ci-version-bump-and-tag.result }}" = "success" ]; then
+            echo "version=${{ needs.ci-version-bump-and-tag.outputs.version }}" >> "$GITHUB_OUTPUT"
+            echo "tag=${{ needs.ci-version-bump-and-tag.outputs.tag }}" >> "$GITHUB_OUTPUT"
+            echo "version_commit=${{ needs.ci-version-bump-and-tag.outputs.version_commit }}" >> "$GITHUB_OUTPUT"
+            echo "source_commit=${{ needs.ci-version-bump-and-tag.outputs.source_commit }}" >> "$GITHUB_OUTPUT"
+            echo "version_source=${{ needs.ci-version-bump-and-tag.outputs.version_source }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${{ needs.direct-version-tag.outputs.version }}" >> "$GITHUB_OUTPUT"
+            echo "tag=${{ needs.direct-version-tag.outputs.tag }}" >> "$GITHUB_OUTPUT"
+            echo "version_commit=${{ needs.direct-version-tag.outputs.version_commit }}" >> "$GITHUB_OUTPUT"
+            echo "source_commit=${{ needs.direct-version-tag.outputs.source_commit }}" >> "$GITHUB_OUTPUT"
+            echo "version_source=${{ needs.direct-version-tag.outputs.version_source }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check out versioned commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.resolved.outputs.version_commit }}
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install packaging tools
+        run: python -m pip install build
+
+      - name: Verify tag points at versioned commit
+        run: |
+          test "$(git rev-parse '${{ steps.resolved.outputs.tag }}^{}')" = "${{ steps.resolved.outputs.version_commit }}"
+          test "$(python scripts/version.py current --plain)" = "${{ steps.resolved.outputs.version }}"
+
+      - name: Build main versioned wheel
+        run: python -m build --wheel --outdir artifacts
+
+      - name: Validate the exact versioned wheel
+        run: python scripts/verify_install_channels.py artifacts --channel pip
+
+      - name: Write checksum and provenance
+        env:
+          VERSION: ${{ steps.resolved.outputs.version }}
+          TAG: ${{ steps.resolved.outputs.tag }}
+          VERSION_COMMIT: ${{ steps.resolved.outputs.version_commit }}
+          SOURCE_COMMIT: ${{ steps.resolved.outputs.source_commit }}
+          VERSION_SOURCE: ${{ steps.resolved.outputs.version_source }}
+        run: |
+          cd artifacts
+          sha256sum aiplane-*.whl > SHA256SUMS
+          sha256sum --check SHA256SUMS
+          wheel="$(ls aiplane-*.whl)"
+          python - <<'PY'
+          import json, os, pathlib
+          payload = {
+              "version": os.environ["VERSION"],
+              "tag": os.environ["TAG"],
+              "version_source": os.environ["VERSION_SOURCE"],
+              "source_commit": os.environ["SOURCE_COMMIT"],
+              "version_commit": os.environ["VERSION_COMMIT"],
+              "ref": "refs/heads/main",
+              "workflow_run_id": os.environ["GITHUB_RUN_ID"],
+              "wheel": next(path.name for path in pathlib.Path('.').glob('aiplane-*.whl')),
+              "sha256sums": "SHA256SUMS",
+          }
+          pathlib.Path("provenance.json").write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+          PY
+
+      - name: Upload versioned main wheel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aiplane-wheel-v${{ steps.resolved.outputs.version }}-${{ steps.resolved.outputs.tag }}-${{ steps.resolved.outputs.version_commit }}
+          path: artifacts/
+          if-no-files-found: error
+          retention-days: 30
