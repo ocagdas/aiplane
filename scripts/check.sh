@@ -7,7 +7,7 @@ case "$MODE" in
   full)
     scripts/format.sh check
     python -m ruff check src tests
-    python -m pytest -q
+    python -m pytest -q -n "${AIPLANE_TEST_WORKERS:-4}" --dist loadfile
     ;;
   quick)
     scripts/format.sh check

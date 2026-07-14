@@ -15,8 +15,8 @@ import uuid
 from .agents import AgentManager
 from .approvals import ApprovalHandler
 from .audit import AuditLogger
+from .boundaries import CommandRunner, SubprocessCommandRunner
 from .models import AuditEvent
-from .benchmark_tools import BenchmarkToolManager
 from .code_tasks import CodeTaskRunner
 from .config import (
     create_profile,
@@ -28,11 +28,14 @@ from .config import (
     resolve_output_format,
     resolve_output_verbosity,
 )
-from .deploy import DeployManager
-from .env import EnvironmentManager
 from .hardware import HardwareManager
 from .cli_config import add_config_parser, handle_config_command
+from .cli_deploy_remote import add_deploy_remote_parsers, handle_deploy_remote_command
+from .cli_hardware import add_hardware_machine_parsers, handle_hardware_machine_command
+from .cli_governance import add_governance_parsers, handle_governance_command
 from .cli_integrations import add_integrations_parser, handle_integrations_command
+from .cli_stacks import add_stack_parsers, handle_stack_command
+from .cli_setup import add_setup_parsers, handle_setup_command
 from .cli_profiles import add_profiles_parser, handle_profiles_command
 from .cli_models import add_models_parser, handle_models_command, refresh_cli_payload
 from .cli_support import (
@@ -44,10 +47,7 @@ from .cli_support import (
 from .integrations import IntegrationManager
 from .integration_contracts import ALL_INTEGRATION_TOOLS
 from .local_doctor import local_coding_doctor, local_coding_doctor_text
-from .machines import MachineManager
-from .mcp import mcp_manifest, serve_stdio
 from .model_catalog import ModelCatalog
-from .orchestrators import OrchestratorCatalog
 from .output import json_dumps as _json
 from .policy import PolicyEngine
 from .providers import (
@@ -55,12 +55,12 @@ from .providers import (
     SUPPORTED_CATALOG_ADAPTERS,
     SUPPORTED_ENDPOINT_FAMILIES,
 )
-from .remote import RemoteManager
-from .secrets import CredentialStore
 from .router import Router
 from .runtime_catalog import RuntimeCatalog
-from .stacks import StackManager
-from .tools import ToolExecutor, ToolchainManager
+from .tools import ToolExecutor
+
+
+_COMMAND_RUNNER: CommandRunner = SubprocessCommandRunner()
 
 
 class HelpFormatter(argparse.ArgumentDefaultsHelpFormatter, argparse.RawDescriptionHelpFormatter):
@@ -417,782 +417,18 @@ def _main(argv: list[str] | None = None) -> int:
         help="Arguments passed to the configured tool; captures options such as -m or -s",
     )
 
-    hardware_cmd = _command(
+    add_hardware_machine_parsers(
         subparsers,
-        "hardware",
-        "Inspect hardware and choose resource templates",
-        "Discover local CPU/RAM/GPU resources, manage active hardware config, and recommend models.",
-        "Examples:\n  aiplane hardware discover\n  aiplane hardware templates\n  aiplane hardware use cpu_laptop --set memory_gb=32\n  aiplane hardware active\n  aiplane hardware recommend",
-    )
-    hardware_sub = hardware_cmd.add_subparsers(dest="hardware_command", required=True, metavar="command")
-    hardware_show = hardware_sub.add_parser(
-        "show",
-        help="Show hardware summary and effective selection",
-        description="Show the active hardware selection and effective machine. Add --list-types to list available template types.",
+        command_factory=_command,
+        profile_arg=_profile_arg,
         formatter_class=HelpFormatter,
-        allow_abbrev=False,
     )
-    _profile_arg(hardware_show)
-    hardware_show.add_argument(
-        "--format",
-        choices=["text", "json"],
-        default=None,
-        help="Output format. JSON is full payload; text is compact table view.",
-    )
-    hardware_show.add_argument(
-        "--verbosity",
-        type=int,
-        choices=[0],
-        default=0,
-        help="Output detail level. 0 (default) keeps a short summary without template catalog values.",
-    )
-    hardware_show.add_argument(
-        "--list-types",
-        action="store_true",
-        help="Show available hardware template types and exit.",
-    )
-    hardware_templates = hardware_sub.add_parser(
-        "templates",
-        help="List immutable hardware templates",
-        description="Show hardware templates that can be copied into the active selected config.",
-        formatter_class=HelpFormatter,
-        allow_abbrev=False,
-    )
-    _profile_arg(hardware_templates)
-    hardware_schema = hardware_sub.add_parser(
-        "schema",
-        help="Show machine property schema",
-        description="Show the editable machine fields used for hardware-aware recommendation: stock tag/SKU, CPU, RAM, GPU, VRAM, accelerator APIs, OS, placement, and substrate.",
-        formatter_class=HelpFormatter,
-        allow_abbrev=False,
-        epilog="Example:\n  aiplane hardware schema",
-    )
-    _profile_arg(hardware_schema)
-    hardware_active = hardware_sub.add_parser(
-        "active",
-        help="Show selected hardware config",
-        description="Show the active copied/customized hardware config and template origin.",
-        formatter_class=HelpFormatter,
-        allow_abbrev=False,
-    )
-    _profile_arg(hardware_active)
-    hardware_use = hardware_sub.add_parser(
-        "use",
-        help="Copy a template into active hardware config",
-        description="Select a hardware template by copying it into the mutable active config. Overrides do not modify the template.",
-        formatter_class=HelpFormatter,
-        allow_abbrev=False,
-        epilog="Example:\n  aiplane hardware use nvidia_consumer_gpu --set vram_gb=16 --set memory_gb=64",
-    )
-    _profile_arg(hardware_use)
-    hardware_use.add_argument("template", help="Template name from aiplane hardware templates")
-    hardware_use.add_argument(
-        "--set",
-        dest="settings",
-        action="append",
-        default=[],
-        help="Override a copied value as key=value; can be repeated",
-    )
-    hardware_set = hardware_sub.add_parser(
-        "set",
-        help="Customize active hardware config",
-        description="Update values in the active selected hardware config without changing the source template.",
-        formatter_class=HelpFormatter,
-        allow_abbrev=False,
-        epilog="Example:\n  aiplane hardware set memory_gb=64 vram_gb=24",
-    )
-    _profile_arg(hardware_set)
-    hardware_set.add_argument(
-        "settings",
-        nargs="+",
-        help="One or more key=value updates, such as memory_gb=64 vram_gb=24",
-    )
-    hardware_discover = hardware_sub.add_parser(
-        "discover",
-        help="Probe local CPU/RAM/GPU resources",
-        description="Discover local hardware and show closest matching hardware templates. Optionally select the closest template.",
-        formatter_class=HelpFormatter,
-        allow_abbrev=False,
-    )
-    _profile_arg(hardware_discover)
-    hardware_discover.add_argument(
-        "--select-closest",
-        action="store_true",
-        help="Update active hardware selection to the closest discovered template",
-    )
-    hardware_discover.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Preview the closest-template selection without writing hardware.yaml",
-    )
-    hardware_clear = hardware_sub.add_parser(
-        "clear",
-        help="Reset selected hardware to local_auto",
-        description="Clear the mutable selected hardware state and reset the profile to local_auto. Raw discovery is not cached.",
-        formatter_class=HelpFormatter,
-        allow_abbrev=False,
-    )
-    _profile_arg(hardware_clear)
-    hardware_clear.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Preview the reset without writing hardware.yaml",
-    )
-    hardware_doctor = hardware_sub.add_parser(
-        "doctor",
-        help="Check hardware/model fit",
-        description="Check whether configured local models fit the discovered or selected hardware.",
-        formatter_class=HelpFormatter,
-        allow_abbrev=False,
-    )
-    _profile_arg(hardware_doctor)
-    hardware_doctor.add_argument(
-        "--model",
-        help="Optional model alias to check, such as a discovered or promoted alias",
-    )
-    hardware_recommend = hardware_sub.add_parser(
-        "recommend",
-        help="Recommend models for active/discovered hardware",
-        description="Return hardware- and policy-aware model recommendations using hardware fit, runtime compatibility, and ranking rationale.",
-        formatter_class=HelpFormatter,
-        allow_abbrev=False,
-    )
-    _profile_arg(hardware_recommend)
-    hardware_recommend.add_argument(
-        "--include-not-recommended",
-        action="store_true",
-        help="Also show models below minimum local RAM/VRAM targets",
-    )
-    hardware_export = hardware_sub.add_parser(
-        "export-machine",
-        help="Export this machine profile",
-        description="Probe this machine and print a normalized machine profile that can be imported on another control PC.",
-        formatter_class=HelpFormatter,
-        allow_abbrev=False,
-        epilog="Example:\n  aiplane hardware export-machine --name gpu_box_01 > gpu_box_01.machine.yaml",
-    )
-    _profile_arg(hardware_export)
-    hardware_export.add_argument(
-        "--name",
-        required=True,
-        help="Machine name/label to embed in the exported profile",
-    )
-    hardware_export.add_argument(
-        "--origin",
-        default="local",
-        help="Origin label, such as local, onprem, azure_vm, ssh_discovered, or manual",
-    )
-    hardware_export.add_argument("--format", choices=["json", "yaml"], default="yaml", help="Export format")
-    hardware_export.add_argument(
-        "--include-discovery",
-        action="store_true",
-        help="Include raw discovery details in the export",
-    )
-
-    machines_cmd = _command(
+    add_stack_parsers(
         subparsers,
-        "machines",
-        "Manage self-managed machine inventory",
-        "Import, list, recommend, and discover self-managed machines that can run local runtimes on local PCs, shared workstations, or cloud VMs.",
-        "Examples:\n  aiplane machines import gpu_box_01.machine.yaml\n  aiplane machines list\n  aiplane machines recommend --model MODEL_ALIAS --runtime vllm\n  aiplane machines discover azure --region uksouth --workload inference_large --gpu-vendor nvidia --min-vram-gb 48",
-    )
-    machines_sub = machines_cmd.add_subparsers(dest="machines_command", required=True, metavar="command")
-    machines_list = machines_sub.add_parser(
-        "list",
-        help="List imported machines",
-        description="List self-managed machines registered in the profile hardware inventory.",
+        command_factory=_command,
+        profile_arg=_profile_arg,
         formatter_class=HelpFormatter,
-        allow_abbrev=False,
     )
-    _profile_arg(machines_list)
-    machines_show = machines_sub.add_parser(
-        "show",
-        help="Show one imported machine",
-        description="Show one machine profile from the self-managed inventory.",
-        formatter_class=HelpFormatter,
-        allow_abbrev=False,
-    )
-    _profile_arg(machines_show)
-    machines_show.add_argument("name", help="Machine name")
-    machines_validate = machines_sub.add_parser(
-        "validate",
-        help="Validate imported machine profiles",
-        description="Validate required machine profile fields for one machine or all imported machines.",
-        formatter_class=HelpFormatter,
-        allow_abbrev=False,
-    )
-    _profile_arg(machines_validate)
-    machines_validate.add_argument("name", nargs="?", help="Optional machine name")
-    machines_cache_list = machines_sub.add_parser(
-        "cache-list",
-        help="List machine discovery cache entries",
-        description="Inspect cached discovery results, including whether each entry came from live provider data or offline hints.",
-        formatter_class=HelpFormatter,
-        allow_abbrev=False,
-    )
-    _profile_arg(machines_cache_list)
-    machines_cache_clear = machines_sub.add_parser(
-        "cache-clear",
-        help="Clear machine discovery cache",
-        description="Clear all cached machine discovery results, or one cache key.",
-        formatter_class=HelpFormatter,
-        allow_abbrev=False,
-    )
-    _profile_arg(machines_cache_clear)
-    machines_cache_clear.add_argument("--key", help="Specific cache key to clear")
-    machines_azure_status = machines_sub.add_parser(
-        "azure-status",
-        help="Check Azure CLI login/query status",
-        description="Report whether az is installed, az account show works, and optionally whether VM SKU query works for a region.",
-        formatter_class=HelpFormatter,
-        allow_abbrev=False,
-    )
-    _profile_arg(machines_azure_status)
-    machines_azure_status.add_argument("--region", help="Region for optional SKU query probe, such as uksouth")
-    machines_azure_status.add_argument(
-        "--sku-query",
-        action="store_true",
-        help="Also run az vm list-skus as a live query probe",
-    )
-    machines_azure_status.add_argument(
-        "--verbosity",
-        type=int,
-        default=0,
-        choices=[0, 1],
-        help="Azure CLI progress verbosity: 0 shows active command with dot progress, 1 also logs every command and redacted outputs",
-    )
-    machines_import = machines_sub.add_parser(
-        "import",
-        help="Import exported machine profile",
-        description="Import a machine profile created by aiplane hardware export-machine. Overrides are applied to the imported copy only.",
-        formatter_class=HelpFormatter,
-        allow_abbrev=False,
-    )
-    _profile_arg(machines_import)
-    machines_import.add_argument("path", help="Path to .machine.yaml or JSON export")
-    machines_import.add_argument("--name", help="Override imported machine name")
-    machines_import.add_argument(
-        "--set",
-        dest="settings",
-        action="append",
-        default=[],
-        help="Override a machine field as key=value, such as memory_gb=128 or vram_gb=48; can be repeated",
-    )
-    machines_recommend = machines_sub.add_parser(
-        "recommend",
-        help="Recommend machines for model/runtime/workload",
-        description="Rank imported machines against a model, runtime, or workload class.",
-        formatter_class=HelpFormatter,
-        allow_abbrev=False,
-    )
-    _profile_arg(machines_recommend)
-    machines_recommend.add_argument("--model", help="Configured model alias, such as a discovered or promoted alias")
-    machines_recommend.add_argument("--runtime", help="Runtime name, such as ollama, vllm, llamacpp, or tgi")
-    machines_recommend.add_argument(
-        "--workload",
-        help="Workload class, such as inference_large, training_finetune, compile_build, or media_generation",
-    )
-    machines_recommend.add_argument("--limit", type=int, help="Maximum machines to return")
-    machines_discover = machines_sub.add_parser(
-        "discover",
-        help="Discover machine candidates from a provider",
-        description="Discover machine candidates from a provider catalog. Azure is the first supported provider.",
-        formatter_class=HelpFormatter,
-        allow_abbrev=False,
-    )
-    _profile_arg(machines_discover)
-    machines_discover.add_argument("provider", choices=["azure"], help="Machine provider to discover")
-    machines_discover.add_argument("--region", required=True, help="Provider region, such as uksouth")
-    machines_discover.add_argument("--workload", help="Workload class filter")
-    machines_discover.add_argument("--model", help="Configured model alias filter")
-    machines_discover.add_argument("--gpu-vendor", help="GPU vendor filter, such as nvidia, amd, intel, apple, or none")
-    machines_discover.add_argument("--min-cpu-cores", type=float, help="Minimum CPU cores filter")
-    machines_discover.add_argument("--min-ram-gb", type=float, help="Minimum RAM (GB) filter")
-    machines_discover.add_argument("--min-vram-gb", type=float, help="Minimum VRAM (GB) filter")
-    machines_discover.add_argument("--limit", type=int, default=20, help="Maximum candidates to return")
-    machines_discover.add_argument(
-        "--verbosity",
-        type=int,
-        default=0,
-        choices=[0, 1],
-        help="Azure CLI progress verbosity: 0 shows active command with dot progress, 1 also logs every command and redacted outputs",
-    )
-    machines_import_azure = machines_sub.add_parser(
-        "import-azure-sku",
-        help="Import an Azure SKU as a machine",
-        description="Create a self-managed machine entry from an Azure VM SKU hint. Verify exact quota/availability before provisioning.",
-        formatter_class=HelpFormatter,
-        allow_abbrev=False,
-    )
-    _profile_arg(machines_import_azure)
-    machines_import_azure.add_argument("sku", help="Azure VM SKU, such as Standard_NC40ads_H100_v5")
-    machines_import_azure.add_argument("--region", required=True, help="Azure region")
-    machines_import_azure.add_argument("--name", help="Machine name to create")
-    machines_import_azure.add_argument(
-        "--set",
-        dest="settings",
-        action="append",
-        default=[],
-        help="Override a machine field as key=value",
-    )
-    machines_profile_remote = machines_sub.add_parser(
-        "profile-remote-plan",
-        help="Plan remote profiling over SSH",
-        description="Render the commands needed to run aiplane on a remote self-managed machine and import the result locally.",
-        formatter_class=HelpFormatter,
-        allow_abbrev=False,
-    )
-    _profile_arg(machines_profile_remote)
-    machines_profile_remote.add_argument("--name", required=True, help="Machine name to assign to the remote export")
-    machines_profile_remote.add_argument("--host", required=True, help="Remote hostname or IP")
-    machines_profile_remote.add_argument("--user", help="SSH username")
-    machines_profile_remote.add_argument("--port", type=int, default=22, help="SSH port")
-
-    orchestrators_cmd = _command(
-        subparsers,
-        "orchestrators",
-        "Inspect agent/workflow orchestrator options",
-        "List, inspect, and health-check orchestrator frameworks such as LangGraph, CrewAI, AutoGen, and OpenHands. Operational setup happens through stacks.",
-        "Examples:\n  aiplane orchestrators list\n  aiplane orchestrators show langgraph\n  aiplane orchestrators setup langgraph --runtime ollama --model MODEL_ALIAS --dry-run\n  aiplane orchestrators doctor langgraph",
-    )
-    orchestrators_sub = orchestrators_cmd.add_subparsers(dest="orchestrators_command", required=True, metavar="command")
-    orchestrators_list = orchestrators_sub.add_parser(
-        "list",
-        help="List supported orchestrators",
-        description="List known orchestrator frameworks and where they fit. Filter by provider/runtime or group by provider/runtime for discovery.",
-        formatter_class=HelpFormatter,
-        allow_abbrev=False,
-        epilog="Examples:\n  aiplane orchestrators list\n  aiplane orchestrators list --provider ollama\n  aiplane orchestrators list --runtime ollama --runtime vllm\n  aiplane orchestrators list --group-by provider",
-    )
-    _profile_arg(orchestrators_list)
-    orchestrators_list.add_argument(
-        "--provider",
-        action="append",
-        default=[],
-        help="Only show orchestrators compatible with this provider; can be repeated",
-    )
-    orchestrators_list.add_argument(
-        "--runtime",
-        action="append",
-        default=[],
-        help="Only show orchestrators compatible with all listed runtimes; can be repeated",
-    )
-    orchestrators_list.add_argument(
-        "--group-by",
-        choices=["provider", "runtime"],
-        help="Group orchestrators by compatible provider or runtime",
-    )
-    orchestrators_show = orchestrators_sub.add_parser(
-        "show",
-        help="Show one orchestrator",
-        description="Show one orchestrator definition and any profile config.",
-        formatter_class=HelpFormatter,
-        allow_abbrev=False,
-    )
-    _profile_arg(orchestrators_show)
-    orchestrators_show.add_argument(
-        "name",
-        help="Orchestrator name, such as langgraph, crewai, autogen, or openhands",
-    )
-    orchestrators_setup = orchestrators_sub.add_parser(
-        "setup",
-        help="Configure one orchestrator",
-        description="Write profile-specific orchestrator settings to orchestrators.yaml. Use --dry-run to preview without writing or installing.",
-        formatter_class=HelpFormatter,
-        allow_abbrev=False,
-        epilog="Examples:\n  aiplane orchestrators setup langgraph --runtime ollama --model MODEL_ALIAS --dry-run\n  aiplane orchestrators setup langgraph --runtime ollama --model MODEL_ALIAS --approval-mode ask\n  aiplane orchestrators setup langgraph --runtime vllm --model MODEL_ALIAS --endpoint http://localhost:8000/v1 --limit timeout=30m --tool shell=guarded",
-    )
-    _profile_arg(orchestrators_setup)
-    orchestrators_setup.add_argument(
-        "name",
-        help="Orchestrator name, such as langgraph, crewai, autogen, or openhands",
-    )
-    orchestrators_setup.add_argument(
-        "--runtime",
-        help="Runtime to pair with the orchestrator, such as ollama or vllm",
-    )
-    orchestrators_setup.add_argument("--model", help="Configured model alias to pair with the orchestrator")
-    orchestrators_setup.add_argument("--endpoint", help="Endpoint URL to pass to the orchestrator config")
-    orchestrators_setup.add_argument(
-        "--environment",
-        help="Environment mode to use, such as system, venv, conda, or docker",
-    )
-    orchestrators_setup.add_argument(
-        "--approval-mode",
-        help="Free-form approval mode hint, such as ask, guarded, or auto",
-    )
-    orchestrators_setup.add_argument(
-        "--limit",
-        action="append",
-        default=[],
-        help="Pass-through limit key=value, such as timeout=30m; can be repeated",
-    )
-    orchestrators_setup.add_argument(
-        "--tool",
-        action="append",
-        default=[],
-        help="Pass-through tool policy key=value, such as shell=guarded; can be repeated",
-    )
-    orchestrators_setup.add_argument(
-        "--install",
-        action="store_true",
-        help="Also install the orchestrator packages into the selected environment",
-    )
-    orchestrators_setup.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Preview actions without writing orchestrators.yaml or installing packages",
-    )
-    orchestrators_doctor = orchestrators_sub.add_parser(
-        "doctor",
-        help="Check orchestrator config/install state",
-        description="Check that an orchestrator is known, configured, and that its Python packages are importable in the current Python process.",
-        formatter_class=HelpFormatter,
-        allow_abbrev=False,
-    )
-    _profile_arg(orchestrators_doctor)
-    orchestrators_doctor.add_argument("name", help="Orchestrator name")
-
-    stacks_cmd = _command(
-        subparsers,
-        "stacks",
-        "Plan orchestrator/runtime/model/machine deployments",
-        "Bind an optional orchestrator, runtime, model, machine, and access policy into a stack that can be planned, checked, exported, and later deployed.",
-        "Examples:\n  aiplane stacks setup coding_agents --orchestrator langgraph --runtime vllm --model MODEL_ALIAS --machine gpu_box_01 --dry-run\n  aiplane stacks plan coding_agents\n  aiplane stacks export continue coding_agents",
-    )
-    stacks_sub = stacks_cmd.add_subparsers(dest="stacks_command", required=True, metavar="command")
-    stacks_list = stacks_sub.add_parser(
-        "list",
-        help="List stacks",
-        description="List configured model/runtime/machine stacks.",
-        formatter_class=HelpFormatter,
-        allow_abbrev=False,
-    )
-    _profile_arg(stacks_list)
-    stacks_show = stacks_sub.add_parser(
-        "show",
-        help="Show one stack",
-        description="Show one stack definition.",
-        formatter_class=HelpFormatter,
-        allow_abbrev=False,
-    )
-    _profile_arg(stacks_show)
-    stacks_show.add_argument("name", help="Stack name")
-    stacks_setup = stacks_sub.add_parser(
-        "setup",
-        help="Write or preview a stack",
-        description="Persist an orchestrator + runtime + model + machine + access binding in hardware.yaml. Use --dry-run to preview without writing.",
-        formatter_class=HelpFormatter,
-        allow_abbrev=False,
-    )
-    _profile_arg(stacks_setup)
-    stacks_setup.add_argument("name", help="Stack name")
-    stacks_setup.add_argument(
-        "--orchestrator",
-        help="Optional orchestrator name, such as langgraph, crewai, autogen, or openhands",
-    )
-    stacks_setup.add_argument("--runtime", required=True, help="Runtime name")
-    stacks_setup.add_argument("--model", required=True, help="Configured model alias")
-    stacks_setup.add_argument(
-        "--machine",
-        required=True,
-        help="Machine name from aiplane machines list; export/import a real machine profile first with hardware export-machine and machines import",
-    )
-    stacks_setup.add_argument(
-        "--target",
-        help="Explicit ssh_tunnel target name from targets.yaml when access=ssh_tunnel",
-    )
-    stacks_setup.add_argument(
-        "--access",
-        default="ssh_tunnel",
-        help="Access mode, such as same_host, ssh_tunnel, lan_http, or gateway",
-    )
-    stacks_setup.add_argument(
-        "--endpoint-policy",
-        default="private",
-        choices=["private", "vpn", "gateway", "public", "shared"],
-        help="Endpoint exposure policy; shared/public/gateway require auth/TLS planning before team use",
-    )
-    stacks_setup.add_argument("--endpoint", help="Endpoint URL override")
-    stacks_setup.add_argument(
-        "--endpoint-auth",
-        choices=[
-            "none",
-            "bearer",
-            "api_key",
-            "basic",
-            "oauth2",
-            "oidc",
-            "mtls",
-            "gateway",
-        ],
-        help="Auth method expected at the endpoint gateway/reverse proxy",
-    )
-    stacks_setup.add_argument(
-        "--endpoint-auth-env",
-        help="Environment variable that will hold the endpoint/gateway credential for bearer or api_key auth",
-    )
-    stacks_setup.add_argument(
-        "--endpoint-tls",
-        choices=["required", "terminated", "not_configured", "not_required"],
-        help="TLS posture for endpoint planning; use terminated when TLS is handled by a gateway",
-    )
-    stacks_setup.add_argument(
-        "--gateway",
-        help="Gateway/reverse proxy pattern or name, such as caddy, nginx, traefik, apim, or kubernetes-gateway",
-    )
-    stacks_setup.add_argument(
-        "--limit",
-        action="append",
-        default=[],
-        help="Pass-through limit key=value, such as timeout=30m or max_parallel_agents=3; can be repeated",
-    )
-    stacks_setup.add_argument(
-        "--tool",
-        action="append",
-        default=[],
-        help="Pass-through tool policy key=value, such as shell=guarded or filesystem=workspace_only; can be repeated",
-    )
-    stacks_setup.add_argument(
-        "--role",
-        action="append",
-        default=[],
-        help="Optional orchestrator role binding ROLE=MODEL_ALIAS, such as planner=local_chat; can be repeated",
-    )
-    stacks_setup.add_argument(
-        "--approval-mode",
-        help="Approval policy label for orchestrator role metadata, such as ask, guarded, or manual",
-    )
-    stacks_setup.add_argument(
-        "--audit-label",
-        help="Audit label prefix for orchestrator role metadata",
-    )
-    stacks_setup.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Preview the stack without writing hardware.yaml",
-    )
-    stacks_plan = stacks_sub.add_parser(
-        "plan",
-        help="Plan a stack",
-        description="Render the checks and actions needed to run a stack.",
-        formatter_class=HelpFormatter,
-        allow_abbrev=False,
-    )
-    _profile_arg(stacks_plan)
-    stacks_plan.add_argument("name", help="Stack name")
-    stacks_doctor = stacks_sub.add_parser(
-        "doctor",
-        help="Check a stack",
-        description="Check machine fit, runtime availability, preflight checks, role endpoint bindings, and risky role tool-policy combinations for a stack.",
-        formatter_class=HelpFormatter,
-        allow_abbrev=False,
-    )
-    _profile_arg(stacks_doctor)
-    stacks_doctor.add_argument("name", help="Stack name")
-    stacks_endpoint_plan = stacks_sub.add_parser(
-        "endpoint-plan",
-        help="Plan endpoint auth and gateway controls",
-        description="Render a non-mutating endpoint security plan for a stack, including TLS, auth, gateway, and private/shared exposure checks.",
-        formatter_class=HelpFormatter,
-        allow_abbrev=False,
-    )
-    _profile_arg(stacks_endpoint_plan)
-    stacks_endpoint_plan.add_argument("name", help="Stack name")
-    stacks_export = stacks_sub.add_parser(
-        "export",
-        help="Export stack artifacts",
-        description="Export IDE config or packaging artifacts for a stack endpoint.",
-        formatter_class=HelpFormatter,
-        allow_abbrev=False,
-    )
-    _profile_arg(stacks_export)
-    stacks_export.add_argument(
-        "artifact",
-        choices=[
-            "continue",
-            "openai-compatible",
-            "dockerfile",
-            "conda-yaml",
-            "compose",
-            "langgraph",
-            "crewai",
-            "autogen",
-            "semantic-kernel",
-            "llamaindex-workflows",
-            "openhands",
-        ],
-        help="Artifact format to export",
-    )
-    stacks_export.add_argument("name", help="Stack name")
-    for lifecycle_action in ["prepare", "start", "stop", "restart"]:
-        lifecycle = stacks_sub.add_parser(
-            lifecycle_action,
-            help=f"{lifecycle_action.capitalize()} stack components",
-            description="Run the stack lifecycle action. Use --dry-run to preview commands without executing them.",
-            formatter_class=HelpFormatter,
-            allow_abbrev=False,
-        )
-        _profile_arg(lifecycle)
-        lifecycle.add_argument("name", help="Stack name")
-        lifecycle.add_argument(
-            "--dry-run",
-            action="store_true",
-            help="Preview commands without executing them",
-        )
-    stacks_status = stacks_sub.add_parser(
-        "status",
-        help="Show stack runtime/orchestrator status",
-        description="Check stack runtime and orchestrator status without mutating anything.",
-        formatter_class=HelpFormatter,
-        allow_abbrev=False,
-    )
-    _profile_arg(stacks_status)
-    stacks_status.add_argument("name", help="Stack name")
-    environment = _command(
-        subparsers,
-        "environment",
-        "Show, check, or plan native/venv/conda/docker execution",
-        "Inspect the active execution environment, check prerequisite tools, or render how a command would run in that mode.",
-        "Examples:\n  aiplane environment list\n  aiplane environment active\n  aiplane environment doctor\n  aiplane environment use venv\n  aiplane environment plan python -m unittest",
-    )
-    env_sub = environment.add_subparsers(dest="environment_command", required=True, metavar="command")
-    env_show = env_sub.add_parser(
-        "show",
-        help="Show environment config",
-        description="Show configured native, venv, conda, or docker execution settings.",
-        formatter_class=HelpFormatter,
-        allow_abbrev=False,
-    )
-    _profile_arg(env_show)
-    env_list = env_sub.add_parser(
-        "list",
-        help="List available environment modes",
-        description="List configured environment modes and mark the active one.",
-        formatter_class=HelpFormatter,
-        allow_abbrev=False,
-    )
-    _profile_arg(env_list)
-    env_active = env_sub.add_parser(
-        "active",
-        help="Show active environment mode",
-        description="Show only the active environment mode, its config, and available modes.",
-        formatter_class=HelpFormatter,
-        allow_abbrev=False,
-    )
-    _profile_arg(env_active)
-    env_use = env_sub.add_parser(
-        "use",
-        help="Set active environment mode",
-        description="Persist a new active environment mode in the profile environment.yaml file.",
-        formatter_class=HelpFormatter,
-        allow_abbrev=False,
-        epilog="Examples:\n  aiplane environment use system\n  aiplane environment use venv\n  aiplane environment use conda\n  aiplane environment use docker",
-    )
-    _profile_arg(env_use)
-    env_use.add_argument("mode", help="Configured mode name, such as system, venv, conda, or docker")
-    env_plan = env_sub.add_parser(
-        "plan",
-        help="Render command execution plan",
-        description="Show the command aiplane would run under the active environment mode.",
-        formatter_class=HelpFormatter,
-        allow_abbrev=False,
-    )
-    _profile_arg(env_plan)
-    env_plan.add_argument(
-        "env_command_args",
-        nargs=argparse.REMAINDER,
-        help="Command to plan after the command name, for example python -m unittest",
-    )
-    env_doctor = env_sub.add_parser(
-        "doctor",
-        help="Check environment and prerequisite tool readiness",
-        description="Check the active aiplane execution environment plus external CLIs/frameworks used by runtime, cloud, benchmark, container, Kubernetes, and SSH workflows.",
-        formatter_class=HelpFormatter,
-        allow_abbrev=False,
-    )
-    _profile_arg(env_doctor)
-    env_doctor.add_argument(
-        "--required-only",
-        action="store_true",
-        help="Only check a minimal required set instead of optional benchmark/cloud tools",
-    )
-    env_doctor.add_argument(
-        "--format",
-        choices=["text", "json"],
-        default=None,
-        help="Output format. Text is the default human-readable aligned table; use json for scripts.",
-    )
-
-    benchmarks_cmd = _command(
-        subparsers,
-        "benchmarks",
-        "Plan/install benchmark frameworks",
-        "Inspect optional benchmark frameworks and render commands for aiplane smoke benchmarks, lm-evaluation-harness, vLLM serving benchmarks, and endpoint load tests.",
-        "Examples:\n  aiplane benchmarks list\n  aiplane benchmarks doctor\n  aiplane benchmarks install lm-evaluation-harness --dry-run\n  aiplane benchmarks plan aiplane-smoke --model MODEL_ALIAS",
-    )
-    benchmarks_sub = benchmarks_cmd.add_subparsers(dest="benchmarks_command", required=True, metavar="command")
-    benchmarks_list = benchmarks_sub.add_parser(
-        "list",
-        help="List benchmark frameworks",
-        description="List built-in and optional external benchmark frameworks known to aiplane.",
-        formatter_class=HelpFormatter,
-        allow_abbrev=False,
-    )
-    _profile_arg(benchmarks_list)
-    benchmarks_doctor = benchmarks_sub.add_parser(
-        "doctor",
-        help="Check benchmark framework availability",
-        description="Check which benchmark frameworks are available and which need install/manual setup.",
-        formatter_class=HelpFormatter,
-        allow_abbrev=False,
-    )
-    _profile_arg(benchmarks_doctor)
-    benchmarks_doctor.add_argument(
-        "name",
-        nargs="?",
-        help="Optional framework name, such as aiplane-smoke, lm-evaluation-harness, vllm-serving, or locust-load",
-    )
-    benchmarks_install = benchmarks_sub.add_parser(
-        "install",
-        help="Plan or run benchmark framework install",
-        description="Install optional benchmark tools where aiplane has a safe helper command. Use --dry-run first.",
-        formatter_class=HelpFormatter,
-        allow_abbrev=False,
-    )
-    _profile_arg(benchmarks_install)
-    benchmarks_install.add_argument(
-        "name",
-        help="Framework name, such as lm-evaluation-harness, vllm-serving, or locust-load",
-    )
-    benchmarks_install.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Print install commands without executing them",
-    )
-    benchmarks_plan = benchmarks_sub.add_parser(
-        "plan",
-        help="Render benchmark command templates",
-        description="Render commands for running one benchmark framework against a selected model/endpoint. This does not execute the benchmark.",
-        formatter_class=HelpFormatter,
-        allow_abbrev=False,
-    )
-    _profile_arg(benchmarks_plan)
-    benchmarks_plan.add_argument(
-        "name",
-        help="Framework name, such as aiplane-smoke, lm-evaluation-harness, vllm-serving, or locust-load",
-    )
-    benchmarks_plan.add_argument(
-        "--model",
-        default="MODEL_ALIAS",
-        help="Model alias or provider-native model id to include in the command template",
-    )
-    benchmarks_plan.add_argument(
-        "--endpoint",
-        help="OpenAI-compatible endpoint for external benchmark frameworks",
-    )
-    benchmarks_plan.add_argument("--spec", help="Custom aiplane benchmark spec path for aiplane-smoke")
-
     add_models_parser(
         subparsers,
         command_factory=_command,
@@ -1486,114 +722,12 @@ def _main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Preview the session metadata without writing it or emitting an audit event.",
     )
-    deploy_cmd = _command(
+    add_deploy_remote_parsers(
         subparsers,
-        "deploy",
-        "Plan/check/apply remote deployment targets",
-        "Work with configured cloud/shared deployment targets. Apply is guarded and intentionally narrow.",
-        "Examples:\n  aiplane deploy list\n  aiplane deploy workflow-plan --target azure_gpu_vm\n  aiplane deploy plan --target aks_gpu_pool\n  aiplane deploy doctor --target aks_gpu_pool\n  aiplane deploy apply --target aks_gpu_pool --yes",
-    )
-    deploy_sub = deploy_cmd.add_subparsers(dest="deploy_command", required=True, metavar="command")
-    deploy_list = deploy_sub.add_parser(
-        "list",
-        help="List deployment targets",
-        description="List targets from profiles/<profile>/targets.yaml.",
+        command_factory=_command,
+        profile_arg=_profile_arg,
         formatter_class=HelpFormatter,
     )
-    _profile_arg(deploy_list)
-    deploy_show = deploy_sub.add_parser(
-        "show",
-        help="Show one deployment target",
-        description="Show one target config; uses profile default when --target is omitted.",
-        formatter_class=HelpFormatter,
-    )
-    _profile_arg(deploy_show)
-    deploy_show.add_argument("--target", help="Target name, such as aks_gpu_pool")
-    deploy_workflow = deploy_sub.add_parser(
-        "workflow-plan",
-        help="Classify a deployment workflow",
-        description="Show whether a target is local install, local VM, remote workstation/VM, cloud VM, or Kubernetes/cloud provisioning, and which external tools own each phase.",
-        formatter_class=HelpFormatter,
-    )
-    _profile_arg(deploy_workflow)
-    deploy_workflow.add_argument("--target", help="Target name; defaults to profile target default")
-    deploy_plan = deploy_sub.add_parser(
-        "plan",
-        help="Render deployment plan",
-        description="Show required tools and commands for a target without applying changes.",
-        formatter_class=HelpFormatter,
-    )
-    _profile_arg(deploy_plan)
-    deploy_plan.add_argument("--target", help="Target name; defaults to profile target default")
-    deploy_doctor = deploy_sub.add_parser(
-        "doctor",
-        help="Check target prerequisites",
-        description="Check local tools and target prerequisites where implemented.",
-        formatter_class=HelpFormatter,
-    )
-    _profile_arg(deploy_doctor)
-    deploy_doctor.add_argument("--target", help="Target name; defaults to profile target default")
-    deploy_apply = deploy_sub.add_parser(
-        "apply",
-        help="Apply guarded bootstrap steps",
-        description="Run narrow, planned bootstrap steps for the selected target. Use deploy plan first to preview commands.",
-        formatter_class=HelpFormatter,
-    )
-    _profile_arg(deploy_apply)
-    deploy_apply.add_argument("--target", help="Target name; defaults to profile target default")
-    deploy_apply.add_argument(
-        "--yes",
-        action="store_true",
-        help="Confirm that mutating target bootstrap commands should run",
-    )
-
-    remote_cmd = _command(
-        subparsers,
-        "remote",
-        "Plan remote access commands",
-        "Render remote access commands such as SSH local port forwards for shared/cloud endpoints.",
-        "Example:\n  aiplane remote tunnel plan --target gpu_workstation_ssh",
-    )
-    remote_sub = remote_cmd.add_subparsers(dest="remote_command", required=True, metavar="command")
-    remote_tunnel = remote_sub.add_parser(
-        "tunnel",
-        help="SSH tunnel planning",
-        description="Work with SSH tunnel targets.",
-        formatter_class=HelpFormatter,
-    )
-    tunnel_sub = remote_tunnel.add_subparsers(dest="tunnel_command", required=True, metavar="command")
-    tunnel_plan = tunnel_sub.add_parser(
-        "plan",
-        help="Render ssh -L command",
-        description="Render an SSH local-forward command and endpoint URL. It does not start the tunnel.",
-        formatter_class=HelpFormatter,
-    )
-    _profile_arg(tunnel_plan)
-    tunnel_plan.add_argument("--target", required=True, help="ssh_tunnel target name from targets.yaml")
-    tunnel_status = tunnel_sub.add_parser(
-        "status",
-        help="Show tunnel process status",
-        description="Show whether a helper-started SSH tunnel is running and which endpoint to use.",
-        formatter_class=HelpFormatter,
-    )
-    _profile_arg(tunnel_status)
-    tunnel_status.add_argument("--target", required=True, help="ssh_tunnel target name from targets.yaml")
-    tunnel_start = tunnel_sub.add_parser(
-        "start",
-        help="Start an SSH tunnel",
-        description="Start the configured ssh -L tunnel in the background and write PID/log files under .aiplane/remote.",
-        formatter_class=HelpFormatter,
-    )
-    _profile_arg(tunnel_start)
-    tunnel_start.add_argument("--target", required=True, help="ssh_tunnel target name from targets.yaml")
-    tunnel_stop = tunnel_sub.add_parser(
-        "stop",
-        help="Stop a helper-started SSH tunnel",
-        description="Stop a tunnel process previously started by this CLI.",
-        formatter_class=HelpFormatter,
-    )
-    _profile_arg(tunnel_stop)
-    tunnel_stop.add_argument("--target", required=True, help="ssh_tunnel target name from targets.yaml")
 
     providers_cmd = _command(
         subparsers,
@@ -1993,166 +1127,18 @@ def _main(argv: list[str] | None = None) -> int:
             help="Confirm destructive runtime actions such as remove or clear",
         )
 
-    tools_cmd = _command(
+    add_setup_parsers(
         subparsers,
-        "tools",
-        "Check and install external prerequisite CLIs",
-        "Inspect and install the small external toolchain aiplane can use for cloud, container, Kubernetes, and remote operations.",
-        "Examples:\n  aiplane tools doctor\n  aiplane tools matrix\n  aiplane tools doctor azure-cli\n  aiplane tools plan vagrant\n  aiplane tools export opentofu\n  aiplane tools install opentofu --dry-run\n  aiplane tools install azure-cli",
-    )
-    tools_sub = tools_cmd.add_subparsers(dest="tools_command", required=True, metavar="command")
-    tools_list = tools_sub.add_parser(
-        "list",
-        help="List known prerequisite tools",
-        description="List supported external CLIs, categories, install hints, and detected versions.",
+        command_factory=_command,
+        profile_arg=_profile_arg,
         formatter_class=HelpFormatter,
     )
-    _profile_arg(tools_list)
-    tools_matrix = tools_sub.add_parser(
-        "matrix",
-        help="Show the tool task matrix",
-        description="Group known external tools by workflow category and show tasks, required/optional status, installability, and starter export availability.",
-        formatter_class=HelpFormatter,
-    )
-    _profile_arg(tools_matrix)
-    tools_doctor = tools_sub.add_parser(
-        "doctor",
-        help="Check external toolchain health",
-        description="Check whether prerequisite tools are installed and whether selected services are reachable, such as Azure login or Docker daemon status.",
-        formatter_class=HelpFormatter,
-    )
-    _profile_arg(tools_doctor)
-    tools_doctor.add_argument(
-        "name",
-        nargs="?",
-        help="Optional tool name, such as azure-cli, opentofu, docker, kubectl, helm, openssh-client, or ansible",
-    )
-    tools_plan = tools_sub.add_parser(
-        "plan",
-        help="Plan how a tool fits a workflow",
-        description="Show prerequisites, safe commands, generated artifacts, and next steps for an external tool workflow without mutating anything.",
-        formatter_class=HelpFormatter,
-    )
-    _profile_arg(tools_plan)
-    tools_plan.add_argument(
-        "name",
-        help="Tool name, such as vagrant, packer, opentofu, terraform, pulumi, devcontainer-cli, or ansible",
-    )
-    tools_export = tools_sub.add_parser(
-        "export",
-        help="Print a starter tool artifact",
-        description="Print a starter Vagrantfile, Packer template, IaC module, Dev Container config, or Ansible playbook. Output is not written automatically.",
-        formatter_class=HelpFormatter,
-    )
-    _profile_arg(tools_export)
-    tools_export.add_argument(
-        "name",
-        help="Tool name, such as vagrant, packer, opentofu, terraform, pulumi, devcontainer-cli, or ansible",
-    )
-    tools_install = tools_sub.add_parser(
-        "install",
-        help="Plan or run prerequisite tool install",
-        description="Render and run platform-specific install commands where supported. Use --dry-run to inspect commands without executing them.",
-        formatter_class=HelpFormatter,
-    )
-    _profile_arg(tools_install)
-    tools_install.add_argument(
-        "name",
-        help="Tool name, such as azure-cli, opentofu, docker, kubectl, helm, openssh-client, or ansible",
-    )
-    tools_install.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Print install commands without executing them",
-    )
-
-    credentials_cmd = _command(
+    add_governance_parsers(
         subparsers,
-        "credentials",
-        "Inspect ignored local credential references",
-        "List or show redacted credential accounts from the ignored local credentials file. This never prints raw secrets.",
-        "Examples:\n  aiplane credentials list\n  aiplane credentials show openai.personal",
-    )
-    credentials_sub = credentials_cmd.add_subparsers(dest="credentials_command", required=True, metavar="command")
-    credentials_list = credentials_sub.add_parser(
-        "list",
-        help="List configured credential refs",
-        description="List credential account names and metadata without secret values.",
+        command_factory=_command,
+        profile_arg=_profile_arg,
         formatter_class=HelpFormatter,
     )
-    credentials_list.add_argument(
-        "--path",
-        help="Optional credentials YAML path. Defaults to AIPLANE_CREDENTIALS, local config credentials_path, or .aiplane/credentials.yaml",
-    )
-    credentials_show = credentials_sub.add_parser(
-        "show",
-        help="Show one credential ref with secrets redacted",
-        description="Show one credential account without printing raw secret values.",
-        formatter_class=HelpFormatter,
-    )
-    credentials_show.add_argument("ref", help="Credential ref, such as openai.personal or openai/personal")
-    credentials_show.add_argument("--path", help="Optional credentials YAML path")
-
-    mcp_cmd = _command(
-        subparsers,
-        "mcp",
-        "Expose MCP tools over stdio",
-        "Run or inspect the MCP adapter so IDEs/agents can query aiplane configuration and use guarded write tools.",
-        "Examples:\n  aiplane mcp manifest\n  aiplane mcp serve",
-    )
-    mcp_sub = mcp_cmd.add_subparsers(dest="mcp_command", required=True, metavar="command")
-    mcp_sub.add_parser(
-        "manifest",
-        help="Print MCP tool manifest",
-        description="Print the MCP tool surface as JSON, including guarded mutating tools.",
-        formatter_class=HelpFormatter,
-    )
-    mcp_serve = mcp_sub.add_parser(
-        "serve",
-        help="Start stdio MCP server",
-        description="Start the MCP server over stdio for MCP-capable IDEs or agents. Mutating tools execute through the same managers as the CLI.",
-        formatter_class=HelpFormatter,
-    )
-    _profile_arg(mcp_serve)
-
-    audit = _command(
-        subparsers,
-        "audit",
-        "Read local audit logs",
-        "Inspect JSONL audit events written under the workspace .aiplane directory.",
-        "Example:\n  aiplane audit tail --limit 50",
-    )
-    audit_sub = audit.add_subparsers(dest="audit_command", required=True, metavar="command")
-    tail = audit_sub.add_parser(
-        "tail",
-        help="Show recent audit events",
-        description="Print the last N audit events as JSON lines.",
-        formatter_class=HelpFormatter,
-    )
-    _profile_arg(tail)
-    tail.add_argument("--limit", type=int, default=20, help="Number of events to print")
-
-    policy = _command(
-        subparsers,
-        "policy",
-        "Explain policy decisions",
-        "Explain how the active profile treats a named action.",
-        "Example:\n  aiplane policy explain --action cloud_escalation",
-    )
-    policy_sub = policy.add_subparsers(dest="policy_command", required=True, metavar="command")
-    explain = policy_sub.add_parser(
-        "explain",
-        help="Explain one action",
-        description="Print policy decision details for an action name.",
-        formatter_class=HelpFormatter,
-    )
-    _profile_arg(explain)
-    explain.add_argument(
-        "--action",
-        required=True,
-        help="Action name to explain, such as backend:cloud, provider:ollama, model:fixture-chat-small, or write_file",
-    )
-
     args = parser.parse_args(argv)
     workspace = Path(args.workspace).resolve()
     profiles_dir = Path(args.profiles_dir).expanduser().resolve() if args.profiles_dir else None
@@ -2272,416 +1258,44 @@ def _main(argv: list[str] | None = None) -> int:
         print(output)
         return 0
 
-    if args.command == "tools":
-        profile = load_profile(effective_profile, workspace, profiles_dir=profiles_dir)
-        manager = ToolchainManager(profile)
-        if args.tools_command == "list":
-            print(_json(manager.list(), indent=2))
-            return 0
-        if args.tools_command == "doctor":
-            print(_json(manager.doctor(args.name), indent=2))
-            return 0
-        if args.tools_command == "matrix":
-            print(_json(manager.matrix(), indent=2))
-            return 0
-        if args.tools_command == "plan":
-            print(_json(manager.plan(args.name), indent=2))
-            return 0
-        if args.tools_command == "export":
-            exported = manager.export(args.name)
-            print(exported["content"])
-            if exported.get("notes"):
-                print("\n# Notes")
-                for note in exported["notes"]:
-                    print(f"# - {note}")
-            return 0
-        print(
-            _json(
-                manager.install(args.name, dry_run=args.dry_run, yes=not args.dry_run),
-                indent=2,
-            )
-        )
-        return 0
+    setup_result = handle_setup_command(
+        args,
+        workspace=workspace,
+        profiles_dir=profiles_dir,
+        effective_profile=effective_profile,
+        json_dumps=_json,
+        progress_factory=_stderr_line_progress,
+        resolve_format=resolve_output_format,
+        config_path=local_config_path(),
+        environment_doctor_text=_environment_doctor_text,
+    )
+    if setup_result is not None:
+        return setup_result
 
-    if args.command == "benchmarks":
-        profile = load_profile(effective_profile, workspace, profiles_dir=profiles_dir)
-        manager = BenchmarkToolManager(profile)
-        if args.benchmarks_command == "list":
-            print(_json(manager.list(), indent=2))
-            return 0
-        if args.benchmarks_command == "doctor":
-            print(_json(manager.doctor(args.name), indent=2))
-            return 0
-        if args.benchmarks_command == "install":
-            print(_json(manager.install(args.name, dry_run=args.dry_run), indent=2))
-            return 0
-        print(
-            _json(
-                manager.plan(args.name, model=args.model, endpoint=args.endpoint, spec=args.spec),
-                indent=2,
-            )
-        )
-        return 0
-
-    if args.command == "hardware":
-        profile = load_profile(effective_profile, workspace, profiles_dir=profiles_dir)
-        manager = HardwareManager(profile)
-        if args.hardware_command == "show":
-            if args.list_types:
-                print(_json(manager.show_types(), indent=2, sort_keys=True))
-                return 0
-            output_format = resolve_output_format(
-                args.format,
-                profile=effective_profile,
-                command="hardware show",
-                path=local_config_path(),
-                default="json",
-            )
-            if output_format == "text":
-                print(_hardware_show_text(manager.show(verbosity=int(args.verbosity))))
-            else:
-                print(_json(manager.show(verbosity=int(args.verbosity)), indent=2, sort_keys=True))
-            return 0
-        if args.hardware_command == "templates":
-            print(_json(manager.templates(), indent=2, sort_keys=True))
-            return 0
-        if args.hardware_command == "schema":
-            print(_json(manager.schema(), indent=2))
-            return 0
-        if args.hardware_command == "active":
-            print(_json(manager.active_config(), indent=2, sort_keys=True))
-            return 0
-        if args.hardware_command == "use":
-            print(
-                _json(
-                    manager.use_template(args.template, _parse_settings(args.settings)),
-                    indent=2,
-                    sort_keys=True,
-                )
-            )
-            return 0
-        if args.hardware_command == "set":
-            print(
-                _json(
-                    manager.customize_active(_parse_settings(args.settings)),
-                    indent=2,
-                    sort_keys=True,
-                )
-            )
-            return 0
-        if args.hardware_command == "discover":
-            result = (
-                manager.select_closest_discovered(dry_run=args.dry_run) if args.select_closest else manager.discover()
-            )
-            print(_json(result, indent=2, sort_keys=True))
-            return 0
-        if args.hardware_command == "clear":
-            print(
-                _json(
-                    manager.clear_selection(dry_run=args.dry_run),
-                    indent=2,
-                    sort_keys=True,
-                )
-            )
-            return 0
-        if args.hardware_command == "recommend":
-            print(
-                _json(
-                    manager.recommend(include_not_recommended=args.include_not_recommended),
-                    indent=2,
-                )
-            )
-            return 0
-        if args.hardware_command == "export-machine":
-            exported = MachineManager(profile).export_machine(
-                args.name, origin=args.origin, include_discovery=args.include_discovery
-            )
-            if args.format == "json":
-                print(_json(exported, indent=2))
-            else:
-                from .config import dump_yaml
-
-                print(dump_yaml(exported), end="")
-            return 0
-        print(_json(manager.doctor(args.model), indent=2, sort_keys=True))
-        return 0
-
-    if args.command == "machines":
-        profile = load_profile(effective_profile, workspace, profiles_dir=profiles_dir)
-        manager = MachineManager(profile)
-        if args.machines_command == "list":
-            print(_json(manager.list(), indent=2))
-            return 0
-        if args.machines_command == "show":
-            print(_json(manager.show(args.name), indent=2))
-            return 0
-        if args.machines_command == "validate":
-            result = manager.validate(args.name)
-            print(_json(result, indent=2))
-            return 0 if result["ok"] else 1
-        if args.machines_command == "cache-list":
-            print(_json(manager.cache_list(), indent=2))
-            return 0
-        if args.machines_command == "cache-clear":
-            print(_json(manager.cache_clear(args.key), indent=2))
-            return 0
-        if args.machines_command == "azure-status":
-            verbosity = int(getattr(args, "verbosity", 0))
-            reporter = _AzCommandReporter(verbosity=verbosity)
-            try:
-                print(
-                    _json(
-                        manager.azure_status(
-                            region=args.region,
-                            run_sku_probe=args.sku_query,
-                            verbosity=verbosity,
-                            az_event_sink=reporter.report,
-                        ),
-                        indent=2,
-                    )
-                )
-            finally:
-                reporter.close()
-            return 0
-        if args.machines_command == "import":
-            print(
-                _json(
-                    manager.import_file(
-                        Path(args.path),
-                        name=args.name,
-                        overrides=_parse_settings(args.settings),
-                    ),
-                    indent=2,
-                )
-            )
-            return 0
-        if args.machines_command == "recommend":
-            print(
-                _json(
-                    manager.recommend(
-                        model=args.model,
-                        runtime=args.runtime,
-                        workload=args.workload,
-                        limit=args.limit,
-                    ),
-                    indent=2,
-                )
-            )
-            return 0
-        if args.machines_command == "discover":
-            verbosity = int(getattr(args, "verbosity", 0))
-            reporter = _AzCommandReporter(verbosity=verbosity)
-            try:
-                print(
-                    _json(
-                        manager.discover_azure(
-                            args.region,
-                            workload=args.workload,
-                            model=args.model,
-                            gpu_vendor=args.gpu_vendor,
-                            min_cpu_cores=args.min_cpu_cores,
-                            min_ram_gb=args.min_ram_gb,
-                            min_vram_gb=args.min_vram_gb,
-                            limit=args.limit,
-                            verbosity=verbosity,
-                            az_event_sink=reporter.report,
-                        ),
-                        indent=2,
-                    )
-                )
-            finally:
-                reporter.close()
-            return 0
-        if args.machines_command == "import-azure-sku":
-            print(
-                _json(
-                    manager.import_azure_sku(
-                        args.sku,
-                        args.region,
-                        name=args.name,
-                        overrides=_parse_settings(args.settings),
-                    ),
-                    indent=2,
-                )
-            )
-            return 0
-        if args.machines_command == "profile-remote-plan":
-            print(
-                _json(
-                    manager.profile_remote_plan(args.name, args.host, user=args.user, port=args.port),
-                    indent=2,
-                )
-            )
-            return 0
-
-    if args.command == "orchestrators":
-        profile = load_profile(effective_profile, workspace, profiles_dir=profiles_dir)
-        catalog = OrchestratorCatalog(profile)
-        if args.orchestrators_command == "list":
-            print(
-                _json(
-                    catalog.list(
-                        providers=args.provider,
-                        runtimes=args.runtime,
-                        group_by=args.group_by,
-                    ),
-                    indent=2,
-                )
-            )
-            return 0
-        if args.orchestrators_command == "show":
-            print(_json(catalog.show(args.name), indent=2))
-            return 0
-        if args.orchestrators_command == "setup":
-            print(
-                _json(
-                    catalog.setup(
-                        args.name,
-                        runtime=args.runtime,
-                        model=args.model,
-                        endpoint=args.endpoint,
-                        environment=args.environment,
-                        approval_mode=args.approval_mode,
-                        limits=_parse_settings(args.limit),
-                        tools=_parse_settings(args.tool),
-                        dry_run=args.dry_run,
-                        yes=not args.dry_run,
-                        install=args.install,
-                    ),
-                    indent=2,
-                )
-            )
-            return 0
-        print(_json(catalog.doctor(args.name), indent=2))
-        return 0
-
-    if args.command == "stacks":
-        profile = load_profile(effective_profile, workspace, profiles_dir=profiles_dir)
-        manager = StackManager(profile)
-        if args.stacks_command == "list":
-            print(_json(manager.list(), indent=2))
-            return 0
-        if args.stacks_command == "show":
-            print(_json(manager.show(args.name), indent=2))
-            return 0
-        if args.stacks_command == "setup":
-            print(
-                _json(
-                    manager.setup(
-                        args.name,
-                        orchestrator=args.orchestrator,
-                        runtime=args.runtime,
-                        model=args.model,
-                        machine=args.machine,
-                        access=args.access,
-                        target=args.target,
-                        endpoint_policy=args.endpoint_policy,
-                        endpoint=args.endpoint,
-                        endpoint_auth={
-                            key: value
-                            for key, value in {
-                                "method": args.endpoint_auth,
-                                "api_key_env": args.endpoint_auth_env,
-                                "tls": args.endpoint_tls,
-                                "gateway": args.gateway,
-                            }.items()
-                            if value
-                        },
-                        limits=_parse_settings(args.limit),
-                        tools=_parse_settings(args.tool),
-                        roles={key: str(value) for key, value in _parse_settings(args.role).items()},
-                        approval_mode=args.approval_mode,
-                        audit_label=args.audit_label,
-                        dry_run=args.dry_run,
-                    ),
-                    indent=2,
-                )
-            )
-            return 0
-        if args.stacks_command == "plan":
-            print(_json(manager.plan(args.name), indent=2))
-            return 0
-        if args.stacks_command == "doctor":
-            print(_json(manager.doctor(args.name), indent=2))
-            return 0
-        if args.stacks_command == "endpoint-plan":
-            print(_json(manager.endpoint_plan(args.name), indent=2))
-            return 0
-        if args.stacks_command == "export":
-            exported = manager.export(args.artifact, args.name)
-            print(exported["content"])
-            if exported.get("notes"):
-                print("\n# Notes")
-                for note in exported["notes"]:
-                    print(f"# - {note}")
-            return 0
-        if args.stacks_command == "prepare":
-            print(_json(manager.prepare(args.name, dry_run=args.dry_run), indent=2))
-            return 0
-        if args.stacks_command == "start":
-            print(_json(manager.start(args.name, dry_run=args.dry_run), indent=2))
-            return 0
-        if args.stacks_command == "stop":
-            print(_json(manager.stop(args.name, dry_run=args.dry_run), indent=2))
-            return 0
-        if args.stacks_command == "restart":
-            print(_json(manager.restart(args.name, dry_run=args.dry_run), indent=2))
-            return 0
-        if args.stacks_command == "status":
-            print(_json(manager.status(args.name), indent=2))
-            return 0
-    if args.command == "environment":
-        profile = load_profile(effective_profile, workspace, profiles_dir=profiles_dir)
-        manager = EnvironmentManager(profile)
-        if args.environment_command == "show":
-            print(_json(manager.show(), indent=2, sort_keys=True))
-            return 0
-        if args.environment_command == "list":
-            print(_json(manager.list_modes(), indent=2, sort_keys=True))
-            return 0
-        if args.environment_command == "active":
-            print(_json(manager.active(), indent=2, sort_keys=True))
-            return 0
-        if args.environment_command == "use":
-            print(_json(manager.use(args.mode), indent=2, sort_keys=True))
-            return 0
-        if args.environment_command == "doctor":
-            progress = _stderr_line_progress()
-            payload = ToolchainManager(profile).environment_doctor(
-                include_optional=not args.required_only,
-                progress=progress,
-            )
-            progress("")
-            output_format = resolve_output_format(
-                args.format,
-                profile=effective_profile,
-                path=local_config_path(),
-            )
-            if output_format == "text":
-                print(_environment_doctor_text(payload))
-            else:
-                print(_json(payload, indent=2))
-            return 0
-        if args.environment_command == "plan":
-            command = args.env_command_args
-            if command and command[0] == "--":
-                command = command[1:]
-            if not command:
-                raise ValueError("environment plan requires a command after plan")
-            plan = manager.plan(command)
-            print(
-                _json(
-                    {
-                        "mode": plan.mode,
-                        "command": plan.command,
-                        "cwd": str(plan.cwd),
-                        "description": plan.description,
-                    },
-                    indent=2,
-                )
-            )
-            return 0
-
+    hardware_result = handle_hardware_machine_command(
+        args,
+        workspace=workspace,
+        profiles_dir=profiles_dir,
+        effective_profile=effective_profile,
+        json_dumps=_json,
+        parse_settings=_parse_settings,
+        reporter_factory=_AzCommandReporter,
+        resolve_format=resolve_output_format,
+        config_path=local_config_path(),
+        hardware_show_text=_hardware_show_text,
+    )
+    if hardware_result is not None:
+        return hardware_result
+    stack_result = handle_stack_command(
+        args,
+        workspace=workspace,
+        profiles_dir=profiles_dir,
+        effective_profile=effective_profile,
+        json_dumps=_json,
+        parse_settings=_parse_settings,
+    )
+    if stack_result is not None:
+        return stack_result
     if args.command == "models":
         profile = load_profile(effective_profile, workspace, profiles_dir=profiles_dir)
         output_format = None
@@ -2737,13 +1351,15 @@ def _main(argv: list[str] | None = None) -> int:
         print(result.output)
         return 0
 
-    if args.command == "credentials":
-        store = CredentialStore(args.path)
-        if args.credentials_command == "list":
-            print(_json(store.list(), indent=2, sort_keys=True))
-            return 0
-        print(_json(store.show(args.ref), indent=2, sort_keys=True))
-        return 0
+    governance_result = handle_governance_command(
+        args,
+        workspace=workspace,
+        profiles_dir=profiles_dir,
+        effective_profile=effective_profile,
+        json_dumps=_json,
+    )
+    if governance_result is not None:
+        return governance_result
 
     if args.command == "agents":
         profile = load_profile(effective_profile, workspace, profiles_dir=profiles_dir)
@@ -2865,7 +1481,7 @@ def _main(argv: list[str] | None = None) -> int:
                 payload["reason"] = f"required executable not found on PATH: {executable}"
                 print(_json(payload, indent=2))
                 return 2
-            completed = subprocess.run(command, text=True, capture_output=True, check=False)
+            completed = _COMMAND_RUNNER.run(command, text=True, capture_output=True, check=False)
             if completed.stdout:
                 print(completed.stdout, end="")
             if completed.stderr:
@@ -2893,7 +1509,7 @@ def _main(argv: list[str] | None = None) -> int:
             payload["reason"] = f"required executable not found on PATH: {executable}"
             print(_json(payload, indent=2))
             return 2
-        completed = subprocess.run(
+        completed = _COMMAND_RUNNER.run(
             [str(part) for part in plan["command"]],
             cwd=workspace,
             env=plan.get("env"),
@@ -2959,45 +1575,15 @@ def _main(argv: list[str] | None = None) -> int:
         print(_json(payload, indent=2))
         return 0
 
-    if args.command == "deploy":
-        profile = load_profile(effective_profile, workspace, profiles_dir=profiles_dir)
-        manager = DeployManager(profile)
-        if args.deploy_command == "list":
-            print(_json(manager.list(), indent=2, sort_keys=True))
-            return 0
-        if args.deploy_command == "show":
-            print(_json(manager.show(args.target), indent=2, sort_keys=True))
-            return 0
-        if args.deploy_command == "workflow-plan":
-            print(_json(manager.workflow_plan(args.target), indent=2, sort_keys=True))
-            return 0
-        if args.deploy_command == "plan":
-            print(_json(manager.plan(args.target), indent=2, sort_keys=True))
-            return 0
-        if args.deploy_command == "doctor":
-            print(_json(manager.doctor(args.target), indent=2, sort_keys=True))
-            return 0
-        if args.deploy_command == "apply":
-            print(_json(manager.apply(args.target, yes=args.yes), indent=2, sort_keys=True))
-            return 0
-        raise ValueError(f"unknown deploy command: {args.deploy_command}")
-
-    if args.command == "remote":
-        profile = load_profile(effective_profile, workspace, profiles_dir=profiles_dir)
-        manager = RemoteManager(profile)
-        if args.remote_command == "tunnel":
-            if args.tunnel_command == "plan":
-                print(_json(manager.tunnel_plan(args.target), indent=2))
-                return 0
-            if args.tunnel_command == "status":
-                print(_json(manager.tunnel_status(args.target), indent=2))
-                return 0
-            if args.tunnel_command == "start":
-                print(_json(manager.tunnel_start(args.target, yes=True), indent=2))
-                return 0
-            if args.tunnel_command == "stop":
-                print(_json(manager.tunnel_stop(args.target, yes=True), indent=2))
-                return 0
+    deploy_remote_result = handle_deploy_remote_command(
+        args,
+        workspace=workspace,
+        profiles_dir=profiles_dir,
+        effective_profile=effective_profile,
+        json_dumps=_json,
+    )
+    if deploy_remote_result is not None:
+        return deploy_remote_result
 
     if args.command == "providers":
         profile = load_profile(effective_profile, workspace, profiles_dir=profiles_dir)
@@ -3266,26 +1852,6 @@ def _main(argv: list[str] | None = None) -> int:
         print(_json([catalog.runtime_available(runtime) for runtime in runtimes], indent=2))
         return 0
 
-    if args.command == "mcp":
-        if args.mcp_command == "manifest":
-            print(_json(mcp_manifest(), indent=2))
-            return 0
-        if args.mcp_command == "serve":
-            load_profile(effective_profile, workspace, profiles_dir=profiles_dir)
-            return serve_stdio(workspace, default_profile=effective_profile, profiles_dir=profiles_dir)
-
-    if args.command == "audit":
-        profile = load_profile(effective_profile, workspace, profiles_dir=profiles_dir)
-        for event in AuditLogger(profile).tail(args.limit):
-            print(_json(event, sort_keys=True))
-        return 0
-
-    if args.command == "policy":
-        profile = load_profile(effective_profile, workspace, profiles_dir=profiles_dir)
-        decision = PolicyEngine(profile).explain(args.action)
-        print(_json(decision.__dict__, indent=2, sort_keys=True))
-        return 0
-
     return 1
 
 
@@ -3420,6 +1986,7 @@ def _run_provider_helper(
     substrate: str = "native",
     dry_run: bool = False,
     profiles_dir: Path | str | None = None,
+    command_runner: CommandRunner | None = None,
 ) -> subprocess.CompletedProcess[str]:
     helper = provider_helper_path()
     if not helper.exists():
@@ -3429,7 +1996,8 @@ def _run_provider_helper(
     if profiles_dir is not None:
         env = os.environ.copy()
         env["AIPLANE_PROFILES_DIR"] = str(profiles_dir)
-    return subprocess.run(
+    runner = command_runner or _COMMAND_RUNNER
+    return runner.run(
         command,
         cwd=helper.parents[1],
         env=env,
@@ -3790,11 +2358,12 @@ class _AzCommandReporter:
 
 
 class _RuntimeInstallReporter:
-    def __init__(self):
+    def __init__(self, dot_interval: float = 2.0):
         self._lock = threading.Lock()
         self._has_status_line = False
         self._dot_thread: threading.Thread | None = None
         self._dot_stop: threading.Event | None = None
+        self._dot_interval = dot_interval
 
     def step(self, message: str, command: str | list[str] | None = None) -> None:
         self._stop_dot_line(clear_line=True)
@@ -3826,7 +2395,7 @@ class _RuntimeInstallReporter:
         thread.start()
 
     def _dot_worker(self, stop: threading.Event) -> None:
-        while not stop.wait(2):
+        while not stop.wait(self._dot_interval):
             self._write(".")
 
     def _stop_dot_line(self, clear_line: bool) -> None:

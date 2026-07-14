@@ -6,6 +6,7 @@ from collections.abc import Callable
 import subprocess
 from pathlib import Path
 
+from .boundaries import CommandRunner, SubprocessCommandRunner
 from .approvals import ApprovalHandler
 from .audit import AuditLogger
 from .env import EnvironmentManager
@@ -21,8 +22,10 @@ class ToolExecutor:
         profile: Profile,
         audit: AuditLogger,
         approvals: ApprovalHandler | None = None,
+        command_runner: CommandRunner | None = None,
     ):
         self.profile = profile
+        self.command_runner = command_runner or SubprocessCommandRunner()
         self.audit = audit
         self.policy = PolicyEngine(profile)
         self.approvals = approvals or ApprovalHandler()
@@ -113,7 +116,7 @@ class ToolExecutor:
         plan = self.environment.plan(command) if use_environment else None
         actual_command = plan.command if plan else command
         cwd = plan.cwd if plan else self.profile.workspace
-        result = subprocess.run(
+        result = self.command_runner.run(
             actual_command,
             cwd=cwd,
             check=False,
@@ -130,8 +133,9 @@ class ToolExecutor:
 
 
 class ToolchainManager:
-    def __init__(self, profile: Profile):
+    def __init__(self, profile: Profile, command_runner: CommandRunner | None = None):
         self.profile = profile
+        self.command_runner = command_runner or SubprocessCommandRunner()
 
     def list(self) -> list[dict[str, object]]:
         return [self._tool_row(name) for name in sorted(TOOLCHAIN)]
@@ -300,7 +304,7 @@ class ToolchainManager:
                 actual_command = plan.command
                 cwd = plan.cwd
                 use_shell = False
-            completed = subprocess.run(
+            completed = self.command_runner.run(
                 actual_command,
                 cwd=cwd,
                 shell=use_shell,
@@ -370,7 +374,7 @@ class ToolchainManager:
         spec = TOOLCHAIN[name]
         command = str(spec["command"])
         path = shutil.which(command)
-        version = _command_version(command) if path else None
+        version = _command_version(command, self.command_runner) if path else None
         install_commands = self._install_commands(name)
         install_mode = _install_mode(install_commands)
         row = {
@@ -403,7 +407,7 @@ class ToolchainManager:
         if not installed:
             return {"ok": False, "reason": "command not found"}
         if name == "azure-cli":
-            completed = _checked_command([command, "account", "show"], self.profile.workspace)
+            completed = _checked_command([command, "account", "show"], self.profile.workspace, self.command_runner)
             return {
                 "ok": completed.get("returncode") == 0,
                 "reason": (
@@ -411,7 +415,7 @@ class ToolchainManager:
                 ),
             }
         if name == "docker":
-            completed = _checked_command([command, "info"], self.profile.workspace)
+            completed = _checked_command([command, "info"], self.profile.workspace, self.command_runner)
             return {
                 "ok": completed.get("returncode") == 0,
                 "reason": (
@@ -421,7 +425,7 @@ class ToolchainManager:
                 ),
             }
         if name == "docker-compose":
-            completed = _checked_command([command, "compose", "version"], self.profile.workspace)
+            completed = _checked_command([command, "compose", "version"], self.profile.workspace, self.command_runner)
             return {
                 "ok": completed.get("returncode") == 0,
                 "reason": (
@@ -711,9 +715,9 @@ def _runtime_setup_commands(runtime: str, payload: dict[str, object]) -> list[st
     return commands
 
 
-def _checked_command(command: list[str], cwd: Path) -> dict[str, object]:
+def _checked_command(command: list[str], cwd: Path, command_runner: CommandRunner) -> dict[str, object]:
     try:
-        completed = subprocess.run(command, cwd=cwd, text=True, capture_output=True, check=False, timeout=15)
+        completed = command_runner.run(command, cwd=cwd, text=True, capture_output=True, check=False, timeout=15)
     except subprocess.TimeoutExpired:
         return {"returncode": None, "stdout": "", "stderr": "timeout"}
     except OSError as exc:
@@ -761,11 +765,11 @@ def _package_manager() -> str | None:
     return None
 
 
-def _command_version(command: str) -> str | None:
+def _command_version(command: str, command_runner: CommandRunner) -> str | None:
     candidates = [[command, "--version"], [command, "version"]]
     for candidate in candidates:
         try:
-            completed = subprocess.run(candidate, text=True, capture_output=True, check=False, timeout=8)
+            completed = command_runner.run(candidate, text=True, capture_output=True, check=False, timeout=8)
         except Exception:
             continue
         output = (completed.stdout or completed.stderr).strip().splitlines()

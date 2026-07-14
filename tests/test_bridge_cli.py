@@ -55,7 +55,7 @@ class BridgeCliTests(unittest.TestCase):
         with (
             patch("aiplane.cli.shutil.which", return_value="/usr/bin/ollama"),
             patch(
-                "aiplane.cli.subprocess.run",
+                "aiplane.boundaries.subprocess.run",
                 return_value=subprocess.CompletedProcess(
                     args=["ollama", "list"],
                     returncode=0,
@@ -129,7 +129,7 @@ class BridgeCliTests(unittest.TestCase):
                     with (
                         patch("aiplane.cli.shutil.which", return_value="/usr/bin/continue"),
                         patch(
-                            "aiplane.cli.subprocess.run",
+                            "aiplane.boundaries.subprocess.run",
                             return_value=subprocess.CompletedProcess(
                                 args=["continue"], returncode=0, stdout="ok\n", stderr=""
                             ),
@@ -166,7 +166,7 @@ class BridgeCliTests(unittest.TestCase):
                     stdout = StringIO()
                     with (
                         patch("aiplane.cli.shutil.which", return_value=None),
-                        patch("aiplane.cli.subprocess.run") as run,
+                        patch("aiplane.boundaries.subprocess.run") as run,
                         redirect_stdout(stdout),
                     ):
                         code = cli_main(

@@ -115,7 +115,7 @@ scripts/check.sh quick
 scripts/check.sh
 ```
 
-The scripts use the currently active Python environment. To run the full check in
+The scripts use the currently active Python environment. The full gate uses four file-scheduled pytest workers by default; set `AIPLANE_TEST_WORKERS=0` for serial execution. To run the full check in
 Conda explicitly, use `conda run --no-capture-output -n aiplane scripts/check.sh`.
 The versions used by those scripts are pinned in the `dev` optional dependency group in `pyproject.toml`. CI installs `.[dev]` and runs the same `scripts/check.sh` wrapper.
 

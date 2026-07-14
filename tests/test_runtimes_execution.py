@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from aiplane.cli import _RuntimeInstallReporter
+
 from .support import (
     AuditLogger,
     BackendResult,
@@ -256,7 +258,7 @@ class RuntimeExecutionTests(unittest.TestCase):
                 return_value={"name": "ollama", "available": True, "reason": "ok"},
             ),
             patch(
-                "aiplane.model_catalog.ModelCatalog._ollama_backend",
+                "aiplane.model_execution.ModelExecution._ollama_backend",
                 return_value=FakeOllama(),
             ),
         ):
@@ -268,7 +270,7 @@ class RuntimeExecutionTests(unittest.TestCase):
 
     def test_ollama_backend_timeout_message_points_to_runtime_commands(self) -> None:
         backend = OllamaBackend(timeout_seconds=3)
-        with patch("aiplane.backends.urlopen", side_effect=TimeoutError("timed out")):
+        with patch("aiplane.boundaries.urlopen", side_effect=TimeoutError("timed out")):
             with self.assertRaisesRegex(RuntimeError, "Ollama request timed out") as raised:
                 backend.chat("hf.co/Example/Chat-GGUF", "hello")
         message = str(raised.exception)
@@ -349,7 +351,7 @@ class RuntimeExecutionTests(unittest.TestCase):
 
         with (
             patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}),
-            patch("aiplane.backends.urlopen", return_value=FakeResponse()) as opened,
+            patch("aiplane.boundaries.urlopen", return_value=FakeResponse()) as opened,
         ):
             result = ModelCatalog(profile).complete("openai-main", "hello")
         self.assertEqual(result.backend, "openai_compatible")
@@ -388,7 +390,7 @@ class RuntimeExecutionTests(unittest.TestCase):
 
         with (
             patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}),
-            patch("aiplane.backends.urlopen", return_value=FakeResponse()) as opened,
+            patch("aiplane.boundaries.urlopen", return_value=FakeResponse()) as opened,
         ):
             result = ModelCatalog(profile).complete("claude-main", "hello")
         self.assertEqual(result.backend, "anthropic_messages")
@@ -429,7 +431,7 @@ class RuntimeExecutionTests(unittest.TestCase):
 
         with (
             patch.dict(os.environ, {"AZURE_OPENAI_API_KEY": "test-key"}),
-            patch("aiplane.backends.urlopen", return_value=FakeResponse()) as opened,
+            patch("aiplane.boundaries.urlopen", return_value=FakeResponse()) as opened,
         ):
             result = ModelCatalog(profile).complete("azure-main", "hello")
         self.assertEqual(result.backend, "azure_openai")
@@ -866,7 +868,7 @@ exit 0
                     0,
                 )
             completed = subprocess.CompletedProcess(args=["provider_helper"], returncode=0, stdout="", stderr="")
-            with patch("aiplane.cli.subprocess.run", return_value=completed) as run:
+            with patch("aiplane.boundaries.subprocess.run", return_value=completed) as run:
                 code = cli_main(
                     [
                         "--profiles-dir",
@@ -971,12 +973,13 @@ exit 0
                     stdout="+ python -m pip install vllm huggingface_hub\n",
                     stderr="",
                 )
-            time.sleep(2.1)
+            time.sleep(0.03)
             return subprocess.CompletedProcess(args=["provider_helper"], returncode=0, stdout="", stderr="")
 
         with (
             patch("aiplane.runtime_catalog.shutil.which", return_value="/usr/bin/fake"),
             patch("aiplane.cli._run_provider_helper", side_effect=_slow_helper),
+            patch("aiplane.cli._RuntimeInstallReporter", lambda: _RuntimeInstallReporter(0.01)),
             redirect_stdout(stdout),
             redirect_stderr(stderr),
         ):

@@ -329,14 +329,17 @@ class HardwareMachineTests(unittest.TestCase):
                     mutate(profile)
                 manager = HardwareManager(profile)
                 manager.use_template("cloud_gpu_vm", overrides)
-                with patch(
-                    "aiplane.hardware.RuntimeCatalog.runtime_available",
-                    return_value={
-                        "name": "ollama",
-                        "available": False,
-                        "reason": "runtime is supported but not running on this runner",
-                        "endpoint": "http://localhost:11434",
-                    },
+                with (
+                    patch.object(manager, "discover", return_value={"gpus": []}),
+                    patch(
+                        "aiplane.hardware.RuntimeCatalog.runtime_available",
+                        return_value={
+                            "name": "ollama",
+                            "available": False,
+                            "reason": "runtime is supported but not running on this runner",
+                            "endpoint": "http://localhost:11434",
+                        },
+                    ),
                 ):
                     return manager.recommend(include_not_recommended=True)
 

@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import json
-import subprocess
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .boundaries import CommandRunner, SubprocessCommandRunner
 from .config import parse_yaml
 from .env import EnvironmentManager
 from .model_catalog import ModelCatalog, capability_profile
@@ -43,8 +43,9 @@ class BenchmarkRun:
 
 
 class BenchmarkRunner:
-    def __init__(self, profile: Profile):
+    def __init__(self, profile: Profile, command_runner: CommandRunner | None = None):
         self.profile = profile
+        self.command_runner = command_runner or SubprocessCommandRunner()
         self.catalog = ModelCatalog(profile)
         self.environment = EnvironmentManager(profile)
 
@@ -202,7 +203,7 @@ class BenchmarkRunner:
                 "cwd": str(plan.cwd),
                 "reason": "dry run",
             }
-        completed = subprocess.run(
+        completed = self.command_runner.run(
             plan.command,
             cwd=plan.cwd,
             text=True,

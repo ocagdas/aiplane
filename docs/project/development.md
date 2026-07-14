@@ -139,7 +139,7 @@ scripts/setup_env.sh --mode docker --action test
 The Conda form uses the named environment and streams pytest output. The simpler
 `scripts/check.sh` uses the currently active Python environment; run
 `conda run --no-capture-output -n aiplane scripts/check.sh` to select Conda
-explicitly. Use `scripts/check.sh quick` for formatting, linting, six contract checks, and intentional smoke coverage for profile loading, CLI dispatch, dry-run planning, and JSON serialization. The quick gate is a narrow feedback loop, not a substitute for the full suite.
+explicitly. The full gate uses four pytest workers with file-level scheduling by default; set `AIPLANE_TEST_WORKERS=0` for serial execution or another worker count for the host. Use `scripts/check.sh quick` for formatting, linting, eight contract checks, and intentional smoke coverage for profile loading, CLI dispatch, dry-run planning, and JSON serialization. The quick gate is a narrow feedback loop, not a substitute for the full suite.
 
 ### Git Pre-Push Hook
 
@@ -186,7 +186,11 @@ integration smoke commands.
 
 Test profiles are materialized on disk under a temporary `AIPLANE_PROFILES_DIR` using shipped templates and synthetic model data. Tests must call the real production profile loader; do not replace loader functions globally in CLI or MCP modules. CI runs the full gate on Python 3.11 and a focused contract plus clean-wheel installation check on Python 3.12 and 3.13.
 
-External command and HTTP calls in stack, provider, machine, integration, and deployment managers use injectable `CommandRunner` and `HttpTransport` boundaries. Production uses `subprocess` and `urllib`; focused tests should pass deterministic fakes instead of patching implementation modules.
+All external command and HTTP calls use injectable `CommandRunner` and `HttpTransport` boundaries. Production uses `subprocess` and `urllib`; focused tests should use the recording fakes in `tests/boundary_fakes.py` instead of patching implementation modules. CLI tests that only need in-process dispatch and output capture should use `tests/cli_fixtures.py`; isolated profile materialization remains in `tests/profile_fixtures.py`.
+
+CLI command families should colocate parser registration and dispatch in `cli_<domain>.py` modules behind the single `aiplane` entrypoint. The entrypoint owns shared argument resolution and cross-family orchestration; domain modules own their command grammar, manager calls, and output routing.
+
+Large domain managers should delegate coherent workflows to collaborators rather than accumulating mutation, execution, readiness, and rendering in one class. `ModelCatalog` owns catalog state while `ModelExecution` owns pull/execution/endpoint readiness; `StackManager` owns stack configuration while `StackRolePlanner` and `StackLifecycle` own role policy and lifecycle behavior.
 
 ## JSON Output Conventions
 

@@ -3,16 +3,17 @@ from __future__ import annotations
 import os
 import shutil
 import signal
-import subprocess
 from pathlib import Path
 from typing import Any
 
+from .boundaries import CommandRunner, SubprocessCommandRunner
 from .models import Profile
 
 
 class RemoteManager:
-    def __init__(self, profile: Profile):
+    def __init__(self, profile: Profile, command_runner: CommandRunner | None = None):
         self.profile = profile
+        self.command_runner = command_runner or SubprocessCommandRunner()
         self.config = profile.targets or {}
 
     def tunnel_plan(self, name: str) -> dict[str, Any]:
@@ -107,7 +108,7 @@ class RemoteManager:
         log_file = self._log_file(name)
         pid_file.parent.mkdir(parents=True, exist_ok=True)
         with log_file.open("ab") as log:
-            process = subprocess.Popen(
+            process = self.command_runner.popen(
                 plan["command"],
                 cwd=self.profile.workspace,
                 stdout=log,

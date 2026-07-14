@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import json
-from contextlib import redirect_stdout
-from io import StringIO
 from pathlib import Path
 
-from aiplane.cli import main
 from aiplane.config import load_profile
 from aiplane.deploy import DeployManager
+
+from .cli_fixtures import run_cli
 
 
 def test_profile_loads_from_synthetic_profile_root() -> None:
@@ -17,11 +16,9 @@ def test_profile_loads_from_synthetic_profile_root() -> None:
 
 
 def test_cli_dispatches_config_templates() -> None:
-    stdout = StringIO()
-    with redirect_stdout(stdout):
-        result = main(["config", "templates"])
-    assert result == 0
-    assert "local" in stdout.getvalue().splitlines()
+    result = run_cli(["config", "templates"])
+    assert result.code == 0
+    assert "local" in result.stdout.splitlines()
 
 
 def test_deployment_plan_is_non_mutating() -> None:
@@ -32,8 +29,6 @@ def test_deployment_plan_is_non_mutating() -> None:
 
 
 def test_cli_json_output_serializes() -> None:
-    stdout = StringIO()
-    with redirect_stdout(stdout):
-        result = main(["profiles", "show", "local-dev", "--selected"])
-    assert result == 0
-    assert json.loads(stdout.getvalue())["name"] == "local-dev"
+    result = run_cli(["profiles", "show", "local-dev", "--selected"])
+    assert result.code == 0
+    assert json.loads(result.stdout)["name"] == "local-dev"

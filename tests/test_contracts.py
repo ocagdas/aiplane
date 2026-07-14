@@ -75,3 +75,21 @@ def test_aiplane_skill_is_versioned_and_not_template_text() -> None:
     assert "TODO" not in text
     assert "control-plane CLI" in text
     assert Path("skills/aiplane/agents/openai.yaml").is_file()
+
+
+def test_full_check_uses_configurable_file_level_parallelism() -> None:
+    script = Path("scripts/check.sh").read_text(encoding="utf-8")
+    assert "AIPLANE_TEST_WORKERS:-4" in script
+    assert "--dist loadfile" in script
+
+
+def test_external_io_calls_are_centralized_in_boundaries() -> None:
+    violations = []
+    for path in Path("src/aiplane").glob("*.py"):
+        if path.name == "boundaries.py":
+            continue
+        text = path.read_text(encoding="utf-8")
+        for token in ("subprocess.run(", "subprocess.Popen(", "urlopen("):
+            if token in text:
+                violations.append(f"{path}:{token}")
+    assert violations == []

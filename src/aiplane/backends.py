@@ -4,8 +4,10 @@ import json
 from dataclasses import dataclass
 from urllib.error import URLError
 from urllib.parse import urlencode
-from urllib.request import Request, urlopen
+from urllib.request import Request
 from typing import Mapping
+
+from .boundaries import HttpTransport, UrllibHttpTransport
 
 
 @dataclass(frozen=True)
@@ -37,14 +39,16 @@ class OllamaBackend:
         endpoint: str = "http://localhost:11434",
         timeout_seconds: int = 60,
         headers: Mapping[str, str] | None = None,
+        http_transport: HttpTransport | None = None,
     ):
         self.endpoint = endpoint.rstrip("/")
         self.timeout_seconds = timeout_seconds
         self.headers = dict(headers or {})
+        self.http_transport = http_transport or UrllibHttpTransport()
 
     def available_models(self) -> list[str]:
         request = Request(f"{self.endpoint}/api/tags", headers=self.headers)
-        with urlopen(request, timeout=5) as response:
+        with self.http_transport.open(request, timeout=5) as response:
             payload = json.loads(response.read().decode("utf-8"))
         return [model.get("name", "") for model in payload.get("models", []) if model.get("name")]
 
@@ -68,7 +72,7 @@ class OllamaBackend:
             method="POST",
         )
         try:
-            with urlopen(request, timeout=self.timeout_seconds) as response:
+            with self.http_transport.open(request, timeout=self.timeout_seconds) as response:
                 body = json.loads(response.read().decode("utf-8"))
         except (URLError, TimeoutError, OSError, ConnectionError) as exc:
             detail = str(exc)
@@ -97,14 +101,16 @@ class OpenAICompatibleBackend:
         endpoint: str,
         timeout_seconds: int = 60,
         headers: Mapping[str, str] | None = None,
+        http_transport: HttpTransport | None = None,
     ):
         self.endpoint = endpoint.rstrip("/")
         self.timeout_seconds = timeout_seconds
         self.headers = dict(headers or {})
+        self.http_transport = http_transport or UrllibHttpTransport()
 
     def available_models(self) -> list[str]:
         request = Request(f"{self.endpoint}/models", headers=self.headers)
-        with urlopen(request, timeout=5) as response:
+        with self.http_transport.open(request, timeout=5) as response:
             payload = json.loads(response.read().decode("utf-8"))
         data = payload.get("data", [])
         return sorted(str(model.get("id")) for model in data if isinstance(model, dict) and model.get("id"))
@@ -129,7 +135,7 @@ class OpenAICompatibleBackend:
             method="POST",
         )
         try:
-            with urlopen(request, timeout=self.timeout_seconds) as response:
+            with self.http_transport.open(request, timeout=self.timeout_seconds) as response:
                 body = json.loads(response.read().decode("utf-8"))
         except (URLError, TimeoutError, OSError, ConnectionError) as exc:
             raise RuntimeError(
@@ -157,11 +163,13 @@ class AnthropicMessagesBackend:
         timeout_seconds: int = 60,
         headers: Mapping[str, str] | None = None,
         api_version: str = "2023-06-01",
+        http_transport: HttpTransport | None = None,
     ):
         self.endpoint = endpoint.rstrip("/")
         self.timeout_seconds = timeout_seconds
         self.headers = dict(headers or {})
         self.api_version = api_version
+        self.http_transport = http_transport or UrllibHttpTransport()
 
     def chat(self, model: str, prompt: str) -> BackendResult:
         payload = {
@@ -181,7 +189,7 @@ class AnthropicMessagesBackend:
             method="POST",
         )
         try:
-            with urlopen(request, timeout=self.timeout_seconds) as response:
+            with self.http_transport.open(request, timeout=self.timeout_seconds) as response:
                 body = json.loads(response.read().decode("utf-8"))
         except (URLError, TimeoutError, OSError, ConnectionError) as exc:
             raise RuntimeError(
@@ -207,11 +215,13 @@ class AzureOpenAIBackend:
         api_version: str = "2024-02-01",
         timeout_seconds: int = 60,
         headers: Mapping[str, str] | None = None,
+        http_transport: HttpTransport | None = None,
     ):
         self.endpoint = endpoint.rstrip("/")
         self.api_version = api_version
         self.timeout_seconds = timeout_seconds
         self.headers = dict(headers or {})
+        self.http_transport = http_transport or UrllibHttpTransport()
 
     def chat(self, deployment: str, prompt: str) -> BackendResult:
         payload = {
@@ -228,7 +238,7 @@ class AzureOpenAIBackend:
             method="POST",
         )
         try:
-            with urlopen(request, timeout=self.timeout_seconds) as response:
+            with self.http_transport.open(request, timeout=self.timeout_seconds) as response:
                 body = json.loads(response.read().decode("utf-8"))
         except (URLError, TimeoutError, OSError, ConnectionError) as exc:
             raise RuntimeError(

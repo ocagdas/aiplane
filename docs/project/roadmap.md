@@ -461,7 +461,7 @@ The roadmap is now actively executing the priorities above; completed work in ea
 ### Post-Merge Foundation
 
 1. **Architecture and codebase cleanup** - Implemented
-   - `src/aiplane/cli.py` now delegates config, profile, integration, and model command registration/handling to focused modules while keeping one public `aiplane` entrypoint. Continue splitting command families when it reduces real ownership pressure.
+   - `src/aiplane/cli.py` now delegates config, profile, governance, deployment/remote, setup/tooling, hardware/machine, orchestrator/stack, integration, and model command registration/handling to focused modules while keeping one public `aiplane` entrypoint. Continue splitting command families when it reduces real ownership pressure.
    - Shared CLI parsing/progress helpers live outside the monolithic CLI so provider refresh, profile bootstrap, hardware/machine/stack settings, and future command modules do not duplicate low-level parsing behavior.
    - Model filter parser choices and MCP schema choices are shared definitions; integration roles are shared contracts. Keep moving shared definitions only where they prevent drift.
    - Keep shell helpers as thin delegates to official tools; avoid growing provider-specific business logic in Bash when Python catalog/runtime code already owns the decision.
@@ -533,15 +533,16 @@ The roadmap is now actively executing the priorities above; completed work in ea
 
 11. **Test-suite structure, performance, and isolation** - Structurally complete / incremental
    - Production loaders are no longer globally replaced by the test harness; temporary profile roots contain deterministic synthetic model data and exercise normal disk loading.
-   - The quick gate now runs six contracts plus four intentional smoke checks; the empty legacy aggregate module is no longer included.
-   - Shared injectable command/HTTP boundaries cover stack, provider, machine, integration, and deployment paths.
+   - The quick gate now runs eight contracts plus four intentional smoke checks; the empty legacy aggregate module is no longer included.
+   - Shared injectable command/HTTP boundaries now cover every production process and HTTP owner; only `boundaries.py` calls `subprocess` or `urllib` directly, enforced by a contract test.
    - Model refresh reconciliation, stack lifecycle, static tool catalog data, and provider-registry tests now live in focused modules instead of their former large mixed owners.
+   - Model pull/execution/endpoint readiness now lives in `model_execution.py`; stack role normalization/policy checks live in `stack_roles.py`. Oversized model and profile/config test owners are split into focused refresh, mutation, listing, lifecycle, config, and governance modules.
    - CI keeps the full Python 3.11 gate and validates contracts plus clean static-wheel installation on Python 3.12 and 3.13.
    - Split the large MVP test module into focused files by area so slow tests and ownership are easier to see. Start with behavior boundaries that already exist in code: profiles/config, providers/models, runtimes/execution, integrations/chat, MCP, machines/stacks, deployment, and CLI smoke coverage.
-   - Extract shared test fixtures and helpers for isolated profiles, local model caches, mocked HTTP endpoints, mocked subprocess boundaries, and CLI stdout/stderr capture.
+   - Shared test infrastructure now separates isolated profile/model materialization (`profile_fixtures.py`), recording process/HTTP fakes (`boundary_fakes.py`), and in-process CLI output capture (`cli_fixtures.py`). Continue migrating repeated local doubles when touching their owning suites.
    - Keep the full automated suite useful as a PR gate without letting local discovery caches or external-machine state dominate runtime.
-   - Continue replacing repeated full-catalog enrichment with cached or single-pass helpers where behavior is unchanged.
-   - Evaluate `pytest-xdist` only after filesystem, environment-variable, and profile-fixture isolation are strong enough for safe parallel execution.
+   - Runtime progress timing is injectable for tests, eliminating a two-second sleep while retaining real threaded reporter coverage; synthetic hardware recommendation matrices no longer probe host GPU tools. Continue replacing repeated full-catalog enrichment with cached or single-pass helpers where behavior is unchanged.
+   - `pytest-xdist` 3.8.0 is pinned for development. The full gate uses four workers with file-level scheduling after three clean parallel full-suite runs; `AIPLANE_TEST_WORKERS` can tune the count or select `0` for serial troubleshooting.
    - Keep quality intact: move tests and optimize fixtures, not assertions or behavioral coverage.
 
 ## Planned But Not Implemented

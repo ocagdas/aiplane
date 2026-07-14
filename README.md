@@ -191,7 +191,7 @@ scripts/check.sh quick
 
 Run the scripts from an environment where the project development dependencies
 are installed, such as the activated Conda environment or `venv`. The scripts
-use that environment's `python` executable. If you do not want to activate a
+use that environment's `python` executable. The full gate uses four file-scheduled pytest workers by default; set `AIPLANE_TEST_WORKERS=0` for serial execution or choose another worker count. If you do not want to activate a
 Conda environment first, you can select it explicitly with
 `conda run --no-capture-output -n aiplane scripts/check.sh`. Use
 `scripts/format.sh check` to check formatting only, or `scripts/format.sh fix`

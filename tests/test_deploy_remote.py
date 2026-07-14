@@ -340,7 +340,7 @@ class DeployRemoteTests(unittest.TestCase):
 
             with (
                 patch("aiplane.remote.shutil.which", return_value="/usr/bin/ssh"),
-                patch("aiplane.remote.subprocess.Popen", return_value=Process()),
+                patch("aiplane.boundaries.subprocess.Popen", return_value=Process()),
             ):
                 started = manager.tunnel_start("gpu_workstation_ssh", yes=True)
             self.assertEqual(started["status"], "started")

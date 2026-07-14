@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import importlib.util
-import subprocess
 from typing import Any
 
+from .boundaries import CommandRunner, SubprocessCommandRunner
 from .config import dump_yaml
 from .env import EnvironmentManager
 from .model_catalog import ModelCatalog
@@ -90,8 +90,9 @@ ORCHESTRATOR_DEFINITIONS: dict[str, dict[str, Any]] = {
 
 
 class OrchestratorCatalog:
-    def __init__(self, profile: Profile):
+    def __init__(self, profile: Profile, command_runner: CommandRunner | None = None):
         self.profile = profile
+        self.command_runner = command_runner or SubprocessCommandRunner()
         self.config = profile.orchestrators or {}
         self.environment = EnvironmentManager(profile)
 
@@ -220,7 +221,7 @@ class OrchestratorCatalog:
             return payload
         results = []
         if install and install_plan:
-            completed = subprocess.run(
+            completed = self.command_runner.run(
                 install_plan.command,
                 cwd=install_plan.cwd,
                 text=True,

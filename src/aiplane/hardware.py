@@ -5,11 +5,11 @@ import json
 import os
 import platform
 import shutil
-import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from .boundaries import CommandRunner, SubprocessCommandRunner
 from .config import dump_yaml
 from .model_catalog import ModelCatalog, capability_profile
 from .runtime_catalog import RuntimeCatalog
@@ -25,8 +25,9 @@ class HardwareFit:
 
 
 class HardwareManager:
-    def __init__(self, profile: Profile):
+    def __init__(self, profile: Profile, command_runner: CommandRunner | None = None):
         self.profile = profile
+        self.command_runner = command_runner or SubprocessCommandRunner()
         self.config = profile.hardware or {}
 
     def show(self, verbosity: int = 0) -> dict[str, Any]:
@@ -224,8 +225,8 @@ class HardwareManager:
             "gpus": [],
             "notes": [],
         }
-        discovered["gpus"].extend(_nvidia_gpus())
-        discovered["gpus"].extend(_amd_gpus())
+        discovered["gpus"].extend(_nvidia_gpus(self.command_runner))
+        discovered["gpus"].extend(_amd_gpus(self.command_runner))
         if not discovered["gpus"]:
             discovered["notes"].append("No NVIDIA/AMD GPU discovered through available CLI tools")
         discovered["closest_profiles"] = self._closest_profiles(discovered)
@@ -518,10 +519,10 @@ def _memory_gb() -> float | None:
     return None
 
 
-def _nvidia_gpus() -> list[dict[str, Any]]:
+def _nvidia_gpus(command_runner: CommandRunner) -> list[dict[str, Any]]:
     if not shutil.which("nvidia-smi"):
         return []
-    result = subprocess.run(
+    result = command_runner.run(
         [
             "nvidia-smi",
             "--query-gpu=name,memory.total,uuid",
@@ -548,11 +549,11 @@ def _nvidia_gpus() -> list[dict[str, Any]]:
     return gpus
 
 
-def _amd_gpus() -> list[dict[str, Any]]:
+def _amd_gpus(command_runner: CommandRunner) -> list[dict[str, Any]]:
     # Prefer rocminfo/rocm-smi when available; fall back to lspci names only.
     gpus: list[dict[str, Any]] = []
     if shutil.which("rocm-smi"):
-        result = subprocess.run(
+        result = command_runner.run(
             ["rocm-smi", "--showproductname", "--showmeminfo", "vram"],
             text=True,
             capture_output=True,
@@ -568,7 +569,7 @@ def _amd_gpus() -> list[dict[str, Any]]:
             )
             return gpus
     if shutil.which("lspci"):
-        result = subprocess.run(["lspci"], text=True, capture_output=True, check=False)
+        result = command_runner.run(["lspci"], text=True, capture_output=True, check=False)
         if result.returncode == 0:
             for line in result.stdout.splitlines():
                 lower = line.lower()
