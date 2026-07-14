@@ -41,3 +41,21 @@ python -m pip show aiplane
 aiplane profiles templates
 aiplane quickstart local-coding --dry-run
 ```
+
+## Artifact integrity and rollback
+
+The release workflow writes `dist/SHA256SUMS` for the wheel and source distribution and verifies it before creating the release. After downloading the artifacts into one directory, consumers can verify them with:
+
+```bash
+# Linux
+sha256sum --check SHA256SUMS
+
+# macOS
+shasum -a 256 --check SHA256SUMS
+```
+
+On Windows PowerShell, compare `(Get-FileHash -Algorithm SHA256 FILE).Hash` with the corresponding manifest value.
+
+Versioned notes live under `docs/project/releases/vVERSION.md`; the release workflow refuses to publish when the matching file is absent. `CHANGELOG.md` summarizes public changes across versions.
+
+For rollback, first preserve reviewed profile YAML and local configuration. Uninstall with the same owner used for installation, verify the checksum of the previously downloaded wheel, and reinstall that immutable artifact. Do not copy credentials, audit logs, tunnel state, caches, or runtime model stores into a profile backup. If a future schema migration is required, follow its explicit preview/backup instructions; Aiplane must not silently downgrade or rewrite profile schemas.

@@ -74,8 +74,11 @@ def verify_tier1_exports(
     if "OPENAI_API_BASE=" not in aider_config or "aider --model openai/" not in aider_config:
         raise RuntimeError("installed Aider Tier-1 export is incomplete")
     openai_config = json.loads(content("openai-compatible", "--model", "portable_smoke"))
-    if openai_config.get("model") != str(workspace / "portable-smoke.gguf"):
-        raise RuntimeError("installed OpenAI-compatible Tier-1 export is incomplete")
+    if openai_config.get("model") != "portable-smoke.gguf":
+        raise RuntimeError(
+            "installed OpenAI-compatible Tier-1 export is incomplete: "
+            f"expected portable-smoke.gguf, got {openai_config.get('model')!r}"
+        )
     mcp_config = json.loads(content("generic-mcp"))
     if mcp_config.get("mcpServers", {}).get("aiplane", {}).get("args") != ["mcp", "serve"]:
         raise RuntimeError("installed generic MCP Tier-1 export is incomplete")
@@ -117,6 +120,34 @@ def verify_tier1_exports(
             process.wait(timeout=5)
 
 
+def verify_platform_contracts(cli, *, system: str) -> None:
+    tunnel_plan = json.loads(cli("remote", "tunnel", "plan", "--target", "gpu_workstation_ssh").stdout)
+    if tunnel_plan.get("type") != "ssh_tunnel" or not tunnel_plan.get("command"):
+        raise RuntimeError("portable SSH tunnel plan is incomplete")
+
+    if system in {"Darwin", "Windows"}:
+        unsupported = json.loads(cli("runtimes", "install", "ollama", "--dry-run", expected=(2,)).stdout)
+        if unsupported.get("name") != "unsupported_platform":
+            raise RuntimeError("unsupported runtime mutation did not fail with unsupported_platform")
+
+    # Tunnel lifecycle is supported on macOS, so never call start there: an
+    # installation verifier must not initiate a real SSH connection. Windows
+    # is the only supported OS where lifecycle is expected to fail closed.
+    if system == "Windows":
+        tunnel = json.loads(
+            cli(
+                "remote",
+                "tunnel",
+                "start",
+                "--target",
+                "gpu_workstation_ssh",
+                expected=(2,),
+            ).stdout
+        )
+        if tunnel.get("name") != "unsupported_platform":
+            raise RuntimeError("unsupported SSH lifecycle did not fail with unsupported_platform")
+
+
 def verify_cli(command: Path, *, env: dict[str, str], workspace: Path) -> None:
     workspace.mkdir(parents=True)
     profiles = workspace / "profiles"
@@ -150,7 +181,7 @@ def verify_cli(command: Path, *, env: dict[str, str], workspace: Path) -> None:
         "--provider",
         "local_file",
         "--model",
-        str(model_path),
+        model_path.name,
         "--role",
         "chat",
         "--role",
@@ -187,23 +218,7 @@ def verify_cli(command: Path, *, env: dict[str, str], workspace: Path) -> None:
     if exported.get("base_url") != "http://127.0.0.1:8080/v1":
         raise RuntimeError("portable export output is incomplete")
 
-    if platform.system() in {"Darwin", "Windows"}:
-        unsupported = json.loads(cli("runtimes", "install", "ollama", "--dry-run", expected=(2,)).stdout)
-        if unsupported.get("name") != "unsupported_platform":
-            raise RuntimeError("unsupported runtime mutation did not fail with unsupported_platform")
-        tunnel = json.loads(
-            cli(
-                "remote",
-                "tunnel",
-                "start",
-                "--target",
-                "gpu_workstation_ssh",
-                expected=(2,),
-            ).stdout
-        )
-        if tunnel.get("name") != "unsupported_platform":
-            raise RuntimeError("unsupported SSH lifecycle did not fail with unsupported_platform")
-
+    verify_platform_contracts(cli, system=platform.system())
 
 def verify_pip(wheel: Path, root: Path) -> None:
     venv = root / "pip-venv"

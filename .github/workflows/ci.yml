@@ -81,3 +81,19 @@ jobs:
 
       - name: Validate pip, pipx, and uv tool lifecycle
         run: python scripts/verify_install_channels.py dist
+
+  release-gate:
+    name: Release gate
+    if: ${{ always() }}
+    needs: [checks, compatibility, install-channels]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every release-path check
+        env:
+          CHECKS: ${{ needs.checks.result }}
+          COMPATIBILITY: ${{ needs.compatibility.result }}
+          INSTALL_CHANNELS: ${{ needs.install-channels.result }}
+        run: |
+          test "$CHECKS" = success
+          test "$COMPATIBILITY" = success
+          test "$INSTALL_CHANNELS" = success

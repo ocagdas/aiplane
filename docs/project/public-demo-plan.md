@@ -4,19 +4,96 @@ This plan presents `aiplane` as it exists in the developer preview: an environme
 
 The public story is deliberately narrow. `aiplane` turns environment facts and reviewed YAML profiles into readiness findings, hardware-aware recommendations, and deterministic configuration exports. It does not become a model runtime, coding agent, IDE extension, secret manager, or hidden cloud deployment system.
 
-## Recommended video set
+## Recording hierarchy
 
-Record three self-contained videos. Each must work at normal speaking speed in no more than three minutes; target 2:30-2:50 so command output and small pauses do not force rushed narration.
+### Primary public adoption cut — one outcome in under three minutes
 
-| Video | New-user outcome | Target |
+This is the one introductory product video. It contains exactly five core commands—quickstart dry-run, discover, doctor, recommend, and Continue export—with no advanced command detours.
+
+**Promise:** “Inspect this AI-development environment, understand readiness, choose a suitable configuration, and produce reviewed Continue config without hidden mutation.”
+
+**Prepared state:** `aiplane` is installed from a release wheel in a clean workspace. Use a sanitized, rehearsed local Ollama profile so output is useful and deterministic; preparing the runtime/model is part of trial setup, not this public cut.
+
+#### 0:00-0:25 — Preview without mutation
+
+Exact command:
+
+```bash
+aiplane quickstart local-coding --dry-run
+```
+
+Narration:
+
+> Aiplane starts with a dry-run. It previews the editable local profile and gives me one exact next action without installing a runtime, editing my IDE, contacting a catalog, or changing cloud resources.
+
+#### 0:25-0:55 — Inspect provenance
+
+Exact command:
+
+```bash
+aiplane discover
+```
+
+Narration:
+
+> Discovery inventories this environment and labels where configuration came from: detected machine facts, generated or discovered records, values supplied by my profile, and anything still unresolved.
+
+#### 0:55-1:40 — Diagnose readiness
+
+Exact command:
+
+```bash
+aiplane doctor
+```
+
+Narration:
+
+> Doctor turns that inventory into actionable findings. Each blocker or advisory identifies the affected resource, explains the impact, and gives a remediation while making any mutation or dry-run requirement explicit.
+
+#### 1:40-2:10 — Choose a suitable configuration
+
+Exact command:
+
+```bash
+aiplane recommend
+```
+
+Narration:
+
+> Recommendation combines reviewed profile policy with available hardware. This is a transparent compatibility recommendation, not a benchmark result or performance guarantee.
+
+#### 2:10-2:45 — Compile Continue configuration
+
+Exact command:
+
+```bash
+aiplane export continue
+```
+
+Narration:
+
+> Export compiles deterministic Continue configuration for review. It prints text to the terminal; it does not install Continue, edit its files, start a model, or bypass authentication.
+
+#### 2:45-2:55 — Close on the repeatable loop
+
+Exact command: none; leave the export visible.
+
+Narration:
+
+> That is the complete loop: profile, discover, doctor, recommend, and export. The inputs stay reviewable and the generated configuration can be reproduced whenever the environment changes.
+
+Do not show model pulls, chat/run/code commands, runtime lifecycle, MCP, stacks, orchestrators, deployment, benchmarks, or cloud discovery in this cut. Link advanced documentation below the video rather than adding another segment.
+
+### P0 workflow-validation recordings
+
+These are evidence workflows for independent user testing, not co-equal introductory product videos.
+
+| Recording | Validation outcome | Target |
 | --- | --- | --- |
-| 1. Local setup | Inspect a laptop, understand blockers, choose a suitable local model, and export Continue config. | 2:45 |
-| 2. Safe repeatability | Enforce local-only policy, archive editable YAML, recover from damage, and prove the restored output is identical. | 2:50 |
-| 3. Remote GPU | Capture an existing GPU workstation, import it on a laptop, rank it for a workload, plan access, and export endpoint config. | 2:50 |
+| Local-only replay | Enforce local-only policy, archive editable YAML, recover from damage, and prove deterministic replay. | 2:50 |
+| Existing remote GPU | Capture/import a GPU workstation, rank placement, plan access, and export endpoint configuration. | 2:50 |
 
-Do not add a fourth public video yet. MCP, schema automation, Aider, and CI usage can become a fourth “automation and integrations” video after audience or user-testing evidence shows that it clarifies adoption. Until then, show one deterministic integration export in each relevant video and keep advanced surfaces in documentation.
-
-These three videos are also the P0 user-testing demonstrations. A successful recording rehearsal is not a substitute for the independent-user completion gate.
+A successful internal rehearsal does not satisfy the P0 gate. Independent users must complete all three workflows: the local Ollama adoption flow above, local-only/privacy replay, and laptop-to-remote-GPU.
 
 ## Shared recording rules
 
@@ -40,87 +117,15 @@ aiplane --help
 
 The installed CLI creates editable profiles relative to this workspace. Keep the demo workspace after each rehearsal until the recording has been reviewed.
 
-## Video 1 — From a new laptop to a usable local setup
-
-**Promise:** “In under three minutes, understand this machine’s AI-development readiness and produce reviewed configuration for an existing coding tool.”
-
-**Prepared state:** `aiplane` is installed. For the live ending, Ollama is already installed and a small reviewed Ollama model is available or can be pulled quickly. The dry-run path must work without either condition.
-
-### 0:00-0:25 — Preview before writing
-
-```bash
-aiplane quickstart local-coding --dry-run
-aiplane quickstart local-coding
-```
-
-Narration:
-
-> Quickstart previews first, then creates the editable local profile. It preserves an existing profile, skips provider catalog communication by default, and reports one exact next action. It does not install a runtime, edit an IDE, or touch cloud resources.
-
-Show `profiles/local-dev/` briefly. Describe it as reviewed environment configuration, not a secret store.
-
-### 0:25-1:15 — Discover and diagnose
-
-```bash
-aiplane discover
-aiplane doctor
-```
-
-Point out:
-
-- detected hardware and installed runtime facts;
-- configuration provenance: detected, generated/discovered, profile-supplied, or unresolved;
-- blocker versus advisory findings;
-- exact remediation and whether it mutates state or supports dry-run.
-
-Narration:
-
-> Doctor is read-only. A blocker explains what is wrong, which resource is affected, and the exact safe next action instead of claiming the machine is ready.
-
-### 1:15-2:05 — Recommend a reviewed local model
-
-```bash
-aiplane recommend
-aiplane models list --runtime ollama --role chat --enabled-only --sort-by role --limit 3
-```
-
-On a prepared profile, select the first rehearsed alias rather than improvising during recording:
-
-```bash
-MODEL_ALIAS="REHEARSED_OLLAMA_ALIAS"
-aiplane models show "$MODEL_ALIAS"
-aiplane quickstart local-coding --dry-run --pull-model "$MODEL_ALIAS"
-```
-
-If the recording machine is prepared and the pull is acceptably short, run the same command without `--dry-run`. Otherwise stop at the plan and show `aiplane runtimes status ollama`.
-
-Narration:
-
-> The profile alias is separate from the provider’s model ID and from the runtime that stores or serves the weights. Aiplane records and checks that mapping; Ollama remains the runtime.
-
-### 2:05-2:45 — Compile tool configuration
-
-```bash
-aiplane export continue
-```
-
-Narration:
-
-> Export is deterministic text for review. It does not install Continue or edit its files. Re-running this export from the same profile produces the same configuration.
-
-End on the core loop:
-
-```text
-profile -> discover -> doctor -> recommend -> export
-```
-
-## Video 2 — Local-only policy, backup, restore, and deterministic replay
+## P0 validation recording 1 — Local-only policy, backup, restore, and deterministic replay
 
 **Promise:** “Treat the setup as reviewable configuration: prove cloud use is blocked, archive it, recover it, and reproduce the same export.”
 
 **Prepared state:** Start with the working `local-dev` profile from video 1. The profile and local config must contain no raw credentials. This video uses ordinary filesystem copies because `aiplane` does not claim to be a backup product.
 
 ### 0:00-0:35 — Make policy visible
+
+Exact commands:
 
 ```bash
 aiplane policy explain --action backend:cloud
@@ -136,6 +141,8 @@ Narration:
 
 ### 0:35-1:10 — Archive editable and canonical forms
 
+Exact commands:
+
 ```bash
 mkdir -p demo-backup
 cp -a profiles/local-dev demo-backup/local-dev
@@ -143,7 +150,7 @@ aiplane profiles render local-dev > demo-backup/local-dev.profile.json
 aiplane export continue > demo-backup/continue.before.yaml
 ```
 
-If local CLI defaults are part of the demonstration:
+Continue with these exact commands to include non-secret local CLI defaults:
 
 ```bash
 aiplane config init --template local
@@ -159,7 +166,7 @@ Before sharing any archive, review it for private endpoints, machine names, acco
 
 ### 1:10-1:45 — Demonstrate failure and template repair
 
-Remove one file only after the backup exists:
+Exact commands; remove one file only after the backup exists:
 
 ```bash
 mv profiles/local-dev/models.yaml profiles/local-dev/models.yaml.broken
@@ -175,6 +182,8 @@ Do not run repair without `--dry-run` in this sequence; restoring the blank temp
 
 ### 1:45-2:30 — Restore and prove equivalence
 
+Exact commands:
+
 ```bash
 cp demo-backup/local-dev/models.yaml profiles/local-dev/models.yaml
 rm profiles/local-dev/models.yaml.broken
@@ -186,7 +195,6 @@ cmp demo-backup/local-dev.profile.json demo-backup/local-dev.restored.profile.js
 cmp demo-backup/continue.before.yaml demo-backup/continue.after.yaml
 ```
 
-If the optional local config was not created, omit its two copy commands.
 
 Narration:
 
@@ -194,18 +202,17 @@ Narration:
 
 ### 2:30-2:50 — Close with portability boundaries
 
-Show the backup contents:
+Exact command:
 
 ```bash
 find demo-backup -maxdepth 2 -type f -print
 ```
 
-State explicitly:
+Narration:
 
-- portable: reviewed profile YAML, canonical render, non-secret local defaults when desired, and generated integration text;
-- not portable by default: credentials, model weights, provider caches, audit logs, PID/tunnel state, and machine-specific runtime data.
+> This backup contains the reviewed profile YAML, canonical render, optional non-secret local defaults, and generated integration text. Credentials, model weights, provider caches, audit logs, tunnel state, and machine-specific runtime data stay with the systems that own them.
 
-## Video 3 — Reuse the setup with an existing remote GPU workstation
+## P0 validation recording 2 — Reuse the setup with an existing remote GPU workstation
 
 **Promise:** “Describe a real GPU machine once, import that fact on a laptop, plan safe access, and compile client configuration without provisioning infrastructure.”
 
@@ -213,7 +220,7 @@ State explicitly:
 
 ### 0:00-0:40 — Capture the GPU machine
 
-Run on the GPU workstation:
+Exact commands to run on the GPU workstation:
 
 ```bash
 mkdir -p aiplane-machine-export
@@ -231,7 +238,7 @@ Transfer `gpu-workstation.machine.yaml` through the team’s approved file-trans
 
 ### 0:40-1:20 — Import and rank on the laptop
 
-Back in the laptop demo workspace:
+Exact commands to run in the laptop demo workspace:
 
 ```bash
 aiplane machines import gpu-workstation.machine.yaml
@@ -239,7 +246,7 @@ aiplane machines show gpu-workstation
 aiplane machines recommend --workload inference_large --limit 3
 ```
 
-If the laptop profile already contains the rehearsed remote model alias:
+Set the sanitized alias prepared in the laptop profile, then run the exact recommendation command:
 
 ```bash
 REMOTE_MODEL="REHEARSED_REMOTE_ALIAS"
@@ -252,7 +259,7 @@ Narration:
 
 ### 1:20-2:05 — Plan access without opening it
 
-Use a sanitized `ssh_tunnel` target already reviewed in `profiles/local-dev/targets.yaml`:
+Use a sanitized `ssh_tunnel` target already reviewed in `profiles/local-dev/targets.yaml`. Exact commands:
 
 ```bash
 aiplane remote tunnel plan --target gpu_workstation_ssh
@@ -267,7 +274,7 @@ If lifecycle support is unavailable on the recording platform, show the explicit
 
 ### 2:05-2:40 — Compile endpoint configuration
 
-With the tunnel or approved endpoint already running:
+Exact commands, with the tunnel or approved endpoint already running:
 
 ```bash
 aiplane doctor
@@ -280,6 +287,10 @@ Narration:
 > The same laptop profile now compiles configuration for an existing remote runtime. Export still only prints reviewable text; it does not create the workstation, start the model server, edit the IDE, or weaken authentication.
 
 ### 2:40-2:50 — Close
+
+Exact command: none; leave the exported configuration visible.
+
+Narration:
 
 > Local laptop or remote GPU, the workflow stays the same: describe facts, diagnose readiness, choose placement, plan access, and export deterministic configuration.
 
@@ -322,7 +333,7 @@ Verify:
 
 ## P0 demonstration evidence
 
-For each independent user, record:
+Use the canonical [external-trial evidence record](external-trial-evidence.md) and validate it before sharing. For each independent user, record:
 
 - operating system and installation channel;
 - start/end timestamps and whether the video stayed under three minutes;

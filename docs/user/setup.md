@@ -12,6 +12,8 @@ Platform behavior is documented in [Platform support](platform-support.md). Port
 
 Download the `.whl` attached to the [latest GitHub Release](https://github.com/ocagdas/aiplane/releases/latest). The wheel is the standard evaluation channel and contains the CLI, profile and config templates, and packaged runtime helper scripts. You do not need Git or a source checkout.
 
+Download `SHA256SUMS` from the same release and verify the wheel before installation. Linux can use `sha256sum --check SHA256SUMS`; macOS can use `shasum -a 256 --check SHA256SUMS`; on Windows compare `Get-FileHash -Algorithm SHA256` output with the manifest.
+
 Choose one installation owner:
 
 ```bash
@@ -44,6 +46,8 @@ pipx uninstall aiplane
 pipx install ./aiplane-NEW_VERSION-py3-none-any.whl
 python -m pip install --upgrade ./aiplane-NEW_VERSION-py3-none-any.whl
 ```
+
+For rollback, preserve the reviewed profile YAML, uninstall the current version with its installation owner, verify the previously downloaded wheel against its release checksum, and reinstall that immutable wheel. Runtime weights, credentials, caches, audit logs, and tunnel state remain outside the portable profile and should be recovered through their owning systems.
 
 Uninstall with the same owner used for installation:
 

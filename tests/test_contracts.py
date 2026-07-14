@@ -256,7 +256,7 @@ def test_p0_documentation_sweep_stays_open_until_user_demonstrations() -> None:
     backlog = Path("docs/project/product-adoption-backlog-2026-07.md").read_text(encoding="utf-8")
 
     assert "**P0 completion gate.**" in backlog
-    assert "after P0 items 4-9 are complete" in backlog
+    assert "after all numbered P0 work is complete" in backlog
     assert "must be repeated after the user-testing demonstrations" in backlog
     assert "interim pass does not close this gate" in backlog
 
@@ -264,15 +264,15 @@ def test_p0_documentation_sweep_stays_open_until_user_demonstrations() -> None:
 def test_post_gate_backlog_numbers_are_sequential() -> None:
     backlog = Path("docs/project/product-adoption-backlog-2026-07.md").read_text(encoding="utf-8")
     numbered = [int(value) for value in re.findall(r"(?m)^(\d+)\. ", backlog)]
-    assert numbered == list(range(1, 25))
+    assert numbered == list(range(1, 24))
 
 
 def test_public_demo_plan_is_bounded_reproducible_and_uses_current_commands() -> None:
     text = Path("docs/project/public-demo-plan.md").read_text(encoding="utf-8")
 
-    assert text.count("## Video ") == 3
-    assert "no more than three minutes" in text
-    assert "Do not add a fourth public video yet" in text
+    assert text.count("### Primary public adoption cut") == 1
+    assert text.count("## P0 validation recording") == 2
+    assert "one introductory product video" in text
     for command in (
         "aiplane quickstart local-coding --dry-run",
         "aiplane discover",
@@ -293,3 +293,104 @@ def test_public_demo_plan_is_bounded_reproducible_and_uses_current_commands() ->
     assert "It does not start a process" in text
     assert "control plane" not in text.lower()
     assert "mvp_0." not in text
+
+
+def test_install_verifier_is_portable_and_never_starts_supported_tunnels() -> None:
+    verifier = Path("scripts/verify_install_channels.py").read_text(encoding="utf-8")
+
+    assert "model_path.name" in verifier
+    assert 'openai_config.get("model") != "portable-smoke.gguf"' in verifier
+    assert 'cli("remote", "tunnel", "plan"' in verifier
+    assert 'if system == "Windows":' in verifier
+    assert 'if platform.system() in {"Darwin", "Windows"}:' not in verifier
+    darwin_guard, windows_guard = verifier.split('if system == "Windows":', 1)
+    assert '"tunnel",\n                "start"' not in darwin_guard
+    assert '"tunnel",\n                "start"' in windows_guard
+
+
+def test_backlog_review_reference_is_portable_and_gates_remain_open() -> None:
+    backlog = Path("docs/project/product-adoption-backlog-2026-07.md").read_text(encoding="utf-8")
+
+    assert "/home/" not in backlog
+    assert Path("docs/project/reviews/dev-mvp-0.5-latest-review-evaluation.md").is_file()
+    assert "**P0 completion gate.**" in backlog
+    assert "independent users reproduce each" in backlog
+    assert "must be repeated after the user-testing demonstrations" in backlog
+
+
+def test_primary_adoption_cut_contains_only_the_core_command_story() -> None:
+    text = Path("docs/project/public-demo-plan.md").read_text(encoding="utf-8")
+    primary = text.split("### Primary public adoption cut", 1)[1].split("### P0 workflow-validation recordings", 1)[0]
+
+    commands = re.findall(r"(?m)^aiplane .+$", primary)
+    assert commands == [
+        "aiplane quickstart local-coding --dry-run",
+        "aiplane discover",
+        "aiplane doctor",
+        "aiplane recommend",
+        "aiplane export continue",
+    ]
+    for advanced in (" chat ", " run ", " code ", " mcp ", " stacks ", " orchestrators ", " deploy ", " benchmarks "):
+        assert advanced not in primary.lower()
+
+
+def test_release_workflow_is_checksummed_versioned_and_quality_gated() -> None:
+    project = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+    version = project["project"]["version"]
+    workflow = Path(".github/workflows/release.yml").read_text(encoding="utf-8")
+    notes = Path(f"docs/project/releases/v{version}.md")
+    setup = Path("docs/user/setup.md").read_text(encoding="utf-8")
+    process = Path("docs/project/release-process.md").read_text(encoding="utf-8")
+
+    assert "run: scripts/check.sh" in workflow
+    assert "sha256sum aiplane-* > SHA256SUMS" in workflow
+    assert "sha256sum --check SHA256SUMS" in workflow
+    assert "docs/project/releases/$GITHUB_REF_NAME.md" in workflow
+    assert '--notes-file "docs/project/releases/$GITHUB_REF_NAME.md"' in workflow
+    assert 'gh release create "$GITHUB_REF_NAME"' in workflow
+    assert notes.is_file()
+    assert f"# aiplane v{version}" in notes.read_text(encoding="utf-8")
+    for text in (notes.read_text(encoding="utf-8"), setup, process):
+        assert "SHA256SUMS" in text
+        assert "rollback" in text.lower()
+
+
+def test_ci_exposes_one_stable_release_gate_and_documents_hosted_protection() -> None:
+    workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
+    protection = Path("docs/project/repository-protection.md").read_text(encoding="utf-8")
+
+    assert "  release-gate:" in workflow
+    assert "needs: [checks, compatibility, install-channels]" in workflow
+    assert "name: Release gate" in workflow
+    assert "CI / Release gate" in protection
+    assert "require pull requests" in protection
+    assert "block force pushes" in protection
+    assert "hosted state" in protection
+
+
+def test_preview_scope_freeze_keeps_advanced_surface_out_of_public_promise() -> None:
+    freeze = Path("docs/project/preview-scope-freeze.md").read_text(encoding="utf-8")
+    coverage = Path("docs/project/command-coverage.md").read_text(encoding="utf-8")
+
+    assert "Until the P0 gates close" in freeze
+    assert "No new integration, runner, orchestrator, stack, benchmark, deployment, MCP-write capability" in freeze
+    assert "## Exception process" in freeze
+    assert "synchronized changes to strategy, roadmap, command coverage, help, and public documentation" in freeze
+    assert "| Experimental |" in coverage
+
+
+def test_every_demo_timeline_step_has_exact_commands_and_spoken_narration() -> None:
+    text = Path("docs/project/public-demo-plan.md").read_text(encoding="utf-8")
+    matches = list(re.finditer(r"(?m)^#{3,4} (\d:\d{2}-\d:\d{2}) — .+$", text))
+
+    assert len(matches) == 16
+    for index, match in enumerate(matches):
+        end = (
+            matches[index + 1].start()
+            if index + 1 < len(matches)
+            else text.find("## Optional fourth video", match.end())
+        )
+        section = text[match.end() : end]
+        assert "Exact command" in section, match.group(1)
+        assert "Narration:" in section, match.group(1)
+        assert "> " in section, match.group(1)
