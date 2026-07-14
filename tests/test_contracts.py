@@ -423,10 +423,27 @@ def test_successful_main_merge_versions_tags_and_uploads_a_bound_wheel() -> None
     assert "python -m build --wheel --outdir artifacts" in workflow
     assert "python scripts/verify_install_channels.py artifacts --channel pip" in workflow
     assert "sha256sum --check SHA256SUMS" in workflow
-    assert "uses: actions/upload-artifact@v4" in workflow
+    for workflow_text in (workflow, release):
+        assert "uses: actions/checkout@v7" in workflow_text
+        assert "uses: actions/setup-python@v6" in workflow_text
+        assert "uses: actions/checkout@v4" not in workflow_text
+        assert "uses: actions/setup-python@v5" not in workflow_text
+    assert "uses: astral-sh/setup-uv@v8" in workflow
+    assert "uses: astral-sh/setup-uv@v8" in release
+    assert "uses: astral-sh/setup-uv@v6" not in workflow
+    assert "uses: astral-sh/setup-uv@v6" not in release
+    assert "uses: actions/upload-artifact@v7" in workflow
+    assert "uses: actions/upload-artifact@v4" not in workflow
+    assert "version_commit_short" in workflow
+    assert "cut -c1-7" in workflow
     assert (
-        "aiplane-wheel-v${{ steps.resolved.outputs.version }}-${{ steps.resolved.outputs.tag }}-${{ steps.resolved.outputs.version_commit }}"
+        "aiplane-wheel-v${{ steps.resolved.outputs.version }}-${{ steps.resolved.outputs.version_commit_short }}"
         in workflow
+    )
+    assert "aiplane-wheel-v${{ steps.resolved.outputs.version }}-${{ steps.resolved.outputs.tag }}" not in workflow
+    assert (
+        "aiplane-wheel-v${{ steps.resolved.outputs.version }}-${{ steps.resolved.outputs.version_commit }}"
+        not in workflow
     )
     assert "retention-days: 30" in workflow
     assert "ci-artifact" in release

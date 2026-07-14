@@ -128,7 +128,7 @@ make wheel-local
 python scripts/build_local_wheel.py --clean --validate-pip
 ```
 
-Artifacts are written to `.aiplane/wheelhouse/` with `SHA256SUMS` and `provenance.json`. The wheel uses the tracked `pyproject.toml` base version plus PEP 440 local metadata with the current Git short SHA and UTC timestamp, for example `0.1.0+gabc1234.20260714t153000z`; provenance distinguishes clean and dirty local checkouts.
+Artifacts are written to `.aiplane/wheelhouse/` with `SHA256SUMS` and `provenance.json`. The wheel uses the tracked `pyproject.toml` base version plus PEP 440 local metadata with the current Git short SHA and UTC timestamp, for example `0.1.0+gabc1234.20260714t153000z`; this is a PEP 440 local version identifier, where the `+...` suffix is valid for local builds but not used for official release wheels; provenance distinguishes clean and dirty local checkouts.
 
 ### Make Targets and Test Coverage
 
