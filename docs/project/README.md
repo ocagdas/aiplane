@@ -12,6 +12,7 @@ under `docs/user/`.
 - [Integration Roadmap](integrations-roadmap.md): IDE/CLI/MCP integration direction and status.
 - [Release Process](release-process.md): versioning, artifact validation, GitHub Release publication, and package-index gate.
 - [Repository Protection](repository-protection.md): stable required check and hosted ruleset requirements.
+- [CI Wheel Artifacts](ci-wheel-artifacts.md): versioned post-merge wheels for no-clone prerelease testing.
 - [External Trial Evidence](external-trial-evidence.md): sanitized P0 trial record and validator.
 - [Developer-Preview Scope Freeze](preview-scope-freeze.md): public-breadth boundary and exception process.
 - [Development Guide](development.md): contributor setup, tests, and output conventions.

@@ -394,3 +394,21 @@ def test_every_demo_timeline_step_has_exact_commands_and_spoken_narration() -> N
         assert "Exact command" in section, match.group(1)
         assert "Narration:" in section, match.group(1)
         assert "> " in section, match.group(1)
+
+
+def test_successful_main_merge_uploads_a_versioned_provenance_bound_wheel() -> None:
+    workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
+    documentation = Path("docs/project/ci-wheel-artifacts.md").read_text(encoding="utf-8")
+    job = workflow.split("  merged-wheel:", 1)[1]
+
+    assert "github.event_name == 'push'" in job
+    assert "github.ref == 'refs/heads/main'" in job
+    assert "needs: [release-gate]" in job
+    assert "python -m build --wheel --outdir artifacts" in job
+    assert "python scripts/verify_install_channels.py artifacts --channel pip" in job
+    assert "sha256sum --check SHA256SUMS" in job
+    assert '"$GITHUB_SHA"' in job
+    assert "uses: actions/upload-artifact@v4" in job
+    assert "aiplane-wheel-v${{ steps.version.outputs.value }}-${{ github.sha }}" in job
+    assert "retention-days: 30" in job
+    assert "not immutable public releases" in documentation
