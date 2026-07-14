@@ -8,6 +8,7 @@ from .support import (
     StackManager,
     StringIO,
     agent_config,
+    _materialize_test_models,
     cli_main,
     json,
     load_profile,
@@ -57,7 +58,7 @@ class StackOrchestratorTests(unittest.TestCase):
                 stdout = "ok"
                 stderr = ""
 
-            with patch("aiplane.stacks.subprocess.run", return_value=Completed()) as run:
+            with patch("aiplane.boundaries.subprocess.run", return_value=Completed()) as run:
                 result = stacks.deploy("local_chat_stack", yes=True)
             self.assertEqual(result["status"], "executed_same_host_steps")
             self.assertEqual(run.call_count, 3)
@@ -201,6 +202,7 @@ class StackOrchestratorTests(unittest.TestCase):
                 Path.cwd() / "profile-templates" / "local-dev",
                 profiles_dir / "local-dev",
             )
+            _materialize_test_models(profiles_dir / "local-dev")
             stdout = StringIO()
             with redirect_stdout(stdout):
                 code = cli_main(
@@ -747,7 +749,7 @@ class StackOrchestratorTests(unittest.TestCase):
                 stdout = "ok"
                 stderr = ""
 
-            with patch("aiplane.stacks.subprocess.run", return_value=Completed()):
+            with patch("aiplane.boundaries.subprocess.run", return_value=Completed()):
                 result = stacks.start("local_stack")
         self.assertEqual(result["status"], "executed")
         self.assertEqual(result["outcome"], "completed")
@@ -800,7 +802,7 @@ class StackOrchestratorTests(unittest.TestCase):
                 stdout = ""
                 stderr = "failed"
 
-            with patch("aiplane.stacks.subprocess.run", return_value=Failed()):
+            with patch("aiplane.boundaries.subprocess.run", return_value=Failed()):
                 result = stacks.prepare("local_stack")
         self.assertEqual(result["status"], "executed")
         self.assertEqual(result["outcome"], "failed")
@@ -869,7 +871,7 @@ class StackOrchestratorTests(unittest.TestCase):
                 machine="azure_h100_test",
                 access="ssh_tunnel",
             )
-            with patch("aiplane.stacks.subprocess.run") as run:
+            with patch("aiplane.boundaries.subprocess.run") as run:
                 result = stacks.start("remote_stack")
         self.assertEqual(result["status"], "planned_not_executed")
         self.assertIn("same-host/local", result["reason"])

@@ -1,7 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SOURCE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+if [[ -d "$SOURCE_ROOT/src/aiplane" ]]; then
+  PROJECT_ROOT="$SOURCE_ROOT"
+  AIPLANE_SOURCE_PATH="$SOURCE_ROOT/src"
+else
+  PROJECT_ROOT="${AIPLANE_PROJECT_ROOT:-$PWD}"
+  AIPLANE_SOURCE_PATH=""
+fi
+PROVIDER_HELPER="$SCRIPT_DIR/provider_helper.sh"
+OLLAMA_HELPER="$SCRIPT_DIR/ollama_helper.sh"
 PROVIDER="ollama"
 ACTION="doctor"
 PROFILE="local-dev"
@@ -139,6 +149,14 @@ status_managed() {
   fi
 }
 
+run_model_resolver() {
+  if [[ -n "$AIPLANE_SOURCE_PATH" ]]; then
+    PYTHONPATH="$AIPLANE_SOURCE_PATH" python - "$@"
+  else
+    python - "$@"
+  fi
+}
+
 resolve_configured_model_id() {
   runtime="$1"
   if [[ "$MODEL" == "all" ]]; then
@@ -151,7 +169,7 @@ resolve_configured_model_id() {
 ' "$MODEL"
     return 0
   fi
-  PYTHONPATH="$PROJECT_ROOT/src" python - "$PROFILE" "$MODEL" <<'PYMODEL'
+  run_model_resolver "$PROFILE" "$MODEL" <<'PYMODEL'
 from pathlib import Path
 import sys
 from aiplane.config import load_profile
@@ -209,8 +227,10 @@ dry_run_args() {
 aiplane_cmd() {
   if command -v aiplane >/dev/null 2>&1; then
     printf 'aiplane'
+  elif [[ -n "$AIPLANE_SOURCE_PATH" ]]; then
+    printf 'PYTHONPATH=%q python -m aiplane' "$AIPLANE_SOURCE_PATH"
   else
-    printf 'PYTHONPATH=%q python -m aiplane' "$PROJECT_ROOT/src"
+    printf 'python -m aiplane'
   fi
 }
 
@@ -220,11 +240,11 @@ ollama_action() {
     model_args=(--model "$MODEL")
   fi
   if [[ "$DRY_RUN" -eq 1 ]]; then
-    scripts/ollama_helper.sh --action "$ACTION" --profile "$PROFILE" --substrate "$SUBSTRATE" "${model_args[@]}" --dry-run
+    "$OLLAMA_HELPER" --action "$ACTION" --profile "$PROFILE" --substrate "$SUBSTRATE" "${model_args[@]}" --dry-run
   elif [[ "$ACTION" == "status" || "$ACTION" == "list" || "$ACTION" == "doctor" ]]; then
-    scripts/ollama_helper.sh --action "$ACTION" --profile "$PROFILE" --substrate "$SUBSTRATE" "${model_args[@]}"
+    "$OLLAMA_HELPER" --action "$ACTION" --profile "$PROFILE" --substrate "$SUBSTRATE" "${model_args[@]}"
   else
-    run scripts/ollama_helper.sh --action "$ACTION" --profile "$PROFILE" --substrate "$SUBSTRATE" "${model_args[@]}"
+    run "$OLLAMA_HELPER" --action "$ACTION" --profile "$PROFILE" --substrate "$SUBSTRATE" "${model_args[@]}"
   fi
 }
 
@@ -474,7 +494,7 @@ cloud_action() {
 all_action() {
   case "$ACTION" in
     doctor|status)
-      scripts/ollama_helper.sh --action status --profile "$PROFILE" --model "$MODEL" $(dry_run_args) || true
+      "$OLLAMA_HELPER" --action status --profile "$PROFILE" --model "$MODEL" $(dry_run_args) || true
       cloud_doctor ollama_cloud
       cloud_doctor openai
       cloud_doctor anthropic
@@ -491,17 +511,17 @@ all_action() {
       ;;
     update|update-installed)
       echo "Updating helper-managed runtimes where supported."
-      scripts/provider_helper.sh --provider ollama --action update --profile "$PROFILE" --model "$MODEL" $(dry_run_args) || true
-      scripts/provider_helper.sh --provider vllm --action update --profile "$PROFILE" --model "$MODEL" $(dry_run_args) || true
-      scripts/provider_helper.sh --provider tgi --action update --profile "$PROFILE" --model "$MODEL" $(dry_run_args) || true
-      scripts/provider_helper.sh --provider transformers --action update --profile "$PROFILE" --model "$MODEL" $(dry_run_args) || true
-      scripts/provider_helper.sh --provider localai --action update --profile "$PROFILE" --model "$MODEL" $(dry_run_args) || true
-      scripts/provider_helper.sh --provider llamacpp --action update --profile "$PROFILE" --model "$MODEL" $(dry_run_args) || true
-      scripts/provider_helper.sh --provider lmstudio --action update --profile "$PROFILE" --model "$MODEL" $(dry_run_args) || true
+      "$PROVIDER_HELPER" --provider ollama --action update --profile "$PROFILE" --model "$MODEL" $(dry_run_args) || true
+      "$PROVIDER_HELPER" --provider vllm --action update --profile "$PROFILE" --model "$MODEL" $(dry_run_args) || true
+      "$PROVIDER_HELPER" --provider tgi --action update --profile "$PROFILE" --model "$MODEL" $(dry_run_args) || true
+      "$PROVIDER_HELPER" --provider transformers --action update --profile "$PROFILE" --model "$MODEL" $(dry_run_args) || true
+      "$PROVIDER_HELPER" --provider localai --action update --profile "$PROFILE" --model "$MODEL" $(dry_run_args) || true
+      "$PROVIDER_HELPER" --provider llamacpp --action update --profile "$PROFILE" --model "$MODEL" $(dry_run_args) || true
+      "$PROVIDER_HELPER" --provider lmstudio --action update --profile "$PROFILE" --model "$MODEL" $(dry_run_args) || true
       ;;
     repull)
       echo "Re-pulling runtime models where already-pulled model discovery is supported."
-      scripts/provider_helper.sh --provider ollama --action repull --profile "$PROFILE" --model "$MODEL" $(dry_run_args) || true
+      "$PROVIDER_HELPER" --provider ollama --action repull --profile "$PROFILE" --model "$MODEL" $(dry_run_args) || true
       echo "For vLLM/TGI/Transformers, use --provider <runtime> --action pull --model <alias> to refresh a selected Hugging Face snapshot."
       ;;
     install|start|stop|restart|pull|remove|clear|list)

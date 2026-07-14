@@ -123,7 +123,7 @@ class BridgeCliTests(unittest.TestCase):
             with _isolated_profiles_dir("local-dev") as profiles_dir:
                 with patch.dict(
                     os.environ,
-                    {"AIPLANE_TEST_PROFILES_DIR": str(profiles_dir)},
+                    {"AIPLANE_PROFILES_DIR": str(profiles_dir)},
                 ):
                     stdout = StringIO()
                     with (
@@ -161,7 +161,7 @@ class BridgeCliTests(unittest.TestCase):
             with _isolated_profiles_dir("local-dev") as profiles_dir:
                 with patch.dict(
                     os.environ,
-                    {"AIPLANE_TEST_PROFILES_DIR": str(profiles_dir)},
+                    {"AIPLANE_PROFILES_DIR": str(profiles_dir)},
                 ):
                     stdout = StringIO()
                     with (
@@ -190,7 +190,7 @@ class BridgeCliTests(unittest.TestCase):
             with _isolated_profiles_dir("local-dev") as profiles_dir:
                 with patch.dict(
                     os.environ,
-                    {"AIPLANE_TEST_PROFILES_DIR": str(profiles_dir)},
+                    {"AIPLANE_PROFILES_DIR": str(profiles_dir)},
                 ):
                     stdout = StringIO()
                     with redirect_stdout(stdout):
@@ -217,7 +217,7 @@ class BridgeCliTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as workspace:
             with _isolated_profiles_dir("local-dev") as profiles_dir:
                 with (
-                    patch.dict(os.environ, {"AIPLANE_TEST_PROFILES_DIR": str(profiles_dir)}),
+                    patch.dict(os.environ, {"AIPLANE_PROFILES_DIR": str(profiles_dir)}),
                     patch("aiplane.cli.uuid.uuid4", return_value=SimpleNamespace(hex="session1234567890")),
                 ):
                     stdout = StringIO()

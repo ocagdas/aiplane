@@ -11,6 +11,8 @@ from pathlib import Path
 from dataclasses import dataclass
 from typing import Any
 
+from .boundaries import CommandRunner, SubprocessCommandRunner
+from .config import provider_helper_path
 from .model_catalog import ModelCatalog, ROLE_CAPABILITY_MAP, expand_capability_filters
 from .integration_contracts import (
     MCP_EXPORT_TOOLS,
@@ -36,8 +38,9 @@ class IntegrationExport:
 
 
 class IntegrationManager:
-    def __init__(self, profile: Profile):
+    def __init__(self, profile: Profile, command_runner: CommandRunner | None = None):
         self.profile = profile
+        self.command_runner = command_runner or SubprocessCommandRunner()
         self.catalog = ModelCatalog(profile)
         self.credentials = CredentialStore()
 
@@ -520,7 +523,7 @@ class IntegrationManager:
         execute: bool,
         reason: object = None,
     ) -> dict[str, Any]:
-        helper = Path(__file__).resolve().parents[2] / "scripts" / "provider_helper.sh"
+        helper = provider_helper_path()
         command = [
             "scripts/provider_helper.sh",
             "--provider",
@@ -574,13 +577,12 @@ class IntegrationManager:
                 row["stderr_tail"] = self._output_tail(completed.stderr)
         return row
 
-    @staticmethod
     def _run_with_progress(
-        command: list[str], cwd: Path, label: str, env: dict[str, str] | None = None
+        self, command: list[str], cwd: Path, label: str, env: dict[str, str] | None = None
     ) -> subprocess.CompletedProcess[str]:
         sys.stderr.write(f"{label}\n")
         sys.stderr.flush()
-        process = subprocess.Popen(
+        process = self.command_runner.popen(
             command,
             cwd=cwd,
             env=env,
@@ -701,7 +703,7 @@ class IntegrationManager:
             command = self.chat_command(model_name)
             if dry_run:
                 return " ".join(command)
-            subprocess.run(command, cwd=self.profile.workspace, check=True)
+            self.command_runner.run(command, cwd=self.profile.workspace, check=True)
             return ""
 
         model_name = self._chat_model_name(model_name)

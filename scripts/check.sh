@@ -12,7 +12,7 @@ case "$MODE" in
   quick)
     scripts/format.sh check
     python -m ruff check src tests
-    python -m pytest -q tests/test_contracts.py tests/test_mvp.py
+    python -m pytest -q tests/test_contracts.py tests/test_quick_smoke.py
     ;;
   *)
     echo "Usage: scripts/check.sh [full|quick]" >&2

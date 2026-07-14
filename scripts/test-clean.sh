@@ -38,7 +38,7 @@ printf 'Using profile template %s as temporary profile %s at %s\\n' \
 cd "$PROJECT_ROOT"
 export PYTHONDONTWRITEBYTECODE=1
 export PYTHONPATH="${PYTHONPATH:-src}"
-export AIPLANE_TEST_PROFILES_DIR="$WORK_ROOT/profiles"
+export AIPLANE_PROFILES_DIR="$WORK_ROOT/profiles"
 
 if [[ "$#" -eq 0 ]]; then
   set -- -m pytest -q

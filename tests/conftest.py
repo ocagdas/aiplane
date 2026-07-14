@@ -13,7 +13,13 @@ import pytest
 _TEST_PROFILES_TEMP = tempfile.TemporaryDirectory(prefix="aiplane-tests-")
 _TEST_PROFILES_ROOT = Path(_TEST_PROFILES_TEMP.name) / "profiles"
 shutil.copytree(Path.cwd() / "profile-templates", _TEST_PROFILES_ROOT)
-os.environ["AIPLANE_TEST_PROFILES_DIR"] = str(_TEST_PROFILES_ROOT)
+os.environ["AIPLANE_PROFILES_DIR"] = str(_TEST_PROFILES_ROOT)
+
+from .profile_fixtures import _materialize_test_models  # noqa: E402
+
+for _profile_root in _TEST_PROFILES_ROOT.iterdir():
+    if _profile_root.is_dir():
+        _materialize_test_models(_profile_root)
 
 
 def _is_loopback_host(host: str) -> bool:

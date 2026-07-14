@@ -425,6 +425,7 @@ The roadmap is now actively executing the priorities above; completed work in ea
 - Local config now supports profile-aware and command-aware format/verbosity defaults (`text`/`json`, `0`/`1`/`2`) via `config format`/`config verbosity` with precedence: CLI `--format`/`--verbosity` > command override > profile override > global default.
 - External tool catalog, doctors, guarded install previews, non-mutating plans, and starter exports for Azure CLI, OpenTofu/Terraform, Pulumi, Vagrant, Packer, Docker/Compose, Dev Container CLI, kubectl, Helm, OpenSSH, Ansible, and benchmark helpers.
 - Provider/model catalog foundations for Ollama, Ollama Cloud placeholder, OpenAI-compatible runtimes, OpenAI, Anthropic, Azure OpenAI, ElevenLabs TTS, Hugging Face, NVIDIA Hugging Face-scoped open model repos, GGUF/local files, and user-defined discovery providers. Shipped profile templates keep `models.yaml` structural, runtime/provider endpoint values live as conventional built-in defaults with local override support, and model grouping separates managed-service providers from self-managed runtime sources while preserving managed endpoint metadata for exports, stacks, and orchestrator plans.
+- Non-destructive bootstrap plus install/activation flows preserve existing editable profiles unless `--overwrite` is explicit; static wheels include shipped config/profile templates and runtime helper scripts and are verified in a clean venv.
 - Ignored discovered provider/model cache flow plus `profiles bootstrap-local`, `models add`, `models clone`, and `models promote` as reviewed paths into editable local profile YAML; `models clear-cache` clears discovered entries and profile-owned review entries by default so discovery can be repopulated from providers, and `models refresh --reset-cache` combines clearing and repopulating for refreshed providers.
 - Runtime/source mapping for Ollama, Hugging Face, NVIDIA Hugging Face-style repos, GGUF/local files, vLLM, TGI, Transformers, llama.cpp, LocalAI, LM Studio, and selected media runtimes.
 - Runtime helper delegation through `aiplane runtimes ...` where supported by `scripts/provider_helper.sh`, including Ollama native and Docker substrate paths, guarded Ollama pulled-model remove/clear, plus vLLM/TGI-style runtimes.
@@ -460,7 +461,7 @@ The roadmap is now actively executing the priorities above; completed work in ea
 ### Post-Merge Foundation
 
 1. **Architecture and codebase cleanup** - Implemented
-   - `src/aiplane/cli.py` now delegates integration and model command registration/handling to focused modules while keeping one public `aiplane` entrypoint. Continue splitting command families when it reduces real ownership pressure.
+   - `src/aiplane/cli.py` now delegates config, profile, integration, and model command registration/handling to focused modules while keeping one public `aiplane` entrypoint. Continue splitting command families when it reduces real ownership pressure.
    - Shared CLI parsing/progress helpers live outside the monolithic CLI so provider refresh, profile bootstrap, hardware/machine/stack settings, and future command modules do not duplicate low-level parsing behavior.
    - Model filter parser choices and MCP schema choices are shared definitions; integration roles are shared contracts. Keep moving shared definitions only where they prevent drift.
    - Keep shell helpers as thin delegates to official tools; avoid growing provider-specific business logic in Bash when Python catalog/runtime code already owns the decision.
@@ -531,6 +532,11 @@ The roadmap is now actively executing the priorities above; completed work in ea
    - Defer automated code execution grading until sandboxing and language runners are designed.
 
 11. **Test-suite structure, performance, and isolation** - Structurally complete / incremental
+   - Production loaders are no longer globally replaced by the test harness; temporary profile roots contain deterministic synthetic model data and exercise normal disk loading.
+   - The quick gate now runs six contracts plus four intentional smoke checks; the empty legacy aggregate module is no longer included.
+   - Shared injectable command/HTTP boundaries cover stack, provider, machine, integration, and deployment paths.
+   - Model refresh reconciliation, stack lifecycle, static tool catalog data, and provider-registry tests now live in focused modules instead of their former large mixed owners.
+   - CI keeps the full Python 3.11 gate and validates contracts plus clean static-wheel installation on Python 3.12 and 3.13.
    - Split the large MVP test module into focused files by area so slow tests and ownership are easier to see. Start with behavior boundaries that already exist in code: profiles/config, providers/models, runtimes/execution, integrations/chat, MCP, machines/stacks, deployment, and CLI smoke coverage.
    - Extract shared test fixtures and helpers for isolated profiles, local model caches, mocked HTTP endpoints, mocked subprocess boundaries, and CLI stdout/stderr capture.
    - Keep the full automated suite useful as a PR gate without letting local discovery caches or external-machine state dominate runtime.

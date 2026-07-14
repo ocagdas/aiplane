@@ -9,6 +9,7 @@ from .support import (
     _REAL_LOAD_PROFILE,
     _isolated_profiles_dir,
     _isolated_test_profile,
+    _materialize_test_models,
     agent_config,
     cli_main,
     create_profile,
@@ -204,7 +205,7 @@ class IntegrationChatTests(unittest.TestCase):
             )
             stderr = StringIO()
             with redirect_stderr(stderr):
-                completed = IntegrationManager._run_with_progress(
+                completed = IntegrationManager(load_profile("local-dev", Path.cwd()))._run_with_progress(
                     [sys.executable, str(script)],
                     cwd=Path.cwd(),
                     label="setup: pull ollama for local_chat",
@@ -498,6 +499,7 @@ class IntegrationChatTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             profiles_dir = Path(tmp) / "profiles"
             create_profile("local-dev", profiles_dir=profiles_dir)
+            _materialize_test_models(profiles_dir / "local-dev")
             stdout = StringIO()
             with redirect_stdout(stdout):
                 code = cli_main(
@@ -545,6 +547,7 @@ class IntegrationChatTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             profiles_dir = Path(tmp) / "profiles"
             create_profile("local-dev", profiles_dir=profiles_dir)
+            _materialize_test_models(profiles_dir / "local-dev")
             config_path = Path(tmp) / "config.yaml"
             configured = Path(tmp) / "agents-config"
             config_path.write_text(f"agent_artifacts_dir: {configured}\n", encoding="utf-8")
@@ -656,6 +659,7 @@ class IntegrationChatTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             profiles_dir = Path(tmp) / "profiles"
             shutil.copytree(Path("profile-templates") / "local-dev", profiles_dir / "local-dev")
+            _materialize_test_models(profiles_dir / "local-dev")
             stdout = StringIO()
             with redirect_stdout(stdout):
                 code = cli_main(
@@ -679,6 +683,7 @@ class IntegrationChatTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             profiles_dir = Path(tmp) / "profiles"
             shutil.copytree(Path("profile-templates") / "local-dev", profiles_dir / "local-dev")
+            _materialize_test_models(profiles_dir / "local-dev")
             stdout = StringIO()
             with redirect_stdout(stdout):
                 code = cli_main(
@@ -701,6 +706,7 @@ class IntegrationChatTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             profiles_dir = Path(tmp) / "profiles"
             shutil.copytree(Path("profile-templates") / "local-dev", profiles_dir / "local-dev")
+            _materialize_test_models(profiles_dir / "local-dev")
             stdout = StringIO()
             with redirect_stdout(stdout):
                 code = cli_main(
@@ -726,6 +732,7 @@ class IntegrationChatTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             profiles_dir = Path(tmp) / "profiles"
             shutil.copytree(Path("profile-templates") / "local-dev", profiles_dir / "local-dev")
+            _materialize_test_models(profiles_dir / "local-dev")
             stdout = StringIO()
             with redirect_stdout(stdout):
                 code = cli_main(

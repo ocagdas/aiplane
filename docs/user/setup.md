@@ -86,9 +86,9 @@ and prints activation commands. The helper verifies that the Conda environment
 is visible after creation and, during install, repairs an existing Conda
 environment that is missing Python by installing `python=3.13` into it. During
 install, it also runs
-`aiplane profiles bootstrap-local --no-discovery` before the profile-aware sanity
+`aiplane profiles bootstrap-local --no-overwrite --no-discovery` before the profile-aware sanity
 check, so a fresh clone gets an ignored `profiles/local-dev` directory from the
-shipped template.
+shipped template while an existing edited profile is preserved.
 
 Check Conda environments with:
 

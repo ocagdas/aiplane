@@ -601,7 +601,7 @@ class RuntimeExecutionTests(unittest.TestCase):
             check=False,
         )
         self.assertEqual(completed.returncode, 0, completed.stderr)
-        bootstrap = "python -m aiplane profiles bootstrap-local --no-discovery"
+        bootstrap = "python -m aiplane profiles bootstrap-local --no-overwrite --no-discovery"
         doctor = "python -m aiplane profiles list"
         self.assertIn(bootstrap, completed.stdout)
         self.assertIn(doctor, completed.stdout)

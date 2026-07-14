@@ -9,8 +9,8 @@ from pathlib import Path
 from typing import Any
 from urllib.error import URLError
 from urllib.parse import quote_plus
-from urllib.request import urlopen
 
+from .boundaries import CommandRunner, HttpTransport, SubprocessCommandRunner, UrllibHttpTransport
 from .config import dump_yaml, parse_yaml
 from .hardware import HardwareManager
 from .model_catalog import ModelCatalog
@@ -124,8 +124,15 @@ AZURE_SKU_HINTS: dict[str, dict[str, Any]] = {
 
 
 class MachineManager:
-    def __init__(self, profile: Profile):
+    def __init__(
+        self,
+        profile: Profile,
+        command_runner: CommandRunner | None = None,
+        http_transport: HttpTransport | None = None,
+    ):
         self.profile = profile
+        self.command_runner = command_runner or SubprocessCommandRunner()
+        self.http_transport = http_transport or UrllibHttpTransport()
         self.config = profile.hardware or {}
 
     def export_machine(self, name: str, origin: str = "local", include_discovery: bool = False) -> dict[str, Any]:
@@ -256,7 +263,7 @@ class MachineManager:
         skus = []
         quota = {"method": "not_checked", "items": []}
         if azure_cli["cli_available"]:
-            completed = _run_az(command, verbosity=verbosity, az_event_sink=az_event_sink)
+            completed = _run_az(command, verbosity=verbosity, az_event_sink=az_event_sink, runner=self.command_runner)
             azure_cli["sku_query"] = _az_command_status(completed)
             if completed.returncode == 0 and completed.stdout.strip():
                 live_values = json.loads(completed.stdout)
@@ -283,7 +290,7 @@ class MachineManager:
                 for machine in skus
                 if isinstance(machine, dict)
             ]
-            pricing = _azure_retail_price_map(region, sku_names)
+            pricing = _azure_retail_price_map(region, sku_names, transport=self.http_transport)
         candidates = []
         for machine in skus:
             fit = _machine_fit(machine, criteria)
@@ -344,6 +351,7 @@ class MachineManager:
             ["az", "account", "show", "--output", "json"],
             verbosity=verbosity,
             az_event_sink=az_event_sink,
+            runner=self.command_runner,
         )
         status["account"] = _az_account_status(account)
         if run_sku_probe and region:
@@ -362,6 +370,7 @@ class MachineManager:
                 ],
                 verbosity=verbosity,
                 az_event_sink=az_event_sink,
+                runner=self.command_runner,
             )
             status["sku_query"] = _az_command_status(query)
         return status
@@ -380,7 +389,7 @@ class MachineManager:
                 "items": [],
             }
         command = ["az", "vm", "list-usage", "--location", region, "--output", "json"]
-        completed = _run_az(command, verbosity=verbosity, az_event_sink=az_event_sink)
+        completed = _run_az(command, verbosity=verbosity, az_event_sink=az_event_sink, runner=self.command_runner)
         if completed.returncode != 0 or not completed.stdout.strip():
             return {
                 "method": "live",
@@ -819,11 +828,13 @@ def _run_az(
     command: list[str],
     verbosity: int = 0,
     az_event_sink: Callable[[dict[str, Any]], None] | None = None,
+    runner: CommandRunner | None = None,
 ):
+    runner = runner or SubprocessCommandRunner()
     if az_event_sink:
         az_event_sink({"phase": "start", "command": command})
     try:
-        completed = subprocess.run(
+        completed = runner.run(
             command,
             text=True,
             capture_output=True,
@@ -901,7 +912,8 @@ def _azure_sku_restrictions(item: dict[str, Any]) -> list[dict[str, Any]]:
     return rows
 
 
-def _azure_retail_price_map(region: str, skus: list[str]) -> dict[str, Any]:
+def _azure_retail_price_map(region: str, skus: list[str], *, transport: HttpTransport | None = None) -> dict[str, Any]:
+    transport = transport or UrllibHttpTransport()
     unique_skus = sorted({sku for sku in skus if sku})
     if not unique_skus:
         return {"method": "skipped", "ok": False, "reason": "no SKU names available", "items": {}}
@@ -915,7 +927,7 @@ def _azure_retail_price_map(region: str, skus: list[str]) -> dict[str, Any]:
     encoded_filter = quote_plus(filter_expr)
     url = f"https://prices.azure.com/api/retail/prices?$filter={encoded_filter}"
     try:
-        with urlopen(url, timeout=4) as response:
+        with transport.open(url, timeout=4) as response:
             payload = json.loads(response.read().decode("utf-8"))
     except URLError as exc:
         return {

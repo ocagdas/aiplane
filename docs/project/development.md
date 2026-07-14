@@ -139,8 +139,7 @@ scripts/setup_env.sh --mode docker --action test
 The Conda form uses the named environment and streams pytest output. The simpler
 `scripts/check.sh` uses the currently active Python environment; run
 `conda run --no-capture-output -n aiplane scripts/check.sh` to select Conda
-explicitly. Use `scripts/check.sh quick` for formatting, linting, and the fast
-synthetic contract suite.
+explicitly. Use `scripts/check.sh quick` for formatting, linting, six contract checks, and intentional smoke coverage for profile loading, CLI dispatch, dry-run planning, and JSON serialization. The quick gate is a narrow feedback loop, not a substitute for the full suite.
 
 ### Git Pre-Push Hook
 
@@ -184,6 +183,10 @@ SSH, provider APIs, model runtimes, or long-running local services from normal
 suite runs. Mock those boundaries and assert planned commands, parser behavior,
 failure handling, and contracts. Keep real checks as explicit manual or
 integration smoke commands.
+
+Test profiles are materialized on disk under a temporary `AIPLANE_PROFILES_DIR` using shipped templates and synthetic model data. Tests must call the real production profile loader; do not replace loader functions globally in CLI or MCP modules. CI runs the full gate on Python 3.11 and a focused contract plus clean-wheel installation check on Python 3.12 and 3.13.
+
+External command and HTTP calls in stack, provider, machine, integration, and deployment managers use injectable `CommandRunner` and `HttpTransport` boundaries. Production uses `subprocess` and `urllib`; focused tests should pass deterministic fakes instead of patching implementation modules.
 
 ## JSON Output Conventions
 

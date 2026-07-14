@@ -88,7 +88,7 @@ class DeployRemoteTests(unittest.TestCase):
             stdout = "ok"
             stderr = ""
 
-        with patch("aiplane.deploy.subprocess.run", return_value=Completed()) as run:
+        with patch("aiplane.boundaries.subprocess.run", return_value=Completed()) as run:
             result = DeployManager(profile).apply("azure_gpu_vm", yes=True)
         self.assertEqual(result["target"], "azure_gpu_vm")
         self.assertTrue(result["results"])
@@ -100,7 +100,7 @@ class DeployRemoteTests(unittest.TestCase):
         stderr = StringIO()
         with _isolated_profiles_dir() as profiles_dir:
             with (
-                patch("aiplane.deploy.subprocess.run") as run,
+                patch("aiplane.boundaries.subprocess.run") as run,
                 redirect_stdout(stdout),
                 redirect_stderr(stderr),
             ):
@@ -124,7 +124,7 @@ class DeployRemoteTests(unittest.TestCase):
         stdout = StringIO()
         with _isolated_profiles_dir() as profiles_dir:
             with (
-                patch("aiplane.deploy.subprocess.run", return_value=completed) as run,
+                patch("aiplane.boundaries.subprocess.run", return_value=completed) as run,
                 redirect_stdout(stdout),
             ):
                 code = cli_main(

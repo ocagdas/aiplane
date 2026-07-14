@@ -7,6 +7,7 @@ from .support import (
     RuntimeCatalog,
     StringIO,
     _REAL_LOAD_PROFILE,
+    _materialize_test_models,
     agent_config,
     cli_main,
     cli_module,
@@ -60,11 +61,17 @@ class ProfileConfigTests(unittest.TestCase):
             profiles = root / "profiles"
             profiles.mkdir()
             original_project_root = agent_config.project_root
+            original_resource_root = agent_config.resource_root
+            original_profiles_root = os.environ.pop("AIPLANE_PROFILES_DIR", None)
             agent_config.project_root = lambda: root
+            agent_config.resource_root = lambda: root
             try:
                 created = create_profile("custom", template="base")
             finally:
                 agent_config.project_root = original_project_root
+                agent_config.resource_root = original_resource_root
+                if original_profiles_root is not None:
+                    os.environ["AIPLANE_PROFILES_DIR"] = original_profiles_root
             self.assertEqual(created, profiles / "custom")
             (created / "models.yaml").write_text("value: changed\n", encoding="utf-8")
             self.assertEqual(
@@ -81,12 +88,18 @@ class ProfileConfigTests(unittest.TestCase):
                 (templates / filename).write_text("value: original\n", encoding="utf-8")
             custom_profiles = root / "custom-profiles"
             original_project_root = agent_config.project_root
+            original_resource_root = agent_config.resource_root
+            original_profiles_root = os.environ.pop("AIPLANE_PROFILES_DIR", None)
             agent_config.project_root = lambda: root
+            agent_config.resource_root = lambda: root
             try:
                 created = create_profile("custom", template="base", profiles_dir=custom_profiles)
                 self.assertEqual(agent_config.list_profiles(custom_profiles), ["custom"])
             finally:
                 agent_config.project_root = original_project_root
+                agent_config.resource_root = original_resource_root
+                if original_profiles_root is not None:
+                    os.environ["AIPLANE_PROFILES_DIR"] = original_profiles_root
             self.assertEqual(created, custom_profiles / "custom")
 
     def test_remove_profile_previews_without_yes_and_deletes_with_yes(self) -> None:
@@ -349,6 +362,8 @@ class ProfileConfigTests(unittest.TestCase):
     ) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             profiles_dir = Path(tmp) / "profiles"
+            create_profile("local-dev", profiles_dir=profiles_dir)
+            _materialize_test_models(profiles_dir / "local-dev")
             completed = cli_module.subprocess.CompletedProcess(
                 args=["provider_helper"], returncode=0, stdout="pulled\n", stderr=""
             )
@@ -409,6 +424,7 @@ class ProfileConfigTests(unittest.TestCase):
                     ),
                     0,
                 )
+            _materialize_test_models(profiles_dir / "local-dev")
             completed = cli_module.subprocess.CompletedProcess(
                 args=["provider_helper"],
                 returncode=0,
@@ -567,7 +583,7 @@ class ProfileConfigTests(unittest.TestCase):
             self.assertEqual(code, 0)
             self.assertEqual(refresh.call_args.kwargs["limit"], 42)
 
-    def test_profiles_bootstrap_local_overwrites_existing_profile_by_default(self) -> None:
+    def test_profiles_bootstrap_local_preserves_existing_profile_by_default(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             profiles_dir = Path(tmp) / "profiles"
             with redirect_stdout(StringIO()):
@@ -584,8 +600,9 @@ class ProfileConfigTests(unittest.TestCase):
                     ),
                     0,
                 )
-            models_path = profiles_dir / "local-dev" / "models.yaml"
-            models_path.write_text("defaults: {}\nmodels:\n  sentinel:\n    provider: x\n", encoding="utf-8")
+            profile_path = profiles_dir / "local-dev"
+            sentinel_path = profile_path / "user-customization.txt"
+            sentinel_path.write_text("keep me\n", encoding="utf-8")
 
             stdout = StringIO()
             with redirect_stdout(stdout):
@@ -601,8 +618,23 @@ class ProfileConfigTests(unittest.TestCase):
                 )
             self.assertEqual(code, 0)
             payload = json.loads(stdout.getvalue())
-            self.assertTrue(payload["created"])
-            self.assertNotIn("sentinel", models_path.read_text(encoding="utf-8"))
+            self.assertFalse(payload["created"])
+            self.assertEqual(sentinel_path.read_text(encoding="utf-8"), "keep me\n")
+
+            with redirect_stdout(StringIO()):
+                code = cli_main(
+                    [
+                        "--profiles-dir",
+                        str(profiles_dir),
+                        "profiles",
+                        "bootstrap-local",
+                        "--overwrite",
+                        "--no-discovery",
+                        "--no-hardware-discovery",
+                    ]
+                )
+            self.assertEqual(code, 0)
+            self.assertFalse(sentinel_path.exists())
 
     def test_profiles_root_uses_env_var(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -737,8 +769,9 @@ class ProfileConfigTests(unittest.TestCase):
             )
 
             stdout = StringIO()
-            with redirect_stdout(stdout):
-                code = cli_main(["config", "show", "--path", str(config_path)])
+            with patch.dict(os.environ, {"AIPLANE_PROFILES_DIR": ""}):
+                with redirect_stdout(stdout):
+                    code = cli_main(["config", "show", "--path", str(config_path)])
 
             self.assertEqual(code, 0)
             payload = json.loads(stdout.getvalue())

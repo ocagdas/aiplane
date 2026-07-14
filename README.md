@@ -77,6 +77,7 @@ aiplane environment doctor --required-only
 Because the installer is sourced, it activates the `aiplane` Conda environment
 in the current shell after installation. Conda is the recommended flow here;
 local Python, `venv`, Docker CLI images, and static installs are also supported.
+Static installs include the shipped templates and runtime helper scripts.
 Use `scripts/setup_env.sh --help` for those modes.
 
 After installation, create the editable `profiles/local-dev/` profile used by
@@ -184,7 +185,7 @@ Before relying on a branch for demos or review, run:
 # Full format, lint, and test gate
 scripts/check.sh
 
-# Fast format, lint, and synthetic contract checks
+# Fast format, lint, contract, and smoke checks
 scripts/check.sh quick
 ```
 

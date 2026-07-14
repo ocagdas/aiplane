@@ -30,8 +30,6 @@ Scope freeze until sprint targets complete:
 
 ## Current Public Status
 
-## Current Public Status
-
 High-level implemented areas:
 
 - profiles, local config, ignored credential references, provider credential tests, and validation;
@@ -92,12 +90,16 @@ conda run --no-capture-output -n aiplane scripts/check.sh
 
 Results:
 
+- The quick gate no longer names the empty legacy `test_mvp.py`; it runs six contracts plus four intentional smoke checks for profile loading, CLI dispatch, non-mutating planning, and JSON output. Shared injectable command and HTTP boundaries now cover stacks, providers, machines, integrations, and deployment. Model refresh reconciliation, stack lifecycle, static tool catalogs, and provider-registry tests were decomposed into focused modules.
+- CLI config and profile parser/dispatch ownership now lives in focused `cli_config.py` and `cli_profiles.py` modules behind the single public entrypoint. Test profiles are materialized on disk and use the real production loader instead of globally monkeypatching CLI/MCP loader functions. CI runs the full gate on Python 3.11 and focused contract/clean-wheel validation on Python 3.12 and 3.13.
+
+- Non-destructive bootstrap now preserves existing editable profiles by default across direct CLI, install, and activation flows; explicit `--overwrite` remains covered. Static wheels now include config/profile templates plus provider/Ollama runtime helpers, and a clean-venv wheel test verifies template listing, bootstrap, config initialization, profile preservation, helper lookup, and helper delegation.
 - Profile validation passed with `ok: true`.
 - `environment doctor --required-only` passed with `2/2` mandatory tools installed; runtime prerequisite checks now come from provider/runtime config rather than shipped model defaults.
 - JSON environment doctor passed with mandatory tools installed and runtime prerequisite rows for Ollama and vLLM.
 - `aiplane quickstart local-coding --dry-run --no-discovery` passed in JSON and text modes, previewing the local profile bootstrap and printing the doctor/export/MCP command sequence without writing profile files; quickstart model pulls are opt-in with `--pull-model MODEL_ALIAS` once a profile-owned or discovered alias exists, and `--dry-run --pull-model MODEL_ALIAS` previews without pulling model weights.
 - Top-level `aiplane doctor --profile local-dev` passed in text and JSON modes. It is read-only and summarizes profile status, required/optional environment checks, configured model defaults with provider/endpoint details, selected role-default endpoint readiness, active hardware and role-model fit, provider readiness, Continue/Aider role capability readiness, MCP manifest and local AI read-surface readiness, and next safe steps.
-- The full suite now uses a session-scoped copy of shipped profile templates plus synthetic model fixtures, never the ignored local provider-discovery cache; external network access remains blocked. The Conda run passed `334 tests in 38.62s`, down from `119.85s` with the developer cache loaded. `scripts/check.sh quick` passed formatting, lint, and 6 synthetic contract tests in `0.11s` of pytest time. Runtime helper subprocesses receive `AIPLANE_PROFILES_DIR` for custom profile roots.
+- The full suite now uses a session-scoped copy of shipped profile templates plus synthetic model fixtures, never the ignored local provider-discovery cache; external network access remains blocked. The latest full gate passed `342 tests in 45.57s`, including the clean-wheel installation test; the source-only suite remains substantially faster than the earlier `119.85s` developer-cache-loaded baseline. `scripts/check.sh quick` passed formatting, lint, six contract checks, and four intentional smoke checks in `0.24s` of pytest time. Runtime helper subprocesses receive `AIPLANE_PROFILES_DIR` for custom profile roots.
 - `tools matrix` passed and reported `16` tools, `2` mandatory, `14` optional, `11` installable by `aiplane`, `7` exports available, and `9` workflow categories: `4` complete, `1` partial, and `4` needing setup on this machine.
 - `tools plan opentofu` passed and reported OpenTofu as optional/manual with non-mutating IaC plan guidance.
 - `models list` returned an empty list for the clean structural profile template until discovery or local model entries are added.

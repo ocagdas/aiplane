@@ -247,7 +247,7 @@ aiplane profiles bootstrap-local --provider ollama --limit 25
 aiplane profiles bootstrap-local --no-discovery
 ```
 
-`bootstrap-local` copies `profile-templates/local-dev` into `profiles/local-dev` when needed, validates the profile, and, unless `--no-discovery` is set, runs a bounded `models refresh` into ignored `models.discovered.yaml`.
+`bootstrap-local` copies `profile-templates/local-dev` into `profiles/local-dev` when missing, preserves an existing profile unless `--overwrite` is explicit, validates the profile, and, unless `--no-discovery` is set, runs a bounded `models refresh` into ignored `models.discovered.yaml`.
 
 - `model-providers.yaml`: default/provider seed entries for this profile.
 - `model-providers.user.yaml`: ignored user additions and overrides. This is where CLI edits go, and it is the extension point for private cloud endpoints or internal catalogs.

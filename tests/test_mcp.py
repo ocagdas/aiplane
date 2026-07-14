@@ -16,6 +16,7 @@ from .support import (
     StackManager,
     _read_message,
     _write_message,
+    _materialize_test_models,
     agent_config,
     create_profile,
     json,
@@ -437,6 +438,7 @@ class McpTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             profiles_dir = Path(tmp) / "profiles"
             create_profile("local-dev", profiles_dir=profiles_dir)
+            _materialize_test_models(profiles_dir / "local-dev")
             profile = load_profile("local-dev", Path.cwd(), profiles_dir=profiles_dir)
             MachineManager(profile).import_azure_sku("Standard_NC40ads_H100_v5", "uksouth", name="azure_h100_test")
             StackManager(profile).setup(
