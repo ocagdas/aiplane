@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import tomllib
 
 from aiplane.integration_contracts import ALL_INTEGRATION_TOOLS, required_roles
 from aiplane.mcp import TOOL_SCHEMAS, mcp_manifest
@@ -75,6 +76,12 @@ def test_aiplane_skill_is_versioned_and_not_template_text() -> None:
     assert "TODO" not in text
     assert "control-plane CLI" in text
     assert Path("skills/aiplane/agents/openai.yaml").is_file()
+
+
+def test_dev_dependencies_include_no_isolation_build_backend() -> None:
+    project = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+    dev_dependencies = project["project"]["optional-dependencies"]["dev"]
+    assert "setuptools==83.0.0" in dev_dependencies
 
 
 def test_full_check_uses_configurable_file_level_parallelism() -> None:

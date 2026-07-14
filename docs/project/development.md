@@ -139,7 +139,7 @@ scripts/setup_env.sh --mode docker --action test
 The Conda form uses the named environment and streams pytest output. The simpler
 `scripts/check.sh` uses the currently active Python environment; run
 `conda run --no-capture-output -n aiplane scripts/check.sh` to select Conda
-explicitly. The full gate uses four pytest workers with file-level scheduling by default; set `AIPLANE_TEST_WORKERS=0` for serial execution or another worker count for the host. Use `scripts/check.sh quick` for formatting, linting, eight contract checks, and intentional smoke coverage for profile loading, CLI dispatch, dry-run planning, and JSON serialization. The quick gate is a narrow feedback loop, not a substitute for the full suite.
+explicitly. The full gate uses four pytest workers with file-level scheduling by default; set `AIPLANE_TEST_WORKERS=0` for serial execution or another worker count for the host. Use `scripts/check.sh quick` for formatting, linting, nine contract checks, and intentional smoke coverage for profile loading, CLI dispatch, dry-run planning, and JSON serialization. The quick gate is a narrow feedback loop, not a substitute for the full suite.
 
 ### Git Pre-Push Hook
 
@@ -184,7 +184,7 @@ suite runs. Mock those boundaries and assert planned commands, parser behavior,
 failure handling, and contracts. Keep real checks as explicit manual or
 integration smoke commands.
 
-Test profiles are materialized on disk under a temporary `AIPLANE_PROFILES_DIR` using shipped templates and synthetic model data. Tests must call the real production profile loader; do not replace loader functions globally in CLI or MCP modules. CI runs the full gate on Python 3.11 and a focused contract plus clean-wheel installation check on Python 3.12 and 3.13.
+Test profiles are materialized on disk under a temporary `AIPLANE_PROFILES_DIR` using shipped templates and synthetic model data. Tests must call the real production profile loader; do not replace loader functions globally in CLI or MCP modules. CI runs the full gate on Python 3.11 and a focused contract plus clean-wheel installation check on Python 3.12 and 3.13. The dev dependency set includes the pinned setuptools build backend because the clean-wheel test deliberately uses `--no-build-isolation`.
 
 All external command and HTTP calls use injectable `CommandRunner` and `HttpTransport` boundaries. Production uses `subprocess` and `urllib`; focused tests should use the recording fakes in `tests/boundary_fakes.py` instead of patching implementation modules. CLI tests that only need in-process dispatch and output capture should use `tests/cli_fixtures.py`; isolated profile materialization remains in `tests/profile_fixtures.py`.
 

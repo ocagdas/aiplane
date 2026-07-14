@@ -533,7 +533,7 @@ The roadmap is now actively executing the priorities above; completed work in ea
 
 11. **Test-suite structure, performance, and isolation** - Structurally complete / incremental
    - Production loaders are no longer globally replaced by the test harness; temporary profile roots contain deterministic synthetic model data and exercise normal disk loading.
-   - The quick gate now runs eight contracts plus four intentional smoke checks; the empty legacy aggregate module is no longer included.
+   - The quick gate now runs nine contracts plus four intentional smoke checks; the empty legacy aggregate module is no longer included.
    - Shared injectable command/HTTP boundaries now cover every production process and HTTP owner; only `boundaries.py` calls `subprocess` or `urllib` directly, enforced by a contract test.
    - Model refresh reconciliation, stack lifecycle, static tool catalog data, and provider-registry tests now live in focused modules instead of their former large mixed owners.
    - Model pull/execution/endpoint readiness now lives in `model_execution.py`; stack role normalization/policy checks live in `stack_roles.py`. Oversized model and profile/config test owners are split into focused refresh, mutation, listing, lifecycle, config, and governance modules.
