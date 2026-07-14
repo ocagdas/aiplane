@@ -4,7 +4,7 @@ GitHub Releases are the current no-clone distribution channel. PyPI or another p
 
 ## Prepare
 
-1. Complete the public launch checklist and update release notes.
+1. Complete the public launch checklist and decide whether this release needs curated public notes.
 2. Set `[project].version` in `pyproject.toml`; pre-1.0 tags use the matching `vVERSION` form.
 3. Run `scripts/check.sh`, the required profile/environment doctors, and the install-channel validator against a freshly built wheel.
 4. Review the wheel and source distribution for secrets, generated state, and unexpected files.
@@ -30,7 +30,7 @@ git push origin v0.1.0
 
 `.github/workflows/release.yml` rejects a tag that does not match `pyproject.toml`, builds both wheel and source distribution, validates the wheel through all three install channels, and creates the GitHub Release with those artifacts. Normal pull-request and main-branch CI separately exercises the wheel lifecycle on Linux, macOS, and Windows.
 
-Do not retag or silently replace a published version. Correct a bad release with a new version and release notes. Enabling a Python package index is a separate release decision; use trusted publishing and add index-install validation before documenting bare package-name install commands as available.
+Do not retag or silently replace a published version. Correct a bad release with a new version. Enabling a Python package index is a separate release decision; use trusted publishing and add index-install validation before documenting bare package-name install commands as available.
 
 ## Consumer verification
 
@@ -56,6 +56,6 @@ shasum -a 256 --check SHA256SUMS
 
 On Windows PowerShell, compare `(Get-FileHash -Algorithm SHA256 FILE).Hash` with the corresponding manifest value.
 
-Versioned notes live under `docs/project/releases/vVERSION.md`; the release workflow refuses to publish when the matching file is absent. `CHANGELOG.md` summarizes public changes across versions.
+The release workflow generates minimal GitHub Release notes from the tag and commit. Curated release notes can be reintroduced for real public releases, but placeholder per-version markdown files are intentionally not required during this preview phase. `CHANGELOG.md` can summarize public changes across versions once we maintain one.
 
 For rollback, first preserve reviewed profile YAML and local configuration. Uninstall with the same owner used for installation, verify the checksum of the previously downloaded wheel, and reinstall that immutable artifact. Do not copy credentials, audit logs, tunnel state, caches, or runtime model stores into a profile backup. If a future schema migration is required, follow its explicit preview/backup instructions; Aiplane must not silently downgrade or rewrite profile schemas.

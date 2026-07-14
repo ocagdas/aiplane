@@ -80,12 +80,21 @@ jobs:
         if: ${{ steps.tag.outputs.ci_artifact != 'true' || github.event_name == 'workflow_dispatch' }}
         run: python scripts/verify_install_channels.py dist
 
-      - name: Require versioned release notes
+      - name: Write generated release notes
         if: ${{ steps.tag.outputs.ci_artifact != 'true' || github.event_name == 'workflow_dispatch' }}
-        run: test -f "docs/project/releases/${{ steps.tag.outputs.name }}.md"
+        run: |
+          {
+            echo "# aiplane ${{ steps.tag.outputs.name }}"
+            echo
+            echo "Automated release artifacts for ${{ steps.tag.outputs.name }}."
+            echo
+            echo "Commit: $(git rev-parse HEAD)"
+            echo
+            echo "Verify downloads with SHA256SUMS before installation."
+          } > RELEASE_NOTES.md
 
       - name: Publish GitHub Release artifacts
         if: ${{ steps.tag.outputs.ci_artifact != 'true' || github.event_name == 'workflow_dispatch' }}
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${{ steps.tag.outputs.name }}" dist/* --title "aiplane ${{ steps.tag.outputs.name }}" --notes-file "docs/project/releases/${{ steps.tag.outputs.name }}.md" --verify-tag
+        run: gh release create "${{ steps.tag.outputs.name }}" dist/* --title "aiplane ${{ steps.tag.outputs.name }}" --notes-file RELEASE_NOTES.md --verify-tag

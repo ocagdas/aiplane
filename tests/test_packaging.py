@@ -40,6 +40,11 @@ def test_wheel_install_includes_templates_helpers_and_preserves_profiles(tmp_pat
     aiplane = bin_dir / ("aiplane.exe" if os.name == "nt" else "aiplane")
     helper = bin_dir / "provider_helper.sh"
     _run([str(python), "-m", "pip", "install", "--no-deps", str(wheel)], cwd=tmp_path)
+    version_output = _run([str(aiplane), "--version"], cwd=tmp_path).stdout
+    assert "aiplane " in version_output
+    assert "metadata_version:" in version_output
+    assert "module_version:" in version_output
+    assert "install_type: wheel" in version_output
 
     workspace = tmp_path / "workspace"
     workspace.mkdir()

@@ -61,6 +61,7 @@ from .cli_support import (
 )
 from .integration_contracts import ALL_INTEGRATION_TOOLS
 from .output import json_dumps as _json
+from .version_info import format_version_info
 
 
 _COMMAND_RUNNER: CommandRunner = SubprocessCommandRunner()
@@ -213,6 +214,11 @@ def _main(argv: list[str] | None = None) -> int:
         help="Show tracebacks for unexpected internal errors; may expose sensitive local context",
     )
     parser.add_argument(
+        "--version",
+        action="store_true",
+        help="Show installed package and module version details",
+    )
+    parser.add_argument(
         "--workspace",
         default=".",
         help="Workspace root for path checks, audit logs, benchmarks, and tool execution",
@@ -221,7 +227,7 @@ def _main(argv: list[str] | None = None) -> int:
         "--profiles-dir",
         help="Directory containing editable profiles. Defaults to AIPLANE_PROFILES_DIR when set, otherwise the repo-local profiles/ directory",
     )
-    subparsers = parser.add_subparsers(dest="command", required=True, metavar="command")
+    subparsers = parser.add_subparsers(dest="command", metavar="command")
 
     add_public_parsers(
         subparsers,
@@ -315,6 +321,11 @@ def _main(argv: list[str] | None = None) -> int:
         formatter_class=HelpFormatter,
     )
     args = parser.parse_args(argv)
+    if args.version:
+        print(format_version_info())
+        return 0
+    if args.command is None:
+        parser.error("the following arguments are required: command")
     workspace = Path(args.workspace).resolve()
     profiles_dir = Path(args.profiles_dir).expanduser().resolve() if args.profiles_dir else None
     if profiles_dir is None and args.command != "config":

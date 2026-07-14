@@ -335,22 +335,19 @@ def test_primary_adoption_cut_contains_only_the_core_command_story() -> None:
 
 
 def test_release_workflow_is_checksummed_versioned_and_quality_gated() -> None:
-    project = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
-    version = project["project"]["version"]
     workflow = Path(".github/workflows/release.yml").read_text(encoding="utf-8")
-    notes = Path(f"docs/project/releases/v{version}.md")
     setup = Path("docs/user/setup.md").read_text(encoding="utf-8")
     process = Path("docs/project/release-process.md").read_text(encoding="utf-8")
 
     assert "run: scripts/check.sh" in workflow
     assert "sha256sum aiplane-* > SHA256SUMS" in workflow
     assert "sha256sum --check SHA256SUMS" in workflow
-    assert "docs/project/releases/${{ steps.tag.outputs.name }}.md" in workflow
-    assert '--notes-file "docs/project/releases/${{ steps.tag.outputs.name }}.md"' in workflow
+    assert "Write generated release notes" in workflow
+    assert "RELEASE_NOTES.md" in workflow
+    assert "docs/project/releases" not in workflow
+    assert "--notes-file RELEASE_NOTES.md" in workflow
     assert 'gh release create "${{ steps.tag.outputs.name }}"' in workflow
-    assert notes.is_file()
-    assert f"# aiplane v{version}" in notes.read_text(encoding="utf-8")
-    for text in (notes.read_text(encoding="utf-8"), setup, process):
+    for text in (setup, process):
         assert "SHA256SUMS" in text
         assert "rollback" in text.lower()
 

@@ -143,6 +143,8 @@ Results:
 - Focused endpoint/lifecycle tests passed for `stacks endpoint-plan`, endpoint auth/TLS/gateway flags, shared endpoint warnings, and same-host lifecycle timing/status reporting.
 - Stack listing passed and returned an empty configured stack list.
 
+- `aiplane --version` now reports effective version, package metadata version, module version, install type, and module path so wheel, static, editable, installed, and direct source-checkout runs can be distinguished during setup verification.
+
 ## Current Follow-Up Work
 
 Provider discovery and model import now has an implemented foundation: structural shipped model templates, discovery-backed add/promote/clone flows, refresh next-step guidance, machine-derived `models list` filtering, OpenAI-compatible `/v1/models` discovery, Azure OpenAI deployment discovery, ElevenLabs voice discovery, and structured managed-provider refresh failures for missing live catalog configuration. Remaining work in that area is richer provider-specific live discovery and credential tests where provider APIs justify dedicated adapters.
