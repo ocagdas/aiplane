@@ -67,7 +67,7 @@ jobs:
           cache: pip
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v8
+        uses: astral-sh/setup-uv@v8.3.2
 
       - name: Install packaging tools
         run: python -m pip install pipx pytest setuptools==83.0.0
