@@ -31,6 +31,23 @@ Canonical profile document merges follow these rules:
 
 There is no implicit merge of editable profile directories today. These rules define deterministic behavior for comparison/import tooling and prevent surprising list concatenation or silent null deletion.
 
+## Backup and recovery
+
+The editable YAML directory is the restorable source of truth; canonical JSON from `profiles render` is read-only evidence for comparison or archival. Aiplane is not a backup service, so use normal reviewed filesystem or version-control procedures for profile YAML that is safe to store. Keep credentials, discovered caches, audit logs, tunnel state, and runtime model data out of that bundle.
+
+```bash
+mkdir -p demo-backup
+cp -a profiles/local-dev demo-backup/local-dev
+aiplane profiles render local-dev > demo-backup/local-dev.profile.json
+
+# Restore the reviewed YAML, then prove it is coherent and equivalent.
+cp -a demo-backup/local-dev profiles/local-dev-restored
+AIPLANE_PROFILES_DIR=profiles aiplane profiles validate local-dev-restored
+AIPLANE_PROFILES_DIR=profiles aiplane profiles render local-dev-restored > demo-backup/local-dev-restored.profile.json
+```
+
+`profiles repair` copies missing structure from a shipped template. It does not reconstruct user model choices, endpoints, policies, or other customizations and therefore does not replace a backup. Review profile archives before sharing because paths, hostnames, endpoints, account aliases, and other operational metadata may be sensitive.
+
 ## Pre-1.0 migration policy
 
 Schema v1 is the only public canonical profile schema in the developer preview. Compatible clarifications may retain v1; any structural breaking change requires a new schema identifier and version. Aiplane does not silently rewrite profiles or canonical documents. Before a future v2 is accepted, the CLI must provide an explicit previewable migration command, document lossy changes, preserve the original, and keep v1 validation available for the announced transition window.

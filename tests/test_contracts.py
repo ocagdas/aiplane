@@ -265,3 +265,31 @@ def test_post_gate_backlog_numbers_are_sequential() -> None:
     backlog = Path("docs/project/product-adoption-backlog-2026-07.md").read_text(encoding="utf-8")
     numbered = [int(value) for value in re.findall(r"(?m)^(\d+)\. ", backlog)]
     assert numbered == list(range(1, 25))
+
+
+def test_public_demo_plan_is_bounded_reproducible_and_uses_current_commands() -> None:
+    text = Path("docs/project/public-demo-plan.md").read_text(encoding="utf-8")
+
+    assert text.count("## Video ") == 3
+    assert "no more than three minutes" in text
+    assert "Do not add a fourth public video yet" in text
+    for command in (
+        "aiplane quickstart local-coding --dry-run",
+        "aiplane discover",
+        "aiplane doctor",
+        "aiplane recommend",
+        "aiplane export continue",
+        "aiplane profiles render local-dev",
+        "aiplane profiles validate local-dev",
+        "aiplane profiles repair local-dev --file models.yaml --dry-run",
+        "aiplane hardware export-machine --name gpu-workstation",
+        "aiplane machines import gpu-workstation.machine.yaml",
+        "aiplane remote tunnel plan --target gpu_workstation_ssh",
+    ):
+        assert command in text
+
+    assert "cmp demo-backup/local-dev.profile.json demo-backup/local-dev.restored.profile.json" in text
+    assert "cannot reconstruct user customizations" in text
+    assert "It does not start a process" in text
+    assert "control plane" not in text.lower()
+    assert "mvp_0." not in text

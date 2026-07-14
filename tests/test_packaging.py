@@ -97,7 +97,8 @@ def test_wheel_install_includes_templates_helpers_and_preserves_profiles(tmp_pat
         )
         assert "ollama" in helper_status.stdout.lower()
 
-    _run(
-        [sys.executable, str(repository / "scripts" / "verify_install_channels.py"), str(wheel), "--channel", "pip"],
-        cwd=repository,
-    )
+    # Upgrade/reinstall/uninstall lifecycle coverage belongs to
+    # scripts/verify_install_channels.py and runs independently in the OS matrix
+    # and release workflow. Do not invoke that full lifecycle again here: this
+    # test already owns wheel contents, isolated installation, and first-run
+    # preservation contracts.

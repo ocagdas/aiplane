@@ -269,3 +269,15 @@ MCP stdio is read-only unless the operator starts `aiplane mcp serve --allow-wri
 - `platform_support.py` owns OS, distribution-family, architecture, and WSL capability classification. Domain modules consume capabilities instead of inventing platform checks.
 
 Structural tests in `tests/test_architecture_boundaries.py` and synthetic platform tests in `tests/test_platform_support.py` enforce these boundaries.
+
+### Test-suite performance ownership
+
+The normal full suite remains hermetic: cloud, runtime, SSH, and HTTP boundaries use deterministic fakes. Profile performance with the production command before removing assertions or changing worker scheduling:
+
+```bash
+python -m pytest -q -n 4 --dist loadfile --durations=30
+```
+
+The packaging test builds and installs one wheel in an isolated venv and owns wheel-content, helper, schema, bootstrap, and preservation contracts. Upgrade/replacement/uninstall lifecycle verification is intentionally separate in `scripts/verify_install_channels.py`, the cross-platform CI matrix, and the release workflow; do not nest that complete lifecycle inside the packaging unit again.
+
+Four file-scheduled workers remain the portable default. On a suitably provisioned local machine, `AIPLANE_TEST_WORKERS=6 scripts/check.sh` is a measured optional speedup. Keep the default conservative for shared CI runners, and retain `AIPLANE_TEST_WORKERS=0` for serial diagnosis.
