@@ -71,7 +71,7 @@ python scripts/build_local_wheel.py --clean
 make wheel-local
 ```
 
-The output goes under `.aiplane/wheelhouse/`, which is ignored by git. It contains the wheel, `SHA256SUMS`, and `provenance.json`. This is a local snapshot for testing the wheel install path from the current checkout. It is not a CI artifact and not a GitHub Release artifact. The wheel uses the tracked base version from `pyproject.toml` plus PEP 440 local metadata containing the current Git short SHA and UTC timestamp, for example `0.1.0+gabc1234.20260714t153000z`; if the working tree is dirty, provenance records `version_source: local_dirty_checkout`.
+The output goes under `.aiplane/wheelhouse/`, which is ignored by git. It contains the wheel, `SHA256SUMS`, and `provenance.json`. This is a local snapshot for testing the wheel install path from the current checkout. It is not a CI artifact and not a GitHub Release artifact. The wheel uses the tracked base version from `pyproject.toml` plus PEP 440 local metadata containing the current Git short SHA and UTC timestamp, for example `0.1.0+gabc1234.20260714t153000z`; this is a PEP 440 local version identifier, where the `+...` suffix is valid for local builds but not used for official release wheels; if the working tree is dirty, provenance records `version_source: local_dirty_checkout`.
 
 Install the local wheel with one owner:
 
