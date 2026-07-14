@@ -61,7 +61,7 @@ from .cli_support import (
 )
 from .integration_contracts import ALL_INTEGRATION_TOOLS
 from .output import json_dumps as _json
-from .version_info import format_version_info
+from .cli_version import add_version_argument, handle_version_argument
 
 
 _COMMAND_RUNNER: CommandRunner = SubprocessCommandRunner()
@@ -213,11 +213,7 @@ def _main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Show tracebacks for unexpected internal errors; may expose sensitive local context",
     )
-    parser.add_argument(
-        "--version",
-        action="store_true",
-        help="Show installed package and module version details",
-    )
+    add_version_argument(parser)
     parser.add_argument(
         "--workspace",
         default=".",
@@ -321,9 +317,9 @@ def _main(argv: list[str] | None = None) -> int:
         formatter_class=HelpFormatter,
     )
     args = parser.parse_args(argv)
-    if args.version:
-        print(format_version_info())
-        return 0
+    version_result = handle_version_argument(args)
+    if version_result is not None:
+        return version_result
     if args.command is None:
         parser.error("the following arguments are required: command")
     workspace = Path(args.workspace).resolve()
