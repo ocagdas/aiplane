@@ -102,6 +102,9 @@ jobs:
     if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     needs: [release-gate]
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
       mode: ${{ steps.classify.outputs.mode }}
       current_version: ${{ steps.classify.outputs.current_version }}
@@ -114,8 +117,18 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Detect associated pull request
+        id: associated-pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          associated="$(gh api -H "Accept: application/vnd.github+json" "/repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/pulls" --jq 'if length > 0 then "true" else "false" end' 2>/dev/null || printf 'false')"
+          echo "value=$associated" >> "$GITHUB_OUTPUT"
+
       - name: Classify version action
         id: classify
+        env:
+          AIPLANE_ASSOCIATED_PR: ${{ steps.associated-pr.outputs.value }}
         run: python scripts/version.py classify-ci --github-output
 
   ci-version-bump-and-tag:
@@ -210,7 +223,7 @@ jobs:
 
   main-versioned-wheel:
     name: Main versioned wheel artifact
-    if: ${{ needs.ci-version-bump-and-tag.result == 'success' || needs.direct-version-tag.result == 'success' }}
+    if: ${{ always() && (needs.ci-version-bump-and-tag.result == 'success' || needs.direct-version-tag.result == 'success') }}
     needs: [ci-version-bump-and-tag, direct-version-tag]
     runs-on: ubuntu-latest
     permissions:

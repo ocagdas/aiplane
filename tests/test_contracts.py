@@ -403,6 +403,8 @@ def test_successful_main_merge_versions_tags_and_uploads_a_bound_wheel() -> None
 
     assert "classify-main-push:" in workflow
     assert "github.event_name == 'push' && github.ref == 'refs/heads/main'" in workflow
+    assert "Detect associated pull request" in workflow
+    assert "AIPLANE_ASSOCIATED_PR" in workflow
     assert "python scripts/version.py classify-ci --github-output" in workflow
     assert "ci-version-bump-and-tag:" in workflow
     assert "needs.classify-main-push.outputs.mode == 'ci_patch_after_merge'" in workflow
@@ -414,6 +416,10 @@ def test_successful_main_merge_versions_tags_and_uploads_a_bound_wheel() -> None
     assert "direct-version-tag:" in workflow
     assert "needs.classify-main-push.outputs.mode == 'maintainer_direct_main_version_commit'" in workflow
     assert "main-versioned-wheel:" in workflow
+    assert (
+        "always() && (needs.ci-version-bump-and-tag.result == 'success' || needs.direct-version-tag.result == 'success')"
+        in workflow
+    )
     assert "python -m build --wheel --outdir artifacts" in workflow
     assert "python scripts/verify_install_channels.py artifacts --channel pip" in workflow
     assert "sha256sum --check SHA256SUMS" in workflow
