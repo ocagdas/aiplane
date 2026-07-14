@@ -77,8 +77,8 @@ def add_public_parsers(
         subparsers,
         "doctor",
         "Check the local AI coding stack",
-        "Aggregate the local/hybrid AI coding stack readiness checks: profile files, required environment tools, model defaults, provider state, integration roles, and MCP manifest.",
-        "Examples:\n  aiplane doctor\n  aiplane doctor --format json\n  aiplane doctor --include-optional",
+        "Aggregate versioned, read-only local/hybrid readiness findings with stable severity, affected-resource, remediation, dry-run, and exit-code fields.",
+        "Examples:\n  aiplane doctor\n  aiplane doctor --format json\n  aiplane doctor --include-optional\nExit codes: 0=healthy, 1=advisory findings only, 2=one or more blockers",
     )
     profile_arg(doctor_cmd)
     doctor_cmd.add_argument(
@@ -98,7 +98,7 @@ def add_public_parsers(
         "quickstart",
         "Start a guided local AI coding setup",
         "Run a focused environment-doctor workflow that discovers, validates, and compiles reproducible local/hybrid AI coding profiles.",
-        "Examples:\n  aiplane quickstart local-coding\n  aiplane quickstart local-coding --dry-run\n  aiplane quickstart local-coding --no-discovery",
+        "Examples:\n  aiplane quickstart local-coding\n  aiplane quickstart local-coding --dry-run\n  aiplane quickstart local-coding --discovery",
     )
     quickstart_sub = quickstart_cmd.add_subparsers(dest="quickstart_command", required=True, metavar="command")
     local_coding = quickstart_sub.add_parser(
@@ -126,9 +126,10 @@ def add_public_parsers(
         help="Replace an existing profile directory first; existing profiles are preserved by default",
     )
     local_coding.add_argument(
-        "--no-discovery",
-        action="store_true",
-        help="Skip provider model discovery refresh",
+        "--discovery",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Contact configured provider catalogs; disabled by default for an offline-safe quickstart",
     )
     local_coding.add_argument(
         "--no-hardware-discovery",

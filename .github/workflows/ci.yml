@@ -48,3 +48,36 @@ jobs:
 
       - name: Validate supported Python and static wheel
         run: python -m pytest -q tests/test_contracts.py tests/test_packaging.py
+
+
+  install-channels:
+    name: Install channels (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-14, windows-latest]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Install packaging tools
+        run: python -m pip install pipx pytest setuptools==83.0.0
+
+      - name: Validate synthetic platform contracts
+        run: python -m pytest -q tests/test_platform_support.py
+
+      - name: Build wheel artifact
+        run: python -m pip wheel . --no-deps --no-build-isolation --wheel-dir dist
+
+      - name: Validate pip, pipx, and uv tool lifecycle
+        run: python scripts/verify_install_channels.py dist

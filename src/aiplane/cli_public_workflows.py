@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 
 from .cli_models import refresh_cli_payload
@@ -95,6 +96,8 @@ def _print_public_export(args, profile) -> None:
 
 
 def _doctor_exit_code(payload: dict[str, object]) -> int:
+    if isinstance(payload.get("exit_code"), int):
+        return int(payload["exit_code"])
     summary = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
     if int(summary.get("blocking", 0) or 0) > 0:
         return 2
@@ -256,6 +259,7 @@ def _bootstrap_local_profile(args, workspace: Path, profiles_dir: Path | None) -
 
 
 def _quickstart_local_coding(args, workspace: Path, profiles_dir: Path | None) -> dict[str, object]:
+    args.no_discovery = not args.discovery
     bootstrap = _bootstrap_local_profile(args, workspace, profiles_dir)
     doctor_payload = None
     recommendation_payload = None
@@ -285,22 +289,14 @@ def _quickstart_local_coding(args, workspace: Path, profiles_dir: Path | None) -
             "skipped": True,
             "reason": "profile does not exist yet; rerun quickstart without --dry-run before pulling models",
         }
-    commands = [
-        f"aiplane discover --profile {args.name}",
-        f"aiplane doctor --profile {args.name}",
-        f"aiplane recommend --profile {args.name}",
-        f"aiplane export continue --profile {args.name}",
-        f"aiplane export aider --profile {args.name}",
-        "aiplane export vscode-mcp",
-    ]
+    readiness = _quickstart_readiness(profile, args.name)
+    commands = [str(readiness["next_action"]["command"])]
     if args.pull_model:
         pull_runtime = (pull.get("runtime") if isinstance(pull, dict) else None) or args.pull_runtime or "RUNTIME"
         commands.insert(
             1,
             f"aiplane runtimes pull {pull_runtime} --model {args.pull_model}" + (" --dry-run" if args.dry_run else ""),
         )
-    if args.dry_run and not profile_path.exists():
-        commands.insert(0, f"aiplane quickstart local-coding --name {args.name}")
     return {
         "name": "quickstart_local_coding",
         "profile": args.name,
@@ -309,11 +305,82 @@ def _quickstart_local_coding(args, workspace: Path, profiles_dir: Path | None) -
         "pull": pull,
         "doctor": doctor_payload,
         "recommend": recommendation_payload,
+        "readiness": readiness,
         "commands": commands,
         "notes": [
             "This quickstart stays in the environment-doctor workflow lane: it creates or previews a local profile, runs discovery/doctor checks, optionally delegates an explicit model pull, and prints export commands.",
             "Use --dry-run with --pull-model to preview the existing runtime helper pull path without pulling model weights.",
             "It does not install runtimes, edit IDE configuration, start cloud resources, or run an agent conversation.",
+        ],
+    }
+
+
+def _quickstart_readiness(profile, profile_name: str) -> dict[str, object]:
+    """Return one next action and no more than two bounded setup choices."""
+    export_command = f"aiplane export continue --profile {profile_name}"
+    if profile is None:
+        return {
+            "status": "profile_required",
+            "ready_to_export": False,
+            "reason": "the dry-run preview did not create a profile",
+            "next_action": {
+                "kind": "create_profile",
+                "command": f"aiplane quickstart local-coding --name {profile_name}",
+                "verifies": "creates the profile while preserving it on later runs",
+            },
+            "export_action": {"command": export_command, "ready": False},
+            "setup_choices": [],
+        }
+
+    models = ModelCatalog(profile).models()
+    enabled_models = sorted(name for name, row in models.items() if bool(row.get("enabled", True)))
+    if enabled_models:
+        return {
+            "status": "ready_to_export",
+            "ready_to_export": True,
+            "reason": f"{len(enabled_models)} enabled profile model alias(es) are available",
+            "next_action": {
+                "kind": "export_and_verify",
+                "command": export_command,
+                "verifies": "prints a Continue configuration without editing Continue files",
+            },
+            "export_action": {"command": export_command, "ready": True},
+            "setup_choices": [],
+        }
+
+    ollama_available = shutil.which("ollama") is not None
+    local_first = (
+        f"aiplane models refresh ollama --profile {profile_name} --limit 20"
+        if ollama_available
+        else f"aiplane runtimes install ollama --profile {profile_name} --dry-run"
+    )
+    return {
+        "status": "model_required",
+        "ready_to_export": False,
+        "reason": "the profile has no enabled model alias; no manual YAML editing is required",
+        "next_action": {
+            "kind": "prepare_local_model",
+            "command": local_first,
+            "verifies": (
+                "discovers local Ollama model aliases"
+                if ollama_available
+                else "prints the supported local-runtime installation plan without changing the host"
+            ),
+        },
+        "export_action": {"command": export_command, "ready": False},
+        "setup_choices": [
+            {
+                "name": "local",
+                "when": "use an Ollama-served model on this machine",
+                "command": local_first,
+                "then": f"aiplane models add local-chat --alias DISCOVERED_ALIAS --role chat --profile {profile_name}",
+            },
+            {
+                "name": "existing-endpoint",
+                "when": "use an OpenAI-compatible endpoint you already operate",
+                "command": (f"aiplane models refresh openai --profile {profile_name} --limit 20"),
+                "then": f"aiplane models add endpoint-chat --alias DISCOVERED_ALIAS --role chat --profile {profile_name}",
+            },
         ],
     }
 

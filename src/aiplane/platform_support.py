@@ -34,6 +34,10 @@ class HostPlatform:
     def linux_hardware_probes_supported(self) -> bool:
         return self.linux
 
+    @property
+    def ssh_tunnel_lifecycle_supported(self) -> bool:
+        return self.normalized_system in {"linux", "darwin"}
+
     def summary(self) -> dict[str, object]:
         return {
             "system": self.system,

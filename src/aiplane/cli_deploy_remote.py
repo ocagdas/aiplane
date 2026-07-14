@@ -103,7 +103,7 @@ def add_deploy_remote_parsers(
     tunnel_status = tunnel_sub.add_parser(
         "status",
         help="Show tunnel process status",
-        description="Show whether a helper-started SSH tunnel is running and which endpoint to use.",
+        description="Show helper-started tunnel state. Lifecycle status is supported on Linux/macOS; on Windows use tunnel plan and manage SSH natively.",
         formatter_class=formatter_class,
     )
     profile_arg(tunnel_status)
@@ -111,7 +111,7 @@ def add_deploy_remote_parsers(
     tunnel_start = tunnel_sub.add_parser(
         "start",
         help="Start an SSH tunnel",
-        description="Start the configured ssh -L tunnel in the background and write PID/log files under .aiplane/remote.",
+        description="Start ssh -L in the background on Linux/macOS and write PID/log files under .aiplane/remote. On Windows use tunnel plan and manage SSH natively.",
         formatter_class=formatter_class,
     )
     profile_arg(tunnel_start)
@@ -119,7 +119,7 @@ def add_deploy_remote_parsers(
     tunnel_stop = tunnel_sub.add_parser(
         "stop",
         help="Stop a helper-started SSH tunnel",
-        description="Stop a tunnel process previously started by this CLI.",
+        description="Stop a tunnel process previously started by this CLI on Linux/macOS. Windows tunnel lifecycle is unsupported; use tunnel plan.",
         formatter_class=formatter_class,
     )
     profile_arg(tunnel_stop)
@@ -167,5 +167,5 @@ def handle_deploy_remote_command(
         else:
             raise ValueError(f"unknown remote tunnel command: {args.tunnel_command}")
         print(json_dumps(payload, indent=2))
-        return 0
+        return 2 if payload.get("name") == "unsupported_platform" else 0
     return None

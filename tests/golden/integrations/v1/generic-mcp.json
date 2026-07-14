@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "aiplane": {
+      "command": "aiplane",
+      "args": [
+        "mcp",
+        "serve"
+      ]
+    }
+  }
+}

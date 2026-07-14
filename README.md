@@ -1,88 +1,63 @@
 # aiplane
 
-`aiplane` is a control-plane CLI for AI model environments across text, image, audio, video, and reasoning workflows.
-It helps teams make local, remote, and cloud-adjacent AI workflows reproducible by organizing the non-model part of AI operations:
+`aiplane` is an environment doctor and configuration compiler for reproducible local and hybrid AI development environments. It turns detected environment facts into a reviewable profile, actionable readiness findings, hardware-aware recommendations, and deterministic configuration exports.
 
-- providers and provider credentials references,
-- runtime and endpoint selection,
-- machine/hardware fit,
-- policy constraints,
-- model catalogs and aliases,
-- IDE/agent/automation exports, and
-- run-time readiness checks.
+First outcome: inspect the proposed local setup and receive exact doctor, recommendation, and export steps without changing runtimes, development-tool files, or external services.
 
-Core config is declarative YAML. Profiles, providers, models, machines, stacks, and policy files can be committed and reviewed like any other environment contract. Secrets stay in ignored local files or environment variables while profile structure stays explicit and diff-friendly.
+```bash
+aiplane quickstart local-coding --dry-run
+```
 
-`aiplane` exposes a practical command API that is easy to automate. Commands support both human-readable output and machine-readable output (`--format json`) for CI/CD and external DevOps hooks, so you can keep setup and checks in existing pipelines.
+Profiles are declarative YAML that can be reviewed like other environment contracts. Secrets remain in ignored local files or environment variables. Human-readable and JSON output support both operators and CI.
 
-A core goal is avoiding lock-in to one provider stack. With aiplane, teams can shift between managed endpoints, self-hosted runtimes, remote workstations, and mixed stacks using the same profile model. This is useful when teams want to optimise cost, move to regions with required data controls, or go fully on-prem as operational needs change.
-
-It is not a coding agent, chat UI, inference server, model marketplace, or cloud platform. It sits one layer lower:
-it coordinates models, runtimes, and tooling so human operators can keep AI environments understandable and auditable.
-The aim is to treat AI environment setup and workflow operations like AIOps for AI operations: taking care of setup, replication, migration, and model/runtime alignment so teams can spend time on model work and experimentation instead.
+`aiplane` is not a coding agent, chat UI, inference server, model marketplace, model proxy, or cloud platform. It configures, checks, plans, and exports the operational layer around those tools.
 
 ## Why this exists
 
 Most teams discover that “working AI setup” becomes a pile of one-off shell commands, hidden assumptions, and environment drift:
 
-- one model works locally, another in a remote VM,
+- one model works on a laptop, another only on a shared GPU workstation,
 - one assistant needs one endpoint format, another needs another,
-- local and managed providers require different credentials and auth paths,
+- local runtimes and hosted endpoints use different credentials and connection settings,
 - hardware constraints (`RAM`, `VRAM`, GPU type) get implicit and untracked,
 - and repeatability depends on tribal knowledge.
 
 `aiplane` reduces this by making setup, checks, and exports profile-first and explicit.
 
-## What `aiplane` is (today)
+## What `aiplane` does today
 
-Current branch focus: **early beta / pre-1.0**, with core value around reproducible AI workflow setup.
+Current maturity: **developer preview / pre-1.0 alpha**. The supported public workflow is intentionally narrow:
 
-### In place now
+- create and validate a reviewable environment profile;
+- discover local hardware, installed runtimes, configured endpoints, and configuration provenance;
+- diagnose readiness problems with impact and remediation;
+- recommend reviewed models that fit the selected hardware and policy; and
+- export deterministic configuration for existing development tools without editing their files.
 
-- Profile loading, validation, config inheritance, and profile selection for local and non-local contexts.
-- Provider catalogs for managed and self-managed sources.
-- Ignored model discovery cache (`models.discovered.yaml`) and explicit profile-owned model entries in `models.yaml`.
-- Provider/model discovery, filtering, and model import paths with RAM/VRAM/capability metadata and provider/source/runtimes separation.
-- Runtime helper orchestration for supported self-managed runtimes (with dry-run first-class behavior).
-- Hardware discovery, machine imports, and hardware-aware recommendations.
-- Stack planning and setup workflows (including role model mapping and policy-aware checks).
-- Integration exports for Continue, Cline, Zed, Aider, OpenAI-compatible clients, MCP clients.
-- MCP read tooling and narrow audited write tooling.
-- External tooling readiness checks (`tools doctor/matrix`, `environment doctor`) for provisioning and benchmark workflows.
-- Policy and audit foundations for explicitness in cloud escalation and managed endpoint use.
-- Smoke-test command scaffolding and benchmark planning.
+The result is an explicit environment contract that can be inspected, compared, and reproduced instead of a collection of machine-specific setup notes.
 
-### Not in scope yet
-
-- it is not a full coding agent,
-- it is not an inference engine,
-- it is not a hidden production orchestrator,
-- it does not run arbitrary shell actions through MCP,
-- and it does not promise turnkey enterprise cloud deployment.
+`aiplane` also retains tested supporting and experimental commands for specialised troubleshooting and planning. They are available to advanced users, but they do not expand the public product promise or block the core workflow. See [command coverage](docs/project/command-coverage.md) for their maturity and limitations.
 
 ## Install
 
-Fresh Conda install:
+For evaluation without cloning the repository, download the wheel from the [latest GitHub Release](https://github.com/ocagdas/aiplane/releases/latest), then install it with one of these isolated or environment-specific methods:
 
 ```bash
-# from a clone
-git clone https://github.com/ocagdas/aiplane.git
-cd aiplane
-source scripts/setup_env.sh --mode conda --conda-env aiplane --action install --editable
+# Recommended isolated application install. Choose one.
+uv tool install ./aiplane-0.1.0-py3-none-any.whl
+pipx install ./aiplane-0.1.0-py3-none-any.whl
 
-aiplane profiles list
-aiplane environment doctor --required-only
+# Or install into the currently active venv or Conda environment.
+python -m pip install ./aiplane-0.1.0-py3-none-any.whl
 ```
 
-Because the installer is sourced, it activates the `aiplane` Conda environment
-in the current shell after installation. Conda is the recommended flow here;
-local Python, `venv`, Docker CLI images, and static installs are also supported.
-Static installs include the shipped templates and runtime helper scripts.
-Use `scripts/setup_env.sh --help` for those modes.
+Use the filename attached to the release; `0.1.0` is illustrative. All three methods register the `aiplane` command and include the profile/config templates and runtime helper assets. See [Setup](docs/user/setup.md#standard-wheel-install-no-repository-clone) for verification, upgrades, uninstallation, index-based commands, Conda usage, and platform limitations.
+
+Contributor and source-checkout installs remain available through `scripts/setup_env.sh`; they are not required for normal evaluation.
 
 After installation, create the editable `profiles/local-dev/` profile used by
-the CLI. It contains the local hardware, provider, model, runtime, tool, policy,
-and environment configuration. This safe first-run form keeps an existing
+the CLI. It contains the reviewed hardware, model, runtime, endpoint, and policy
+configuration. This safe first-run form keeps an existing
 profile, detects local hardware, validates the profile, and skips provider model
 catalog queries:
 
@@ -118,50 +93,36 @@ aiplane recommend
 aiplane export continue
 ```
 
-The single-command equivalent is:
+The single-command equivalent is offline-safe by default:
 
 ```bash
 aiplane quickstart local-coding
 aiplane quickstart local-coding --dry-run
 aiplane quickstart local-coding --dry-run --pull-model MODEL_ALIAS
 aiplane quickstart local-coding --pull-model MODEL_ALIAS
+aiplane quickstart local-coding --discovery  # explicitly contact configured catalogs
 ```
 
+Quickstart preserves existing profile files on repeat runs and reports one exact next action. When no model alias exists, it offers only two setup paths—local Ollama or an existing managed endpoint—and requires no manual YAML editing. Provider catalog access is opt-in with `--discovery`.
+
 This path is designed to detect local hardware, runtimes, model catalog state,
-endpoint setup status, and role mappings, report configuration sources (detected, built-in, provider-discovered cache, profile-configured, and unresolved records), and then print the next concrete export commands. Doctor findings include severity, impact, remediation command metadata, mutability, and dry-run support where action is needed.
+endpoint setup status, and role mappings, report configuration sources (detected, built-in, provider-discovered cache, profile-configured, and unresolved records), and then report one exact next action. Doctor findings include severity, impact, remediation command metadata, mutability, and dry-run support where action is needed.
 
-Command categories are explicit in [command coverage](docs/project/command-coverage.md): core commands lead onboarding, supporting commands troubleshoot specific subsystems, and deferred commands stay out of the public beta path unless a scope review moves them.
+Command categories are explicit in [command coverage](docs/project/command-coverage.md): core commands lead onboarding, supporting commands troubleshoot specific subsystems, and experimental commands remain outside the developer-preview path.
 
-## Execution tracks
+## Advanced and experimental commands
 
-The current project direction is organized into three execution tracks:
-
-1. **Agentic environments and workflows**
-   - profile-driven endpoints,
-   - policy-aware role bindings,
-   - starter project scaffolds (non-mutating export path first).
-
-2. **Provisioning and automation tooling**
-   - clear tool readiness checks,
-   - non-mutating plans/exports for Vagrant, Packer, OpenTofu/Terraform, Pulumi, Ansible, Docker/Compose, dev containers, and Kubernetes tooling,
-   - explicit guardrails before applying remote changes.
-
-3. **Benchmark and evaluation workflow integration**
-   - smoke/custom checks,
-   - benchmark tool install/check/plan helpers,
-   - explicit placement of benchmark execution (local host, remote endpoint, same host as runtime).
-
-See [Roadmap](docs/project/roadmap.md) for concrete implementation status.
+The repository contains additional tested commands for specialised environment troubleshooting, integration planning, and guarded operations. They remain subordinate to the profile → discover → doctor → recommend → export workflow. They remain implementation details rather than additional product promises. See [command coverage](docs/project/command-coverage.md) for the exact maturity boundary and [Roadmap](docs/project/roadmap.md) for future decisions.
 
 ## Safety, governance, and trust model
 
 - credentials and local machine state are intentionally outside git in ignored files,
 - secrets are redacted by command output tooling,
 - plans/doctor/install previews come before mutation,
-- MCP mutations are narrow and audited,
+- mutating operations are narrow, guarded, and audited,
 - and policy checks are surfaced before escalation is allowed.
 
-Security reporting is documented in [SECURITY.md](SECURITY.md).
+Security reporting is documented in [SECURITY.md](SECURITY.md). The tested trust boundaries and residual limitations are in the [practical threat model](docs/project/threat-model.md).
 
 ## Helper scripts
 
@@ -170,11 +131,13 @@ Security reporting is documented in [SECURITY.md](SECURITY.md).
 - `aiplane environment plan`: renders how a command would run under current profile context.
 - `aiplane environment doctor` and `aiplane tools doctor`: first checks when setup quality looks off.
 
-More command detail in:
-- [setup](docs/user/setup.md)
-- [providers and runtime helpers](docs/user/providers.md)
-- [tools and provisioning](docs/user/tools.md)
-- [runtime map](docs/user/runtime-model-map.md)
+More detail:
+
+- [setup and installation](docs/user/setup.md)
+- [core user workflow](docs/user/index.md)
+- [doctor output contract](docs/user/doctor-contract.md)
+- [platform support](docs/user/platform-support.md)
+- [advanced command maturity](docs/project/command-coverage.md)
 
 ## Validation expectations
 
@@ -196,35 +159,26 @@ Conda environment first, you can select it explicitly with
 `scripts/format.sh check` to check formatting only, or `scripts/format.sh fix`
 to apply formatting fixes.
 
-Use [command coverage](docs/project/command-coverage.md), [strategy](docs/project/strategy.md), and [session handoff](docs/project/session-handoff.md) to keep behavior, docs, and tests synchronized.
+Use [command coverage](docs/project/command-coverage.md) and [strategy](docs/project/strategy.md) to keep behavior, docs, and tests synchronized.
 
 ## Documentation
 
-- [User docs](docs/user/index.md)
-- [Security policy](SECURITY.md)
-- [Contributing](CONTRIBUTING.md)
-- [Code of conduct](CODE_OF_CONDUCT.md)
-- [Setup](docs/user/setup.md)
-- [Providers and credentials](docs/user/providers.md)
-- [Tools and provisioning](docs/user/tools.md)
-- [Integrations](docs/user/integrations.md)
-- [Machines and stacks](docs/user/machines-and-stacks.md)
-- [Benchmarks](docs/user/benchmarks.md)
-- [MCP](docs/user/mcp.md)
-- [aiplane skill](skills/aiplane/SKILL.md)
-- [Roadmap](docs/project/roadmap.md)
-- [Project handoff](docs/project/session-handoff.md)
+- [Start here](docs/user/index.md)
+- [Installation and setup](docs/user/setup.md)
+- [Platform support](docs/user/platform-support.md)
+- [Security policy](SECURITY.md) and [practical threat model](docs/project/threat-model.md)
+- [Advanced command maturity](docs/project/command-coverage.md)
+- [Contributor guide](CONTRIBUTING.md)
 
 ## Contributing
 
-We want practical contributions from teams that run local models, remote GPUs, or AI workflows that span local + managed services.
-Good first areas:
+We want practical contributions that make local and hybrid AI development environments easier to diagnose and reproduce. Good first areas:
 
-- improve provider/runtime checks,
-- harden guardrails and policy behavior,
-- improve reproducible setup flows,
-- improve benchmark and evaluation ergonomics,
-- and tighten docs where commands or terminology still create ambiguity.
+- improve discovery and actionable doctor findings;
+- improve hardware-fit recommendations and deterministic exports;
+- harden profile, policy, and secret-safety behavior;
+- improve reproducible installation and setup flows; and
+- tighten documentation where commands or terminology create ambiguity.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
 

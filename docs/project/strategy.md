@@ -11,12 +11,12 @@ Good design choices flow from that standard:
 - Prefer transparency over magic. Significant operations should be inspectable before they run.
 - Prefer composability over replacement. Integrate with tools developers already use rather than duplicating them.
 - Prefer explicitness over convenience at the cost of control. Profile-driven configuration is intentionally visible.
-- Prefer depth over breadth. Do the environment-doctor and compiler job well before expanding scope.
+- Prefer depth over breadth. Do the environment doctor and compiler job well before expanding scope.
 - Prefer a polished local/hybrid AI workflow stack doctor over broad integration lists that are not end-to-end useful.
 
 ## Positioning
 
-`aiplane` is a local-first configuration and operations environment-doctor and configuration compiler for AI workflow environments across local, remote, VM, and cloud-adjacent machines. Its sharpest wedge is making local and hybrid AI workflow stacks reproducible, inspectable, policy-aware, and portable from one profile.
+`aiplane` is a local-first configuration and operations environment doctor and configuration compiler for AI workflow environments across local, remote, VM, and cloud-adjacent machines. Its sharpest wedge is making local and hybrid AI workflow stacks reproducible, inspectable, policy-aware, and portable from one profile.
 
 It is not a coding agent, IDE assistant, full chat UI, inference server, model marketplace, model proxy, or cloud platform. Existing tools such as Continue, Cline, Cursor, Codex-like CLIs, Claude Code, Aider, OpenHands, Ollama, LM Studio, vLLM, TGI, llama.cpp, LocalAI, OpenAI, Anthropic, and Azure OpenAI already cover large parts of those domains. `aiplane` should configure, check, plan, export, and govern those pieces rather than replacing them.
 The aim of `aiplane` is to make environment setup, migration, and model/runtime pairing an explicit, repeatable operations layer so teams can focus on AI experiments, model work, and code outcomes instead.
@@ -95,9 +95,9 @@ The merged MVP has enough surface area that maintainability now matters as much 
 - Treat orchestrators as external frameworks. `aiplane` should generate role/endpoint/policy config and readiness checks, not run autonomous agent conversations itself.
 - Keep tests close to behavior boundaries. As the code is split, tests should move from one large MVP file into focused modules for profiles/config, provider/model catalog, runtimes, integrations, MCP, orchestrators, stacks, and CLI smoke coverage.
 
-## Execution Fabric Tracks
+## Advanced surfaces (subordinate)
 
-The current product direction is organized around three execution-fabric tracks.
+These implemented and planned surfaces support specialist users, but remain subordinate to the doctor and configuration-compiler workflow and do not add parallel product promises.
 
 ### Agentic Environments and Workflows
 

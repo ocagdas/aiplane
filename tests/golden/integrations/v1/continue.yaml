@@ -1,0 +1,27 @@
+name: aiplane
+version: 0.1.0
+schema: v1
+models:
+  - name: fixture-chat-small
+    provider: openai
+    model: provider-chat-small:8b
+    apiBase: http://localhost:11434/v1
+    apiKey: ollama
+    roles: [chat, edit, apply]
+  - name: fixture-code-base
+    provider: openai
+    model: provider-code-base:1.5b
+    apiBase: http://localhost:11434/v1
+    apiKey: ollama
+    roles: [autocomplete]
+tabAutocompleteModel:
+  title: fixture-code-base
+  provider: openai
+  model: provider-code-base:1.5b
+  apiBase: http://localhost:11434/v1
+  apiKey: ollama
+embeddingsProvider:
+  provider: openai
+  model: fixture-embedding-small:latest
+  apiBase: http://localhost:11434/v1
+  apiKey: ollama

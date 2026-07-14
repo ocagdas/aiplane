@@ -250,11 +250,32 @@ class ProfileConfigTests(unittest.TestCase):
             self.assertTrue(payload["dry_run"])
             self.assertTrue(payload["bootstrap"]["would_create"])
             self.assertFalse((profiles_dir / "local-dev").exists())
-            self.assertIn("aiplane quickstart local-coding --name local-dev", payload["commands"])
-            self.assertIn("aiplane discover --profile local-dev", payload["commands"])
-            self.assertIn("aiplane doctor --profile local-dev", payload["commands"])
-            self.assertIn("aiplane recommend --profile local-dev", payload["commands"])
+            self.assertEqual(payload["commands"], ["aiplane quickstart local-coding --name local-dev"])
+            self.assertEqual(payload["readiness"]["status"], "profile_required")
+            self.assertFalse(payload["readiness"]["ready_to_export"])
+            self.assertEqual(payload["readiness"]["setup_choices"], [])
             self.assertIsNone(payload["doctor"])
+
+    def test_quickstart_skips_provider_network_discovery_by_default(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            profiles_dir = Path(tmp) / "profiles"
+            with (
+                patch("aiplane.cli_public_workflows.ModelCatalog.refresh_all") as refresh,
+                redirect_stdout(StringIO()),
+            ):
+                code = cli_main(
+                    [
+                        "--profiles-dir",
+                        str(profiles_dir),
+                        "quickstart",
+                        "local-coding",
+                        "--no-hardware-discovery",
+                        "--format",
+                        "json",
+                    ]
+                )
+            self.assertEqual(code, 0)
+            refresh.assert_not_called()
 
     def test_quickstart_local_coding_text_lists_next_commands(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -278,9 +299,48 @@ class ProfileConfigTests(unittest.TestCase):
             self.assertEqual(code, 0)
             self.assertIn("local coding quickstart for profile local-dev", output)
             self.assertIn("profile validation: ok", output)
-            self.assertIn("aiplane doctor --profile local-dev", output)
-            self.assertIn("aiplane export continue --profile local-dev", output)
+            self.assertIn("readiness: model_required", output)
+            self.assertIn("setup choices (choose one):", output)
+            self.assertIn("next action:", output)
+            self.assertIn("no manual YAML editing is required", output)
             self.assertTrue((profiles_dir / "local-dev" / "models.yaml").exists())
+
+    def test_quickstart_is_idempotent_and_preserves_manual_profile_edits(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            profiles_dir = Path(tmp) / "profiles"
+            arguments = [
+                "--profiles-dir",
+                str(profiles_dir),
+                "quickstart",
+                "local-coding",
+                "--no-discovery",
+                "--no-hardware-discovery",
+                "--format",
+                "json",
+            ]
+            with redirect_stdout(StringIO()):
+                self.assertEqual(cli_main(arguments), 0)
+            models_path = profiles_dir / "local-dev" / "models.yaml"
+            edited = models_path.read_text(encoding="utf-8") + "# retained by quickstart\n"
+            models_path.write_text(edited, encoding="utf-8")
+
+            stdout = StringIO()
+            with patch("aiplane.cli_public_workflows.shutil.which", return_value=None), redirect_stdout(stdout):
+                self.assertEqual(cli_main(arguments), 0)
+            payload = json.loads(stdout.getvalue())
+
+            self.assertEqual(models_path.read_text(encoding="utf-8"), edited)
+            self.assertFalse(payload["bootstrap"]["created"])
+            self.assertEqual(payload["readiness"]["status"], "model_required")
+            self.assertLessEqual(len(payload["readiness"]["setup_choices"]), 2)
+            self.assertEqual(
+                payload["readiness"]["next_action"]["command"],
+                "aiplane runtimes install ollama --profile local-dev --dry-run",
+            )
+            self.assertEqual(
+                payload["readiness"]["export_action"]["command"],
+                "aiplane export continue --profile local-dev",
+            )
 
     def test_public_onboarding_commands_are_wired(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -382,6 +442,12 @@ class ProfileConfigTests(unittest.TestCase):
             self.assertEqual(code, 0)
             self.assertEqual(payload["pull"]["model"], "fixture-chat-small")
             self.assertEqual(payload["pull"]["runtime"], "ollama")
+            self.assertEqual(payload["readiness"]["status"], "ready_to_export")
+            self.assertEqual(payload["readiness"]["setup_choices"], [])
+            self.assertEqual(
+                payload["readiness"]["next_action"]["command"],
+                "aiplane export continue --profile local-dev",
+            )
             self.assertTrue(payload["pull"]["executed"])
             self.assertFalse(payload["pull"]["dry_run"])
             helper.assert_called_once()

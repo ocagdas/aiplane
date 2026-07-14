@@ -33,6 +33,13 @@ LOCAL_CODING_MCP_TOOLS = {
     "aiplane.remote.tunnel.plan",
 }
 
+DOCTOR_CONTRACT_VERSION = "1.0"
+DOCTOR_EXIT_CODES = {
+    "healthy": 0,
+    "advisory": 1,
+    "blocking": 2,
+}
+
 
 def local_coding_doctor(profile: Profile, include_optional: bool = False) -> dict[str, Any]:
     catalog = ModelCatalog(profile)
@@ -57,6 +64,7 @@ def local_coding_doctor(profile: Profile, include_optional: bool = False) -> dic
             if not isinstance(check, dict):
                 continue
             section_name = str(section.get("name") or "general")
+            check["id"] = f"{section_name}.{check.get('name', 'unknown')}"
             check["severity"], check["action"] = _section_check_status(
                 str(profile.name),
                 section_name,
@@ -64,8 +72,13 @@ def local_coding_doctor(profile: Profile, include_optional: bool = False) -> dic
             )
             check.setdefault("reason", check.get("detail", ""))
             check["impact"] = _check_impact(section_name, check)
-            if check["severity"] in {"blocking", "advisory"}:
-                check["remediation"] = _check_remediation(str(profile.name), section_name, check)
+            check["affected_resource"] = _affected_resource(str(profile.name), section_name, check)
+            check["remediation"] = _check_remediation(
+                str(profile.name),
+                section_name,
+                check,
+                actionable=check["severity"] in {"blocking", "advisory"},
+            )
 
     blocking = sum(
         1
@@ -85,10 +98,19 @@ def local_coding_doctor(profile: Profile, include_optional: bool = False) -> dic
         for check in section.get("checks", [])
         if isinstance(check, dict) and check.get("severity") == "pass"
     )
+    outcome = "blocking" if blocking else "advisory" if advisory else "healthy"
     return {
         "name": "local_coding_doctor",
+        "contract_version": DOCTOR_CONTRACT_VERSION,
         "profile": profile.name,
         "ok": blocking == 0,
+        "outcome": outcome,
+        "exit_code": DOCTOR_EXIT_CODES[outcome],
+        "exit_codes": {
+            "healthy": {"code": 0, "meaning": "all findings pass"},
+            "advisory": {"code": 1, "meaning": "no blockers; one or more advisory findings"},
+            "blocking": {"code": 2, "meaning": "one or more blocking findings"},
+        },
         "summary": {
             "sections": len(sections),
             "checks": sum(len(section["checks"]) for section in sections),
@@ -113,6 +135,7 @@ def local_coding_doctor_text(payload: dict[str, Any]) -> str:
     summary = payload.get("summary", {}) if isinstance(payload.get("summary"), dict) else {}
     lines = [
         f"aiplane doctor for profile {payload.get('profile', 'unknown')}",
+        f"contract: {payload.get('contract_version', 'unversioned')}; exit_code: {payload.get('exit_code', 'unknown')}",
         f"status: {'ok' if payload.get('ok') else 'issues found'}; checks: {summary.get('checks', 0)}; needs_attention: {summary.get('blocking', 0)}; further_actions: {summary.get('warnings', 0)}",
         "",
     ]
@@ -802,16 +825,55 @@ def _check_impact(section: str, check: dict[str, Any]) -> str:
     return "The local AI workflow may need attention before export or use."
 
 
-def _check_remediation(profile: str, section: str, check: dict[str, Any]) -> dict[str, Any]:
+def _check_remediation(
+    profile: str,
+    section: str,
+    check: dict[str, Any],
+    *,
+    actionable: bool,
+) -> dict[str, Any]:
+    if not actionable:
+        return {
+            "command": None,
+            "description": "No action required.",
+            "mutation": "none",
+            "mutates": False,
+            "dry_run_supported": False,
+            "dry_run_command": None,
+        }
     action = _check_action(profile, section, check)
-    command = _first_command(action) or action
+    command = _first_command(action) or f"aiplane doctor --profile {profile} --format json"
+    command = _scope_profile(command, profile)
     dry_run_command = _dry_run_command(command)
+    mutates = _command_mutates(command)
     return {
         "command": command,
-        "mutates": _command_mutates(command),
+        "mutates": mutates,
+        "mutation": "mutating" if mutates else "read_only",
         "dry_run_supported": dry_run_command is not None,
         "dry_run_command": dry_run_command,
         "description": action,
+    }
+
+
+def _scope_profile(command: str, profile: str) -> str:
+    if "--profile " in command or command.startswith("aiplane profiles validate "):
+        return command
+    return f"{command} --profile {profile}"
+
+
+def _affected_resource(profile: str, section: str, check: dict[str, Any]) -> dict[str, str]:
+    name = str(check.get("name") or "unknown")
+    resource_name = str(
+        check.get("alias")
+        or check.get("provider")
+        or check.get("tool")
+        or (name.split(":", 1)[1] if ":" in name else name)
+    )
+    return {
+        "profile": profile,
+        "type": section,
+        "name": resource_name,
     }
 
 
@@ -882,6 +944,8 @@ def _check_action(profile: str, section: str, check: dict[str, Any]) -> str:
         )
 
     if section == "endpoints":
+        if name == "role_default_endpoints":
+            return f"Run `aiplane models defaults --profile {profile}`, then configure a reported role with `aiplane models use ROLE ALIAS --profile {profile}`."
         if name.startswith("endpoint:"):
             alias = str(check.get("alias") or "UNKNOWN")
             return (
@@ -901,7 +965,7 @@ def _check_action(profile: str, section: str, check: dict[str, Any]) -> str:
         if name == "providers_configured":
             return "Run `aiplane providers list` and add missing providers in profile provider config."
         if name == "providers_enabled":
-            return "Enable providers with `aiplane providers enable <provider>`."
+            return f"Run `aiplane providers list --profile {profile}`, then enable one listed provider."
 
     if section == "integrations":
         tool = name.removeprefix("integration:")
@@ -911,7 +975,7 @@ def _check_action(profile: str, section: str, check: dict[str, Any]) -> str:
         if name == "cloud_backends":
             return "Run `aiplane policy explain --action backend:cloud` and align repository policy before approval."
         if name == "repository_classification":
-            return "Update repository policy in `profile.yaml` (`classification` / `allow_cloud`) and rerun doctor."
+            return f"Run `aiplane policy explain --action backend:cloud --profile {profile}`, then update the reported profile policy path."
         if name.startswith("model_policy:"):
             model_alias = name.split(":", 1)[1]
             return f"Run `aiplane policy explain --action model:{model_alias}` and resolve model/provider policy constraints."
@@ -934,10 +998,12 @@ def _check_action(profile: str, section: str, check: dict[str, Any]) -> str:
         if name == "mcp_local_coding_read_surface":
             return "Run `aiplane mcp manifest` and verify all wedge tools are available."
         if name == "mcp_guarded_write_surface":
-            return "Verify MCP audit and write authorization path in target clients."
+            return (
+                f"Run `aiplane mcp manifest --profile {profile}` and verify the guarded write tools and audit fields."
+            )
         return "Run `aiplane mcp manifest` and validate read/write surface coverage."
 
-    return ""
+    return f"Run `aiplane doctor --profile {profile} --format json` and inspect `{section}.{name}`."
 
 
 def _next_steps(profile: str, sections: list[dict[str, Any]]) -> list[str]:

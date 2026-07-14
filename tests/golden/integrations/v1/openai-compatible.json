@@ -1,0 +1,7 @@
+{
+  "name": "fixture-analysis-small",
+  "model": "provider-text-small:0.5b",
+  "provider": "ollama",
+  "api_key_env": null,
+  "base_url": "http://localhost:11434/v1"
+}

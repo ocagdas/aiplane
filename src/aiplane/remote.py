@@ -11,6 +11,7 @@ from typing import Any, Protocol
 
 from .boundaries import CommandRunner, SubprocessCommandRunner
 from .models import Profile
+from .platform_support import HostPlatform, detect_host_platform
 from .network_validation import (
     ssh_forward_host,
     validate_http_endpoint,
@@ -98,10 +99,12 @@ class RemoteManager:
         profile: Profile,
         command_runner: CommandRunner | None = None,
         process_inspector: ProcessInspector | None = None,
+        host_platform: HostPlatform | None = None,
     ):
         self.profile = profile
         self.command_runner = command_runner or SubprocessCommandRunner()
         self.process_inspector = process_inspector or SystemProcessInspector(self.command_runner)
+        self.host_platform = host_platform or detect_host_platform()
         self.config = profile.targets or {}
 
     def tunnel_plan(self, name: str) -> dict[str, Any]:
@@ -165,6 +168,9 @@ class RemoteManager:
         }
 
     def tunnel_status(self, name: str) -> dict[str, Any]:
+        unsupported = self._unsupported_lifecycle(name, "status")
+        if unsupported is not None:
+            return unsupported
         plan = self.tunnel_plan(name)
         state_file = self._state_file(name)
         try:
@@ -200,6 +206,9 @@ class RemoteManager:
         }
 
     def tunnel_start(self, name: str, yes: bool = False) -> dict[str, Any]:
+        unsupported = self._unsupported_lifecycle(name, "start")
+        if unsupported is not None:
+            return unsupported
         if not yes:
             raise PermissionError(
                 "remote tunnel start is mutating; run remote tunnel plan first or use the CLI start command when ready"
@@ -251,6 +260,9 @@ class RemoteManager:
         }
 
     def tunnel_stop(self, name: str, yes: bool = False) -> dict[str, Any]:
+        unsupported = self._unsupported_lifecycle(name, "stop")
+        if unsupported is not None:
+            return unsupported
         if not yes:
             raise PermissionError("remote tunnel stop is mutating; use the CLI stop command when ready")
         state_file = self._state_file(name)
@@ -269,6 +281,23 @@ class RemoteManager:
         except FileNotFoundError:
             pass
         return {"target": name, "status": status, "pid": pid, "state_file": str(state_file)}
+
+    def _unsupported_lifecycle(self, name: str, action: str) -> dict[str, Any] | None:
+        if self.host_platform.ssh_tunnel_lifecycle_supported:
+            return None
+        payload = self.host_platform.unsupported(
+            "ssh_tunnel_lifecycle",
+            ["Linux", "macOS"],
+            "safe SSH tunnel process identity and signalling are not supported on this platform; use tunnel plan and manage the platform-native SSH process separately",
+        )
+        payload.update(
+            {
+                "target": name,
+                "action": action,
+                "next_steps": ["Run aiplane remote tunnel plan for the reviewed SSH command."],
+            }
+        )
+        return payload
 
     def _state_dir(self) -> Path:
         return self.profile.workspace / ".aiplane" / "remote"

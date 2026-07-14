@@ -167,3 +167,101 @@ def test_public_onboarding_links_and_code_fences_are_valid() -> None:
             if not local_target or "://" in local_target or local_target.startswith("mailto:"):
                 continue
             assert (path.parent / local_target).exists(), (path, target)
+
+
+def test_public_positioning_agrees_across_metadata_and_launch_docs() -> None:
+    project = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+    description = project["project"]["description"].lower()
+    assert "environment doctor" in description
+    assert "configuration compiler" in description
+
+    for path in (Path("README.md"), Path("docs/project/strategy.md"), Path("docs/project/public-launch-review.md")):
+        opening = path.read_text(encoding="utf-8")[:2000].lower()
+        assert "environment doctor" in opening, path
+        assert "configuration compiler" in opening, path
+
+    readme_opening = Path("README.md").read_text(encoding="utf-8")[:2000]
+    assert "aiplane quickstart local-coding --dry-run" in readme_opening
+    assert "First outcome:" in readme_opening
+
+    readme = Path("README.md").read_text(encoding="utf-8")
+    assert readme.index("## Core onboarding flow") < readme.index("## Advanced and experimental commands")
+    readme_lower = readme.lower()
+    for stale_breadth in (
+        "control plane",
+        "control-plane",
+        "agentic environments",
+        "provisioning and automation",
+        "benchmark and evaluation",
+        "machines and stacks",
+        "mcp",
+    ):
+        assert stale_breadth not in readme_lower
+
+    keywords = set(project["project"]["keywords"])
+    assert {"environment", "configuration", "diagnostics", "reproducibility"} <= keywords
+    assert keywords.isdisjoint({"mcp", "agents", "benchmarks", "stacks", "provisioning"})
+
+
+def test_install_channels_and_release_workflows_are_explicit() -> None:
+    ci = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
+    release = Path(".github/workflows/release.yml").read_text(encoding="utf-8")
+    validator = Path("scripts/verify_install_channels.py").read_text(encoding="utf-8")
+    setup = Path("docs/user/setup.md").read_text(encoding="utf-8")
+
+    for os_runner in ("ubuntu-latest", "macos-14", "windows-latest"):
+        assert os_runner in ci
+    for channel in ("pip", "pipx", "uv"):
+        assert f"def verify_{channel}" in validator
+    assert "python scripts/verify_install_channels.py dist" in ci
+    assert "tests/test_platform_support.py" in ci
+    for portable_command in ("profiles", "hardware", "recommend", "policy", "integrations"):
+        assert f'"{portable_command}"' in validator
+    assert "unsupported_platform" in validator
+    assert "tags:" in release and '- "v*"' in release
+    assert 'tag == f"v{version}"' in release
+    assert "gh release create" in release
+    project = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+    package_init = Path("src/aiplane/__init__.py").read_text(encoding="utf-8")
+    assert f'__version__ = "{project["project"]["version"]}"' in package_init
+    assert {"Homepage", "Documentation", "Repository", "Issues"} <= set(project["project"]["urls"])
+    assert "pypa/gh-action-pypi-publish" not in release
+    for command in (
+        "uv tool install",
+        "pipx install",
+        "python -m pip install",
+        "uv tool uninstall",
+        "pipx uninstall",
+        "python -m pip uninstall",
+    ):
+        assert command in setup
+    assert "Do not assume index publication" in setup
+
+
+def test_public_workflow_and_terminology_do_not_regress_to_stale_promises() -> None:
+    for path in (Path("docs/user/index.md"), Path("docs/user/README.md"), Path("docs/user/overview.md")):
+        text = path.read_text(encoding="utf-8")
+        assert "one exact next action" in text, path
+        assert "prints the next" not in text, path
+
+    for path in (
+        Path("SECURITY.md"),
+        Path("docs/project/integrations-roadmap.md"),
+        Path("docs/user/machines-and-stacks.md"),
+    ):
+        assert "control-plane" not in path.read_text(encoding="utf-8").lower(), path
+
+
+def test_p0_documentation_sweep_stays_open_until_user_demonstrations() -> None:
+    backlog = Path("docs/project/product-adoption-backlog-2026-07.md").read_text(encoding="utf-8")
+
+    assert "**P0 completion gate.**" in backlog
+    assert "after P0 items 4-9 are complete" in backlog
+    assert "must be repeated after the user-testing demonstrations" in backlog
+    assert "interim pass does not close this gate" in backlog
+
+
+def test_post_gate_backlog_numbers_are_sequential() -> None:
+    backlog = Path("docs/project/product-adoption-backlog-2026-07.md").read_text(encoding="utf-8")
+    numbered = [int(value) for value in re.findall(r"(?m)^(\d+)\. ", backlog)]
+    assert numbered == list(range(1, 25))

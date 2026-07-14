@@ -2,11 +2,11 @@
 
 This plan is for a short public demo of `aiplane` as it exists today. The project is under active development, so individual commands, flags, and output shapes may change. The stable message is the philosophy: make AI development environments explicit, inspectable, repeatable, and safe to rehearse before mutating a host or cloud account.
 
-`aiplane` is primarily a control-plane CLI for self-managed and managed AI development environments. It is also a thin runner where that helps validate the configured environment: endpoint-backed `chat`, single-prompt `run`, code-task commands, and runtime helper delegation. It does not try to become a model runtime, full chat product, IDE extension, autonomous coding agent, orchestrator platform, or cloud platform. It organizes the operational layer around those tools: profiles, providers, model entries, runtimes, machines, stacks, tool readiness, IDE exports, MCP access, orchestrator metadata, runner smoke checks, and deployment plans.
+`aiplane` is primarily an environment doctor and configuration compiler for reproducible local and hybrid AI development environments. It is also a thin runner where that helps validate the configured environment: endpoint-backed `chat`, single-prompt `run`, code-task commands, and runtime helper delegation. It does not try to become a model runtime, full chat product, IDE extension, autonomous coding agent, orchestrator platform, or cloud platform. It organizes the operational layer around those tools: profiles, providers, model entries, runtimes, machines, stacks, tool readiness, IDE exports, MCP access, orchestrator metadata, runner smoke checks, and deployment plans.
 
 ## Demo Target After `mvp_0.2`
 
-The `mvp_0.2` demo goals should remain the spine: install/validate `aiplane`, discover and filter models, set up a runtime, pull a model, run chat/tasks, export Continue config, expose MCP, and explain repeatability across local, remote, and cloud-adjacent targets.
+The extended rehearsal below preserves earlier engineering demonstrations, but it is not the P0 public-product gate. The P0 gate is limited to reproducible local Ollama coding, laptop-to-remote-GPU, and local-only/privacy-policy workflows. Earlier goals remain useful as advanced regression material: install/validate `aiplane`, discover and filter models, set up a runtime, pull a model, run chat/tasks, export Continue config, expose MCP, and explain repeatability across local, remote, and cloud-adjacent targets.
 
 The `mvp_0.3` enhancement is not a different product story. It makes that original story safer and easier to follow:
 
@@ -34,7 +34,7 @@ Use a three-part demo rather than two overloaded videos.
 3. **Section 3: Portability, MCP, Skills, And Roadmap** - target 2:45-3:00.
    - Show profile/machine/stack repeatability, remote endpoint/tunnel planning, MCP manifest/config export, the `skills/aiplane` assistant guidance package, orchestrator metadata, and tool/deploy planning.
    - Keep Azure/media/orchestrator items as planning/readiness demos unless a prepared sanitized environment exists.
-   - Close with the scope anchor: control plane plus thin runner smoke checks, not a runtime/platform replacement.
+   - Close with the scope anchor: environment doctor and configuration compiler plus thin runner smoke checks, not a runtime/platform replacement.
 
 A single three-minute cut should be Section 1 plus a short runner clip from Section 2. The full public walkthrough should use all three sections.
 
@@ -148,7 +148,7 @@ Use `aiplane chat --native-ollama --dry-run --model "$CHAT_ALIAS"` only when you
 
 Key points to say explicitly:
 
-- `aiplane` is a control plane with thin runner/smoke-test surfaces; it is not a model runtime, full chat UI, IDE extension, autonomous coding agent, or cloud platform.
+- `aiplane` is an environment doctor and configuration compiler with thin runner/smoke-test surfaces; it is not a model runtime, full chat UI, IDE extension, autonomous coding agent, or cloud platform.
 - The narrow public wedge is local/hybrid AI workflow stack readiness from one profile.
 - Providers, models, runtimes, machines, stacks, credentials, integrations, MCP tools, assistant skills, and runner commands are separate concepts.
 - Ollama is the easiest local live demo path; vLLM/OpenAI-compatible is the second runtime path for endpoint planning, export, and dry-run runner checks unless a prepared endpoint is available.
@@ -255,7 +255,7 @@ aiplane profiles validate
 
 Voiceover:
 
-> This is aiplane. It is primarily a control-plane CLI for AI development environments, with thin runner commands for validating configured models and endpoints. It is not a model runtime, full chat product, autonomous coding agent, IDE extension, or cloud platform. It helps organize the operational pieces around them: profiles, providers, models, runtimes, machines, stacks, tool readiness, integrations, MCP access, runner smoke checks, and deployment plans.
+> This is aiplane. It is primarily an environment doctor and configuration compiler for local and hybrid AI development environments, with thin runner commands for validating configured models and endpoints. It is not a model runtime, full chat product, autonomous coding agent, IDE extension, or cloud platform. It helps organize the operational pieces around them: profiles, providers, models, runtimes, machines, stacks, tool readiness, integrations, MCP access, runner smoke checks, and deployment plans.
 
 > The project is under active development, so flags and exact output can change. The important idea is stable: inspect first, plan and dry-run where possible, then make repeatable changes deliberately.
 
@@ -532,7 +532,7 @@ aiplane integrations setup continue --chat "$CHAT_ALIAS" --autocomplete "$AUTOCO
 
 Voiceover:
 
-> Profiles and YAML make the setup repeatable. Machine profiles can be exported from one host and imported into another control-plane profile. A stack binds model, runtime, machine, and access policy so a setup can be repeated locally, over SSH, or against a cloud VM. For the first remote replication demo, rerun bootstrap/validate/setup on the remote host with the default profile flow. Keep runtime state and credentials local to each host: no raw secrets in profile files.
+> Profiles and YAML make the setup repeatable. Machine profiles can be exported from one host and imported into another configuration profile. A stack binds model, runtime, machine, and access policy so a setup can be repeated locally, over SSH, or against a cloud VM. For the first remote replication demo, rerun bootstrap/validate/setup on the remote host with the default profile flow. Keep runtime state and credentials local to each host: no raw secrets in profile files.
 
 ### 0:30-1:10 - Grouping, Best Fit, And Custom Scoring Direction
 
@@ -625,7 +625,7 @@ Use these phrases across all three sections:
 
 - A profile captures policy, model entries, local overrides, tools, machines, targets, and orchestrators; provider discovery and runtime endpoint defaults stay explicit and inspectable.
 - Discovered model data is reviewable before it becomes profile-owned configuration.
-- Machine profiles can be exported from one host and imported into another control-plane profile.
+- Machine profiles can be exported from one host and imported into another configuration profile.
 - Stack plans bind a model/runtime to a machine and an access policy, so setup can be repeated locally, over SSH, or against a cloud VM.
 - Integration exports are text artifacts that users review and paste into the target tool's native config.
 - Doctors and dry-runs are part of the design, not just debugging aids.

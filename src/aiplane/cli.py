@@ -17,6 +17,7 @@ from .config import (
 )
 from .cli_config import add_config_parser, handle_config_command
 from .cli_deploy_remote import add_deploy_remote_parsers, handle_deploy_remote_command
+from .cli_help import HelpFormatter
 from .cli_hardware import add_hardware_machine_parsers, handle_hardware_machine_command
 from .cli_governance import add_governance_parsers, handle_governance_command
 from .cli_integrations import add_integrations_parser, handle_integrations_command
@@ -63,10 +64,6 @@ from .output import json_dumps as _json
 
 
 _COMMAND_RUNNER: CommandRunner = SubprocessCommandRunner()
-
-
-class HelpFormatter(argparse.ArgumentDefaultsHelpFormatter, argparse.RawDescriptionHelpFormatter):
-    pass
 
 
 def _command(subparsers, name: str, help_text: str, description: str, epilog: str | None = None):
@@ -196,18 +193,15 @@ def _main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="aiplane",
         description=(
-            "Configure, check, and connect local/cloud AI coding environments.\n\n"
-            "aiplane is an environment-doctor and configuration compiler: it manages profiles, providers, models, hardware fit,\n"
-            "IDE/CLI exports, remote endpoint plans, and MCP access. It does not replace IDE agents."
+            "Diagnose and reproduce local and hybrid AI development environments.\n\n"
+            "aiplane is an environment doctor and configuration compiler: it turns profile and environment facts into readiness findings,\n"
+            "hardware-aware recommendations, and deterministic exports. Advanced commands remain subordinate to this workflow."
         ),
         epilog=(
-            "Primary workflow:\n"
-            "  aiplane discover\n"
-            "  aiplane doctor\n"
-            "  aiplane recommend\n"
-            "  aiplane export continue\n"
-            "  aiplane quickstart local-coding\n\n"
-            "Advanced command categories are documented in docs/project/command-coverage.md.\n"
+            "Outcome: a profile-aware readiness report with an exact next export step.\n\n"
+            "Next command:\n"
+            "  aiplane quickstart local-coding --dry-run\n\n"
+            "Command maturity and coverage are documented in docs/project/command-coverage.md.\n"
             "Docs: docs/user/index.md"
         ),
         formatter_class=HelpFormatter,

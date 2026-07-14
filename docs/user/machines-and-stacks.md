@@ -33,7 +33,7 @@ aiplane hardware export-machine --name gpu_box_01 --format json
 
 ## Import on the Control Machine
 
-Move the exported file to your main PC/control-plane checkout and import it:
+Move the exported file to your main PC checkout and import it:
 
 ```bash
 aiplane machines import gpu_box_01.machine.yaml
@@ -204,7 +204,7 @@ aiplane machines import-azure-sku Standard_NC40ads_H100_v5 \
   --name azure_h100_test
 ```
 
-This still has not created the Azure VM. It only gives the control plane a named target shape.
+This still has not created the Azure VM. It only records a named target shape in the selected profile.
 
 4. Create or update a deploy target in `profiles/<profile>/targets.yaml`, or use the existing `azure_gpu_vm` target as a starting point. Set the real resource group, region, VM name, image, VM size, SSH key, network, and runtime.
 

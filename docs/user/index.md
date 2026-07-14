@@ -1,5 +1,7 @@
 # User Documentation
 
+`aiplane` is an environment doctor and configuration compiler for reproducible local and hybrid AI development environments.
+
 These docs are split by user maturity. Start with the first workflow, then move into common recipes, then advanced concepts only when you need to customize providers, runtimes, machines, stacks, policy, or MCP.
 
 ## Start here
@@ -11,10 +13,11 @@ Use this path for first onboarding. It avoids advanced concepts and keeps every 
    Verifiable outcome: `aiplane --help` and `aiplane profiles list` run successfully.
 2. [Quickstart](overview.md#core-onboarding-flow)
    Mutates state: `aiplane quickstart local-coding --dry-run` is read-only; `aiplane quickstart local-coding` can create or refresh the local profile scaffold but does not install runtimes, edit IDE config, or touch cloud resources.
-   Verifiable outcome: the command prints the next `doctor`, `recommend`, and `export` commands.
-3. [Doctor](overview.md#ai-workflow-stack-doctor)
+   Verifiable outcome: the command reports one exact next action based on current readiness.
+3. [Doctor](overview.md#ai-workflow-stack-doctor) ([JSON contract](doctor-contract.md))
+   Profile interchange: [public profile schema v1](profile-schema.md)
    Mutates state: no.
-   Verifiable outcome: findings include severity, impact, remediation command metadata, and next commands.
+   Verifiable outcome: contract-v1 findings include stable IDs, severity, reason, impact, affected resources, remediation/mutation/dry-run metadata, and authoritative exit codes.
 4. [Recommend](hardware.md#hardware-aware-model-recommendations)
    Mutates state: no.
    Verifiable outcome: model rows are grouped into recommended, usable, remote/cloud, or not recommended with rationale.

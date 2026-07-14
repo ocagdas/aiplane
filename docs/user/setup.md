@@ -8,6 +8,57 @@ from provider setup: provider runtimes and API credentials are handled by
 
 Platform behavior is documented in [Platform support](platform-support.md). Portable profile, validation, recommendation, and export operations are distinct from host-mutating helpers. Runtime install/update helpers are supported on native Ubuntu/Debian only; WSL, other Linux distributions, macOS, and Windows use vendor-native runtime installers. Unsupported mutations return `unsupported_platform` before running host commands.
 
+## Standard wheel install (no repository clone)
+
+Download the `.whl` attached to the [latest GitHub Release](https://github.com/ocagdas/aiplane/releases/latest). The wheel is the standard evaluation channel and contains the CLI, profile and config templates, and packaged runtime helper scripts. You do not need Git or a source checkout.
+
+Choose one installation owner:
+
+```bash
+# Recommended: an isolated command managed by uv.
+uv tool install ./aiplane-0.1.0-py3-none-any.whl
+
+# Equivalent isolated command managed by pipx.
+pipx install ./aiplane-0.1.0-py3-none-any.whl
+
+# Install into the currently active venv or Conda environment.
+python -m pip install ./aiplane-0.1.0-py3-none-any.whl
+```
+
+Replace the illustrative version with the downloaded filename. Do not run all three commands: use `uv tool` or `pipx` for a dedicated application environment, or `pip` when you deliberately want `aiplane` in an already active venv/Conda environment.
+
+Verify and create a local editable profile in the working directory where you want to use it:
+
+```bash
+aiplane --help
+aiplane profiles templates
+aiplane profiles bootstrap-local --no-overwrite --no-discovery
+aiplane quickstart local-coding --dry-run
+```
+
+Upgrade from a newer downloaded wheel:
+
+```bash
+uv tool install --force ./aiplane-NEW_VERSION-py3-none-any.whl
+pipx uninstall aiplane
+pipx install ./aiplane-NEW_VERSION-py3-none-any.whl
+python -m pip install --upgrade ./aiplane-NEW_VERSION-py3-none-any.whl
+```
+
+Uninstall with the same owner used for installation:
+
+```bash
+uv tool uninstall aiplane
+pipx uninstall aiplane
+python -m pip uninstall aiplane
+```
+
+When an official Python package index publication is enabled, the corresponding commands become `uv tool install aiplane`, `pipx install aiplane`, or `python -m pip install aiplane`, with `uv tool upgrade aiplane`, `pipx upgrade aiplane`, or `python -m pip install --upgrade aiplane` for upgrades. Do not assume index publication until a release announcement names that channel.
+
+The portable profile, doctor, recommendation, and export surface is supported on Linux, macOS, and Windows and is validated from the built wheel in CI. Runtime install/update helpers remain limited to native Ubuntu/Debian; see [Platform support](platform-support.md).
+
+## Source-checkout install modes
+
 Install modes:
 
 - `--install-mode editable` or `--editable`: for local/venv/Conda, runs `pip install -e .`; source changes are visible immediately. For Docker, builds a small image and mounts this checkout at `/workspace` when commands run.

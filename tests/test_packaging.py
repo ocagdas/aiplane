@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
@@ -21,7 +22,7 @@ def test_wheel_install_includes_templates_helpers_and_preserves_profiles(tmp_pat
     build_root.mkdir()
     for filename in ("pyproject.toml", "README.md", "LICENSE"):
         shutil.copy2(repository / filename, build_root / filename)
-    for directory in ("src", "scripts", "profile-templates", "config-templates"):
+    for directory in ("src", "scripts", "profile-templates", "config-templates", "schemas"):
         shutil.copytree(repository / directory, build_root / directory)
 
     wheel_dir = tmp_path / "wheels"
@@ -49,6 +50,8 @@ def test_wheel_install_includes_templates_helpers_and_preserves_profiles(tmp_pat
 
     assert _run([str(aiplane), "profiles", "templates"], cwd=workspace, env=env).stdout.splitlines() == ["local-dev"]
     assert "local" in _run([str(aiplane), "config", "templates"], cwd=workspace, env=env).stdout.splitlines()
+    schema = json.loads(_run([str(aiplane), "profiles", "schema"], cwd=workspace, env=env).stdout)
+    assert schema["$id"] == "https://aiplane.dev/schemas/profile/v1"
     _run(
         [
             str(aiplane),
@@ -82,10 +85,19 @@ def test_wheel_install_includes_templates_helpers_and_preserves_profiles(tmp_pat
         env=env,
     ).stdout.strip()
     assert Path(helper_path) == helper.resolve()
-    assert "Usage: scripts/provider_helper.sh" in _run([str(helper), "--help"], cwd=workspace, env=env).stdout
-    helper_status = _run(
-        [str(helper), "--provider", "ollama", "--action", "status", "--dry-run"],
-        cwd=workspace,
-        env=env,
+    assert helper.is_file()
+    if os.name == "nt":
+        assert "Usage: scripts/provider_helper.sh" in helper.read_text(encoding="utf-8")
+    else:
+        assert "Usage: scripts/provider_helper.sh" in _run([str(helper), "--help"], cwd=workspace, env=env).stdout
+        helper_status = _run(
+            [str(helper), "--provider", "ollama", "--action", "status", "--dry-run"],
+            cwd=workspace,
+            env=env,
+        )
+        assert "ollama" in helper_status.stdout.lower()
+
+    _run(
+        [sys.executable, str(repository / "scripts" / "verify_install_channels.py"), str(wheel), "--channel", "pip"],
+        cwd=repository,
     )
-    assert "ollama" in helper_status.stdout.lower()

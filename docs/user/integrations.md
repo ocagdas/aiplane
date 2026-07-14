@@ -296,9 +296,20 @@ Tunnel start stores versioned process identity under `.aiplane/remote/`; status 
 it does not require a reverse tunnel unless the network path only works in the
 opposite direction.
 
-## Other Plan And Export Targets
+## Export support tiers
 
-Continue is the first VS Code path, but the plan/export surface is broader:
+Release-blocking Tier-1 exports use contract version `1.0` and exact golden files:
+
+| Tier-1 target | Output | Verification |
+| --- | --- | --- |
+| Continue | YAML model, autocomplete, and embedding configuration | Golden file plus installed-wheel structure checks |
+| Aider | Shell environment and launch command | Golden file plus installed-wheel command checks |
+| Generic OpenAI-compatible | Neutral JSON endpoint/model payload | Golden file plus JSON parsing from the installed wheel |
+| Generic MCP | Common `mcpServers` JSON | Golden file plus a real initialize and `tools/list` stdio exchange |
+
+The installed-wheel verifier runs on Linux, macOS, and Windows CI. Cline, Zed, VS Code MCP, Continue MCP, and Cline MCP exporters remain available as advanced, unversioned conveniences; they do not block a developer-preview release. `aiplane integrations list` reports `support_tier` and `contract_version` explicitly.
+
+The broader plan/export surface remains available:
 
 ```bash
 aiplane integrations list

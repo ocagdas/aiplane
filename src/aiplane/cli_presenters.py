@@ -498,8 +498,22 @@ def _quickstart_local_coding_text(payload: dict[str, object]) -> str:
                         lines.append(f"- {root}:")
                         current_root = root
                     lines.append(f"  - {item}")
+    readiness = payload.get("readiness") if isinstance(payload.get("readiness"), dict) else {}
+    if readiness:
+        lines.append("")
+        lines.append(f"readiness: {readiness.get('status', 'unknown')}")
+        reason = readiness.get("reason")
+        if reason:
+            lines.append(f"reason: {reason}")
+        choices = readiness.get("setup_choices", [])
+        if isinstance(choices, list) and choices:
+            lines.append("setup choices (choose one):")
+            for choice in choices:
+                if isinstance(choice, dict):
+                    lines.append(f"- {choice.get('name')}: {choice.get('command')}")
+                    lines.append(f"  then: {choice.get('then')}")
     lines.append("")
-    lines.append("next commands:")
+    lines.append("next action:")
     commands = payload.get("commands", [])
     if isinstance(commands, list):
         lines.extend(f"- {command}" for command in commands)

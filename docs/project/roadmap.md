@@ -13,7 +13,7 @@ This document is the developer-facing status map. It separates what is implement
 
 These anchors are deliberate product constraints, not incidental wording. Change them only with an explicit roadmap/strategy update that says the project is changing course.
 
-- `aiplane` is a local-first environment-doctor and configuration compiler for AI workflow environments: profiles, providers, model aliases, runtimes, endpoints, hardware fit, readiness checks, exports, MCP inspection, policy, and audit.
+- `aiplane` is a local-first environment doctor and configuration compiler for AI workflow environments: profiles, providers, model aliases, runtimes, endpoints, hardware fit, readiness checks, exports, MCP inspection, policy, and audit.
 - The strongest public wedge is: **make local and hybrid AI model workflow stacks reproducible, inspectable, policy-aware, and portable from one profile**.
 - `aiplane` configures and checks tools such as Ollama, vLLM, Continue, Aider, Cline, MCP clients, OpenAI-compatible endpoints, Anthropic, OpenAI, and Azure OpenAI; it does not replace them.
 - Do not grow `aiplane` into a coding agent, full chat UI, inference runtime, general model proxy, model marketplace, IDE extension, production cloud platform, or Terraform/Ansible/Docker replacement.
@@ -31,7 +31,7 @@ This register tracks overlap by layer so scope drift is intentional rather than 
 | Local inference runtimes | Ollama, vLLM, TGI, llama.cpp, LocalAI, LM Studio | Serve local model inference and model lifecycle | Provider/runtime mapping, helper wrappers, endpoint-aware runner checks, lifecycle ops where helper exists | Thin delegate only: native tools remain lifecycle authority |
 | Managed APIs / services | OpenAI, Anthropic, Azure OpenAI | Hosted APIs with auth and endpoint contracts | Catalog adapters, endpoint/protocol metadata, provider tests, and task/chat execution for supported protocols | In-scope as configured endpoint caller, not marketplace or gateway |
 | IDE integration surfaces | VS Code + Continue, Zed, IDE MCP clients | Connect editors/workflow tools to endpoints and MCP | Config snippets, MCP manifests, integration plan/export | In-scope only as config and readiness surfaces |
-| Model catalogs | Hugging Face, NVIDIA on HF, local files, media sources | Resolve model IDs/artifacts and discovery metadata | Multiple catalog adapters, discovered cache, add/promote/clone, provider-kind grouping | Core in-scope control plane function |
+| Model catalogs | Hugging Face, NVIDIA on HF, local files, media sources | Resolve model IDs/artifacts and discovery metadata | Multiple catalog adapters, discovered cache, add/promote/clone, provider-kind grouping | Core in-scope configuration function |
 | Infrastructure tooling | Docker/Compose, OpenSSH, Dev Containers, Terraform/OpenTofu, Vagrant, Packer, Ansible, Helm, kubectl | Build runtime/machine/container/workspace targets | Readiness checks, non-mutating plans, guarded helper calls and generated exports | Boundary is explicit: planning+readiness, not ownership of infra platform |
 | Orchestration / workflow frameworks | LangGraph, CrewAI, AutoGen, Semantic Kernel, LlamaIndex, OpenHands | Run autonomous agent/workflow execution in application runtime | Stack role metadata, policy labels, starter exports, stack doctor/planner | In-scope as setup/binding/export only |
 | Benchmark and validation | lm-eval, vLLM serving benchmarks, Locust | Compare quality/throughput/latency on a workload | Smoke/custom benchmark scaffolding and planning commands | In-scope as aid-to-selection, not a benchmark SaaS replacement |
@@ -415,7 +415,11 @@ Do not add new orchestrators, cloud providers, benchmark frameworks or runtime t
 
 ## Current Milestone: External Beta Readiness
 
-The roadmap is now actively executing the priorities above; completed work in each earlier milestone is being stabilized as execution hardens.
+The roadmap is now actively executing the priorities above; completed work in each earlier milestone is being stabilized as execution hardens. P0 quickstart sufficiency is implemented with offline-safe defaults, idempotent profile preservation, bounded no-model guidance, and one exact next action.
+
+P0.6 stable doctor contract v1 is implemented with uniform findings and authoritative 0/1/2 exit semantics.
+P0.7 Tier-1 export contracts are implemented with four versioned golden formats and cross-OS installed-wheel verification.
+P0.8 public profile schema v1 is implemented with external validation and canonical rendering.
 
 ## Implemented
 
@@ -603,3 +607,20 @@ The external MVP/adoption review was evaluated against current code and recorded
 
 
 DOC-1 is complete: public onboarding examples use concrete export targets, the empty README workflow heading is removed, and focused contract tests enforce concrete export commands, nonempty sections, and sequential workflow numbering.
+
+
+The positioning and default-help pass is complete. README, package metadata, user entrypoints, strategy, launch review, demo framing, and CLI help lead with the environment doctor and configuration compiler outcome. Top-level help groups all commands into Core workflow, Advanced and supporting, and Experimental tiers, prints one safe next command, and fails its contract test if a command is unclassified.
+
+
+Standard no-clone installation and release automation are implemented. Versioned GitHub Release wheels are the declared evaluation channel; normal CI validates `pip`, `pipx`, and `uv tool` install/verify/upgrade-or-replace/uninstall lifecycles on Linux, macOS, and Windows. Tag builds must match package version, rebuild wheel and sdist, pass all installer checks, and only then create the release. Bare package-index commands remain deliberately undocumented as available until trusted publishing is enabled and verified.
+
+
+README and package metadata now keep the environment-doctor/configuration-compiler wedge dominant throughout the page, not only in the opening. Broad parallel execution tracks and specialist feature inventories were replaced by a subordinate advanced/experimental maturity link; package keywords now emphasize environment diagnostics, configuration, and reproducibility. A final P0 public-surface consistency sweep remains explicitly scheduled after items 4-9.
+
+
+The P0 platform CI matrix is implemented. Every Ubuntu, macOS, and Windows packaging job runs the synthetic capability suite and a built-wheel portable workflow from clean temporary workspaces through pip, pipx, and uv. The smoke covers bootstrap, validation, hardware discovery, recommendation, policy, and offline deterministic export. Unsupported runtime mutations and Windows SSH lifecycle status/start/stop fail with `unsupported_platform` before helper execution, process spawn, or state access; tunnel planning remains portable.
+
+
+P0.9 practical threat modeling is complete. The tracked model covers credential references, redaction and debug limits, generated-config disclosure, external helper boundaries, two-stage MCP write guards, identity-safe tunnel ownership, unsigned profile trust, and local audit sensitivity. Every control row cites deterministic regression tests and every row states its residual limitation. Focused security validation passes 62 tests.
+
+An interim P0 README/documentation consistency sweep followed items 8-9. It corrected quickstart's stale “three next commands” wording to its tested one-action contract, removed remaining positive “control plane” positioning from user/project entrypoints, aligned help and strategy with the narrow product promise, and corrected the P0 range after converting item 10 into an unnumbered gate. This is not the final gate result: repeat the sweep after the three user demonstrations. Focused consistency gate: 76 passed; full suite: 449 passed.

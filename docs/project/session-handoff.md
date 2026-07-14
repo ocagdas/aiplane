@@ -7,6 +7,14 @@ This file is the short resume point for future `aiplane` development sessions. U
 
 **Current target: Milestone 1 (External Beta Readiness)**
 
+P0.5 quickstart sufficiency is complete: provider discovery is opt-in, repeat runs preserve profile edits, empty profiles receive at most two no-YAML setup paths plus a no-runtime dry-run plan, and configured profiles receive one exact Continue export action. Validation: focused quickstart suite 6 passed; quick gate 19 passed; full suite 436 passed; required profile and environment doctor checks passed.
+
+P0.6 stable doctor contract v1 is complete: all findings expose stable IDs, severity, reason, impact, affected resources, and uniform remediation/mutation/dry-run metadata; blocker actions are deterministic and payload exit semantics are authoritative. Validation: focused doctor/contract suite 29 passed; focused doctor suite 14 passed; quick gate 19 passed; full suite 438 passed; required profile and environment doctor checks passed.
+
+P0.7 Tier-1 deterministic exports are implemented: four v1 golden contracts define the release boundary, advanced exporters are explicitly unversioned, and installed-wheel CI performs real MCP stdio verification on every supported OS.
+
+P0.8 public profile schema v1 is complete: packaged JSON Schema, canonical read-only rendering, deterministic merge semantics, validation paths/remedies, and a no-silent-migration pre-1.0 policy.
+
 Must
 
 1. Completed: top-level `aiplane discover` coverage and execution for the public onboarding flow.
@@ -172,3 +180,15 @@ SEC-1 and ARCH-1 are complete. SEC-1 focused tests cover non-TTY denial without 
  COMPAT-1 and ARCH-2 are complete. Platform capabilities centralize distro/WSL behavior, block unsupported runtime mutations, and skip non-Linux probes; focused compatibility coverage passes 78 tests. Model persistence/reconciliation and Azure pricing/CLI boundaries are decomposed with structural drift tests; focused architecture coverage passes 64 tests. The combined suite passes 117 tests; the final full suite passes 422 tests. The evaluated external product/adoption/monetization backlog is `docs/project/product-adoption-backlog-2026-07.md`.
 
  DOC-1 is complete. README and user onboarding now use `aiplane export continue`, the empty workflow heading is removed, and documentation contracts prevent ambiguous exports, empty adjacent sections, and workflow-number drift. Focused contract suite: 13 passed; quick gate: 17 passed; full suite: 425 passed.
+
+ The product positioning/default-help backlog item is complete. Public entrypoints consistently lead with “environment doctor and configuration compiler,” developer-preview maturity is aligned with package alpha metadata, and top-level help groups every command into explicit core, advanced/supporting, or experimental tiers with one dry-run next action. Focused positioning/help suite: 30 passed; quick gate: 18 passed; full suite: 426 passed; required profile and environment-doctor checks passed in text and JSON modes.
+
+ The standard installation/release-channel implementation is complete, with first tag publication intentionally left to the maintainer. GitHub Release wheels require no clone; `scripts/verify_install_channels.py` validates pip, pipx, and uv tool lifecycles in isolated homes; CI covers Ubuntu, macOS, and Windows; release tags must match `pyproject.toml` before validated wheel/sdist publication. Local focused packaging contracts passed 16 tests, all three real final-wheel installer lifecycles passed, quick gate passed 19 tests, full suite passed 427 tests, and required profile/environment doctor checks passed.
+
+ README and package metadata breadth cleanup is complete: detailed agentic/provisioning/benchmark/stack/MCP marketing lists are removed, advanced commands are described only as a subordinate maturity surface, contribution and documentation links lead the narrow workflow, and package keywords now target diagnostics/configuration/reproducibility. Regression contracts prevent the stale broad headings and keywords returning. Focused contracts/packaging: 16 passed; quick gate: 19 passed; full suite: 427 passed. The final overall documentation consistency sweep is tracked at the bottom of P0, after items 4-9.
+
+ P0.4 platform CI is implementation-complete. The Ubuntu/macOS/Windows matrix runs 15 synthetic platform tests plus clean installed-wheel portable workflow smoke through pip, pipx, and uv. Windows SSH lifecycle is now gated before process/state access with explicit help and `unsupported_platform`; runtime mutation gates cover Fedora, WSL, macOS, and Windows before helper dispatch. Focused platform/remote suite: 79 passed; local real final-wheel lifecycles: all three passed; quick gate: 19 passed; full suite: 434 passed; required doctors passed. Cross-OS runner results will be produced when CI runs on push.
+
+ P0.9 is complete: docs/project/threat-model.md maps all eight required security areas to deterministic tests and explicit residual limitations; SECURITY.md links it and uses the current product boundary. Focused security validation: 62 passed; full suite: 449 passed.
+
+ The interim README/documentation consistency sweep after P0.8-P0.9 corrected stale quickstart outcome text, positive control-plane positioning, top-level help breadth, and obsolete P0 item-number references. Contract tests preserve those corrections. The unnumbered P0 completion gate remains open: run the three independent-user demonstrations, then repeat the final README/documentation sweep before closing P0. Focused consistency gate: 76 passed; full suite: 449 passed.

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from .model_catalog import ModelCatalog
+from .profile_schema import PROFILE_SCHEMA_VERSION, canonical_profile, structural_profile_findings
 
 
 def _profile_summary(profile, default_name: str | None = None) -> dict[str, object]:
@@ -61,7 +62,7 @@ def _profile_selected(profile, default_name: str | None = None) -> dict[str, obj
 
 
 def _validate_profile(profile) -> dict[str, object]:
-    checks: list[dict[str, object]] = []
+    checks: list[dict[str, object]] = structural_profile_findings(canonical_profile(profile))
     for filename in [
         "hardware.yaml",
         "backends.yaml",
@@ -140,11 +141,48 @@ def _validate_profile(profile) -> dict[str, object]:
         }
     )
 
+    for check in checks:
+        _add_validation_location(profile.name, check)
     return {
         "name": profile.name,
+        "schema_version": PROFILE_SCHEMA_VERSION,
         "ok": all(bool(check["ok"]) for check in checks if not check.get("warning")),
         "checks": checks,
     }
+
+
+def _add_validation_location(profile_name: str, check: dict[str, object]) -> None:
+    name = str(check.get("name") or "unknown")
+    if "path" not in check:
+        if name.startswith("file:"):
+            filename = name.split(":", 1)[1]
+            check["path"] = f"$files.{filename}"
+            check["remediation"] = f"aiplane profiles repair {profile_name} --file {filename}"
+        elif name == "environment:active_mode":
+            check["path"] = "$.environment.active"
+            check["remediation"] = f"Review environment.yaml, then run aiplane profiles validate {profile_name}."
+        elif name.startswith("model_default:") or name.startswith("model_default_enabled:"):
+            role = name.split(":", 1)[1]
+            check["path"] = f"$.models.defaults.{role}"
+            check["remediation"] = f"aiplane models use {role} ALIAS --profile {profile_name}"
+        elif name.startswith("model_provider:"):
+            alias = name.split(":", 1)[1]
+            check["path"] = f"$.models.models.{alias}.provider"
+            check["remediation"] = f"Review model alias {alias}, then run aiplane profiles validate {profile_name}."
+        elif name.startswith("provider_enabled:"):
+            provider = name.split(":", 1)[1]
+            check["path"] = f"$.models.providers.{provider}.enabled"
+            check["remediation"] = f"aiplane providers enable {provider} --profile {profile_name}"
+        elif name == "target:default":
+            check["path"] = "$.targets.default"
+            check["remediation"] = f"Review targets.yaml, then run aiplane profiles validate {profile_name}."
+        else:
+            check["path"] = "$"
+            check["remediation"] = f"aiplane profiles validate {profile_name}"
+    check.setdefault(
+        "remediation",
+        "No action required." if check.get("ok") else f"aiplane profiles validate {profile_name}",
+    )
 
 
 _AZ_SENSITIVE_FLAGS = {

@@ -13,6 +13,7 @@ from .config import (
     repair_profile,
     resolve_profile_name,
 )
+from .profile_schema import canonical_profile, load_profile_schema
 
 CommandFactory = Callable[..., argparse.ArgumentParser]
 ProfileArg = Callable[[argparse.ArgumentParser], None]
@@ -41,6 +42,8 @@ def add_profiles_parser(
             "  aiplane profiles create my-local --template local-dev\n"
             "  aiplane profiles remove old-local --dry-run\n"
             "  aiplane profiles show --selected\n"
+            "  aiplane profiles render local-dev\n"
+            "  aiplane profiles schema\n"
             "  aiplane hardware discover\n"
             "  aiplane hardware active\n"
             "  aiplane hardware export-machine --name local_box > local_box.machine.yaml\n"
@@ -247,6 +250,25 @@ def add_profiles_parser(
         action="store_true",
         help="Show only selected/default options from each profile block",
     )
+    profile_sub.add_parser(
+        "schema",
+        help="Print the canonical profile v1 JSON Schema",
+        description="Print the dependency-free JSON Schema used to validate canonical profile documents.",
+        formatter_class=formatter_class,
+        allow_abbrev=False,
+    )
+    render = profile_sub.add_parser(
+        "render",
+        help="Render a canonical profile v1 document",
+        description="Combine the editable profile YAML files into one deterministic JSON document for external validation or comparison. This command is read-only.",
+        formatter_class=formatter_class,
+        allow_abbrev=False,
+    )
+    render.add_argument(
+        "name",
+        nargs="?",
+        help="Profile name. If omitted, uses the effective default profile",
+    )
     validate = profile_sub.add_parser(
         "validate",
         help="Validate a profile",
@@ -282,6 +304,9 @@ def handle_profiles_command(
         return 0
     if args.profile_command == "templates":
         print("\n".join(list_profile_templates()))
+        return 0
+    if args.profile_command == "schema":
+        print(json_dumps(load_profile_schema(), indent=2, sort_keys=True))
         return 0
     if args.profile_command == "create":
         path = create_profile(
@@ -319,6 +344,9 @@ def handle_profiles_command(
     effective_profile = resolve_profile_name(requested_profile, profiles_dir=profiles_dir)
     profile_name = args.name or effective_profile
     profile = load_profile(profile_name, workspace, profiles_dir=profiles_dir)
+    if args.profile_command == "render":
+        print(json_dumps(canonical_profile(profile), indent=2, sort_keys=True))
+        return 0
     if args.profile_command == "validate":
         result = validate_profile(profile)
         print(json_dumps(result, indent=2))

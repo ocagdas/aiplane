@@ -112,12 +112,16 @@ For end-to-end command sequences and combinations, see [Practical Workflows](wor
 
 ## AI Workflow Stack Doctor
 
-Start with `aiplane quickstart local-coding` when evaluating a laptop, workstation, or hybrid AI workflow profile. It creates or previews the editable local profile through the same bootstrap path, runs the AI workflow doctor when the profile exists, and prints the next export commands. Use `aiplane doctor` when you only want to inspect an already configured profile. It aggregates the environment-doctor checks that matter for AI workflow readiness: profile files, required environment tools, runtime prerequisites, model defaults with provider/endpoint details, selected role-default endpoint readiness, active hardware and role-model fit, provider state, Continue/Aider role capability readiness, and MCP manifest and local AI read-surface readiness. The doctor itself is read-only. The quickstart does not install runtimes, edit IDE config, or mutate cloud resources; model pulls are opt-in with `--pull-model`; use `--dry-run` to preview without pulling model weights.
+The JSON form follows the versioned [doctor output contract](doctor-contract.md): every finding identifies its severity, reason, impact, affected resource, exact remediation, mutation status, and dry-run support. Exit codes are 0 for healthy, 1 for advisory-only, and 2 for blocking.
+
+
+Start with `aiplane quickstart local-coding` when evaluating a laptop, workstation, or hybrid AI workflow profile. It creates or previews the editable local profile through the same bootstrap path, runs the AI workflow doctor when the profile exists, and reports one exact next action based on current readiness. Use `aiplane doctor` when you only want to inspect an already configured profile. It aggregates the environment-doctor checks that matter for AI workflow readiness: profile files, required environment tools, runtime prerequisites, model defaults with provider/endpoint details, selected role-default endpoint readiness, active hardware and role-model fit, provider state, Continue/Aider role capability readiness, and MCP manifest and local AI read-surface readiness. The doctor itself is read-only. The quickstart preserves existing profile files, skips provider network discovery by default, and reports one exact next action. With no configured model it offers at most two no-YAML setup paths and a dry-run runtime plan. Use `--discovery` to contact configured catalogs; model pulls remain opt-in with `--pull-model`. It does not edit IDE config or mutate cloud resources.
 
 ```bash
 aiplane quickstart local-coding
 aiplane quickstart local-coding --dry-run
 aiplane quickstart local-coding --pull-model MODEL_ALIAS
+aiplane quickstart local-coding --discovery
 aiplane doctor
 aiplane doctor --format json
 aiplane doctor --include-optional
