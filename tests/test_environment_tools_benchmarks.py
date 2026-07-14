@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
+
+import aiplane.tools as tools_module
 from .support import (
     ApprovalHandler,
     AuditLogger,
@@ -12,6 +15,7 @@ from .support import (
     cli_main,
     json,
     load_profile,
+    patch,
     redirect_stderr,
     redirect_stdout,
     shutil,
@@ -21,6 +25,56 @@ from .support import (
 
 
 class EnvironmentToolBenchmarkTests(unittest.TestCase):
+    @staticmethod
+    def _synthetic_fixture_payload() -> dict[str, object]:
+        fixture_path = Path(__file__).parent / "fixtures" / "toolchain-synthetic.json"
+        return json.loads(fixture_path.read_text(encoding="utf-8"))
+
+    @contextmanager
+    def _synthetic_toolchain(self):
+        payload = self._synthetic_fixture_payload()
+        tools = payload["tools"]
+        runtime_prerequisites = payload["runtime_prerequisites"]
+        if not isinstance(tools, list) or not isinstance(runtime_prerequisites, list):
+            self.fail("synthetic toolchain fixture is malformed")
+        tool_rows = {str(row["name"]): row for row in tools if isinstance(row, dict) and row.get("name")}
+        self.assertEqual(set(tool_rows), set(tools_module.TOOLCHAIN))
+
+        def _fake_tool_row(_manager, name: str) -> dict[str, object]:
+            return dict(tool_rows[name])
+
+        with (
+            patch.object(tools_module.ToolchainManager, "_tool_row", autospec=True, side_effect=_fake_tool_row),
+            patch.object(tools_module, "_runtime_prerequisite_rows", autospec=True, return_value=runtime_prerequisites),
+        ):
+            yield
+
+    def test_synthetic_tool_fixture_matches_toolchain_shape(self) -> None:
+        payload = self._synthetic_fixture_payload()
+        tools = payload["tools"]
+        self.assertIsInstance(tools, list)
+        names = {row["name"] for row in tools if isinstance(row, dict)}
+        self.assertEqual(names, set(tools_module.TOOLCHAIN))
+        required_keys = {
+            "name",
+            "category",
+            "description",
+            "needed_for",
+            "requirement",
+            "command",
+            "installed",
+            "path",
+            "version",
+            "health",
+            "install_mode",
+            "installable_by_aiplane",
+            "install_commands",
+        }
+        for row in tools:
+            if not isinstance(row, dict):
+                self.fail("synthetic toolchain fixture contains a non-object row")
+            self.assertTrue(required_keys.issubset(set(row)))
+
     def test_tool_command_accepts_passthrough_options(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             workspace = Path(tmp) / "workspace"
@@ -139,7 +193,7 @@ class EnvironmentToolBenchmarkTests(unittest.TestCase):
 
     def test_tools_doctor_includes_vm_and_provider_agnostic_iac_tools(self) -> None:
         stdout = StringIO()
-        with redirect_stdout(stdout):
+        with self._synthetic_toolchain(), redirect_stdout(stdout):
             code = cli_main(["tools", "doctor"])
         self.assertEqual(code, 0)
         payload = json.loads(stdout.getvalue())
@@ -166,7 +220,7 @@ class EnvironmentToolBenchmarkTests(unittest.TestCase):
 
     def test_tools_matrix_cli_groups_tasks_and_capabilities(self) -> None:
         stdout = StringIO()
-        with redirect_stdout(stdout):
+        with self._synthetic_toolchain(), redirect_stdout(stdout):
             code = cli_main(["tools", "matrix"])
         self.assertEqual(code, 0)
         payload = json.loads(stdout.getvalue())
@@ -224,7 +278,7 @@ class EnvironmentToolBenchmarkTests(unittest.TestCase):
     def test_environment_doctor_cli_groups_installable_tools(self) -> None:
         stdout = StringIO()
         stderr = StringIO()
-        with redirect_stdout(stdout), redirect_stderr(stderr):
+        with self._synthetic_toolchain(), redirect_stdout(stdout), redirect_stderr(stderr):
             code = cli_main(["environment", "doctor", "--required-only", "--format", "json"])
         self.assertEqual(code, 0)
         self.assertIn("checking tool", stderr.getvalue())

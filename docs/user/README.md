@@ -1,38 +1,87 @@
 # User Documentation
 
-These docs cover day-to-day use of `aiplane`: installing it, configuring providers and models, checking hardware, connecting IDEs/CLIs, and exposing MCP tools.
+These docs are split by user maturity. Start with the first workflow, then move into common recipes, then advanced concepts only when you need to customize providers, runtimes, machines, stacks, policy, or MCP.
 
-## Start Here
+## Start here
 
-- [Practical Overview](overview.md): what `aiplane` does, terminology, implemented capabilities, and first useful flows.
-- [Practical Workflows](workflows.md): end-to-end recipes for local Ollama, Continue, MCP, refresh, remote endpoints, stacks, cloud planning, and troubleshooting.
-- [Setup](setup.md): install `aiplane` with local Python, `venv`, Conda, or Docker CLI images; also covers profile execution modes.
-- [External Toolchain](tools.md): check and install prerequisite CLIs such as Azure CLI, OpenTofu, Docker, kubectl, Helm, SSH, and Ansible.
-- [Providers](providers.md): configure and check model providers such as Ollama Library, Hugging Face, GGUF sources, Azure Speech voices, and manual/local sources.
-- [Model Sources and Runtimes](runtime-model-map.md): understand catalogs, runtimes, preferred runtimes, lifecycle helper commands, and runtime bundle plans.
-- [Model Capabilities](model-capabilities.md): understand task suitability scores shown by model list/show and hardware recommendations.
-- [Benchmarks](benchmarks.md): run small local smoke tests and understand how benchmark scores are calculated.
-- [Hardware](hardware.md): discover local CPU/RAM/GPU resources and configure hardware/resource profiles.
-- [Machines, Stacks, and Orchestrators](machines-and-stacks.md): work with local, shared workstation, Azure, self-managed machines, stack lifecycle, and orchestrator bindings.
-- [Integrations](integrations.md): VS Code/Continue setup and IDE/CLI config snippets for local or remote model endpoints.
-- [MCP Adapter](mcp.md): run the MCP server for LLM/agent access to `aiplane`, including guarded write tools.
-- [Cloud Deployment](cloud-deployment.md): plan and check Azure targets from the local CLI.
+Use this path for first onboarding. It avoids advanced concepts and keeps every command inspect-first.
 
-## Common First Commands
+1. [Install](setup.md)
+   Mutates state: yes, only when you run installer commands without `--dry-run`.
+   Verifiable outcome: `aiplane --help` and `aiplane profiles list` run successfully.
+2. [Quickstart](overview.md#core-onboarding-flow)
+   Mutates state: `aiplane quickstart local-coding --dry-run` is read-only; `aiplane quickstart local-coding` can create or refresh the local profile scaffold but does not install runtimes, edit IDE config, or touch cloud resources.
+   Verifiable outcome: the command prints the next `doctor`, `recommend`, and `export` commands.
+3. [Doctor](overview.md#ai-workflow-stack-doctor)
+   Mutates state: no.
+   Verifiable outcome: findings include severity, impact, remediation command metadata, and next commands.
+4. [Recommend](hardware.md#hardware-aware-model-recommendations)
+   Mutates state: no.
+   Verifiable outcome: model rows are grouped into recommended, usable, remote/cloud, or not recommended with rationale.
+5. [Export](integrations.md)
+   Mutates state: no; exports print configuration snippets and do not edit IDE files.
+   Verifiable outcome: Continue, Aider, Cline, Zed, OpenAI-compatible, or MCP config is printed.
+
+Primary workflow:
 
 ```bash
-aiplane profiles list
-aiplane profiles show --selected
-aiplane environment show
-aiplane providers list
-aiplane models refresh --provider huggingface --query text-generation --limit 25 --dry-run
-aiplane integrations roles continue
-aiplane integrations export vscode-mcp
+aiplane quickstart local-coding --dry-run
+aiplane quickstart local-coding
+aiplane discover
+aiplane doctor
+aiplane recommend
+aiplane export continue
+```
+
+## Common workflows
+
+Use these after the first workflow succeeds.
+
+1. [Local Ollama workflow](workflows.md)
+   Mutates state: runtime install/start/pull commands mutate when run without `--dry-run`; discovery, doctor, recommend, and export are read-only.
+   Verifiable outcome: `aiplane doctor`, `aiplane recommend`, and `aiplane export continue` produce useful output.
+2. [Local vLLM or OpenAI-compatible endpoint workflow](runtime-model-map.md)
+   Mutates state: bundle and export commands are read-only; starting a runtime is explicit and helper-backed.
+   Verifiable outcome: endpoint config exports with the expected base URL.
+3. [Remote GPU workstation workflow](machines-and-stacks.md)
+   Mutates state: machine import changes the local profile; remote tunnel start mutates local SSH tunnel state; planning commands are read-only.
+   Verifiable outcome: machine profile imports, endpoint/tunnel plan renders, and model recommendations use the remote machine facts.
+4. [Managed provider workflow](providers.md)
+   Mutates state: provider enable/add commands update profile config; provider tests and exports are read-only.
+   Verifiable outcome: provider policy and credentials are explained without printing secrets.
+5. [Privacy-restricted repository workflow](overview.md#ai-workflow-stack-doctor)
+   Mutates state: policy/profile edits are explicit; doctor and recommend are read-only.
+   Verifiable outcome: doctor and recommendation output explain blocked providers, cloud usage, or approval requirements.
+
+## Advanced concepts
+
+Read these when you need to customize the environment model or automate team workflows.
+
+- [Providers and credentials](providers.md): provider/source configuration, endpoint families, managed services, and credential references.
+- [Model sources and runtimes](runtime-model-map.md): runtime compatibility, lifecycle helpers, source/runtime mapping, and OpenAI-compatible endpoints.
+- [Hardware](hardware.md): CPU/RAM/GPU detection, hardware templates, and fit checks.
+- [Machines, stacks, and orchestrators](machines-and-stacks.md): machine inventory, stack planning, remote workstation plans, and orchestrator bindings.
+- [Policy, approvals, and audit](overview.md#ai-workflow-stack-doctor): repository policy effects surfaced through doctor, recommend, and policy explain.
+- [MCP adapter](mcp.md): structured read/planning access for compatible clients and guarded write surfaces.
+- [Benchmarks](benchmarks.md): smoke checks and practical model/runtime evaluation notes.
+- [External toolchain](tools.md): prerequisite CLIs for runtime, provisioning, and benchmark workflows.
+- [Cloud deployment planning](cloud-deployment.md): guarded planning and checks for Azure targets.
+- [Model capabilities](model-capabilities.md): capability scores used by model selection and recommendations.
+- [aiplane skill](../../skills/aiplane/SKILL.md): assistant workflow guidance for Codex-style skill-capable agents.
+
+## Main commands
+
+```bash
+aiplane discover
+aiplane doctor
+aiplane recommend
+aiplane export
+aiplane quickstart local-coding
 ```
 
 Project strategy, developer policy, and future roadmap details live under [docs/project](../project/README.md), not in the user documentation.
 
-## Profile Selection
+## Profile selection
 
 Most commands accept `--profile`, but it is optional. `aiplane` resolves the profile in this order:
 
@@ -41,12 +90,13 @@ Most commands accept `--profile`, but it is optional. `aiplane` resolves the pro
 3. `default_profile` in the local `.aiplane/config.yaml`.
 4. The only available profile, when exactly one exists.
 
-If no profile exists, bootstrap the default local profile with:
+If no profile exists, run the onboarding flow directly:
 
 ```bash
-aiplane profiles bootstrap-local
+aiplane quickstart local-coding
+aiplane discover
+aiplane doctor
+aiplane recommend
 ```
-
-This copies the shipped `local-dev` template into `profiles/local-dev`, validates it, and attempts a bounded provider discovery refresh into ignored `models.discovered.yaml`. Use `--no-discovery` when you only want the editable profile files, or `--dry-run` to preview the create/discovery steps.
 
 Use `--profile` only when you need to override the default for one command.

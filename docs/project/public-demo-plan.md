@@ -49,7 +49,7 @@ A clean PR-ready demo cut is at this point when all of these are true:
 - A second runtime track is shown through vLLM/OpenAI-compatible planning/export (dry-run at minimum).
 - MCP manifest export and skills handoff are shown, and credentials are kept out of screen recordings.
 
-With current behavior and current test coverage, we are at the feature-freeze point for the **Team Policy and Governance** milestone. The next demo checkpoint should be delayed only for any remaining remote-workstation hardening changes that are still being polished outside this milestone.
+With current behavior and current test coverage, we are at the feature-freeze point for the **External Beta Readiness** milestone. Next release checkpoints should focus on the priorities in the new roadmap, especially the onboarding/discovery->doctor->recommend->export path. The next demo checkpoint should be delayed only for any remaining remote-workstation hardening changes that are still being polished outside this milestone.
 
 
 ## Demo Thesis
@@ -92,15 +92,17 @@ aiplane models refresh --provider ollama --query code --limit 10
 aiplane models refresh --provider ollama --query embed --limit 10
 aiplane models list --group-by runtime --limit 10
 aiplane models list --runtime ollama --role chat --capability 'general_chat>=2' --fits-hardware --enabled-only --sort-by role --limit 3
-aiplane models list --runtime ollama --role chat --ram-gb 16 --vram-gb 0 --sort-by role --limit 3
-aiplane models list --runtime ollama --role chat --ram-gb 32 --vram-gb 8 --sort-by role --limit 3
-aiplane models list --runtime ollama --role autocomplete --ram-gb 16 --vram-gb 0 --sort-by role --limit 3
-aiplane models list --runtime ollama --role embedding --ram-gb 16 --vram-gb 0 --sort-by role --limit 3
+aiplane models list --runtime vllm --role chat --capability 'general_chat>=2' --fits-hardware --enabled-only --sort-by role --limit 3
+aiplane models list --runtime ollama --role autocomplete --fits-hardware --enabled-only --sort-by role --limit 3
+aiplane models list --runtime ollama --role embedding --fits-hardware --enabled-only --sort-by role --limit 3
 CHAT_ALIAS="$(aiplane models list --runtime ollama --role chat --capability 'general_chat>=2' --fits-hardware --enabled-only --sort-by role --limit 1 --name-only)"
 printf 'chat_alias=%s\n' "$CHAT_ALIAS"
+VLLM_ALIAS="$(aiplane models list --runtime vllm --role chat --capability 'general_chat>=2' --fits-hardware --enabled-only --sort-by role --limit 1 --name-only)"
+printf 'vllm_alias=%s\n' "$VLLM_ALIAS"
 
 # Review/add/promote the chosen alias before exporting or running.
 aiplane models show "$CHAT_ALIAS"
+aiplane models show "$VLLM_ALIAS"
 aiplane integrations roles continue
 
 # Pull preview versus execution. Run the non-dry command only on a prepared recording machine.
@@ -119,15 +121,16 @@ aiplane integrations export continue --chat "$CHAT_ALIAS"
 aiplane integrations export aider --chat "$CHAT_ALIAS"
 
 # Second runtime track: vLLM/OpenAI-compatible endpoint planning and runner dry-runs.
-VLLM_ALIAS="vllm_demo_chat"
-aiplane models add "$VLLM_ALIAS" --provider local_file --model /models/TinyLlama-1.1B-Chat-v1.0 --role chat --runtime vllm --preferred-runtime vllm --set min_ram_gb=16 --set min_vram_gb=8 --dry-run
-aiplane models add "$VLLM_ALIAS" --provider local_file --model /models/TinyLlama-1.1B-Chat-v1.0 --role chat --runtime vllm --preferred-runtime vllm --set min_ram_gb=16 --set min_vram_gb=8 --overwrite
-aiplane models show "$VLLM_ALIAS"
 aiplane runtimes prerequisites vllm
+aiplane runtimes install vllm --dry-run
 aiplane runtimes bundle vllm --model "$VLLM_ALIAS" --mode docker --format dockerfile
 aiplane runtimes start vllm --model "$VLLM_ALIAS" --dry-run
+aiplane runtimes status vllm
 aiplane integrations export openai-compatible --model "$VLLM_ALIAS" --endpoint http://localhost:8000/v1
 aiplane chat --model "$VLLM_ALIAS" --prompt "Say hello from the vLLM endpoint" --dry-run
+# Run without --dry-run only when a reachable vLLM/OpenAI-compatible endpoint is already up.
+aiplane chat --model "$VLLM_ALIAS" --prompt "Say hello from the vLLM endpoint"
+aiplane code analyze --model "$VLLM_ALIAS" src/aiplane/cli.py --dry-run
 
 # Section 3: MCP, skills, and repeatability surfaces.
 aiplane integrations export vscode-mcp
@@ -170,6 +173,74 @@ aiplane profiles validate
 ```
 
 For this demo plan, assume the default profile is active and keep commands profile-agnostic.
+
+## Clean-machine onboarding trial commands
+
+Add this section to the execution demo when validating Priority 9 clean-machine onboarding. It is intentionally named **Clean-machine onboarding trial commands** so results from different machines can be compared without mixing them with the rehearsed happy-path demo.
+
+Run the Linux common block first on Ubuntu/Linux trial machines. It records install, discovery, doctor, recommendation, and export evidence without requiring manual YAML edits. The Bash install helper is not a Windows/macOS installer; on Windows or macOS, use the platform-native Python/Conda install path first, then run the post-install `aiplane` commands below.
+
+```bash
+# Linux common trial block. Start in a fresh shell on the target machine.
+git clone https://github.com/ocagdas/aiplane.git
+cd aiplane
+scripts/setup_env.sh --mode conda --conda-env aiplane --action install --editable
+conda activate aiplane
+
+mkdir -p /tmp/aiplane-onboarding-trial
+aiplane --help | tee /tmp/aiplane-onboarding-trial/00-help.txt
+aiplane quickstart local-coding --dry-run --format json | tee /tmp/aiplane-onboarding-trial/01-quickstart-dry-run.json
+aiplane quickstart local-coding --format json | tee /tmp/aiplane-onboarding-trial/02-quickstart.json
+aiplane discover --format json | tee /tmp/aiplane-onboarding-trial/03-discover.json
+aiplane doctor --format json | tee /tmp/aiplane-onboarding-trial/04-doctor.json
+aiplane recommend --format json | tee /tmp/aiplane-onboarding-trial/05-recommend.json
+aiplane export continue | tee /tmp/aiplane-onboarding-trial/06-continue.yaml
+aiplane export aider | tee /tmp/aiplane-onboarding-trial/07-aider.sh
+aiplane export vscode-mcp | tee /tmp/aiplane-onboarding-trial/08-vscode-mcp.json
+```
+
+Environment-specific additions:
+
+```bash
+# 1. Ubuntu with Ollama and Continue.
+ollama --version | tee /tmp/aiplane-onboarding-trial/ubuntu-ollama-version.txt
+code --version | tee /tmp/aiplane-onboarding-trial/ubuntu-code-version.txt
+aiplane integrations setup continue --dry-run | tee /tmp/aiplane-onboarding-trial/ubuntu-continue-setup-dry-run.json
+
+# 2. Ubuntu with vLLM or another OpenAI-compatible local endpoint.
+VLLM_ENDPOINT="${VLLM_ENDPOINT:-http://localhost:8000/v1}"
+aiplane export openai-compatible --endpoint "$VLLM_ENDPOINT" | tee /tmp/aiplane-onboarding-trial/ubuntu-vllm-openai-compatible.json
+aiplane integrations setup openai-compatible --endpoint "$VLLM_ENDPOINT" --dry-run | tee /tmp/aiplane-onboarding-trial/ubuntu-vllm-setup-dry-run.json
+
+# 3. Windows with Ollama, from PowerShell after platform-native install.
+# Do not run scripts/setup_env.sh on Windows. Install aiplane with the Windows Python/Conda workflow first.
+New-Item -ItemType Directory -Force "$env:TEMP\aiplane-onboarding-trial"
+ollama --version | Tee-Object -FilePath "$env:TEMP\aiplane-onboarding-trial\windows-ollama-version.txt"
+aiplane quickstart local-coding --dry-run --format json | Tee-Object -FilePath "$env:TEMP\aiplane-onboarding-trial\windows-quickstart-dry-run.json"
+aiplane doctor --format json | Tee-Object -FilePath "$env:TEMP\aiplane-onboarding-trial\windows-doctor.json"
+aiplane recommend --format json | Tee-Object -FilePath "$env:TEMP\aiplane-onboarding-trial\windows-recommend.json"
+aiplane export continue | Tee-Object -FilePath "$env:TEMP\aiplane-onboarding-trial\windows-continue.yaml"
+
+# 4. macOS with Apple Silicon, after platform-native install.
+# Do not run scripts/setup_env.sh on macOS. Install aiplane with the macOS Python/Conda workflow first.
+sysctl -n machdep.cpu.brand_string | tee /tmp/aiplane-onboarding-trial/macos-cpu.txt
+aiplane quickstart local-coding --dry-run --format json | tee /tmp/aiplane-onboarding-trial/macos-quickstart-dry-run.json
+aiplane hardware discover | tee /tmp/aiplane-onboarding-trial/macos-hardware.json
+aiplane recommend --format json | tee /tmp/aiplane-onboarding-trial/macos-recommend.json
+
+# 5. Clean machine with no AI tools installed.
+aiplane doctor --format json | tee /tmp/aiplane-onboarding-trial/clean-no-tools-doctor.json
+aiplane recommend --format json | tee /tmp/aiplane-onboarding-trial/clean-no-tools-recommend.json
+aiplane export vscode-mcp | tee /tmp/aiplane-onboarding-trial/clean-no-tools-vscode-mcp.json
+
+# 6. Remote workstation with local client.
+aiplane hardware export-machine --name local-client | tee /tmp/aiplane-onboarding-trial/local-client.machine.json
+aiplane machines import /tmp/aiplane-onboarding-trial/local-client.machine.json --name local-client
+aiplane machines list | tee /tmp/aiplane-onboarding-trial/remote-workstation-machines.json
+aiplane remote tunnel plan --host "$REMOTE_GPU_HOST" --local-port 11434 --remote-port 11434 | tee /tmp/aiplane-onboarding-trial/remote-workstation-tunnel-plan.json
+```
+
+For every environment, record these outcomes in the demo notes: install success, discovery success, doctor findings, first generated export, elapsed time to first useful export, number of manual values entered, and whether each failure is a product defect, documentation defect, or unsupported environment.
 
 ## Section 1: Local AI Workflow Stack Readiness
 
@@ -263,7 +334,7 @@ aiplane models refresh --provider ollama --query chat --limit 10
 aiplane models refresh --provider ollama --query code --limit 10
 aiplane models refresh --provider ollama --query embed --limit 10
 aiplane models list --group-by runtime --limit 10
-aiplane models list --provider ollama --role chat --ram-gb 16 --vram-gb 0 --sort-by role --limit 5
+aiplane models list --runtime ollama --role chat --capability 'general_chat>=2' --fits-hardware --enabled-only --sort-by role --limit 5
 aiplane models list --provider ollama --role chat --ram-gb 32 --vram-gb 8 --sort-by role --limit 5
 aiplane models list --provider ollama --role chat --gpu-vendor nvidia --accelerator-api cuda --sort-by role --limit 5
 CHAT_ALIAS="$(aiplane models list --provider ollama --role chat --enabled-only --sort-by role --limit 1 --name-only)"
@@ -372,18 +443,21 @@ Recording note: `aiplane chat` resolves the model entry and uses the configured 
 
 ### 0:35-1:05 - Second Runtime: vLLM/OpenAI-Compatible Endpoint
 
-Use vLLM as the second runtime story. Keep it dry-run unless the recording machine or a remote GPU box already has a reachable OpenAI-compatible endpoint.
+Use vLLM as the second runtime story with a second model alias that already fits the current machine profile. Keep it dry-run unless the recording machine or a remote GPU box already has a reachable OpenAI-compatible endpoint.
 
 ```bash
-VLLM_ALIAS="vllm_demo_chat"
-aiplane models add "$VLLM_ALIAS" --provider local_file --model /models/TinyLlama-1.1B-Chat-v1.0 --role chat --runtime vllm --preferred-runtime vllm --set min_ram_gb=16 --set min_vram_gb=8 --dry-run
-aiplane models add "$VLLM_ALIAS" --provider local_file --model /models/TinyLlama-1.1B-Chat-v1.0 --role chat --runtime vllm --preferred-runtime vllm --set min_ram_gb=16 --set min_vram_gb=8 --overwrite
+VLLM_ALIAS="$(aiplane models list --runtime vllm --role chat --capability 'general_chat>=2' --fits-hardware --enabled-only --sort-by role --limit 1 --name-only)"
+printf 'vllm_alias=%s\n' "$VLLM_ALIAS"
 aiplane models show "$VLLM_ALIAS"
 aiplane runtimes prerequisites vllm
+aiplane runtimes install vllm --dry-run
 aiplane runtimes bundle vllm --model "$VLLM_ALIAS" --mode docker --format dockerfile
 aiplane runtimes start vllm --model "$VLLM_ALIAS" --dry-run
+aiplane runtimes status vllm
 aiplane integrations export openai-compatible --model "$VLLM_ALIAS" --endpoint http://localhost:8000/v1
 aiplane chat --model "$VLLM_ALIAS" --prompt "Say hello from the vLLM endpoint" --dry-run
+aiplane chat --model "$VLLM_ALIAS" --prompt "Say hello from the vLLM endpoint"
+aiplane code analyze --model "$VLLM_ALIAS" src/aiplane/cli.py --dry-run
 ```
 
 Voiceover:
@@ -569,16 +643,16 @@ aiplane models refresh --provider ollama --query chat --dry-run --limit 5
 aiplane models refresh --provider ollama --query chat --limit 10
 aiplane models refresh --provider ollama --query code --limit 10
 aiplane models refresh --provider ollama --query embed --limit 10
-aiplane models list --provider ollama --role chat --ram-gb 16 --vram-gb 0 --sort-by role --limit 5
+aiplane models list --runtime ollama --role chat --capability 'general_chat>=2' --fits-hardware --enabled-only --sort-by role --limit 5
 aiplane integrations plan continue --chat "$CHAT_ALIAS" --autocomplete "$AUTOCOMPLETE_ALIAS" --embedding "$EMBEDDING_ALIAS"
 aiplane integrations export continue --chat "$CHAT_ALIAS" --autocomplete "$AUTOCOMPLETE_ALIAS" --embedding "$EMBEDDING_ALIAS"
 aiplane integrations export vscode-mcp
 aiplane integrations export continue-mcp
 aiplane mcp manifest
 sed -n '1,90p' skills/aiplane/SKILL.md
-VLLM_ALIAS="vllm_demo_chat"
-aiplane models add "$VLLM_ALIAS" --provider local_file --model /models/TinyLlama-1.1B-Chat-v1.0 --role chat --runtime vllm --preferred-runtime vllm --set min_ram_gb=16 --set min_vram_gb=8 --dry-run
-aiplane models add "$VLLM_ALIAS" --provider local_file --model /models/TinyLlama-1.1B-Chat-v1.0 --role chat --runtime vllm --preferred-runtime vllm --set min_ram_gb=16 --set min_vram_gb=8 --overwrite
+VLLM_ALIAS="$(aiplane models list --runtime vllm --role chat --capability 'general_chat>=2' --fits-hardware --enabled-only --sort-by role --limit 1 --name-only)"
+aiplane models list --runtime vllm --role chat --capability 'general_chat>=2' --fits-hardware --enabled-only --sort-by role --limit 3
+aiplane runtimes install vllm --dry-run
 aiplane runtimes bundle vllm --model "$VLLM_ALIAS" --mode docker --format dockerfile
 aiplane machines discover azure --region uksouth --workload inference_small --gpu-vendor nvidia --min-vram-gb 16 --verbosity 1 --limit 5
 ```

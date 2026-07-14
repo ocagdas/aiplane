@@ -21,15 +21,16 @@ chat UI before the provider/session contracts are stable.
    - Implemented: VS Code MCP, Continue MCP, Cline-style MCP, and generic MCP config exports.
    - Ongoing: validate more client-specific config shapes as tools evolve.
 
-2. **CLI wrapper commands - Partially implemented**
+2. **CLI wrapper commands - Implemented / hardening**
    - Implemented: `aiplane chat`, which resolves a chat-capable profile alias and uses configured endpoints by default; `--native-ollama` delegates Ollama-runnable aliases to `ollama run <model>`.
-   - Planned: broader launch wrappers around stable tool-native CLIs such as `ollama launch`, Continue CLI, Codex-style tools, or Claude Code where support is explicit.
+   - Implemented: `aiplane launch --tool continue`, `aiplane launch --tool ollama`, and `aiplane launch --tool aider` wrappers for selected profile entries, provider/runtime constraints, and policy checks.
+   - Implemented: `aiplane session start` for minimal session metadata/audit records, transcript path defaults, and handoff-friendly state.
+   - Planned: wrappers for Codex/Cursor/Claude Code or other stable CLIs where support is explicit.
 
-3. **Thin `aiplane session` layer - Planned**
-   - Not implemented yet.
-   - Keep this minimal at first: session metadata, selected model, transcript path, and audit events.
+3. **Thin `aiplane session` layer - Implemented / hardening**
+   - Implemented as minimal handoff state in `session start` records: selected model, launch command, transcript path, and local audit event.
    - Do not build a full Copilot/Codex clone.
-   - Prefer delegating interactive chat to mature provider or IDE tools when they exist.
+   - Prefer delegating interactive chat to mature provider or IDE tools when they exist
 
 4. **Patch proposal workflow - Planned**
    - Not implemented as a general workflow yet.
@@ -59,7 +60,7 @@ provisioners, model runtimes, or configuration-management engines.
 | VS Code MCP clients | Let IDEs query `aiplane` for models, hardware, recommendations, integration snippets, and guarded profile changes. | MCP stdio server plus client config export. | Implemented / hardening. |
 | Cline / Roo-style clients | Alternative VS Code agent surfaces that can use endpoints and MCP tools. | Config export and MCP config export; wrappers only after stable CLI/API review. | Export implemented; wrappers planned. |
 | Zed | Editor path for OpenAI-compatible endpoints and MCP-capable workflows. | Config export first. | Implemented / needs end-to-end validation. |
-| Aider | CLI pair-programming path against selected model endpoints. | Config/export first; launch wrapper later if useful. | Export implemented; wrapper planned. |
+| Aider | CLI pair-programming path against selected model endpoints. | Config/export first; launch wrapper now implemented and hardening is underway. | Export implemented; launch/session wrapper implemented. |
 | Cursor / Windsurf | Commercial IDE paths where custom endpoint or MCP support is available. | Research, config export where supported, no brittle plugin assumptions. | Research/planned. |
 | Codex CLI / Claude Code / Copilot-style tools | Existing agentic CLI or IDE tools. | Possible launch wrappers and environment/config handoff only. | Planned/research. |
 | Ollama | Local/self-managed runtime and optional native CLI chat. | Install/update/start/stop/status/pull helpers; endpoint-backed `aiplane chat` by default, with `--native-ollama` delegating to `ollama run`. | Implemented for core flow. |
@@ -101,7 +102,7 @@ Initial candidates:
 - **Codex CLI-like interface**: prefer wrapper/delegation first, not a large
   custom chat implementation.
 
-## CLI Session Strategy - Mostly Planned
+## CLI Session Strategy - Implemented baseline
 
 A full custom active chat/session UI is medium effort and easy to overbuild. The
 better first implementation is a thin command layer. Current status:
@@ -113,10 +114,11 @@ aiplane chat --prompt "Say hello"
 # Implemented: optional Ollama-native chat for configured Ollama-runnable aliases.
 aiplane chat --native-ollama
 
-# Planned / not implemented yet:
-aiplane launch --tool continue --model MODEL_ALIAS
-aiplane launch --tool codex --model MODEL_ALIAS
-aiplane session start --model MODEL_ALIAS
+# Implemented: thin launch/session wrappers and session handoff metadata:
+aiplane launch --tool continue --model MODEL_ALIAS --dry-run
+aiplane launch --tool ollama --app vscode --model MODEL_ALIAS
+aiplane launch --tool aider --model MODEL_ALIAS
+aiplane session start --tool continue --model MODEL_ALIAS
 ```
 
 Future wrappers should:
@@ -147,9 +149,9 @@ Start with:
 
 1. Continue config generation for VS Code. - **Implemented**
 2. `aiplane chat` endpoint-backed smoke chat, plus `--native-ollama` for `ollama run`. - **Implemented for configured chat-capable aliases; native Ollama path is opt-in**
-3. `aiplane launch` wrapper for `ollama launch` where supported. - **Planned, not implemented**
+3. `aiplane launch` wrapper for supported tools (currently `continue`, `ollama`, `aider`). - **Implemented**
 4. Cline/Zed/Aider exporter or wrapper research against their documented endpoint/MCP/config surfaces. - **Exporters implemented; wrappers still planned/research**
-5. Minimal session metadata/audit around those launches. - **Planned, not implemented**
+5. Minimal session metadata/audit around those launches. - **Implemented (thin session records + audit)**
 6. Agent-to-agent role metadata and orchestrator config export for established frameworks. - **Partial scaffolding implemented; multi-role schema/export planned next**
 7. Cursor research/config-export path after the generic endpoint/MCP exporters are stable. - **Research/planned**
 

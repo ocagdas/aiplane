@@ -12,6 +12,8 @@ from typing import Any
 
 from .config import dump_yaml
 from .model_catalog import ModelCatalog, capability_profile
+from .runtime_catalog import RuntimeCatalog
+from .policy import PolicyEngine
 from .models import Profile
 
 
@@ -255,6 +257,8 @@ class HardwareManager:
 
     def recommend(self, include_not_recommended: bool = False) -> dict[str, Any]:
         catalog = ModelCatalog(self.profile)
+        runtime_catalog = RuntimeCatalog(self.profile)
+        policy = PolicyEngine(self.profile)
         discovered = self.discover()
         machine = self.machine(discovered)
         fit_basis = _discovered_from_machine(machine, discovered)
@@ -265,6 +269,7 @@ class HardwareManager:
             "remote_or_cloud": [],
         }
         benchmark_summaries = _latest_benchmark_summaries(self.profile.workspace)
+
         for row in catalog.models().items():
             name, model = row
             payload = dict(model)
@@ -280,8 +285,26 @@ class HardwareManager:
                     )
                 )
                 continue
-            level, reason = _recommend_model(payload, fit_basis)
-            groups[level].append(_recommendation_payload(payload, level, reason, benchmark_summary))
+
+            runtime_compatibility = _recommendation_runtime_compatibility(name, runtime_catalog, payload)
+            policy_decision = policy.model_decision(name)
+            level, reason = _recommend_model(
+                payload,
+                fit_basis,
+                runtime_compatibility=runtime_compatibility,
+                policy_decision=policy_decision,
+            )
+            groups[level].append(
+                _recommendation_payload(
+                    payload,
+                    level,
+                    reason,
+                    benchmark_summary,
+                    runtime_compatibility=runtime_compatibility,
+                    policy_decision=policy_decision,
+                )
+            )
+
         ordered_groups: dict[str, list[dict[str, Any]]] = {
             "recommended": groups["recommended"],
             "usable": groups["usable"],
@@ -292,18 +315,20 @@ class HardwareManager:
         for rows in ordered_groups.values():
             rows.sort(
                 key=lambda item: (
-                    -_average_capability_score(item),
+                    -item.get("capability_avg_score", 0.0),
+                    -item.get("runtime_compatibility_score", 0.0),
                     item.get("provider", ""),
                     item.get("name", ""),
                 )
             )
+
         criteria = {
-            "recommended": "meets configured recommended RAM and VRAM targets for reasonable local use",
-            "usable": "meets configured minimum RAM and VRAM targets, but may be slow or tight",
+            "recommended": "meets configured recommended RAM/VRAM targets, has policy approval, and is compatible with local runtime options",
+            "usable": "meets configured minimum RAM/VRAM targets with policy and runtime caveats, but may be slow or tight",
             "remote_or_cloud": "fit is checked against provider quota/keys, not local RAM/VRAM",
         }
         if include_not_recommended:
-            criteria["not_recommended"] = "does not meet configured minimum local load/run targets"
+            criteria["not_recommended"] = "does not meet local fit, local runtime compatibility, or policy constraints"
         return {
             "criteria": criteria,
             "machine": machine,
@@ -312,7 +337,7 @@ class HardwareManager:
             "hidden": (
                 {
                     "not_recommended_count": len(groups["not_recommended"]),
-                    "hint": "pass --include-not-recommended to show models that do not fit this hardware",
+                    "hint": "pass --include-not-recommended to show models that do not fit this hardware, runtime, or policy",
                 }
                 if not include_not_recommended
                 else {}
@@ -619,6 +644,8 @@ def _recommendation_payload(
     level: str,
     reason: str,
     benchmark_summary: dict[str, Any] | None = None,
+    runtime_compatibility: dict[str, Any] | None = None,
+    policy_decision: Any | None = None,
 ) -> dict[str, Any]:
     capabilities = capability_profile(model)
     payload = {
@@ -633,13 +660,109 @@ def _recommendation_payload(
         "min_vram_gb": model.get("min_vram_gb"),
         "recommended_vram_gb": model.get("recommended_vram_gb"),
         "reason": reason,
-        "pull_command": model.get("pull_command"),
-        "notes": model.get("notes"),
-        "capabilities": capabilities,
     }
+    if runtime_compatibility:
+        payload["runtime_compatibility"] = {
+            "state": runtime_compatibility.get("state"),
+            "supported_runtimes": runtime_compatibility.get("supported_runtimes", []),
+            "available_runtimes": runtime_compatibility.get("available_runtimes", []),
+            "preferred_runtime": runtime_compatibility.get("preferred_runtime"),
+            "recommended_runtime": runtime_compatibility.get("recommended_runtime"),
+            "reasoning": runtime_compatibility.get("reasoning", []),
+        }
+        payload["runtime_compatibility_score"] = float(runtime_compatibility.get("compatibility_score", 0.0) or 0.0)
+        payload["runtime_recommendation"] = runtime_compatibility.get("recommended_runtime")
+    else:
+        payload["runtime_compatibility_score"] = 0.0
+        payload["runtime_recommendation"] = None
+        payload["runtime_compatibility"] = {
+            "state": "not_applicable",
+            "supported_runtimes": [],
+            "available_runtimes": [],
+            "preferred_runtime": None,
+            "recommended_runtime": None,
+            "reasoning": ["remote or non-local model"],
+        }
+    if policy_decision is not None:
+        payload["policy_decision"] = {
+            "outcome": str(getattr(policy_decision, "outcome", "allowed")),
+            "allowed": bool(policy_decision.allowed),
+            "requires_approval": bool(policy_decision.requires_approval),
+            "reason": policy_decision.reason,
+            "matched_rule": policy_decision.matched_rule,
+        }
+    payload["pull_command"] = model.get("pull_command")
+    payload["notes"] = model.get("notes")
+    payload["capabilities"] = capabilities
     if benchmark_summary:
         payload["latest_benchmark"] = benchmark_summary
     return payload
+
+
+def _recommendation_runtime_compatibility(
+    model_name: str,
+    runtime_catalog: RuntimeCatalog,
+    model: dict[str, Any],
+) -> dict[str, Any]:
+    if not bool(model.get("local", False)):
+        return {
+            "state": "not_local_model",
+            "supported_runtimes": [],
+            "available_runtimes": [],
+            "preferred_runtime": None,
+            "recommended_runtime": None,
+            "compatibility_score": 0.0,
+            "reasoning": ["model does not use a local runtime"],
+        }
+
+    supported_runtimes = runtime_catalog.compatible_runtimes_for_entry(model, include_gui=False)
+    if not supported_runtimes:
+        return {
+            "state": "no_supported_runtime",
+            "supported_runtimes": [],
+            "available_runtimes": [],
+            "preferred_runtime": str(model.get("preferred_runtime") or "") or None,
+            "recommended_runtime": None,
+            "compatibility_score": 0.0,
+            "reasoning": ["no local runtime is known for this model"],
+        }
+
+    statuses = [runtime_catalog.runtime_available(runtime) for runtime in supported_runtimes]
+    available = [str(row.get("name")) for row in statuses if bool(row.get("available"))]
+    preferred = str(model.get("preferred_runtime") or "").strip()
+    preferred_runtime = supported_runtimes[0] if not preferred else preferred
+
+    if preferred and preferred in available:
+        return {
+            "state": "preferred_runtime_available",
+            "supported_runtimes": sorted(set(supported_runtimes)),
+            "available_runtimes": sorted(set(available)),
+            "preferred_runtime": preferred,
+            "recommended_runtime": preferred,
+            "compatibility_score": 1.0,
+            "reasoning": [f"preferred runtime '{preferred}' is available"],
+        }
+
+    if available:
+        return {
+            "state": "runtime_available",
+            "supported_runtimes": sorted(set(supported_runtimes)),
+            "available_runtimes": sorted(set(available)),
+            "preferred_runtime": preferred or None,
+            "recommended_runtime": available[0],
+            "compatibility_score": 0.8,
+            "reasoning": ["model has supported runtimes with local availability"],
+        }
+
+    return {
+        "state": "runtime_supported_only",
+        "supported_runtimes": sorted(set(supported_runtimes)),
+        "available_runtimes": [],
+        "preferred_runtime": preferred or None,
+        "recommended_runtime": preferred_runtime,
+        "compatibility_score": 0.4,
+        "reasoning": ["model has local runtime compatibility, but none are currently available"],
+    }
 
 
 def _latest_benchmark_summaries(workspace: Path) -> dict[str, dict[str, Any]]:
@@ -663,7 +786,25 @@ def _latest_benchmark_summaries(workspace: Path) -> dict[str, dict[str, Any]]:
     return summaries
 
 
-def _recommend_model(model: dict[str, Any], discovered: dict[str, Any]) -> tuple[str, str]:
+def _recommend_model(
+    model: dict[str, Any],
+    discovered: dict[str, Any],
+    runtime_compatibility: dict[str, Any] | None = None,
+    policy_decision: Any | None = None,
+) -> tuple[str, str]:
+    if policy_decision is not None and not bool(policy_decision.allowed):
+        return "not_recommended", policy_decision.reason
+
+    compatibility_state = str((runtime_compatibility or {}).get("state"))
+    if compatibility_state == "no_supported_runtime":
+        return "not_recommended", "; ".join(
+            (runtime_compatibility or {}).get("reasoning", ["no local runtime support"])
+        )
+
+    runtime_warning = ""
+    if compatibility_state == "runtime_supported_only":
+        runtime_warning = "; ".join((runtime_compatibility or {}).get("reasoning", []))
+
     memory_gb = _float_or_none(discovered.get("memory_gb"))
     gpu_vram_gb = _max_vram_gb(discovered)
     min_ram = _float_or_none(model.get("min_ram_gb"))
@@ -671,22 +812,30 @@ def _recommend_model(model: dict[str, Any], discovered: dict[str, Any]) -> tuple
     min_vram = _float_or_none(model.get("min_vram_gb"))
     recommended_vram = _float_or_none(model.get("recommended_vram_gb"))
 
-    blockers = []
+    blockers: list[str] = []
     if min_ram is not None and memory_gb is not None and memory_gb < min_ram:
         blockers.append(f"needs at least {min_ram:g}GB RAM; discovered {memory_gb:g}GB")
     if min_vram is not None and gpu_vram_gb < min_vram:
         blockers.append(f"needs at least {min_vram:g}GB VRAM; discovered {gpu_vram_gb:.1f}GB")
     if blockers:
+        if runtime_warning:
+            blockers.append(runtime_warning)
         return "not_recommended", "; ".join(blockers)
-
-    gaps = []
+    gaps: list[str] = []
     if recommended_ram is not None and memory_gb is not None and memory_gb < recommended_ram:
         gaps.append(f"below recommended RAM ({memory_gb:g}GB < {recommended_ram:g}GB)")
     if recommended_vram is not None and gpu_vram_gb < recommended_vram:
         gaps.append(f"below recommended VRAM ({gpu_vram_gb:.1f}GB < {recommended_vram:g}GB)")
+    if runtime_warning and not gaps:
+        return (
+            "recommended",
+            f"{runtime_warning}; meets policy, runtime compatibility, and configured RAM/VRAM targets",
+        )
     if gaps:
+        if runtime_warning:
+            gaps.append(runtime_warning)
         return "usable", "; ".join(gaps)
-    return "recommended", "meets configured recommended RAM/VRAM targets"
+    return "recommended", "meets policy, runtime compatibility, and configured RAM/VRAM targets"
 
 
 def _max_vram_gb(discovered: dict[str, Any]) -> float:

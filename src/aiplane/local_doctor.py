@@ -52,8 +52,39 @@ def local_coding_doctor(profile: Profile, include_optional: bool = False) -> dic
         _integration_section(defaults, models),
         _mcp_section(),
     ]
-    blocking = sum(1 for section in sections for check in section["checks"] if not check.get("ok"))
-    warnings = sum(1 for section in sections for check in section["checks"] if check.get("warning"))
+    for section in sections:
+        for check in section.get("checks", []):
+            if not isinstance(check, dict):
+                continue
+            section_name = str(section.get("name") or "general")
+            check["severity"], check["action"] = _section_check_status(
+                str(profile.name),
+                section_name,
+                check,
+            )
+            check.setdefault("reason", check.get("detail", ""))
+            check["impact"] = _check_impact(section_name, check)
+            if check["severity"] in {"blocking", "advisory"}:
+                check["remediation"] = _check_remediation(str(profile.name), section_name, check)
+
+    blocking = sum(
+        1
+        for section in sections
+        for check in section.get("checks", [])
+        if isinstance(check, dict) and check.get("severity") == "blocking"
+    )
+    advisory = sum(
+        1
+        for section in sections
+        for check in section.get("checks", [])
+        if isinstance(check, dict) and check.get("severity") == "advisory"
+    )
+    pass_count = sum(
+        1
+        for section in sections
+        for check in section.get("checks", [])
+        if isinstance(check, dict) and check.get("severity") == "pass"
+    )
     return {
         "name": "local_coding_doctor",
         "profile": profile.name,
@@ -62,7 +93,12 @@ def local_coding_doctor(profile: Profile, include_optional: bool = False) -> dic
             "sections": len(sections),
             "checks": sum(len(section["checks"]) for section in sections),
             "blocking": blocking,
-            "warnings": warnings,
+            "warnings": advisory,
+            "checks_by_severity": {
+                "blocking": blocking,
+                "advisory": advisory,
+                "pass": pass_count,
+            },
         },
         "sections": sections,
         "next_steps": _next_steps(profile.name, sections),
@@ -82,42 +118,9 @@ def local_coding_doctor_text(payload: dict[str, Any]) -> str:
     ]
     sections = payload.get("sections", [])
 
-    def _suggest_fix(section_name: str, check: dict) -> str:
-        name = check.get("name", "")
-        if name == "model_catalog":
-            return (
-                "Try: `aiplane models refresh --dry-run`; "
-                "`aiplane models list --group-by runtime`; "
-                "`aiplane models promote DISCOVERED_ENTRY_NAME --as ALIAS`"
-            )
-        if section_name == "model_defaults" or name.endswith("_model"):
-            role_arg = check.get("name") or "<role>"
-            return (
-                "Try: `aiplane models refresh --dry-run`; "
-                "`aiplane models promote DISCOVERED_ENTRY_NAME --as ALIAS`; "
-                f"`aiplane models use {role_arg} ALIAS`"
-            )
-        if section_name == "environment":
-            return "Try: `aiplane environment doctor --required-only` then install missing CLIs listed above."
-        if section_name == "endpoints" or name.startswith("endpoint:"):
-            return "Try: `aiplane runtimes status <runtime>` or `aiplane providers test <provider>`. If provider is disabled, run `aiplane providers enable <provider>`."
-        if section_name == "integrations":
-            return "Try: `aiplane integrations list`; `aiplane integrations roles <tool>`; `aiplane integrations plan <tool>`."
-        if section_name == "profile":
-            return "Run `aiplane profiles validate <profile>` and repair missing files."
-        if section_name == "mcp":
-            return "Run `aiplane mcp manifest` to inspect MCP tools."
-        if section_name == "remote":
-            return "Run `aiplane remote tunnel plan --target <name>` or `aiplane stacks doctor <stack>`."
-        if section_name == "hardware":
-            return "Run `aiplane hardware doctor` or `aiplane hardware recommend`."
-        if section_name == "policy":
-            return "Run `aiplane policy explain --action <action>` to see why something is blocked."
-        return ""
-
     # collect checks and warnings across sections
     blocking_items: list[tuple[str, str]] = []
-    warning_items: list[tuple[str, str]] = []
+    advisory_items: list[tuple[str, str]] = []
     if isinstance(sections, list):
         for section in sections:
             if not isinstance(section, dict):
@@ -127,17 +130,21 @@ def local_coding_doctor_text(payload: dict[str, Any]) -> str:
                 if not isinstance(check, dict):
                     continue
                 reason = check.get("reason") or check.get("detail") or ""
-                suggestion = _suggest_fix(section.get("name", ""), check)
+                suggestion = str(check.get("action") or "")
                 check_name = str(check.get("name") or "check")
                 if section_name == "integrations" and check_name.startswith("integration:"):
                     check_name = check_name.split(":", 1)[1]
                 item = f"{check_name}: {reason}"
                 if suggestion:
                     item += f" -> {suggestion}"
-                if not check.get("ok"):
+                severity = str(
+                    check.get("severity")
+                    or ("blocking" if not check.get("ok") else "advisory" if check.get("warning") else "pass")
+                )
+                if severity == "blocking":
                     blocking_items.append((section_name, item))
-                elif check.get("warning"):
-                    warning_items.append((section_name, item))
+                elif severity == "advisory":
+                    advisory_items.append((section_name, item))
 
     if blocking_items:
         lines.append(f"recommended actions ({len(blocking_items)}):")
@@ -149,10 +156,10 @@ def local_coding_doctor_text(payload: dict[str, Any]) -> str:
             lines.append(f"  - {item}")
         lines.append("")
 
-    if warning_items:
-        lines.append(f"further actions/status ({len(warning_items)}):")
+    if advisory_items:
+        lines.append(f"further actions/status ({len(advisory_items)}):")
         current_root = ""
-        for root, item in warning_items:
+        for root, item in advisory_items:
             if root != current_root:
                 lines.append(f"- {root}:")
                 current_root = root
@@ -164,7 +171,7 @@ def local_coding_doctor_text(payload: dict[str, Any]) -> str:
         if not isinstance(section, dict):
             continue
         marker = "ok" if section.get("ok") else "needs attention"
-        lines.append(f"{section.get('name', 'section')}: {marker}")
+        lines.append(f"{section.get('name')}: {marker}")
         checks = section.get("checks", [])
         for check in checks if isinstance(checks, list) else []:
             if not isinstance(check, dict):
@@ -758,6 +765,179 @@ def _machine_detail(machine: dict[str, Any]) -> str:
     if vram is not None:
         parts.append(f"VRAM={vram}GB")
     return ", ".join(parts) or str(machine.get("machine_tag") or machine.get("provider") or "configured")
+
+
+def _section_check_status(profile: str, section_name: str, check: dict[str, Any]) -> tuple[str, str]:
+    ok = bool(check.get("ok"))
+    warning = bool(check.get("warning"))
+    if not ok:
+        return "blocking", _check_action(profile, section_name, check)
+    if warning:
+        return "advisory", _check_action(profile, section_name, check)
+    return "pass", ""
+
+
+def _check_impact(section: str, check: dict[str, Any]) -> str:
+    name = str(check.get("name") or "")
+    if section == "profile":
+        return "Profile loading or validation may be incomplete."
+    if section == "environment":
+        return "Required local tooling or runtime prerequisites may be missing."
+    if section == "model_defaults" or name == "model_catalog":
+        return "Coding tools may not have usable model aliases for required roles."
+    if section == "endpoints":
+        return "Selected models may not be reachable by exported tools."
+    if section == "hardware":
+        return "Recommended local models may not fit or may run poorly on the active machine."
+    if section == "providers":
+        return "Model aliases may reference providers that are unavailable or disabled."
+    if section == "policy":
+        return "Policy may block model, provider, or cloud usage."
+    if section == "integrations":
+        return "Generated tool configuration may be incomplete for this integration."
+    if section == "remote":
+        return "Remote endpoints or workstation flows may not be reproducible."
+    if section == "mcp":
+        return "MCP clients may not expose the expected aiplane workflow tools."
+    return "The local AI workflow may need attention before export or use."
+
+
+def _check_remediation(profile: str, section: str, check: dict[str, Any]) -> dict[str, Any]:
+    action = _check_action(profile, section, check)
+    command = _first_command(action) or action
+    dry_run_command = _dry_run_command(command)
+    return {
+        "command": command,
+        "mutates": _command_mutates(command),
+        "dry_run_supported": dry_run_command is not None,
+        "dry_run_command": dry_run_command,
+        "description": action,
+    }
+
+
+def _first_command(action: str) -> str | None:
+    if "`" not in action:
+        return None
+    parts = action.split("`")
+    return parts[1] if len(parts) > 1 and parts[1].strip() else None
+
+
+def _dry_run_command(command: str) -> str | None:
+    if "--dry-run" in command:
+        return command
+    dry_run_capable = (
+        "aiplane models refresh",
+        "aiplane hardware discover",
+        "aiplane integrations setup",
+        "aiplane profiles repair",
+        "aiplane profiles bootstrap-local",
+        "aiplane runtimes install",
+        "aiplane runtimes start",
+        "aiplane runtimes pull",
+    )
+    if command.startswith(dry_run_capable):
+        return f"{command} --dry-run"
+    return None
+
+
+def _command_mutates(command: str) -> bool:
+    mutating_prefixes = (
+        "aiplane models promote",
+        "aiplane models use",
+        "aiplane providers enable",
+        "aiplane hardware discover --select-closest",
+        "aiplane profiles repair",
+        "aiplane profiles bootstrap-local",
+        "aiplane integrations setup",
+        "aiplane runtimes install",
+        "aiplane runtimes start",
+        "aiplane runtimes pull",
+    )
+    return command.startswith(mutating_prefixes) and "--dry-run" not in command
+
+
+def _check_action(profile: str, section: str, check: dict[str, Any]) -> str:
+    name = str(check.get("name") or "")
+    if section == "profile":
+        if name.startswith("file:"):
+            missing_file = name.split(":", 1)[1]
+            return f"Run `aiplane profiles validate {profile}` and repair `{missing_file}`."
+        return f"Run `aiplane profiles validate {profile}`."
+
+    if section == "environment":
+        if name == "required_tools":
+            return "Run `aiplane environment doctor --required-only` and install missing CLIs."
+        if name == "runtime_prerequisites":
+            return "Run `aiplane environment doctor --required-only --include-optional` for runtime prerequisites."
+        return "Run `aiplane environment doctor --required-only`."
+
+    if section == "model_defaults" or name == "model_catalog":
+        if name == "model_catalog":
+            return "Run `aiplane models refresh --dry-run`, then `aiplane models list --group-by runtime` and `aiplane models promote DISCOVERED_ENTRY_NAME --as ALIAS`."
+        role_arg = name.removesuffix("_model") if name.endswith("_model") else "ALIAS"
+        return (
+            f"Run `aiplane models refresh --dry-run`; "
+            "`aiplane models promote DISCOVERED_ENTRY_NAME --as ALIAS`; "
+            f"`aiplane models use {role_arg} ALIAS`"
+        )
+
+    if section == "endpoints":
+        if name.startswith("endpoint:"):
+            alias = str(check.get("alias") or "UNKNOWN")
+            return (
+                f"Run `aiplane runtimes status {str(check.get('provider') or 'runtime')}` or "
+                f"`aiplane providers test {str(check.get('provider') or 'provider')}` for `{alias}`."
+            )
+        return "Review role default endpoint aliases in model defaults."
+
+    if section == "hardware":
+        if name == "active_machine":
+            return "Run `aiplane hardware show` and `aiplane hardware discover --select-closest`."
+        if name.startswith("model_fit:"):
+            return "Run `aiplane hardware recommend` and choose a model that fits this machine."
+        return "Run `aiplane hardware doctor` for hardware readiness checks."
+
+    if section == "providers":
+        if name == "providers_configured":
+            return "Run `aiplane providers list` and add missing providers in profile provider config."
+        if name == "providers_enabled":
+            return "Enable providers with `aiplane providers enable <provider>`."
+
+    if section == "integrations":
+        tool = name.removeprefix("integration:")
+        return f"Run `aiplane integrations roles {tool}` and `aiplane integrations plan {tool}` to fill required role gaps."
+
+    if section == "policy":
+        if name == "cloud_backends":
+            return "Run `aiplane policy explain --action backend:cloud` and align repository policy before approval."
+        if name == "repository_classification":
+            return "Update repository policy in `profile.yaml` (`classification` / `allow_cloud`) and rerun doctor."
+        if name.startswith("model_policy:"):
+            model_alias = name.split(":", 1)[1]
+            return f"Run `aiplane policy explain --action model:{model_alias}` and resolve model/provider policy constraints."
+        if name == "allowed_providers":
+            return "Update `allowed_providers` in the profile repository policy and re-run doctor."
+        return "Run `aiplane policy explain --action backend:cloud`."
+
+    if section == "remote":
+        if name.startswith("remote_target:"):
+            target = name.removeprefix("remote_target:")
+            return f"Run `aiplane remote tunnel plan --target {target}` and `aiplane remote tunnel status --target {target}`."
+        if name.startswith("stack_doctor:"):
+            stack = name.removeprefix("stack_doctor:")
+            return f"Run `aiplane stacks doctor {stack}` and address reported readiness gaps."
+        return "Run `aiplane remote tunnel list` and `aiplane stacks list` to review remote access coverage."
+
+    if section == "mcp":
+        if name == "mcp_manifest":
+            return "Run `aiplane mcp manifest` and check tool availability for client onboarding."
+        if name == "mcp_local_coding_read_surface":
+            return "Run `aiplane mcp manifest` and verify all wedge tools are available."
+        if name == "mcp_guarded_write_surface":
+            return "Verify MCP audit and write authorization path in target clients."
+        return "Run `aiplane mcp manifest` and validate read/write surface coverage."
+
+    return ""
 
 
 def _next_steps(profile: str, sections: list[dict[str, Any]]) -> list[str]:

@@ -1,17 +1,21 @@
 from __future__ import annotations
 
+from pathlib import Path
+from datetime import datetime, timezone
 import argparse
 import json
 import os
+import platform
 import shutil
 import subprocess
 import sys
 import threading
-from pathlib import Path
+import uuid
 
 from .agents import AgentManager
 from .approvals import ApprovalHandler
 from .audit import AuditLogger
+from .models import AuditEvent
 from .benchmark_tools import BenchmarkToolManager
 from .code_tasks import CodeTaskRunner
 from .config import (
@@ -59,6 +63,7 @@ from .cli_support import (
     refresh_progress as _refresh_progress,
 )
 from .integrations import IntegrationManager
+from .integration_contracts import ALL_INTEGRATION_TOOLS
 from .local_doctor import local_coding_doctor, local_coding_doctor_text
 from .machines import MachineManager
 from .mcp import mcp_manifest, serve_stdio
@@ -138,6 +143,8 @@ _BRIDGE_ACTIONS: dict[str, dict[str, object]] = {
     },
 }
 
+_LAUNCH_TOOLS = ("aider", "continue", "ollama")
+
 
 def _integration_selection_args(parser) -> None:
     parser.add_argument(
@@ -177,18 +184,17 @@ def _main(argv: list[str] | None = None) -> int:
         prog="aiplane",
         description=(
             "Configure, check, and connect local/cloud AI coding environments.\n\n"
-            "aiplane is a control-plane CLI: it manages profiles, providers, models, hardware fit,\n"
+            "aiplane is an environment-doctor and configuration compiler: it manages profiles, providers, models, hardware fit,\n"
             "IDE/CLI exports, remote endpoint plans, and MCP access. It does not replace IDE agents."
         ),
         epilog=(
-            "Common flows:\n"
-            "  aiplane config init\n"
-            "  aiplane profiles list\n"
-            "  aiplane providers models ollama\n"
-            "  aiplane hardware recommend\n"
-            "  aiplane models benchmark MODEL_ALIAS --dry-run\n"
-            "  aiplane integrations export continue --model MODEL_ALIAS\n"
-            "  aiplane mcp serve\n\n"
+            "Primary workflow:\n"
+            "  aiplane discover\n"
+            "  aiplane doctor\n"
+            "  aiplane recommend\n"
+            "  aiplane export continue\n"
+            "  aiplane quickstart local-coding\n\n"
+            "Advanced command categories are documented in docs/project/command-coverage.md.\n"
             "Docs: docs/user/index.md"
         ),
         formatter_class=HelpFormatter,
@@ -204,6 +210,61 @@ def _main(argv: list[str] | None = None) -> int:
         help="Directory containing editable profiles. Defaults to AIPLANE_PROFILES_DIR when set, otherwise the repo-local profiles/ directory",
     )
     subparsers = parser.add_subparsers(dest="command", required=True, metavar="command")
+
+    discover_cmd = _command(
+        subparsers,
+        "discover",
+        "Discover the local AI workflow environment",
+        "Read the current profile and detect hardware, runtime/provider configuration, local model aliases, endpoint configuration, and supported coding-tool exports. This command is read-only.",
+        "Examples:\n  aiplane discover\n  aiplane discover --format json",
+    )
+    _profile_arg(discover_cmd)
+    discover_cmd.add_argument(
+        "--format",
+        choices=["text", "json"],
+        default=None,
+        help="Output format. Text is human-readable; JSON is for scripts.",
+    )
+
+    recommend_cmd = _command(
+        subparsers,
+        "recommend",
+        "Recommend models for this machine",
+        "Rank local model aliases against the active hardware selection, runtime compatibility, and policy. This command is read-only.",
+        "Examples:\n  aiplane recommend\n  aiplane recommend --include-not-recommended\n  aiplane recommend --format json",
+    )
+    _profile_arg(recommend_cmd)
+    recommend_cmd.add_argument(
+        "--include-not-recommended",
+        action="store_true",
+        help="Include models rejected by hardware, runtime, or policy constraints",
+    )
+    recommend_cmd.add_argument(
+        "--format",
+        choices=["text", "json"],
+        default=None,
+        help="Output format. Text is human-readable; JSON is for scripts.",
+    )
+
+    export_cmd = _command(
+        subparsers,
+        "export",
+        "Export configuration for coding tools",
+        "Print configuration for Continue, Aider, Cline, Zed, OpenAI-compatible clients, or MCP clients. This does not edit target tool files.",
+        "Examples:\n  aiplane export continue\n  aiplane export aider --model MODEL_ALIAS\n  aiplane export vscode-mcp",
+    )
+    _profile_arg(export_cmd)
+    _integration_selection_args(export_cmd)
+    export_cmd.add_argument(
+        "--model",
+        help="Single model alias to export. For Continue, omit this to export chat/autocomplete/embedding selections",
+    )
+    export_cmd.add_argument("--from-plan", help="Path to a JSON file produced by integrations plan")
+    export_cmd.add_argument("--endpoint", help="Override provider endpoint/base URL")
+    export_cmd.add_argument(
+        "--api-key-env", help="Environment variable name the target tool should read for an API key"
+    )
+    export_cmd.add_argument("tool", choices=ALL_INTEGRATION_TOOLS, help="Export format to print")
 
     doctor_cmd = _command(
         subparsers,
@@ -229,7 +290,7 @@ def _main(argv: list[str] | None = None) -> int:
         subparsers,
         "quickstart",
         "Start a guided local AI coding setup",
-        "Run narrow, control-plane quickstarts for reproducible local/hybrid AI coding profiles.",
+        "Run a focused environment-doctor workflow that discovers, validates, and compiles reproducible local/hybrid AI coding profiles.",
         "Examples:\n  aiplane quickstart local-coding\n  aiplane quickstart local-coding --dry-run\n  aiplane quickstart local-coding --no-discovery",
     )
     quickstart_sub = quickstart_cmd.add_subparsers(dest="quickstart_command", required=True, metavar="command")
@@ -890,7 +951,7 @@ def _main(argv: list[str] | None = None) -> int:
     hardware_recommend = hardware_sub.add_parser(
         "recommend",
         help="Recommend models for active/discovered hardware",
-        description="Return hardware-aware model recommendations, sorted by capability score within recommendation groups.",
+        description="Return hardware- and policy-aware model recommendations using hardware fit, runtime compatibility, and ranking rationale.",
         formatter_class=HelpFormatter,
         allow_abbrev=False,
     )
@@ -1756,6 +1817,73 @@ def _main(argv: list[str] | None = None) -> int:
         help="Print the resolved external command without executing it",
     )
 
+    launch_cmd = _command(
+        subparsers,
+        "launch",
+        "Launch a configured assistant tool",
+        "Launch a configured assistant tool with profile-driven model selection.",
+        "Examples:\n  aiplane launch --tool aider --model fixture-chat-small\n  aiplane launch --tool ollama --app vscode\n  aiplane launch --tool continue --model fixture-chat-small --dry-run",
+    )
+    launch_cmd.add_argument(
+        "--tool",
+        choices=sorted(_LAUNCH_TOOLS),
+        required=True,
+        help="Target assistant/tool wrapper to launch",
+    )
+    _profile_arg(launch_cmd)
+    launch_cmd.add_argument(
+        "--model",
+        help="Model alias to apply when building launch arguments and endpoint metadata. If omitted, defaults to chat_model.",
+    )
+    launch_cmd.add_argument(
+        "--app",
+        help="Target application name for `aiplane launch --tool ollama`",
+    )
+    launch_cmd.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print the launch plan without starting any process",
+    )
+
+    session_cmd = _command(
+        subparsers,
+        "session",
+        "Track a minimal model session",
+        "Create thin, local session metadata for model-facing tooling without implementing a custom chat UI.",
+        "Examples:\n  aiplane session start --tool aider --model fixture-chat-small\n  aiplane session start --tool ollama --app vscode --transcript /tmp/session.log\n  aiplane session start --tool continue --model fixture-chat-small --dry-run",
+    )
+    session_sub = session_cmd.add_subparsers(dest="session_command", required=True, metavar="command")
+    session_start = session_sub.add_parser(
+        "start",
+        help="Start a minimal session metadata record",
+        description="Start a minimal session metadata record (model, command, transcript path, audit metadata).",
+        formatter_class=HelpFormatter,
+        allow_abbrev=False,
+    )
+    session_start.add_argument(
+        "--tool",
+        choices=sorted(_LAUNCH_TOOLS),
+        required=True,
+        help="Tool name to launch from aiplane session metadata.",
+    )
+    _profile_arg(session_start)
+    session_start.add_argument(
+        "--model",
+        help="Model alias to apply. If omitted, defaults to chat_model.",
+    )
+    session_start.add_argument(
+        "--app",
+        help="Target application name for `aiplane session start --tool ollama`.",
+    )
+    session_start.add_argument(
+        "--transcript",
+        help="Optional transcript file path. Defaults to .aiplane/sessions/<session-id>.log under workspace.",
+    )
+    session_start.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Preview the session metadata without writing it or emitting an audit event.",
+    )
     deploy_cmd = _command(
         subparsers,
         "deploy",
@@ -2498,7 +2626,9 @@ def _main(argv: list[str] | None = None) -> int:
                 raise ValueError("use either --clear or a format value, not both")
             config_path = local_config_path(args.path)
             if args.value is not None:
-                write_path = set_output_format(args.value, profile=args.profile, command=args.format_command, path=config_path)
+                write_path = set_output_format(
+                    args.value, profile=args.profile, command=args.format_command, path=config_path
+                )
             elif args.clear:
                 write_path = clear_output_format(profile=args.profile, command=args.format_command, path=config_path)
             else:
@@ -2510,8 +2640,12 @@ def _main(argv: list[str] | None = None) -> int:
                         "format": get_output_format_override(path=write_path),
                         "profile": args.profile,
                         "command": args.format_command,
-                        "profile_format": get_profile_output_format(args.profile, path=write_path) if args.profile else None,
-                        "command_format": get_command_output_format(args.format_command, path=write_path) if args.format_command else None,
+                        "profile_format": get_profile_output_format(args.profile, path=write_path)
+                        if args.profile
+                        else None,
+                        "command_format": get_command_output_format(args.format_command, path=write_path)
+                        if args.format_command
+                        else None,
                         "resolved_format": resolve_output_format(
                             profile=args.profile,
                             command=args.format_command,
@@ -2549,8 +2683,12 @@ def _main(argv: list[str] | None = None) -> int:
                         "verbosity": get_output_verbosity_override(path=write_path),
                         "profile": args.profile,
                         "command": args.verbosity_command,
-                        "profile_verbosity": get_profile_output_verbosity(args.profile, path=write_path) if args.profile else None,
-                        "command_verbosity": get_command_output_verbosity(args.verbosity_command, path=write_path) if args.verbosity_command else None,
+                        "profile_verbosity": get_profile_output_verbosity(args.profile, path=write_path)
+                        if args.profile
+                        else None,
+                        "command_verbosity": get_command_output_verbosity(args.verbosity_command, path=write_path)
+                        if args.verbosity_command
+                        else None,
                         "resolved_verbosity": resolve_output_verbosity(
                             profile=args.profile,
                             command=args.verbosity_command,
@@ -2710,6 +2848,43 @@ def _main(argv: list[str] | None = None) -> int:
 
     effective_profile = resolve_profile_name(requested_profile, profiles_dir=profiles_dir)
 
+    if args.command == "discover":
+        profile = load_profile(effective_profile, workspace, profiles_dir=profiles_dir)
+        payload = _public_discover(profile)
+        output_format = resolve_output_format(
+            args.format,
+            profile=effective_profile,
+            command="discover",
+            path=local_config_path(),
+            default="text",
+        )
+        if output_format == "json":
+            print(_json(payload, indent=2, sort_keys=True))
+        else:
+            print(_public_discover_text(payload))
+        return 0
+
+    if args.command == "recommend":
+        profile = load_profile(effective_profile, workspace, profiles_dir=profiles_dir)
+        payload = HardwareManager(profile).recommend(include_not_recommended=args.include_not_recommended)
+        output_format = resolve_output_format(
+            args.format,
+            profile=effective_profile,
+            command="recommend",
+            path=local_config_path(),
+            default="text",
+        )
+        if output_format == "json":
+            print(_json(payload, indent=2, sort_keys=True))
+        else:
+            print(_public_recommend_text(payload))
+        return 0
+
+    if args.command == "export":
+        profile = load_profile(effective_profile, workspace, profiles_dir=profiles_dir)
+        _print_public_export(args, profile)
+        return 0
+
     if args.command == "doctor":
         profile = load_profile(effective_profile, workspace, profiles_dir=profiles_dir)
         payload = local_coding_doctor(profile, include_optional=args.include_optional)
@@ -2722,7 +2897,7 @@ def _main(argv: list[str] | None = None) -> int:
             print(_json(payload, indent=2, sort_keys=True))
         else:
             print(local_coding_doctor_text(payload))
-        return 0
+        return _doctor_exit_code(payload)
 
     if args.command == "run":
         profile = load_profile(effective_profile, workspace, profiles_dir=profiles_dir)
@@ -3343,6 +3518,92 @@ def _main(argv: list[str] | None = None) -> int:
             return int(completed.returncode)
         raise ValueError(f"unknown bridge command: {args.bridge_command}")
 
+    if args.command == "launch":
+        profile = load_profile(effective_profile, workspace, profiles_dir=profiles_dir)
+        plan = _launch_plan(profile, args.tool, model=args.model, app=args.app)
+        payload = {
+            "name": "launch_plan",
+            "tool": args.tool,
+            "profile": profile.name,
+            "dry_run": bool(args.dry_run),
+            **plan,
+        }
+        if args.dry_run:
+            payload["ok"] = True
+            print(_json(payload, indent=2))
+            return 0
+        executable = str(plan["command"][0]) if plan.get("command") else ""
+        if executable and not shutil.which(executable):
+            payload["ok"] = False
+            payload["reason"] = f"required executable not found on PATH: {executable}"
+            print(_json(payload, indent=2))
+            return 2
+        completed = subprocess.run(
+            [str(part) for part in plan["command"]],
+            cwd=workspace,
+            env=plan.get("env"),
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if completed.stdout:
+            print(completed.stdout, end="")
+        if completed.stderr:
+            print(completed.stderr, end="", file=sys.stderr)
+        payload["returncode"] = int(completed.returncode)
+        return int(completed.returncode)
+
+    if args.command == "session":
+        profile = load_profile(effective_profile, workspace, profiles_dir=profiles_dir)
+        launch_plan = _launch_plan(profile, args.tool, model=args.model, app=args.app)
+        session_id = _new_session_id()
+        transcript_path = _default_session_transcript(args.transcript, workspace, session_id)
+        payload = {
+            "name": "session_start",
+            "session_id": session_id,
+            "tool": args.tool,
+            "profile": profile.name,
+            "model": launch_plan["selection"]["name"],
+            "dry_run": bool(args.dry_run),
+            "transcript": str(transcript_path),
+            "launch": launch_plan,
+        }
+        if args.dry_run:
+            print(_json(payload, indent=2))
+            return 0
+        metadata_path = _session_metadata_path(workspace, session_id)
+        metadata_path.parent.mkdir(parents=True, exist_ok=True)
+        transcript_path.parent.mkdir(parents=True, exist_ok=True)
+        session_record = {
+            "name": "session_record",
+            "session_id": session_id,
+            "tool": args.tool,
+            "profile": profile.name,
+            "model": launch_plan["selection"]["name"],
+            "command": launch_plan["command"],
+            "transcript": str(transcript_path),
+            "created": datetime.now(timezone.utc).isoformat(),
+        }
+        metadata_path.write_text(_json(session_record, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        launch_event = AuditEvent(
+            event_type="session",
+            profile=profile.name,
+            action="session.start",
+            decision="allowed",
+            details={
+                "session_id": session_id,
+                "tool": args.tool,
+                "model": launch_plan["selection"]["name"],
+                "transcript": str(transcript_path),
+                "command": launch_plan["command"],
+                "selection": launch_plan["selection"],
+            },
+        )
+        AuditLogger(profile).record(launch_event)
+        payload["record"] = str(metadata_path)
+        print(_json(payload, indent=2))
+        return 0
+
     if args.command == "deploy":
         profile = load_profile(effective_profile, workspace, profiles_dir=profiles_dir)
         manager = DeployManager(profile)
@@ -3577,12 +3838,59 @@ def _main(argv: list[str] | None = None) -> int:
                     )
                 )
                 return 2
+            if args.runtimes_command in {"install", "update", "update-installed"} and platform.system() != "Linux":
+                print(
+                    _json(
+                        {
+                            "name": "runtime_helper_platform_unsupported",
+                            "runtime": args.runtime,
+                            "action": args.runtimes_command,
+                            "platform": platform.system(),
+                            "supported_platforms": ["Linux"],
+                            "reason": "aiplane runtime install helpers are not supported on this platform",
+                            "next_steps": [
+                                "Install the runtime with the platform-native installer.",
+                                "Use aiplane discover, doctor, recommend, and export after the runtime is installed.",
+                            ],
+                        },
+                        indent=2,
+                    )
+                )
+                return 2
+            install_reporter: _RuntimeInstallReporter | None = None
             if args.runtimes_command == "install" and not args.dry_run:
+                install_reporter = _RuntimeInstallReporter()
+                install_reporter.step(
+                    "checking prerequisites", command=f"internal: runtimes prerequisites {args.runtime}"
+                )
                 prerequisites = catalog.prerequisites(args.runtime)
                 if not prerequisites.get("ok"):
+                    install_reporter.complete(f"prerequisites failed: {args.runtime}")
                     print(_json(prerequisites, indent=2))
                     return 2
             substrate = _runtime_helper_substrate(profile, args.runtime, args.substrate)
+            helper_command = _provider_helper_command(
+                args.runtime,
+                helper_action,
+                effective_profile,
+                args.model,
+                substrate=substrate,
+                dry_run=args.dry_run,
+            )
+            if install_reporter:
+                install_reporter.step(f"running helper action: {helper_action}", command=helper_command)
+                preview = _run_provider_helper(
+                    args.runtime,
+                    helper_action,
+                    effective_profile,
+                    args.model,
+                    substrate=substrate,
+                    dry_run=True,
+                    profiles_dir=profiles_dir,
+                )
+                preview_command = _extract_helper_inner_command(preview)
+                if preview_command:
+                    install_reporter.step("running runtime install command", command=preview_command)
             completed = _run_provider_helper(
                 args.runtime,
                 helper_action,
@@ -3592,6 +3900,8 @@ def _main(argv: list[str] | None = None) -> int:
                 dry_run=args.dry_run,
                 profiles_dir=profiles_dir,
             )
+            if install_reporter:
+                install_reporter.complete(f"install finished (exit {completed.returncode}): {args.runtime}")
             if completed.stdout:
                 print(completed.stdout, end="")
             if completed.stderr:
@@ -3622,6 +3932,101 @@ def _main(argv: list[str] | None = None) -> int:
         return 0
 
     return 1
+
+
+def _launch_plan(
+    profile,
+    tool: str,
+    model: str | None = None,
+    app: str | None = None,
+) -> dict[str, object]:
+    if app and tool != "ollama":
+        raise ValueError("--app is only supported with --tool ollama")
+    manager = IntegrationManager(profile)
+    plan_args: dict[str, object] = {}
+    if tool == "continue":
+        if model:
+            plan_args["chat"] = model
+    elif tool == "ollama":
+        if model:
+            plan_args["model_name"] = model
+        plan_args["runtime"] = "ollama"
+    else:
+        if model:
+            plan_args["model_name"] = model
+    plan = manager.plan("openai-compatible" if tool == "ollama" else tool, **plan_args)
+    selections = plan.get("selection", {})
+    if not isinstance(selections, dict):
+        raise ValueError("integration plan did not include a selection map")
+    if tool == "continue":
+        selected = selections.get("chat")
+        if not isinstance(selected, dict):
+            raise ValueError("integration plan is missing continue chat selection")
+    else:
+        selected = selections.get("primary")
+        if not isinstance(selected, dict):
+            raise ValueError("integration plan is missing primary selection")
+
+    model_name = str(selected.get("name") or "")
+    if not model_name:
+        raise ValueError("selected model name is missing")
+
+    decision = PolicyEngine(profile).model_decision(model_name)
+    if not decision.allowed:
+        raise ValueError(f"launch blocked: {decision.reason}")
+
+    if tool == "ollama":
+        model_id = str(selected.get("model") or "")
+        command = ["ollama", "launch", model_id]
+        if app:
+            command.extend(["--app", app])
+        return {
+            "tool": tool,
+            "selection": selected,
+            "command": command,
+        }
+
+    if tool == "aider":
+        api_key_env = str(selected.get("api_key_env") or "")
+        model_id = str(selected.get("model") or "")
+        if not model_id:
+            raise ValueError("selected model has no model id")
+        command = ["aider", "--model", f"openai/{model_id}"]
+        launch_env: dict[str, str] = os.environ.copy()
+        launch_env["OPENAI_API_BASE"] = str(selected.get("endpoint") or "")
+        if api_key_env:
+            if api_key_env not in launch_env:
+                raise ValueError(f"required environment variable {api_key_env} for aider is not set")
+            launch_env[api_key_env] = os.environ.get(api_key_env, "")
+        return {
+            "tool": tool,
+            "selection": selected,
+            "command": command,
+            "env": launch_env,
+        }
+
+    if tool == "continue":
+        return {
+            "tool": tool,
+            "selection": selected,
+            "command": ["continue"],
+        }
+
+    raise ValueError(f"unsupported launch tool: {tool}")
+
+
+def _new_session_id() -> str:
+    return uuid.uuid4().hex
+
+
+def _default_session_transcript(transcript_arg: str | Path | None, workspace: Path, session_id: str) -> Path:
+    if transcript_arg:
+        return Path(transcript_arg).expanduser()
+    return workspace / ".aiplane" / "sessions" / f"{session_id}.log"
+
+
+def _session_metadata_path(workspace: Path, session_id: str) -> Path:
+    return workspace / ".aiplane" / "sessions" / f"{session_id}.json"
 
 
 def _runtime_helper_substrate(profile: object, runtime: str, override: str | None = None) -> str:
@@ -3664,6 +4069,30 @@ def _run_provider_helper(
     helper = Path(__file__).resolve().parents[2] / "scripts" / "provider_helper.sh"
     if not helper.exists():
         raise FileNotFoundError(f"provider helper not found: {helper}")
+    command = _provider_helper_command(runtime, action, profile, model, substrate=substrate, dry_run=dry_run)
+    env = None
+    if profiles_dir is not None:
+        env = os.environ.copy()
+        env["AIPLANE_PROFILES_DIR"] = str(profiles_dir)
+    return subprocess.run(
+        command,
+        cwd=helper.parents[1],
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+
+def _provider_helper_command(
+    runtime: str,
+    action: str,
+    profile: str,
+    model: str,
+    substrate: str = "native",
+    dry_run: bool = False,
+) -> list[str]:
+    helper = Path(__file__).resolve().parents[2] / "scripts" / "provider_helper.sh"
     command = [
         str(helper),
         "--provider",
@@ -3679,18 +4108,20 @@ def _run_provider_helper(
     ]
     if dry_run:
         command.append("--dry-run")
-    env = None
-    if profiles_dir is not None:
-        env = os.environ.copy()
-        env["AIPLANE_PROFILES_DIR"] = str(profiles_dir)
-    return subprocess.run(
-        command,
-        cwd=helper.parents[1],
-        env=env,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
+    return command
+
+
+def _extract_helper_inner_command(completed: subprocess.CompletedProcess[str]) -> str | None:
+    output = f"{completed.stdout}\n{completed.stderr}".splitlines()
+    for line in output:
+        stripped = line.strip()
+        if not stripped.startswith("+ "):
+            continue
+        command_text = stripped[2:].strip()
+        if "provider_helper.sh" in command_text:
+            continue
+        return command_text
+    return None
 
 
 def _profile_summary(profile, default_name: str | None = None) -> dict[str, object]:
@@ -4003,6 +4434,64 @@ class _AzCommandReporter:
             sys.stderr.flush()
 
 
+class _RuntimeInstallReporter:
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._has_status_line = False
+        self._dot_thread: threading.Thread | None = None
+        self._dot_stop: threading.Event | None = None
+
+    def step(self, message: str, command: str | list[str] | None = None) -> None:
+        self._stop_dot_line(clear_line=True)
+        if self._has_status_line:
+            self._write("\x1b[1A\r\x1b[2K")
+        if isinstance(command, list):
+            command_text = _redact_command_for_stderr([str(part) for part in command])
+        else:
+            command_text = str(command or "").strip()
+        if command_text:
+            self._write(f"[runtime] {message}: {command_text}\n")
+        else:
+            self._write(f"[runtime] {message}\n")
+        self._has_status_line = True
+        self._start_dot_line()
+
+    def complete(self, message: str) -> None:
+        self._stop_dot_line(clear_line=True)
+        if self._has_status_line:
+            self._write("\x1b[1A\r\x1b[2K")
+        self._write(f"[runtime] {message}\n")
+        self._has_status_line = False
+
+    def _start_dot_line(self) -> None:
+        stop = threading.Event()
+        self._dot_stop = stop
+        thread = threading.Thread(target=self._dot_worker, args=(stop,), daemon=True)
+        self._dot_thread = thread
+        thread.start()
+
+    def _dot_worker(self, stop: threading.Event) -> None:
+        while not stop.wait(2):
+            self._write(".")
+
+    def _stop_dot_line(self, clear_line: bool) -> None:
+        stop = self._dot_stop
+        thread = self._dot_thread
+        self._dot_stop = None
+        self._dot_thread = None
+        if stop:
+            stop.set()
+        if thread:
+            thread.join(timeout=3)
+        if clear_line:
+            self._write("\r\x1b[2K\r")
+
+    def _write(self, text: str) -> None:
+        with self._lock:
+            sys.stderr.write(text)
+            sys.stderr.flush()
+
+
 def _stderr_line_progress():
     longest = 0
 
@@ -4020,7 +4509,6 @@ def _stderr_line_progress():
         sys.stderr.flush()
 
     return progress
-
 
 
 def _runtimes_list_text(rows: list[dict[str, object]]) -> str:
@@ -4155,6 +4643,7 @@ def _hardware_show_text(payload: dict[str, object]) -> str:
         ]
     )
 
+
 def _environment_doctor_text(payload: dict[str, object]) -> str:
     summary = payload.get("summary", {}) if isinstance(payload.get("summary"), dict) else {}
     rows: list[dict[str, str]] = []
@@ -4245,6 +4734,190 @@ def _environment_doctor_text(payload: dict[str, object]) -> str:
     return "\n".join(lines)
 
 
+def _public_discover(profile) -> dict[str, object]:
+    catalog = ModelCatalog(profile)
+    models = catalog.models()
+    providers = catalog.providers()
+    defaults = catalog.defaults()
+    hardware = HardwareManager(profile).discover()
+    runtimes = RuntimeCatalog(profile).list(include_gui=True)
+    integrations = IntegrationManager(profile).list()
+    endpoints = [
+        {
+            "provider": name,
+            "endpoint": provider.get("endpoint"),
+            "enabled": bool(provider.get("enabled", True)),
+            "api_key_env": provider.get("api_key_env"),
+            "ownership": provider.get("ownership"),
+            "origin": provider.get("origin", "built_in"),
+        }
+        for name, provider in sorted(providers.items())
+        if isinstance(provider, dict) and (provider.get("endpoint") or provider.get("api_key_env"))
+    ]
+    local_models = [
+        {
+            "name": name,
+            "model": model.get("model"),
+            "provider": model.get("provider"),
+            "enabled": bool(model.get("enabled", True)),
+            "origin": "discovered_cache" if name in catalog.generated_config.get("models", {}) else "profile",
+        }
+        for name, model in sorted(models.items())
+        if isinstance(model, dict) and bool(model.get("local", False))
+    ]
+    return {
+        "name": "environment_discovery",
+        "profile": profile.name,
+        "read_only": True,
+        "hardware": hardware,
+        "runtimes": runtimes,
+        "local_models": local_models,
+        "endpoints": endpoints,
+        "coding_tools": integrations,
+        "defaults": defaults,
+        "provenance": _profile_provenance(
+            profile,
+            hardware=hardware,
+            runtimes=runtimes,
+            local_models=local_models,
+            endpoints=endpoints,
+            integrations=integrations,
+        ),
+        "next_command": f"aiplane doctor --profile {profile.name}",
+    }
+
+
+def _public_discover_text(payload: dict[str, object]) -> str:
+    provenance = payload.get("provenance") if isinstance(payload.get("provenance"), dict) else {}
+    summary = provenance.get("summary") if isinstance(provenance.get("summary"), dict) else {}
+    hardware = payload.get("hardware") if isinstance(payload.get("hardware"), dict) else {}
+    lines = [
+        f"aiplane discover for profile {payload.get('profile', 'unknown')}",
+        f"hardware: CPU={hardware.get('cpu_count', 'unknown')}; RAM={hardware.get('memory_gb', 'unknown')}GB; GPUs={len(hardware.get('gpus', []) or [])}",
+        f"runtimes: {len(payload.get('runtimes', []) or [])}; local_models: {len(payload.get('local_models', []) or [])}; endpoints: {len(payload.get('endpoints', []) or [])}; coding_tools: {len(payload.get('coding_tools', []) or [])}",
+        "configuration sources (counted records): "
+        f"detected={summary.get('detected_values', 0)}, "
+        f"built_in={summary.get('generated_values', 0)}, "
+        f"discovered_cache={summary.get('discovered_values', 0)}, "
+        f"profile_configured={summary.get('user_supplied_values', 0)}, "
+        f"unresolved={summary.get('unresolved_values', 0)}",
+        "",
+        f"next command: {payload.get('next_command')}",
+    ]
+    return "\n".join(lines)
+
+
+def _public_recommend_text(payload: dict[str, object]) -> str:
+    models = payload.get("models") if isinstance(payload.get("models"), dict) else {}
+    lines = ["aiplane recommend", "recommended:"]
+    recommended = models.get("recommended", []) if isinstance(models, dict) else []
+    if recommended:
+        for row in recommended[:8]:
+            if not isinstance(row, dict):
+                continue
+            lines.append(f"- {row.get('name')}: {row.get('reason')}")
+    else:
+        lines.append("- none")
+    usable = models.get("usable", []) if isinstance(models, dict) else []
+    remote = models.get("remote_or_cloud", []) if isinstance(models, dict) else []
+    lines.append(f"usable: {len(usable)}; remote_or_cloud: {len(remote)}")
+    lines.append("next command: aiplane export continue")
+    return "\n".join(lines)
+
+
+def _print_public_export(args, profile) -> None:
+    manager = IntegrationManager(profile)
+    if args.from_plan:
+        plan = json.loads(Path(args.from_plan).read_text(encoding="utf-8"))
+        exported = manager.export_from_plan(plan)
+    else:
+        exported = manager.export(
+            args.tool,
+            args.model,
+            endpoint=args.endpoint,
+            api_key_env=args.api_key_env,
+            provider=args.provider,
+            runtime=args.runtime,
+            capabilities=args.capability,
+            select_best=args.select_best,
+            chat=args.chat,
+            autocomplete=args.autocomplete,
+            embedding=args.embedding,
+        )
+    print(exported.content)
+    if exported.notes:
+        print("\n# Notes")
+        for note in exported.notes:
+            print(f"# - {note}")
+
+
+def _doctor_exit_code(payload: dict[str, object]) -> int:
+    summary = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
+    if int(summary.get("blocking", 0) or 0) > 0:
+        return 2
+    if int(summary.get("warnings", 0) or 0) > 0:
+        return 1
+    return 0
+
+
+def _profile_provenance(
+    profile,
+    *,
+    hardware: dict[str, object] | None = None,
+    runtimes: list[dict[str, object]] | None = None,
+    local_models: list[dict[str, object]] | None = None,
+    endpoints: list[dict[str, object]] | None = None,
+    integrations: list[dict[str, object]] | None = None,
+) -> dict[str, object]:
+    values: list[dict[str, object]] = []
+
+    def add(state: str, source: str, name: str, value: object) -> None:
+        values.append({"state": state, "source": source, "name": name, "value": value})
+
+    hardware = hardware or {}
+    if hardware.get("cpu_count") is not None:
+        add("detected", "hardware.discover", "hardware.cpu_count", hardware.get("cpu_count"))
+    if hardware.get("memory_gb") is not None:
+        add("detected", "hardware.discover", "hardware.memory_gb", hardware.get("memory_gb"))
+    for index, gpu in enumerate(hardware.get("gpus", []) or []):
+        if isinstance(gpu, dict):
+            add("detected", "hardware.discover", f"hardware.gpus.{index}", gpu.get("name") or gpu.get("vendor"))
+    for runtime in runtimes or []:
+        if isinstance(runtime, dict):
+            add("generated", "runtime_catalog", f"runtime.{runtime.get('name')}", runtime.get("protocol"))
+    for tool in integrations or []:
+        if isinstance(tool, dict):
+            add("generated", "integration_contracts", f"integration.{tool.get('name')}", tool.get("description"))
+    for model in local_models or []:
+        if isinstance(model, dict):
+            if model.get("origin") == "discovered_cache":
+                add("discovered", "models.discovered.yaml", f"model.{model.get('name')}", model.get("model"))
+            else:
+                add("user_supplied", "profile.models", f"model.{model.get('name')}", model.get("model"))
+    for endpoint in endpoints or []:
+        if isinstance(endpoint, dict):
+            state = "user_supplied" if endpoint.get("origin") == "profile" else "generated"
+            source = "profile.providers" if state == "user_supplied" else "provider_defaults"
+            add(state, source, f"endpoint.{endpoint.get('provider')}", endpoint.get("endpoint"))
+    defaults = profile.models.get("defaults", {}) if isinstance(profile.models, dict) else {}
+    if isinstance(defaults, dict):
+        for key, value in sorted(defaults.items()):
+            if value:
+                add("user_supplied", "profile.defaults", f"defaults.{key}", value)
+            else:
+                add("unresolved", "profile.defaults", f"defaults.{key}", value)
+    if not local_models:
+        add("unresolved", "profile.models", "local_models", "no local model aliases discovered or configured")
+    summary = {
+        "detected_values": sum(1 for row in values if row["state"] == "detected"),
+        "generated_values": sum(1 for row in values if row["state"] == "generated"),
+        "discovered_values": sum(1 for row in values if row["state"] == "discovered"),
+        "user_supplied_values": sum(1 for row in values if row["state"] == "user_supplied"),
+        "unresolved_values": sum(1 for row in values if row["state"] == "unresolved"),
+    }
+    return {"summary": summary, "values": values}
+
+
 def _bootstrap_local_profile(args, workspace: Path, profiles_dir: Path | None) -> dict[str, object]:
     root = profiles_root(profiles_dir)
     profile_path = root / args.name
@@ -4264,6 +4937,7 @@ def _bootstrap_local_profile(args, workspace: Path, profiles_dir: Path | None) -
     validation = None
     discovery = None
     hardware = None
+    provenance = None
     if profile_exists:
         profile = load_profile(args.name, workspace, profiles_dir=profiles_dir)
         validation = _validate_profile(profile)
@@ -4312,6 +4986,7 @@ def _bootstrap_local_profile(args, workspace: Path, profiles_dir: Path | None) -
                     progress("done", "", "")
             if isinstance(discovery, dict) and "results" in discovery:
                 discovery = refresh_cli_payload(discovery, verbosity=verbosity)
+        provenance = _public_discover(profile)["provenance"]
     elif not args.no_discovery or not args.no_hardware_discovery:
         skipped = "profile does not exist yet; rerun without --dry-run to create it before discovery"
         if not args.no_discovery:
@@ -4331,6 +5006,7 @@ def _bootstrap_local_profile(args, workspace: Path, profiles_dir: Path | None) -
         "discovery": discovery,
         "hardware_discovery_requested": not args.no_hardware_discovery,
         "hardware": hardware,
+        "provenance": provenance,
         "validation": validation,
         "next_steps": _profile_bootstrap_next_steps(args.name, not args.no_discovery, args.dry_run),
     }
@@ -4339,6 +5015,7 @@ def _bootstrap_local_profile(args, workspace: Path, profiles_dir: Path | None) -
 def _quickstart_local_coding(args, workspace: Path, profiles_dir: Path | None) -> dict[str, object]:
     bootstrap = _bootstrap_local_profile(args, workspace, profiles_dir)
     doctor_payload = None
+    recommendation_payload = None
     pull = None
     profile_path = Path(str(bootstrap.get("path", "")))
     profile = None
@@ -4355,6 +5032,7 @@ def _quickstart_local_coding(args, workspace: Path, profiles_dir: Path | None) -
                 profiles_dir=profiles_dir,
             )
         doctor_payload = local_coding_doctor(profile, include_optional=False)
+        recommendation_payload = HardwareManager(profile).recommend()
     elif args.pull_model:
         pull = {
             "name": "quickstart_model_pull",
@@ -4365,10 +5043,12 @@ def _quickstart_local_coding(args, workspace: Path, profiles_dir: Path | None) -
             "reason": "profile does not exist yet; rerun quickstart without --dry-run before pulling models",
         }
     commands = [
+        f"aiplane discover --profile {args.name}",
         f"aiplane doctor --profile {args.name}",
-        f"aiplane integrations export continue --profile {args.name}",
-        f"aiplane integrations export aider --profile {args.name}",
-        "aiplane mcp manifest",
+        f"aiplane recommend --profile {args.name}",
+        f"aiplane export continue --profile {args.name}",
+        f"aiplane export aider --profile {args.name}",
+        "aiplane export vscode-mcp",
     ]
     if args.pull_model:
         pull_runtime = (pull.get("runtime") if isinstance(pull, dict) else None) or args.pull_runtime or "RUNTIME"
@@ -4385,9 +5065,10 @@ def _quickstart_local_coding(args, workspace: Path, profiles_dir: Path | None) -
         "bootstrap": bootstrap,
         "pull": pull,
         "doctor": doctor_payload,
+        "recommend": recommendation_payload,
         "commands": commands,
         "notes": [
-            "This quickstart stays in the control-plane lane: it creates or previews a local profile, runs discovery/doctor checks, optionally delegates an explicit model pull, and prints export commands.",
+            "This quickstart stays in the environment-doctor workflow lane: it creates or previews a local profile, runs discovery/doctor checks, optionally delegates an explicit model pull, and prints export commands.",
             "Use --dry-run with --pull-model to preview the existing runtime helper pull path without pulling model weights.",
             "It does not install runtimes, edit IDE configuration, start cloud resources, or run an agent conversation.",
         ],

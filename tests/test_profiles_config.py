@@ -247,7 +247,9 @@ class ProfileConfigTests(unittest.TestCase):
             self.assertTrue(payload["bootstrap"]["would_create"])
             self.assertFalse((profiles_dir / "local-dev").exists())
             self.assertIn("aiplane quickstart local-coding --name local-dev", payload["commands"])
+            self.assertIn("aiplane discover --profile local-dev", payload["commands"])
             self.assertIn("aiplane doctor --profile local-dev", payload["commands"])
+            self.assertIn("aiplane recommend --profile local-dev", payload["commands"])
             self.assertIsNone(payload["doctor"])
 
     def test_quickstart_local_coding_text_lists_next_commands(self) -> None:
@@ -273,8 +275,74 @@ class ProfileConfigTests(unittest.TestCase):
             self.assertIn("local coding quickstart for profile local-dev", output)
             self.assertIn("profile validation: ok", output)
             self.assertIn("aiplane doctor --profile local-dev", output)
-            self.assertIn("aiplane integrations export continue --profile local-dev", output)
+            self.assertIn("aiplane export continue --profile local-dev", output)
             self.assertTrue((profiles_dir / "local-dev" / "models.yaml").exists())
+
+    def test_public_onboarding_commands_are_wired(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            profiles_dir = Path(tmp) / "profiles"
+            with redirect_stdout(StringIO()):
+                self.assertEqual(
+                    cli_main(
+                        [
+                            "--profiles-dir",
+                            str(profiles_dir),
+                            "quickstart",
+                            "local-coding",
+                            "--no-discovery",
+                            "--no-hardware-discovery",
+                            "--format",
+                            "json",
+                        ]
+                    ),
+                    0,
+                )
+
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                self.assertEqual(
+                    cli_main(
+                        ["--profiles-dir", str(profiles_dir), "discover", "--profile", "local-dev", "--format", "json"]
+                    ),
+                    0,
+                )
+            discover = json.loads(stdout.getvalue())
+            self.assertEqual(discover["name"], "environment_discovery")
+            self.assertIn("provenance", discover)
+            self.assertIn("detected_values", discover["provenance"]["summary"])
+            self.assertIn("discovered_values", discover["provenance"]["summary"])
+            self.assertEqual(discover["next_command"], "aiplane doctor --profile local-dev")
+
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                self.assertEqual(
+                    cli_main(["--profiles-dir", str(profiles_dir), "discover", "--profile", "local-dev"]),
+                    0,
+                )
+            discover_text = stdout.getvalue()
+            self.assertIn("configuration sources (counted records):", discover_text)
+            self.assertIn("built_in=", discover_text)
+            self.assertIn("discovered_cache=", discover_text)
+            self.assertIn("profile_configured=", discover_text)
+
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                self.assertEqual(
+                    cli_main(
+                        ["--profiles-dir", str(profiles_dir), "recommend", "--profile", "local-dev", "--format", "json"]
+                    ),
+                    0,
+                )
+            recommendation = json.loads(stdout.getvalue())
+            self.assertIn("models", recommendation)
+            self.assertIn("recommended", recommendation["models"])
+
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                self.assertEqual(
+                    cli_main(["--profiles-dir", str(profiles_dir), "export", "vscode-mcp", "--profile", "local-dev"]), 0
+                )
+            self.assertIn("mcp", stdout.getvalue().lower())
 
     def test_quickstart_local_coding_pull_model_executes_runtime_pull_by_default(
         self,
@@ -959,8 +1027,13 @@ class ProfileConfigTests(unittest.TestCase):
             cli_main(["--help"])
         self.assertEqual(raised.exception.code, 0)
         output = stdout.getvalue()
-        self.assertIn("Common flows", output)
+        self.assertIn("Primary workflow", output)
         self.assertIn("Configure, check, and connect", output)
+        self.assertIn("aiplane discover", output)
+        self.assertIn("aiplane quickstart local-coding", output)
+        self.assertIn("docs/project/command-coverage.md", output)
+        self.assertNotIn("aiplane launch --tool continue", output)
+        self.assertNotIn("aiplane session start --tool ollama", output)
         self.assertIn("hardware", output)
 
     def test_profiles_help_points_to_hardware_discovery_commands(self) -> None:
@@ -983,11 +1056,35 @@ class ProfileConfigTests(unittest.TestCase):
         self.assertIn("Override provider endpoint", output)
         self.assertIn("Endpoint examples", output)
 
+    def test_launch_and_session_help_mentions_command_shapes(self) -> None:
+        stdout = StringIO()
+        with redirect_stdout(stdout), self.assertRaises(SystemExit) as raised:
+            cli_main(["launch", "--help"])
+        self.assertEqual(raised.exception.code, 0)
+        output = stdout.getvalue()
+        self.assertIn("Launch a configured assistant tool", output)
+        self.assertIn("aiplane launch --tool aider --model fixture-chat-small", output)
+        self.assertIn("--tool", output)
+
+    def test_session_help_mentions_start_recording(self) -> None:
+        stdout = StringIO()
+        with redirect_stdout(stdout), self.assertRaises(SystemExit) as raised:
+            cli_main(["session", "start", "--help"])
+        self.assertEqual(raised.exception.code, 0)
+        output = stdout.getvalue()
+        self.assertIn("Start a minimal session metadata record", output)
+        self.assertIn("--tool", output)
+        self.assertIn("--transcript", output)
+
     def test_policy_allows_read_and_requires_write_approval(self) -> None:
         profile = load_profile("local-dev", Path.cwd())
         policy = PolicyEngine(profile)
-        self.assertFalse(policy.tool_decision("read_file").requires_approval)
-        self.assertTrue(policy.tool_decision("write_file").requires_approval)
+        read = policy.tool_decision("read_file")
+        write = policy.tool_decision("write_file")
+        self.assertFalse(read.requires_approval)
+        self.assertEqual(read.outcome, "allowed")
+        self.assertTrue(write.requires_approval)
+        self.assertEqual(write.outcome, "approval_required")
 
     def test_policy_explain_supports_new_policy_actions(self) -> None:
         profile = load_profile("local-dev", Path.cwd())
@@ -1000,11 +1097,11 @@ class ProfileConfigTests(unittest.TestCase):
         }
 
         policy = PolicyEngine(profile)
-        self.assertTrue(policy.explain("provider:ollama").allowed)
-        self.assertTrue(policy.explain("backend:cloud").allowed)
-        self.assertTrue(policy.explain("model:policy-demo").allowed)
-        self.assertFalse(policy.explain("provider:forbidden").allowed)
-        self.assertFalse(policy.explain("model:missing-model").allowed)
+        self.assertEqual(policy.explain("provider:ollama").outcome, "allowed")
+        self.assertEqual(policy.explain("backend:cloud").outcome, "allowed")
+        self.assertEqual(policy.explain("model:policy-demo").outcome, "allowed")
+        self.assertEqual(policy.explain("provider:forbidden").outcome, "blocked")
+        self.assertEqual(policy.explain("model:missing-model").outcome, "blocked")
 
     def test_policy_explain_cli_reports_allow_and_deny_decisions(self) -> None:
         stdout_allow = StringIO()
@@ -1013,6 +1110,7 @@ class ProfileConfigTests(unittest.TestCase):
         self.assertEqual(code, 0)
         payload = json.loads(stdout_allow.getvalue())
         self.assertTrue(payload["allowed"])
+        self.assertEqual(payload["outcome"], "allowed")
         self.assertEqual(payload["matched_rule"], "repository.allowed_providers")
 
         stdout_deny = StringIO()

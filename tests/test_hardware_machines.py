@@ -62,14 +62,16 @@ class HardwareMachineTests(unittest.TestCase):
     def test_hardware_show_cli_outputs_text_when_format_text(self) -> None:
         stdout = StringIO()
         with redirect_stdout(stdout):
-            code = cli_main([
-                "hardware",
-                "show",
-                "--profile",
-                "local-dev",
-                "--format",
-                "text",
-            ])
+            code = cli_main(
+                [
+                    "hardware",
+                    "show",
+                    "--profile",
+                    "local-dev",
+                    "--format",
+                    "text",
+                ]
+            )
         self.assertEqual(code, 0)
         rows = [line for line in stdout.getvalue().splitlines() if line.strip()]
         self.assertEqual(rows[0], "hardware show")
@@ -110,6 +112,7 @@ class HardwareMachineTests(unittest.TestCase):
     def test_hardware_closest_profiles_excludes_zero_score_gpu_templates(self) -> None:
         profile = load_profile("local-dev", Path.cwd())
         manager = HardwareManager(profile)
+
         discovered = {"gpus": [], "memory_gb": 64}
         closest = manager._closest_profiles(discovered)
         names = {row["name"] for row in closest}
@@ -232,6 +235,23 @@ class HardwareMachineTests(unittest.TestCase):
         scores = [row["capability_avg_score"] for row in result["models"]["recommended"]]
         self.assertEqual(scores, sorted(scores, reverse=True))
 
+    def test_hardware_recommend_includes_runtime_and_policy_metadata(self) -> None:
+        profile = load_profile("local-dev", Path.cwd())
+        result = HardwareManager(profile).recommend()
+        rows = [row for group in result["models"].values() for row in group]
+        local_rows = [
+            row
+            for row in rows
+            if row["runtime_compatibility_score"] >= 0 and row["runtime_compatibility"]["state"] != "not_applicable"
+        ]
+        self.assertTrue(local_rows)
+        sample = local_rows[0]
+        self.assertIn("runtime_compatibility", sample)
+        self.assertIn("runtime_compatibility_score", sample)
+        self.assertIn("runtime_recommendation", sample)
+        self.assertIn("policy_decision", sample)
+        self.assertIn("allowed", sample["policy_decision"])
+
     def test_hardware_recommend_can_include_not_recommended(self) -> None:
         profile = load_profile("local-dev", Path.cwd())
         result = HardwareManager(profile).recommend(include_not_recommended=True)
@@ -271,6 +291,186 @@ class HardwareMachineTests(unittest.TestCase):
         self.assertIn("cpu", active["machine"])
         self.assertIn("memory", active["machine"])
 
+    def test_hardware_recommendation_quality_matrix_is_deterministic(self) -> None:
+        source = load_profile("local-dev", Path.cwd())
+
+        def recommend_for(overrides: dict[str, object], mutate=None) -> dict[str, object]:
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                (root / "hardware.yaml").write_text("", encoding="utf-8")
+                profile = Profile(
+                    name="tmp",
+                    root=root,
+                    workspace=Path.cwd(),
+                    hardware=json.loads(json.dumps(source.hardware)),
+                    backends=source.backends,
+                    repository=json.loads(json.dumps(source.repository)),
+                    tools=source.tools,
+                    approvals=source.approvals,
+                    environment=source.environment,
+                    models=json.loads(json.dumps(source.models)),
+                    targets=source.targets,
+                )
+                profile.models["models"].setdefault("local-code-large", {})["enabled"] = True
+                profile.models["models"]["unsupported-runtime"] = {
+                    "provider": "ollama",
+                    "model": "unsupported-runtime:latest",
+                    "local": True,
+                    "enabled": True,
+                    "roles": ["chat"],
+                    "supported_runtimes": ["not-a-runtime"],
+                    "min_ram_gb": 1,
+                    "recommended_ram_gb": 1,
+                    "min_vram_gb": 0,
+                    "recommended_vram_gb": 0,
+                    "capabilities": {"scores": {"general_chat": 1}},
+                }
+                if mutate:
+                    mutate(profile)
+                manager = HardwareManager(profile)
+                manager.use_template("cloud_gpu_vm", overrides)
+                with patch(
+                    "aiplane.hardware.RuntimeCatalog.runtime_available",
+                    return_value={
+                        "name": "ollama",
+                        "available": False,
+                        "reason": "runtime is supported but not running on this runner",
+                        "endpoint": "http://localhost:11434",
+                    },
+                ):
+                    return manager.recommend(include_not_recommended=True)
+
+        cases = [
+            (
+                "cpu_only",
+                {"machine_tag": "cpu", "memory_gb": 64, "gpu_vendor": "none", "gpu_count": 0, "vram_gb": 0},
+                {"fixture-analysis-small"},
+                set(),
+                {"local-code-large", "unsupported-runtime"},
+            ),
+            (
+                "small_nvidia_gpu",
+                {
+                    "machine_tag": "small-nvidia",
+                    "memory_gb": 64,
+                    "gpu_vendor": "nvidia",
+                    "gpu_model": "RTX 4060",
+                    "gpu_count": 1,
+                    "vram_gb": 8,
+                },
+                {"fixture-analysis-small"},
+                set(),
+                {"local-code-large", "unsupported-runtime"},
+            ),
+            (
+                "nvidia_24gb",
+                {
+                    "machine_tag": "nvidia-24gb",
+                    "memory_gb": 128,
+                    "gpu_vendor": "nvidia",
+                    "gpu_model": "RTX 4090",
+                    "gpu_count": 1,
+                    "vram_gb": 24,
+                },
+                set(),
+                {"local-code-large"},
+                {"unsupported-runtime"},
+            ),
+            (
+                "nvidia_32gb",
+                {
+                    "machine_tag": "nvidia-32gb",
+                    "memory_gb": 128,
+                    "gpu_vendor": "nvidia",
+                    "gpu_model": "RTX 6000",
+                    "gpu_count": 1,
+                    "vram_gb": 32,
+                },
+                {"local-code-large"},
+                set(),
+                {"unsupported-runtime"},
+            ),
+            (
+                "amd_gpu",
+                {
+                    "machine_tag": "amd-gpu",
+                    "memory_gb": 128,
+                    "gpu_vendor": "amd",
+                    "gpu_model": "Radeon Pro",
+                    "gpu_count": 1,
+                    "vram_gb": 32,
+                },
+                {"local-code-large"},
+                set(),
+                {"unsupported-runtime"},
+            ),
+            (
+                "apple_unified_memory",
+                {
+                    "machine_tag": "apple-unified",
+                    "memory_gb": 96,
+                    "unified_memory_gb": 96,
+                    "gpu_vendor": "apple",
+                    "gpu_model": "Apple GPU",
+                    "gpu_count": 1,
+                    "vram_gb": 0,
+                },
+                {"fixture-analysis-small"},
+                set(),
+                {"unsupported-runtime"},
+            ),
+            (
+                "remote_gpu_endpoint",
+                {
+                    "machine_tag": "remote-gpu",
+                    "placement": "remote_workstation",
+                    "memory_gb": 256,
+                    "gpu_vendor": "nvidia",
+                    "gpu_model": "H100 NVL",
+                    "gpu_count": 1,
+                    "vram_gb": 94,
+                },
+                {"local-code-large"},
+                set(),
+                {"unsupported-runtime"},
+            ),
+        ]
+
+        for name, machine, recommended, usable, rejected in cases:
+            with self.subTest(name=name):
+                result = recommend_for(machine)
+                groups = result["models"]
+                self.assertTrue(groups["remote_or_cloud"], name)
+                recommended_names = {row["name"] for row in groups["recommended"]}
+                usable_names = {row["name"] for row in groups["usable"]}
+                rejected_names = {row["name"] for row in groups["not_recommended"]}
+                self.assertTrue(recommended <= recommended_names, name)
+                self.assertTrue(usable <= usable_names, name)
+                self.assertTrue(rejected <= rejected_names, name)
+                for row in groups["recommended"]:
+                    self.assertIn("reason", row)
+                    self.assertIn("runtime_compatibility", row)
+                    self.assertNotEqual(row["policy_decision"]["outcome"], "blocked")
+
+        def restrict_ollama(profile: Profile) -> None:
+            profile.repository["allowed_providers"] = ["openai"]
+
+        restricted = recommend_for(
+            {
+                "machine_tag": "policy-restricted",
+                "memory_gb": 128,
+                "gpu_vendor": "nvidia",
+                "gpu_model": "RTX 6000",
+                "gpu_count": 1,
+                "vram_gb": 48,
+            },
+            mutate=restrict_ollama,
+        )
+        recommended_names = {row["name"] for row in restricted["models"]["recommended"]}
+        rejected_rows = {row["name"]: row for row in restricted["models"]["not_recommended"]}
+        self.assertNotIn("local-code-large", recommended_names)
+        self.assertEqual(rejected_rows["local-code-large"]["policy_decision"]["outcome"], "blocked")
+
     def test_hardware_recommend_uses_custom_active_machine(self) -> None:
         source = load_profile("local-dev", Path.cwd())
         with tempfile.TemporaryDirectory() as tmp:
@@ -290,20 +490,31 @@ class HardwareMachineTests(unittest.TestCase):
                 targets=source.targets,
             )
             manager = HardwareManager(profile)
+            profile.models["models"]["local-code-large"]["enabled"] = True
+
             manager.use_template(
                 "cloud_gpu_vm",
                 {
                     "machine_tag": "azure_h100_test",
                     "provider": "azure",
                     "stock_sku": "Standard_NC40ads_H100_v5",
-                    "memory_gb": 320,
+                    "memory_gb": 256,
                     "gpu_vendor": "nvidia",
                     "gpu_model": "H100 NVL",
                     "gpu_count": 1,
                     "vram_gb": 94,
                 },
             )
-            result = manager.recommend()
+            with patch(
+                "aiplane.hardware.RuntimeCatalog.runtime_available",
+                return_value={
+                    "name": "ollama",
+                    "available": False,
+                    "reason": "runtime is supported but not running on this runner",
+                    "endpoint": "http://localhost:11434",
+                },
+            ):
+                result = manager.recommend()
             self.assertEqual(result["machine"]["stock"]["machine_tag"], "azure_h100_test")
             self.assertEqual(result["machine"]["gpu"]["vram_gb"], 94)
             recommended_names = {row["name"] for row in result["models"]["recommended"]}

@@ -27,6 +27,7 @@ class Decision:
     requires_approval: bool = False
     reason: str = ""
     matched_rule: str = ""
+    outcome: str = "allowed"
 
 
 @dataclass

@@ -74,64 +74,64 @@ aiplane profiles list
 aiplane environment doctor --required-only
 ```
 
-Alternative flows are supported for local Python, venv, Docker CLI images, and static installs; use `scripts/setup_env.sh --help` for supported modes.
+Because the installer is sourced, it activates the `aiplane` Conda environment
+in the current shell after installation. Conda is the recommended flow here;
+local Python, `venv`, Docker CLI images, and static installs are also supported.
+Use `scripts/setup_env.sh --help` for those modes.
 
-If you already have the package installed:
+After installation, create the editable `profiles/local-dev/` profile used by
+the CLI. It contains the local hardware, provider, model, runtime, tool, policy,
+and environment configuration. This safe first-run form keeps an existing
+profile, detects local hardware, validates the profile, and skips provider model
+catalog queries:
 
 ```bash
-PYTHONPATH=src python -m aiplane profiles bootstrap-local --no-discovery
+aiplane profiles bootstrap-local --no-overwrite --no-discovery
 ```
 
-When you want per-machine local defaults:
+To run that same command directly from a repository checkout without installing
+the package, expose the `src/` directory to Python explicitly:
+
+```bash
+PYTHONPATH=src python -m aiplane profiles bootstrap-local --no-overwrite --no-discovery
+```
+
+Local CLI preferences are separate and optional. The following creates the
+ignored `.aiplane/config.yaml`, where you can set the default profile, output
+format, verbosity, and custom paths; it does not create a profile or discover
+hardware or models:
 
 ```bash
 aiplane config init --template local
 aiplane config show
 ```
 
-## Quick start flow
+## Core onboarding flow
 
-Use this when you want to evaluate the project end-to-end:
+Use this when you want the first useful flow with minimal complexity:
+
+```bash
+aiplane discover
+aiplane doctor
+aiplane recommend
+aiplane export
+```
+
+The single-command equivalent is:
 
 ```bash
 aiplane quickstart local-coding
-# preview only
-
 aiplane quickstart local-coding --dry-run
-# add a model pull only when you choose one alias
+aiplane quickstart local-coding --dry-run --pull-model MODEL_ALIAS
 aiplane quickstart local-coding --pull-model MODEL_ALIAS
-
-aiplane doctor
-aiplane doctor --format json
-
-aiplane profiles show --selected
 ```
 
-`quickstart local-coding` builds a local profile baseline, runs a readiness doctor when possible, and prints the next deterministic commands.
-Model pulls remain opt-in and can always be previewed with `--dry-run`.
+This path is designed to detect local hardware, runtimes, model catalog state,
+endpoint setup status, and role mappings, report configuration sources (detected, built-in, provider-discovered cache, profile-configured, and unresolved records), and then print the next concrete export commands. Doctor findings include severity, impact, remediation command metadata, mutability, and dry-run support where action is needed.
 
-### Common workflow
+Command categories are explicit in [command coverage](docs/project/command-coverage.md): core commands lead onboarding, supporting commands troubleshoot specific subsystems, and deferred commands stay out of the public beta path unless a scope review moves them.
 
-```bash
-# 1) discover candidates
-
-aiplane providers list
-aiplane models refresh --provider huggingface --query text-generation --dry-run
-
-aiplane models list --group-by ownership --enabled-only
-
-# 2) stage runnable setup (explicitly)
-aiplane runtimes install ollama --dry-run
-aiplane integrations roles continue
-
-aiplane runtimes pull ollama --model MODEL_ALIAS --dry-run
-
-# 3) export and run
-aiplane integrations export continue --model MODEL_ALIAS
-aiplane integrations export vscode-mcp
-aiplane chat --model MODEL_ALIAS --dry-run
-```
-
+### Extended common workflow
 ## Execution tracks
 
 The current project direction is organized into three execution tracks:
@@ -181,10 +181,20 @@ More command detail in:
 Before relying on a branch for demos or review, run:
 
 ```bash
-conda run -n aiplane scripts/check.sh
-# and a representative smoke set for your area
-PYTHONPATH=src python -m pytest tests/test_* -k "smoke or critical"
+# Full format, lint, and test gate
+scripts/check.sh
+
+# Fast format, lint, and synthetic contract checks
+scripts/check.sh quick
 ```
+
+Run the scripts from an environment where the project development dependencies
+are installed, such as the activated Conda environment or `venv`. The scripts
+use that environment's `python` executable. If you do not want to activate a
+Conda environment first, you can select it explicitly with
+`conda run --no-capture-output -n aiplane scripts/check.sh`. Use
+`scripts/format.sh check` to check formatting only, or `scripts/format.sh fix`
+to apply formatting fixes.
 
 Use [command coverage](docs/project/command-coverage.md), [strategy](docs/project/strategy.md), and [session handoff](docs/project/session-handoff.md) to keep behavior, docs, and tests synchronized.
 

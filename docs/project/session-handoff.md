@@ -2,38 +2,33 @@
 
 This file is the short resume point for future `aiplane` development sessions. Use it together with [Agent Guidance](agent-guidance.md), [Project Roadmap](roadmap.md), [Strategy](strategy.md), and [Command Coverage](command-coverage.md).
 
+
 ## Current Milestone
 
-**Team Policy and Governance** is now the active milestone.
+**Current target: Milestone 1 (External Beta Readiness)**
 
-Policy is the focus this cycle.
-- `policy explain` and doctor surfaces now define what is allowed, what is blocked, and what operator action is required.
-- Policy readiness is aligned with stack role/tool-policy checks, and risky tool permissions are explicit.
-- Scope remains bounded: aiplane stays a control plane and never becomes a coding runtime/chat UI/agent executor.
-- Remote workflow behavior stays stable while policy and escalation visibility is hardened for the next milestone.
+Must
 
-Scope anchor: `aiplane` remains the control plane, not the coding agent, full chat UI, model runtime, general proxy, cloud platform, IDE extension, or infrastructure-tool replacement. Changing that direction is allowed only if the strategy and roadmap explicitly authorize a course change.
+1. Completed: top-level `aiplane discover` coverage and execution for the public onboarding flow.
+2. Completed: `aiplane quickstart local-coding` now carries discovery provenance and prints the public core command sequence.
+3. Completed: discovery/bootstrap output now distinguishes detected, built-in, provider-discovered cache, profile-configured, and unresolved provenance records.
+4. Completed: blocking/advisory doctor findings now include structured remediation command metadata, impact, mutability, and dry-run support fields.
+5. Add deterministic, reproducible exports for Continue, Aider, Cline, Zed, OpenAI-compatible, and MCP clients.
+6. Implement recommendation test matrix and deterministic ranking.
+7. Completed: public onboarding has top-level `discover`, `doctor`, `recommend`, and `export` commands with help text and tests.
+8. Validate clean onboarding on multiple environments and classify failures.
 
+Should
 
-## Product Boundary
+1. Completed for current behavior: policy decisions now expose stable `allowed`, `approval_required`, and `blocked` outcomes; temporary approvals and audited overrides remain future governance work.
+2. Completed: user docs are split by maturity with Start here, Common workflows, and Advanced concepts sections, and command examples call out mutating-state behavior and verifiable outcomes.
 
-`aiplane` is a control-plane CLI for AI model development environments (self-managed and managed). It configures and checks profiles, providers, models, runtimes, machines, stacks, tools, credentials references, IDE/MCP snippets, and supporting workflows.
+Scope freeze until sprint targets complete:
 
-It should not become a coding agent, model runtime, general model proxy, IDE extension, or hidden cloud deployment engine.
+- No new orchestrators, cloud providers, benchmark frameworks, or runtime types.
+- Priority remains onboarding determinism, actionability, provenance, deterministic exports, and clean-machine evidence.
 
-## Local Direction Notes
-
-If `docs/project/.strategy/` exists, read it before roadmap, strategy, release-readiness, or positioning changes. It is intentionally gitignored local context and should not be copied into tracked public docs unless the human owner explicitly asks.
-
-## Recent Repository Event
-
-The GitHub history was rewritten to remove sensitive tracked planning files from earlier history. As part of the beta-hardening milestone, clean public versions of the core project planning docs were restored in the current working tree:
-
-- `docs/project/strategy.md`
-- `docs/project/roadmap.md`
-- `docs/project/session-handoff.md`
-
-These restored docs are public-facing contributor context and intentionally avoid private business/financial positioning.
+## Current Public Status
 
 ## Current Public Status
 
@@ -68,31 +63,31 @@ Known in-progress areas:
 Latest checks from this session:
 
 ```bash
-PYTHONPATH=src python -m aiplane profiles validate local-dev
-PYTHONPATH=src python -m aiplane environment doctor --required-only
-PYTHONPATH=src python -m aiplane environment doctor --required-only --format json
-PYTHONPATH=src python -m aiplane quickstart local-coding --dry-run --no-discovery
-PYTHONPATH=src python -m aiplane quickstart local-coding --dry-run --no-discovery --format json
-PYTHONPATH=src python -m aiplane quickstart local-coding --dry-run --no-discovery --pull-model MODEL_ALIAS
-PYTHONPATH=src python -m aiplane doctor --profile local-dev
-PYTHONPATH=src python -m aiplane doctor --profile local-dev --format json
-PYTHONPATH=src python -m aiplane config format
-PYTHONPATH=src python -m aiplane hardware show --list-types
-PYTHONPATH=src python -m pytest -q
-PYTHONPATH=src python -m aiplane tools matrix
-PYTHONPATH=src python -m aiplane tools plan opentofu
-PYTHONPATH=src python -m aiplane agents templates
-PYTHONPATH=src python -m aiplane stacks list
-PYTHONPATH=src python -m aiplane models list
-PYTHONPATH=src python -m aiplane models clear-cache --dry-run
-PYTHONPATH=src python -m aiplane deploy workflow-plan --target azure_gpu_vm
-PYTHONPATH=src python -m aiplane deploy apply --target azure_gpu_vm
-PYTHONPATH=src python -m aiplane models refresh --provider huggingface --query text-to-video --dry-run --verbosity 2 --limit 2
-PYTHONPATH=src python -m pytest -q tests/test_models_providers.py tests/test_runtimes_execution.py tests/test_integrations_chat.py -k "models_list_and_defaults_support_grouping or managed_service_models_do_not_mix_into_runtime_groups or model_catalog_cloud_doctor_checks_env_var or runtime_catalog_maps_sources_and_models or integrations_export_continue_uses_planner_constraints"
-PYTHONPATH=src python -m aiplane models list --profile local-dev --group-by provider-kind
-PYTHONPATH=src python -m aiplane models list --profile local-dev --group-by runtime
-PYTHONPATH=src python -m pytest tests/test_models_providers.py -q -k "models_add or models_clone or models_promote"
-conda run -n aiplane scripts/check.sh
+python -m aiplane profiles validate local-dev
+python -m aiplane environment doctor --required-only
+python -m aiplane environment doctor --required-only --format json
+python -m aiplane quickstart local-coding --dry-run --no-discovery
+python -m aiplane quickstart local-coding --dry-run --no-discovery --format json
+python -m aiplane quickstart local-coding --dry-run --no-discovery --pull-model MODEL_ALIAS
+python -m aiplane doctor --profile local-dev
+python -m aiplane doctor --profile local-dev --format json
+python -m aiplane config format
+python -m aiplane hardware show --list-types
+python -m pytest -q
+python -m aiplane tools matrix
+python -m aiplane tools plan opentofu
+python -m aiplane agents templates
+python -m aiplane stacks list
+python -m aiplane models list
+python -m aiplane models clear-cache --dry-run
+python -m aiplane deploy workflow-plan --target azure_gpu_vm
+python -m aiplane deploy apply --target azure_gpu_vm
+python -m aiplane models refresh --provider huggingface --query text-to-video --dry-run --verbosity 2 --limit 2
+python -m pytest -q tests/test_models_providers.py tests/test_runtimes_execution.py tests/test_integrations_chat.py -k "models_list_and_defaults_support_grouping or managed_service_models_do_not_mix_into_runtime_groups or model_catalog_cloud_doctor_checks_env_var or runtime_catalog_maps_sources_and_models or integrations_export_continue_uses_planner_constraints"
+python -m aiplane models list --profile local-dev --group-by provider-kind
+python -m aiplane models list --profile local-dev --group-by runtime
+python -m pytest tests/test_models_providers.py -q -k "models_add or models_clone or models_promote"
+conda run --no-capture-output -n aiplane scripts/check.sh
 ```
 
 Results:
@@ -102,7 +97,7 @@ Results:
 - JSON environment doctor passed with mandatory tools installed and runtime prerequisite rows for Ollama and vLLM.
 - `aiplane quickstart local-coding --dry-run --no-discovery` passed in JSON and text modes, previewing the local profile bootstrap and printing the doctor/export/MCP command sequence without writing profile files; quickstart model pulls are opt-in with `--pull-model MODEL_ALIAS` once a profile-owned or discovered alias exists, and `--dry-run --pull-model MODEL_ALIAS` previews without pulling model weights.
 - Top-level `aiplane doctor --profile local-dev` passed in text and JSON modes. It is read-only and summarizes profile status, required/optional environment checks, configured model defaults with provider/endpoint details, selected role-default endpoint readiness, active hardware and role-model fit, provider readiness, Continue/Aider role capability readiness, MCP manifest and local AI read-surface readiness, and next safe steps.
-- Latest local gate passed after explicit test imports, focused fixture split, and local doctor coverage: `scripts/check.sh` completed with formatter check, Ruff lint, and `306 passed, 3 subtests passed in 64.55s`. Runtime helper subprocesses now receive `AIPLANE_PROFILES_DIR` for custom profile roots. The original `tests/test_mvp.py` monolith is now a legacy pointer; MVP coverage lives in focused domain modules with shared setup in `tests/support.py`, `tests/profile_fixtures.py`, and `tests/http_fixtures.py`. Earlier full-gate baselines reported `253 passed` before the chat/task behavior tests and split.
+- The full suite now uses a session-scoped copy of shipped profile templates plus synthetic model fixtures, never the ignored local provider-discovery cache; external network access remains blocked. The Conda run passed `334 tests in 38.62s`, down from `119.85s` with the developer cache loaded. `scripts/check.sh quick` passed formatting, lint, and 6 synthetic contract tests in `0.11s` of pytest time. Runtime helper subprocesses receive `AIPLANE_PROFILES_DIR` for custom profile roots.
 - `tools matrix` passed and reported `16` tools, `2` mandatory, `14` optional, `11` installable by `aiplane`, `7` exports available, and `9` workflow categories: `4` complete, `1` partial, and `4` needing setup on this machine.
 - `tools plan opentofu` passed and reported OpenTofu as optional/manual with non-mutating IaC plan guidance.
 - `models list` returned an empty list for the clean structural profile template until discovery or local model entries are added.
@@ -145,6 +140,8 @@ Orchestrator support now has stack role metadata over reviewed model aliases and
 
 ## Next Useful Work
 
-1. Finish the remote-workstation onboarding documentation pass and align it with the public demo plan sequence.
-2. Keep policy/risk behavior regressions visible: blocked cloud-policy and disallowed-provider-path tests are now covered in `tests/test_stacks_orchestrators.py`; extend coverage next to remote-workstation policy surfaces.
-3. Keep docs/tests/command-coverage synchronized before the feature-freeze gate.
+1. Must: run the clean-machine onboarding trial commands from `docs/project/public-demo-plan.md` across the six Priority 9 environments and classify each failure.
+2. Must: finish the remote-workstation onboarding documentation pass and align it with the public demo workflow sequence.
+3. Must: keep policy/risk behavior regressions visible: expand blocked cloud-policy and disallowed-provider coverage beyond current stack tests.
+4. Should: keep docs/tests/command-coverage synchronized before feature-freeze gates.
+

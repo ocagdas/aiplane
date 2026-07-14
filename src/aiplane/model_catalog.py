@@ -5,6 +5,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
+from urllib.error import URLError
 
 from .backends import (
     AnthropicMessagesBackend,
@@ -1310,8 +1311,11 @@ class ModelCatalog:
 
     def doctor(self) -> list[ModelStatus]:
         statuses = []
+        provider_probe_cache: dict[
+            tuple[str, str, tuple[tuple[str, str], ...]], tuple[bool, str, list[str] | None]
+        ] = {}
         for name, model in self.models().items():
-            statuses.append(self._status(name, model))
+            statuses.append(self._status(name, model, provider_probe_cache))
         return statuses
 
     def pull(self, name: str) -> str:
@@ -1556,7 +1560,12 @@ class ModelCatalog:
             )
         return self.complete(name, prompt)
 
-    def _status(self, name: str, model: dict[str, Any]) -> ModelStatus:
+    def _status(
+        self,
+        name: str,
+        model: dict[str, Any],
+        provider_probe_cache: dict[tuple[str, str, tuple[tuple[str, str], ...]], tuple[bool, str, list[str] | None]],
+    ) -> ModelStatus:
         provider_name = str(model.get("provider", ""))
         provider = self.providers().get(provider_name, {})
         if not bool(model.get("enabled", True)):
@@ -1575,14 +1584,13 @@ class ModelCatalog:
                     f"missing env var {provider.get('api_key_env')}",
                 )
             backend = self._ollama_backend(provider_name)
-            reachable, reason = backend.is_reachable()
+            probe_key = self._provider_probe_cache_key(provider_name, backend.endpoint, backend.headers)
+            reachable, reason, available = provider_probe_cache.get(probe_key) or self._probe_ollama_backend(backend)
+            provider_probe_cache.setdefault(probe_key, (reachable, reason, available))
             if not reachable:
                 return ModelStatus(name, provider_name, True, False, reason)
             model_id = str(model.get("model", ""))
-            try:
-                pulled = model_id in backend.available_models()
-            except Exception as exc:  # pragma: no cover - defensive after reachability check
-                return ModelStatus(name, provider_name, True, False, str(exc))
+            pulled = model_id in (available or [])
             return ModelStatus(
                 name,
                 provider_name,
@@ -1597,14 +1605,14 @@ class ModelCatalog:
             if not bool(provider.get("enabled", True)):
                 return ModelStatus(name, provider_name, True, False, "provider is disabled")
             backend = self._openai_compatible_backend(provider_name, model)
-            reachable, reason = backend.is_reachable()
+            probe_key = self._provider_probe_cache_key(provider_name, backend.endpoint, backend.headers)
+            reachable, reason, available = provider_probe_cache.get(probe_key) or self._probe_openai_compatible_backend(
+                backend
+            )
+            provider_probe_cache.setdefault(probe_key, (reachable, reason, available))
             if not reachable:
                 return ModelStatus(name, provider_name, True, False, reason)
             model_id = str(model.get("model", ""))
-            try:
-                available = backend.available_models()
-            except Exception as exc:  # pragma: no cover - defensive after reachability check
-                return ModelStatus(name, provider_name, True, False, str(exc))
             usable = not available or model_id in available
             return ModelStatus(
                 name,
@@ -1658,6 +1666,34 @@ class ModelCatalog:
         if not credential_ref and key_env and not os.environ.get(str(key_env)):
             return f"missing env var {key_env}"
         return None
+
+    @staticmethod
+    def _provider_probe_cache_key(
+        provider_name: str, endpoint: str, headers: dict[str, Any]
+    ) -> tuple[str, str, tuple[tuple[str, str], ...]]:
+        return (
+            provider_name,
+            endpoint,
+            tuple(sorted((str(key), str(value)) for key, value in headers.items())),
+        )
+
+    @staticmethod
+    def _probe_ollama_backend(backend: OllamaBackend) -> tuple[bool, str, list[str] | None]:
+        try:
+            available = backend.available_models()
+            return True, "Ollama is reachable", available
+        except (URLError, TimeoutError, OSError, ConnectionError) as exc:
+            return False, f"Ollama is not reachable: {exc}", None
+
+    @staticmethod
+    def _probe_openai_compatible_backend(
+        backend: OpenAICompatibleBackend,
+    ) -> tuple[bool, str, list[str] | None]:
+        try:
+            available = backend.available_models()
+            return True, "OpenAI-compatible endpoint is reachable", available
+        except (URLError, TimeoutError, OSError, ConnectionError) as exc:
+            return False, f"OpenAI-compatible endpoint is not reachable: {exc}", None
 
 
 def capability_profile(model: dict[str, Any]) -> dict[str, Any]:

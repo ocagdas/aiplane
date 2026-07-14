@@ -42,7 +42,7 @@ Run focused tests for the area you changed, then run the full check before openi
 ```bash
 conda run -n aiplane python -m pytest tests/test_contracts.py -q
 conda run -n aiplane python -m pytest tests/test_mvp.py -k "keyword_for_your_change" -q
-conda run -n aiplane scripts/check.sh
+conda run --no-capture-output -n aiplane scripts/check.sh
 ```
 
 The full check runs formatting, linting, and tests.
@@ -76,7 +76,7 @@ A good PR should include:
 - a clear description of the change;
 - focused tests for behavior or regressions;
 - documentation updates when user-facing behavior changes;
-- the result of `conda run -n aiplane scripts/check.sh`;
+- the result of `conda run --no-capture-output -n aiplane scripts/check.sh`;
 - notes about any intentionally deferred work.
 
 Keep changes scoped. Avoid unrelated refactors in the same PR.

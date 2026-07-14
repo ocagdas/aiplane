@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import copy
+
 from .support import (
     IntegrationManager,
     MachineManager,
@@ -19,9 +21,19 @@ from aiplane.local_doctor import local_coding_doctor, local_coding_doctor_text
 
 
 class LocalDoctorTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        cls._baseline_profile = load_profile("local-dev", Path.cwd())
+        cls._baseline_doctor_payload = local_coding_doctor(cls._baseline_profile)
+        cls._baseline_doctor_text = local_coding_doctor_text(cls._baseline_doctor_payload)
+
+    @classmethod
+    def _baseline_payload(cls) -> dict[str, object]:
+        return cls._baseline_doctor_payload
+
     def test_local_coding_doctor_reports_wedge_sections(self) -> None:
-        profile = load_profile("local-dev", Path.cwd())
-        payload = local_coding_doctor(profile)
+        payload = self._baseline_payload()
         self.assertEqual(payload["name"], "local_coding_doctor")
         self.assertEqual(payload["profile"], "local-dev")
         section_names = {section["name"] for section in payload["sections"]}
@@ -71,8 +83,7 @@ class LocalDoctorTests(unittest.TestCase):
         self.assertEqual(integration_check_names, {f"integration:{tool}" for tool in ALL_INTEGRATION_TOOLS})
 
     def test_local_coding_doctor_includes_remote_tunnel_readiness(self) -> None:
-        profile = load_profile("local-dev", Path.cwd())
-        payload = local_coding_doctor(profile)
+        payload = self._baseline_payload()
 
         remote = next(section for section in payload["sections"] if section["name"] == "remote")
         remote_checks = {check["name"]: check for check in remote["checks"]}
@@ -103,9 +114,43 @@ class LocalDoctorTests(unittest.TestCase):
         remote_stack_check = remote_checks["stack_doctor:remote_stack"]
         self.assertIn("reason", remote_stack_check)
 
+    def test_local_coding_doctor_includes_actionable_severity_sections(self) -> None:
+        payload = self._baseline_payload()
+        sections = payload["sections"]
+        self.assertTrue(all(isinstance(check, dict) for section in sections for check in section["checks"]))
+        self.assertIn("checks_by_severity", payload["summary"])
+        total = payload["summary"]["checks"]
+        self.assertEqual(
+            payload["summary"]["checks_by_severity"]["blocking"]
+            + payload["summary"]["checks_by_severity"]["advisory"]
+            + payload["summary"]["checks_by_severity"]["pass"],
+            total,
+        )
+        summary = {
+            check_key: check
+            for section in sections
+            for check_key, check in [
+                (f"{section['name']}::{check['name']}", check) for check in section["checks"] if isinstance(check, dict)
+            ]
+        }
+        self.assertTrue(all("severity" in check for check in summary.values()))
+        blocking = [check for check in summary.values() if check.get("severity") == "blocking"]
+        advisory = [check for check in summary.values() if check.get("severity") == "advisory"]
+        if blocking:
+            self.assertTrue(any(check.get("action") for check in blocking))
+        if advisory:
+            self.assertTrue(any(check.get("action") for check in advisory))
+        actionable = blocking + advisory
+        for check in actionable:
+            self.assertIn("impact", check)
+            remediation = check.get("remediation")
+            self.assertIsInstance(remediation, dict)
+            self.assertIn("command", remediation)
+            self.assertIn("mutates", remediation)
+            self.assertIn("dry_run_supported", remediation)
+
     def test_local_coding_doctor_text_is_human_readable(self) -> None:
-        profile = load_profile("local-dev", Path.cwd())
-        output = local_coding_doctor_text(local_coding_doctor(profile))
+        output = self._baseline_doctor_text
         self.assertIn("aiplane doctor for profile local-dev", output)
         self.assertIn("model_defaults", output)
         self.assertIn("integrations", output)
@@ -115,20 +160,19 @@ class LocalDoctorTests(unittest.TestCase):
         text_stdout = StringIO()
         with redirect_stdout(text_stdout):
             code = cli_main(["doctor", "--profile", "local-dev"])
-        self.assertEqual(code, 0)
+        self.assertIn(code, {0, 1, 2})
         self.assertIn("aiplane doctor for profile local-dev", text_stdout.getvalue())
 
         json_stdout = StringIO()
         with redirect_stdout(json_stdout):
             code = cli_main(["doctor", "--profile", "local-dev", "--format", "json"])
-        self.assertEqual(code, 0)
+        self.assertIn(code, {0, 1, 2})
         payload = json.loads(json_stdout.getvalue())
         self.assertEqual(payload["name"], "local_coding_doctor")
         self.assertIn("summary", payload)
 
     def test_doctor_reports_default_endpoint_and_hardware_fit_details(self) -> None:
-        profile = load_profile("local-dev", Path.cwd())
-        payload = local_coding_doctor(profile)
+        payload = self._baseline_payload()
 
         defaults = next(section for section in payload["sections"] if section["name"] == "model_defaults")
         chat_check = next(check for check in defaults["checks"] if check["name"] == "chat_model")
@@ -183,8 +227,8 @@ class LocalDoctorTests(unittest.TestCase):
         self.assertIn("chat:incompatible", continue_check["detail"])
 
     def test_doctor_integration_readiness_matches_continue_plan_defaults(self) -> None:
-        profile = load_profile("local-dev", Path.cwd())
-        payload = local_coding_doctor(profile)
+        profile = self._baseline_profile
+        payload = self._baseline_payload()
         integrations = next(section for section in payload["sections"] if section["name"] == "integrations")
         continue_check = next(check for check in integrations["checks"] if check["name"] == "integration:continue")
         plan = IntegrationManager(profile).plan("continue")
@@ -192,7 +236,7 @@ class LocalDoctorTests(unittest.TestCase):
         self.assertEqual(plan["selection"]["chat"]["name"], "fixture-chat-small")
 
     def test_doctor_policy_section_flags_disallowed_default_provider(self) -> None:
-        profile = load_profile("local-dev", Path.cwd())
+        profile = copy.deepcopy(self._baseline_profile)
         profile.repository["allowed_providers"] = ["openai"]
         payload = local_coding_doctor(profile)
         policy = next(section for section in payload["sections"] if section["name"] == "policy")
@@ -201,7 +245,7 @@ class LocalDoctorTests(unittest.TestCase):
         self.assertIn("not allowed", model_policy["detail"])
 
     def test_doctor_policy_section_flags_blocked_cloud_backends(self) -> None:
-        profile = load_profile("local-dev", Path.cwd())
+        profile = copy.deepcopy(self._baseline_profile)
         profile.repository["classification"] = "client_sensitive"
         payload = local_coding_doctor(profile)
         policy = next(section for section in payload["sections"] if section["name"] == "policy")

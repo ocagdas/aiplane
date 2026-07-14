@@ -606,7 +606,14 @@ def add_models_parser(
     models_benchmark.add_argument("name", help="Model alias to benchmark")
 
 
-def handle_models_command(args: argparse.Namespace, *, profile: Profile, json_dumps: JsonDumps, output_format: str | None = None, output_verbosity: int | None = None) -> int:
+def handle_models_command(
+    args: argparse.Namespace,
+    *,
+    profile: Profile,
+    json_dumps: JsonDumps,
+    output_format: str | None = None,
+    output_verbosity: int | None = None,
+) -> int:
     catalog = ModelCatalog(profile)
     if args.models_command == "defaults":
         summary = catalog.default_summary()
@@ -879,8 +886,6 @@ def handle_models_command(args: argparse.Namespace, *, profile: Profile, json_du
     result = catalog.test_prompt(args.name, args.task, target, dry_run=args.dry_run)
     print(result.text)
     return 0
-
-
 
 
 def _models_list_text(rows: list[dict[str, object]]) -> str:
