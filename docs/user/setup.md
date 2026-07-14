@@ -61,6 +61,28 @@ When an official Python package index publication is enabled, the corresponding 
 
 The portable profile, doctor, recommendation, and export surface is supported on Linux, macOS, and Windows and is validated from the built wheel in CI. Runtime install/update helpers remain limited to native Ubuntu/Debian; see [Platform support](platform-support.md).
 
+## Local source-checkout wheel snapshot
+
+Contributors can build a local wheel without creating a release tag or committing generated artifacts:
+
+```bash
+python scripts/build_local_wheel.py --clean
+# or
+make wheel-local
+```
+
+The output goes under `.aiplane/wheelhouse/`, which is ignored by git. It contains the wheel, `SHA256SUMS`, and `provenance.json`. This is a local snapshot for testing the wheel install path from the current checkout. It is not a CI artifact and not a GitHub Release artifact. The wheel uses the tracked base version from `pyproject.toml` plus PEP 440 local metadata containing the current Git short SHA and UTC timestamp, for example `0.1.0+gabc1234.20260714t153000z`; if the working tree is dirty, provenance records `version_source: local_dirty_checkout`.
+
+Install the local wheel with one owner:
+
+```bash
+python -m pip install --force-reinstall .aiplane/wheelhouse/aiplane-VERSION-py3-none-any.whl
+pipx install --force .aiplane/wheelhouse/aiplane-VERSION-py3-none-any.whl
+uv tool install --force .aiplane/wheelhouse/aiplane-VERSION-py3-none-any.whl
+```
+
+Use `python scripts/build_local_wheel.py --clean --validate-pip` when you want the same pip-channel smoke validation used by CI for the built artifact.
+
 ## Source-checkout install modes
 
 Install modes:

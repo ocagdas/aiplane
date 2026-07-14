@@ -220,6 +220,7 @@ def verify_cli(command: Path, *, env: dict[str, str], workspace: Path) -> None:
 
     verify_platform_contracts(cli, system=platform.system())
 
+
 def verify_pip(wheel: Path, root: Path) -> None:
     venv = root / "pip-venv"
     run([sys.executable, "-m", "venv", str(venv)])

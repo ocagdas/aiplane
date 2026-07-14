@@ -119,6 +119,17 @@ You can tune clean-mode inputs with these variables:
 make test-clean TEST_PROFILE_TEMPLATE=local-dev TEST_PROFILE_NAME=ci-test
 ```
 
+### Local Wheel Snapshot
+
+Build an ignored wheel from the current checkout when you want to test installed-wheel behavior locally without publishing, tagging, or committing artifacts:
+
+```bash
+make wheel-local
+python scripts/build_local_wheel.py --clean --validate-pip
+```
+
+Artifacts are written to `.aiplane/wheelhouse/` with `SHA256SUMS` and `provenance.json`. The wheel uses the tracked `pyproject.toml` base version plus PEP 440 local metadata with the current Git short SHA and UTC timestamp, for example `0.1.0+gabc1234.20260714t153000z`; provenance distinguishes clean and dirty local checkouts.
+
 ### Make Targets and Test Coverage
 
 - `make format`: format only (no tests)

@@ -23,6 +23,9 @@ lint:
 
 check: format lint test-clean
 
+wheel-local:
+	$(PYTHON) scripts/build_local_wheel.py --clean
+
 install-hooks:
 	mkdir -p .githooks
 	if [ ! -f .githooks/pre-push ]; then \
@@ -33,4 +36,4 @@ install-hooks:
 	printf 'Installed pre-push hook to .git/hooks/pre-push (from .githooks/pre-push).\n'
 	printf 'Override: export AIPLANE_PREPUSH_MODE=backup|fast|off (default=full).\n'
 
-.PHONY: test test-clean format lint check install-hooks
+.PHONY: test test-clean format lint check wheel-local install-hooks

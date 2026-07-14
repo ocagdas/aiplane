@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Version tag to publish, for example v0.1.0"
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -14,41 +20,72 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+          fetch-depth: 0
+
+      - name: Classify tag
+        id: tag
+        run: |
+          tag="${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}"
+          echo "name=$tag" >> "$GITHUB_OUTPUT"
+          contents="$(git for-each-ref "refs/tags/$tag" --format='%(contents)')"
+          if printf '%s\n' "$contents" | grep -q '\[ci-artifact\]'; then
+            echo "ci_artifact=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ci_artifact=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Skip CI artifact tag
+        if: ${{ steps.tag.outputs.ci_artifact == 'true' && github.event_name != 'workflow_dispatch' }}
+        run: echo "${{ steps.tag.outputs.name }} is a CI artifact tag; skipping public GitHub Release publication."
 
       - name: Set up Python
+        if: ${{ steps.tag.outputs.ci_artifact != 'true' || github.event_name == 'workflow_dispatch' }}
         uses: actions/setup-python@v5
         with:
           python-version: "3.13"
           cache: pip
 
       - name: Set up uv
+        if: ${{ steps.tag.outputs.ci_artifact != 'true' || github.event_name == 'workflow_dispatch' }}
         uses: astral-sh/setup-uv@v6
 
       - name: Install build and validation tools
+        if: ${{ steps.tag.outputs.ci_artifact != 'true' || github.event_name == 'workflow_dispatch' }}
         run: python -m pip install build pipx setuptools==83.0.0 -e ".[dev]"
 
       - name: Run full quality gate
+        if: ${{ steps.tag.outputs.ci_artifact != 'true' || github.event_name == 'workflow_dispatch' }}
         run: scripts/check.sh
 
       - name: Require tag to match package version
-        run: python -c 'import os, tomllib, pathlib; version = tomllib.loads(pathlib.Path("pyproject.toml").read_text())["project"]["version"]; tag = os.environ["GITHUB_REF_NAME"]; assert tag == f"v{version}", f"tag {tag} does not match package version {version}"'
+        if: ${{ steps.tag.outputs.ci_artifact != 'true' || github.event_name == 'workflow_dispatch' }}
+        run: python -c 'import os, tomllib, pathlib; version = tomllib.loads(pathlib.Path("pyproject.toml").read_text())["project"]["version"]; tag = os.environ["RELEASE_TAG"]; assert tag == f"v{version}", f"tag {tag} does not match package version {version}"'
+        env:
+          RELEASE_TAG: ${{ steps.tag.outputs.name }}
 
       - name: Build wheel and source distribution
+        if: ${{ steps.tag.outputs.ci_artifact != 'true' || github.event_name == 'workflow_dispatch' }}
         run: python -m build
 
       - name: Build and verify SHA-256 manifest
+        if: ${{ steps.tag.outputs.ci_artifact != 'true' || github.event_name == 'workflow_dispatch' }}
         run: |
           cd dist
           sha256sum aiplane-* > SHA256SUMS
           sha256sum --check SHA256SUMS
 
       - name: Validate wheel through every install channel
+        if: ${{ steps.tag.outputs.ci_artifact != 'true' || github.event_name == 'workflow_dispatch' }}
         run: python scripts/verify_install_channels.py dist
 
       - name: Require versioned release notes
-        run: test -f "docs/project/releases/$GITHUB_REF_NAME.md"
+        if: ${{ steps.tag.outputs.ci_artifact != 'true' || github.event_name == 'workflow_dispatch' }}
+        run: test -f "docs/project/releases/${{ steps.tag.outputs.name }}.md"
 
       - name: Publish GitHub Release artifacts
+        if: ${{ steps.tag.outputs.ci_artifact != 'true' || github.event_name == 'workflow_dispatch' }}
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" dist/* --title "aiplane $GITHUB_REF_NAME" --notes-file "docs/project/releases/$GITHUB_REF_NAME.md" --verify-tag
+        run: gh release create "${{ steps.tag.outputs.name }}" dist/* --title "aiplane ${{ steps.tag.outputs.name }}" --notes-file "docs/project/releases/${{ steps.tag.outputs.name }}.md" --verify-tag

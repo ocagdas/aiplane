@@ -345,9 +345,9 @@ def test_release_workflow_is_checksummed_versioned_and_quality_gated() -> None:
     assert "run: scripts/check.sh" in workflow
     assert "sha256sum aiplane-* > SHA256SUMS" in workflow
     assert "sha256sum --check SHA256SUMS" in workflow
-    assert "docs/project/releases/$GITHUB_REF_NAME.md" in workflow
-    assert '--notes-file "docs/project/releases/$GITHUB_REF_NAME.md"' in workflow
-    assert 'gh release create "$GITHUB_REF_NAME"' in workflow
+    assert "docs/project/releases/${{ steps.tag.outputs.name }}.md" in workflow
+    assert '--notes-file "docs/project/releases/${{ steps.tag.outputs.name }}.md"' in workflow
+    assert 'gh release create "${{ steps.tag.outputs.name }}"' in workflow
     assert notes.is_file()
     assert f"# aiplane v{version}" in notes.read_text(encoding="utf-8")
     for text in (notes.read_text(encoding="utf-8"), setup, process):
@@ -396,19 +396,33 @@ def test_every_demo_timeline_step_has_exact_commands_and_spoken_narration() -> N
         assert "> " in section, match.group(1)
 
 
-def test_successful_main_merge_uploads_a_versioned_provenance_bound_wheel() -> None:
+def test_successful_main_merge_versions_tags_and_uploads_a_bound_wheel() -> None:
     workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
+    release = Path(".github/workflows/release.yml").read_text(encoding="utf-8")
     documentation = Path("docs/project/ci-wheel-artifacts.md").read_text(encoding="utf-8")
-    job = workflow.split("  merged-wheel:", 1)[1]
 
-    assert "github.event_name == 'push'" in job
-    assert "github.ref == 'refs/heads/main'" in job
-    assert "needs: [release-gate]" in job
-    assert "python -m build --wheel --outdir artifacts" in job
-    assert "python scripts/verify_install_channels.py artifacts --channel pip" in job
-    assert "sha256sum --check SHA256SUMS" in job
-    assert '"$GITHUB_SHA"' in job
-    assert "uses: actions/upload-artifact@v4" in job
-    assert "aiplane-wheel-v${{ steps.version.outputs.value }}-${{ github.sha }}" in job
-    assert "retention-days: 30" in job
+    assert "classify-main-push:" in workflow
+    assert "github.event_name == 'push' && github.ref == 'refs/heads/main'" in workflow
+    assert "python scripts/version.py classify-ci --github-output" in workflow
+    assert "ci-version-bump-and-tag:" in workflow
+    assert "needs.classify-main-push.outputs.mode == 'ci_patch_after_merge'" in workflow
+    assert "python scripts/version.py set" in workflow
+    assert "[skip ci-version]" in workflow
+    assert "python scripts/version.py tag --ci-artifact" in workflow
+    assert "git push origin HEAD:main" in workflow
+    assert "git push origin" in workflow
+    assert "direct-version-tag:" in workflow
+    assert "needs.classify-main-push.outputs.mode == 'maintainer_direct_main_version_commit'" in workflow
+    assert "main-versioned-wheel:" in workflow
+    assert "python -m build --wheel --outdir artifacts" in workflow
+    assert "python scripts/verify_install_channels.py artifacts --channel pip" in workflow
+    assert "sha256sum --check SHA256SUMS" in workflow
+    assert "uses: actions/upload-artifact@v4" in workflow
+    assert (
+        "aiplane-wheel-v${{ steps.resolved.outputs.version }}-${{ steps.resolved.outputs.tag }}-${{ steps.resolved.outputs.version_commit }}"
+        in workflow
+    )
+    assert "retention-days: 30" in workflow
+    assert "ci-artifact" in release
+    assert "skipping public GitHub Release publication" in release
     assert "not immutable public releases" in documentation
