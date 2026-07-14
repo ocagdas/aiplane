@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import sys
 
 from .models import Decision
@@ -13,11 +12,7 @@ class ApprovalHandler:
     def approve(self, action: str, decision: Decision) -> bool:
         if not decision.requires_approval:
             return True
-        if self.assume_yes or os.environ.get("AIPLANE_APPROVE", "").lower() in {
-            "1",
-            "true",
-            "yes",
-        }:
+        if self.assume_yes:
             return True
         if not sys.stdin.isatty():
             return False

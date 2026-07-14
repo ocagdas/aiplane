@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from aiplane import cli_presenters
+
 from .support import (
     HardwareManager,
     MachineManager,
@@ -8,7 +10,6 @@ from .support import (
     StringIO,
     agent_config,
     cli_main,
-    cli_module,
     create_profile,
     json,
     load_profile,
@@ -834,7 +835,7 @@ class HardwareMachineTests(unittest.TestCase):
             self.assertIn('"id": "[redacted]"', verbose_progress)
 
     def test_az_command_progress_redacts_sensitive_command_values(self) -> None:
-        rendered = cli_module._redact_command_for_stderr(
+        rendered = cli_presenters._redact_command_for_stderr(
             [
                 "az",
                 "vm",

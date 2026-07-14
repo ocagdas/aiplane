@@ -90,7 +90,7 @@ conda run --no-capture-output -n aiplane scripts/check.sh
 
 Results:
 
-- CLI ownership restructuring is complete: `cli_public.py`, `cli_execution.py`, `cli_providers.py`, and `cli_runtimes.py` now own their parser and dispatch contracts. `cli.py` decreased from 3,171 to 1,570 lines and acts as the composition/shared-helper root; an architecture contract prevents command dispatch from drifting back into it.
+- CLI ownership restructuring is complete: `cli_public.py`, `cli_execution.py`, `cli_providers.py`, and `cli_runtimes.py` now own their parser and dispatch contracts. `cli.py` decreased from 3,171 to 456 lines and is now limited to parser composition and command dispatch. Launch/session planning, profile views/validation, presentation/progress reporting, and public onboarding workflows have focused owners; architecture contracts prevent those responsibilities from drifting back into the root.
 
 - Python 3.12 clean-wheel CI now installs the pinned `setuptools==83.0.0` backend through the dev extra. This satisfies the packaging test's deliberate `--no-build-isolation` contract instead of relying on runner-preinstalled build tooling.
 
@@ -160,3 +160,9 @@ Orchestrator support now has stack role metadata over reviewed model aliases and
 3. Must: keep policy/risk behavior regressions visible: expand blocked cloud-policy and disallowed-provider coverage beyond current stack tests.
 4. Should: keep docs/tests/command-coverage synchronized before feature-freeze gates.
 
+
+## July 2026 Safety and Structure Review
+
+The persistent prioritized register is
+[Code Quality and Safety Review — July 2026](code-quality-review-2026-07.md).
+SEC-1 and ARCH-1 are complete. SEC-1 focused tests cover non-TTY denial without mutation, explicit per-invocation `--yes`, read-only execution, passthrough arguments, and audit denial. ARCH-1 reduces `cli.py` from 1,570 to 456 lines with dedicated launch, profile, presenter, and public-workflow modules plus structural drift tests. Validation: focused suite 89 passed, quick gate 14 passed, full suite 349 passed.

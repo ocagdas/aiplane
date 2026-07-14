@@ -360,7 +360,7 @@ class ProfileConfigTests(unittest.TestCase):
             )
             stdout = StringIO()
             with (
-                patch("aiplane.cli._run_provider_helper", return_value=completed) as helper,
+                patch("aiplane.cli_public_workflows._run_provider_helper", return_value=completed) as helper,
                 redirect_stdout(stdout),
             ):
                 code = cli_main(
@@ -424,7 +424,7 @@ class ProfileConfigTests(unittest.TestCase):
             )
             stdout = StringIO()
             with (
-                patch("aiplane.cli._run_provider_helper", return_value=completed) as helper,
+                patch("aiplane.cli_public_workflows._run_provider_helper", return_value=completed) as helper,
                 redirect_stdout(stdout),
             ):
                 code = cli_main(

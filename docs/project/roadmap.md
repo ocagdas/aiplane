@@ -461,7 +461,7 @@ The roadmap is now actively executing the priorities above; completed work in ea
 ### Post-Merge Foundation
 
 1. **Architecture and codebase cleanup** - Implemented
-   - `src/aiplane/cli.py` delegates every command family to focused parser/dispatch owners, including public onboarding, execution/session, providers, and runtimes. The composition root decreased from 3,171 to 1,570 lines while preserving one public `aiplane` entrypoint.
+   - `src/aiplane/cli.py` delegates every command family to focused owners and is limited to parser composition and dispatch. Launch/session planning, profile views/validation, presentation/progress reporting, and public onboarding workflows live in dedicated modules. The root decreased from 3,171 to 456 lines while preserving one public `aiplane` entrypoint.
    - Shared CLI parsing/progress helpers live outside the monolithic CLI so provider refresh, profile bootstrap, hardware/machine/stack settings, and future command modules do not duplicate low-level parsing behavior.
    - Model filter parser choices and MCP schema choices are shared definitions; integration roles are shared contracts. Keep moving shared definitions only where they prevent drift.
    - Keep shell helpers as thin delegates to official tools; avoid growing provider-specific business logic in Bash when Python catalog/runtime code already owns the decision.
@@ -561,3 +561,11 @@ The roadmap is now actively executing the priorities above; completed work in ea
 - Implementing model inference engines inside `aiplane`.
 - Becoming a general model proxy competing with LiteLLM/OpenRouter-style tools.
 - Hidden IDE policy bypasses or direct model edits without review.
+
+### Repository Safety Review Register
+
+The prioritized July 2026 code-quality and safety findings are tracked in
+[Code Quality and Safety Review — July 2026](code-quality-review-2026-07.md).
+SEC-1 is implemented: `aiplane tool` no longer assumes approval; risky operations
+require an interactive confirmation or explicit per-invocation `--yes`, while
+read-only tools remain non-interactive.

@@ -60,10 +60,15 @@ def add_execution_parsers(
         subparsers,
         "tool",
         "Run a configured local tool with approval checks",
-        "Execute a configured tool through aiplane policy, workspace, and audit checks.",
-        "Examples:\n  aiplane tool read_file README.md\n  aiplane tool write_file note.txt hello",
+        "Execute a configured tool through aiplane policy, workspace, approval, and audit checks. Risky tools prompt on an interactive terminal and fail closed otherwise unless --yes is explicit.",
+        "Examples:\n  aiplane tool read_file README.md\n  aiplane tool --yes write_file note.txt hello",
     )
     profile_arg(tool)
+    tool.add_argument(
+        "--yes",
+        action="store_true",
+        help="Approve this invocation non-interactively when profile policy requires approval; place before TOOL",
+    )
     tool.add_argument("tool_name", help="Configured tool name, such as read_file or write_file")
     tool.add_argument(
         "tool_args",
@@ -401,7 +406,11 @@ def handle_execution_command(
 
     if args.command == "tool":
         profile = load_profile(effective_profile, workspace, profiles_dir=profiles_dir)
-        output = ToolExecutor(profile, AuditLogger(profile), ApprovalHandler(True)).run(args.tool_name, args.tool_args)
+        output = ToolExecutor(
+            profile,
+            AuditLogger(profile),
+            ApprovalHandler(assume_yes=args.yes),
+        ).run(args.tool_name, args.tool_args)
         print(output)
         return 0
 

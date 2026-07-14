@@ -229,3 +229,20 @@ python -m aiplane integrations plan continue --select-best --runtime ollama
 - `docs/user/providers.md`: provider setup/discovery helpers.
 - `docs/project/development.md`: dependency, test, and contributor workflows.
 - `docs/project/strategy.md`: product strategy and roadmap.
+
+## CLI Architecture
+
+`src/aiplane/cli.py` is the composition root: it builds the parser, resolves global
+workspace/profile context, and dispatches to command-family handlers. Domain and
+presentation behavior belongs outside that root:
+
+- `cli_launch_support.py` owns launch plans and session paths/identifiers.
+- `cli_profile_support.py` owns profile summaries, selected views, and validation.
+- `cli_presenters.py` owns text rendering, progress output, and Azure output redaction.
+- `cli_public_workflows.py` owns discovery, bootstrap, and quickstart orchestration.
+- `cli_<family>.py` modules own each command family's parser and dispatch contract.
+
+Keep external effects behind injectable boundaries and patch the module that owns a
+behavior in tests. The architecture contract in `tests/test_contracts.py` limits the
+composition root to fewer than 500 lines and prevents extracted responsibilities
+from being reintroduced there.

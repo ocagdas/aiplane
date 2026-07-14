@@ -80,11 +80,31 @@ def test_aiplane_skill_is_versioned_and_not_template_text() -> None:
 
 def test_cli_command_families_are_owned_outside_composition_root() -> None:
     root = Path("src/aiplane/cli.py").read_text(encoding="utf-8")
-    for module in ("cli_public.py", "cli_execution.py", "cli_providers.py", "cli_runtimes.py"):
+    for module in (
+        "cli_public.py",
+        "cli_execution.py",
+        "cli_providers.py",
+        "cli_runtimes.py",
+        "cli_launch_support.py",
+        "cli_profile_support.py",
+        "cli_presenters.py",
+        "cli_public_workflows.py",
+    ):
         assert (Path("src/aiplane") / module).is_file()
     for command in ("discover", "quickstart", "run", "code", "providers", "runtimes"):
         assert f'if args.command == "{command}"' not in root
-    assert len(root.splitlines()) < 1600
+    assert len(root.splitlines()) < 500
+    for helper in (
+        "_launch_plan",
+        "_validate_profile",
+        "_AzCommandReporter",
+        "_hardware_show_text",
+        "_public_discover",
+        "_bootstrap_local_profile",
+        "_quickstart_local_coding",
+    ):
+        assert f"def {helper}" not in root
+        assert f"class {helper}" not in root
 
 
 def test_dev_dependencies_include_no_isolation_build_backend() -> None:
