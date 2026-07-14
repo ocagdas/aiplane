@@ -428,8 +428,8 @@ def test_successful_main_merge_versions_tags_and_uploads_a_bound_wheel() -> None
         assert "uses: actions/setup-python@v6" in workflow_text
         assert "uses: actions/checkout@v4" not in workflow_text
         assert "uses: actions/setup-python@v5" not in workflow_text
-    assert "uses: astral-sh/setup-uv@v8" in workflow
-    assert "uses: astral-sh/setup-uv@v8" in release
+    assert "uses: astral-sh/setup-uv@v8.3.2" in workflow
+    assert "uses: astral-sh/setup-uv@v8.3.2" in release
     assert "uses: astral-sh/setup-uv@v6" not in workflow
     assert "uses: astral-sh/setup-uv@v6" not in release
     assert "uses: actions/upload-artifact@v7" in workflow
