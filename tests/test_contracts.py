@@ -78,6 +78,15 @@ def test_aiplane_skill_is_versioned_and_not_template_text() -> None:
     assert Path("skills/aiplane/agents/openai.yaml").is_file()
 
 
+def test_cli_command_families_are_owned_outside_composition_root() -> None:
+    root = Path("src/aiplane/cli.py").read_text(encoding="utf-8")
+    for module in ("cli_public.py", "cli_execution.py", "cli_providers.py", "cli_runtimes.py"):
+        assert (Path("src/aiplane") / module).is_file()
+    for command in ("discover", "quickstart", "run", "code", "providers", "runtimes"):
+        assert f'if args.command == "{command}"' not in root
+    assert len(root.splitlines()) < 1600
+
+
 def test_dev_dependencies_include_no_isolation_build_backend() -> None:
     project = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
     dev_dependencies = project["project"]["optional-dependencies"]["dev"]

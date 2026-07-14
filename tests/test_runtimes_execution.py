@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from aiplane.cli import _RuntimeInstallReporter
+from aiplane.cli_runtimes import _RuntimeInstallReporter
 
 from .support import (
     AuditLogger,
@@ -34,7 +34,7 @@ from .support import (
 class RuntimeExecutionTests(unittest.TestCase):
     def test_runtime_install_helper_rejects_non_linux_platforms(self) -> None:
         stdout = StringIO()
-        with patch("aiplane.cli.platform.system", return_value="Darwin"), redirect_stdout(stdout):
+        with patch("aiplane.cli_runtimes.platform.system", return_value="Darwin"), redirect_stdout(stdout):
             code = cli_main(["runtimes", "install", "ollama", "--dry-run"])
         self.assertEqual(code, 2)
         payload = json.loads(stdout.getvalue())
@@ -978,8 +978,8 @@ exit 0
 
         with (
             patch("aiplane.runtime_catalog.shutil.which", return_value="/usr/bin/fake"),
-            patch("aiplane.cli._run_provider_helper", side_effect=_slow_helper),
-            patch("aiplane.cli._RuntimeInstallReporter", lambda: _RuntimeInstallReporter(0.01)),
+            patch("aiplane.cli_runtimes._run_provider_helper", side_effect=_slow_helper),
+            patch("aiplane.cli_runtimes._RuntimeInstallReporter", lambda: _RuntimeInstallReporter(0.01)),
             redirect_stdout(stdout),
             redirect_stderr(stderr),
         ):
@@ -1053,7 +1053,7 @@ exit 0
         profile.models["providers"]["ollama"]["substrate"] = "docker"
         stdout = StringIO()
         with (
-            patch("aiplane.cli.load_profile", return_value=profile),
+            patch("aiplane.cli_runtimes.load_profile", return_value=profile),
             redirect_stdout(stdout),
         ):
             code = cli_main(["runtimes", "start", "--profile", "local-dev", "ollama", "--dry-run"])

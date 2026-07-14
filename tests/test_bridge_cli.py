@@ -53,7 +53,7 @@ class BridgeCliTests(unittest.TestCase):
     def test_bridge_exec_runs_allowlisted_command(self) -> None:
         stdout = StringIO()
         with (
-            patch("aiplane.cli.shutil.which", return_value="/usr/bin/ollama"),
+            patch("aiplane.cli_execution.shutil.which", return_value="/usr/bin/ollama"),
             patch(
                 "aiplane.boundaries.subprocess.run",
                 return_value=subprocess.CompletedProcess(
@@ -127,7 +127,7 @@ class BridgeCliTests(unittest.TestCase):
                 ):
                     stdout = StringIO()
                     with (
-                        patch("aiplane.cli.shutil.which", return_value="/usr/bin/continue"),
+                        patch("aiplane.cli_execution.shutil.which", return_value="/usr/bin/continue"),
                         patch(
                             "aiplane.boundaries.subprocess.run",
                             return_value=subprocess.CompletedProcess(
@@ -165,7 +165,7 @@ class BridgeCliTests(unittest.TestCase):
                 ):
                     stdout = StringIO()
                     with (
-                        patch("aiplane.cli.shutil.which", return_value=None),
+                        patch("aiplane.cli_execution.shutil.which", return_value=None),
                         patch("aiplane.boundaries.subprocess.run") as run,
                         redirect_stdout(stdout),
                     ):

@@ -461,7 +461,7 @@ The roadmap is now actively executing the priorities above; completed work in ea
 ### Post-Merge Foundation
 
 1. **Architecture and codebase cleanup** - Implemented
-   - `src/aiplane/cli.py` now delegates config, profile, governance, deployment/remote, setup/tooling, hardware/machine, orchestrator/stack, integration, and model command registration/handling to focused modules while keeping one public `aiplane` entrypoint. Continue splitting command families when it reduces real ownership pressure.
+   - `src/aiplane/cli.py` delegates every command family to focused parser/dispatch owners, including public onboarding, execution/session, providers, and runtimes. The composition root decreased from 3,171 to 1,570 lines while preserving one public `aiplane` entrypoint.
    - Shared CLI parsing/progress helpers live outside the monolithic CLI so provider refresh, profile bootstrap, hardware/machine/stack settings, and future command modules do not duplicate low-level parsing behavior.
    - Model filter parser choices and MCP schema choices are shared definitions; integration roles are shared contracts. Keep moving shared definitions only where they prevent drift.
    - Keep shell helpers as thin delegates to official tools; avoid growing provider-specific business logic in Bash when Python catalog/runtime code already owns the decision.
@@ -533,7 +533,7 @@ The roadmap is now actively executing the priorities above; completed work in ea
 
 11. **Test-suite structure, performance, and isolation** - Structurally complete / incremental
    - Production loaders are no longer globally replaced by the test harness; temporary profile roots contain deterministic synthetic model data and exercise normal disk loading.
-   - The quick gate now runs nine contracts plus four intentional smoke checks; the empty legacy aggregate module is no longer included.
+   - The quick gate now runs ten contracts plus four intentional smoke checks; the empty legacy aggregate module is no longer included.
    - Shared injectable command/HTTP boundaries now cover every production process and HTTP owner; only `boundaries.py` calls `subprocess` or `urllib` directly, enforced by a contract test.
    - Model refresh reconciliation, stack lifecycle, static tool catalog data, and provider-registry tests now live in focused modules instead of their former large mixed owners.
    - Model pull/execution/endpoint readiness now lives in `model_execution.py`; stack role normalization/policy checks live in `stack_roles.py`. Oversized model and profile/config test owners are split into focused refresh, mutation, listing, lifecycle, config, and governance modules.

@@ -19,6 +19,7 @@ from .support import (
     redirect_stdout,
     remove_profile,
     repair_profile,
+    subprocess,
     tempfile,
     unittest,
 )
@@ -354,7 +355,7 @@ class ProfileConfigTests(unittest.TestCase):
             profiles_dir = Path(tmp) / "profiles"
             create_profile("local-dev", profiles_dir=profiles_dir)
             _materialize_test_models(profiles_dir / "local-dev")
-            completed = cli_module.subprocess.CompletedProcess(
+            completed = subprocess.CompletedProcess(
                 args=["provider_helper"], returncode=0, stdout="pulled\n", stderr=""
             )
             stdout = StringIO()
@@ -415,7 +416,7 @@ class ProfileConfigTests(unittest.TestCase):
                     0,
                 )
             _materialize_test_models(profiles_dir / "local-dev")
-            completed = cli_module.subprocess.CompletedProcess(
+            completed = subprocess.CompletedProcess(
                 args=["provider_helper"],
                 returncode=0,
                 stdout="dry-run pull\n",
