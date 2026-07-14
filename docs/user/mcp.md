@@ -109,7 +109,18 @@ You do not need both configs for the same client. Use the VS Code config for a V
 
 ## Scope
 
-The MCP write surface is intentionally narrow. These remain blocked until stronger approval, audit, and rollback behavior exist:
+The MCP server is read-only by default. Starting it with `--allow-writes` is an explicit operator decision that enables only the listed narrow write tools; each mutating tool call must additionally include `confirm=true`. Either missing guard blocks the request before manager dispatch and writes a metadata-only `blocked` audit event. A `models.refresh` call with `dry_run=true` is non-mutating and remains available on a read-only server.
+
+To opt in for a controlled session:
+
+```yaml
+args:
+  - mcp
+  - serve
+  - --allow-writes
+```
+
+Do not add this flag to routine client configuration unless that client is intended to modify the selected profile. These broader operations remain blocked regardless of the flag:
 
 - pulling/downloading models;
 - installing runtimes;
@@ -120,12 +131,11 @@ The MCP write surface is intentionally narrow. These remain blocked until strong
 
 Planned next phases:
 
-1. Add audit events for every mutating MCP tool call.
-2. Add guarded model pull/runtime lifecycle tools after provider helper approvals are clear.
-3. Keep deployment apply blocked until cloud cost/risk controls are explicit.
+1. Add guarded model pull/runtime lifecycle tools only after provider helper approvals are clear.
+2. Keep deployment apply blocked until cloud cost/risk controls are explicit.
 
 The adapter must not bypass `aiplane` policy. Write-capable tools should call the same internal managers used by the CLI.
 
 ## Write Tools
 
-Mutating MCP calls are audited through the same local JSONL audit log used by CLI tool execution. Successful write calls record `allowed`; failed write calls record `failed` with the error reason.
+Mutating MCP calls are audited through the same local JSONL audit log used by CLI tool execution. Missing server or per-call authorization records `blocked`; successful writes record `allowed`; manager failures record `failed` with a sanitized exception type. Raw arguments, output, and exception messages are not stored.

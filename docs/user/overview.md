@@ -15,7 +15,7 @@ For a first successful run, use this command sequence:
 aiplane discover
 aiplane doctor
 aiplane recommend
-aiplane export
+aiplane export continue
 ```
 
 Or use the single command path:

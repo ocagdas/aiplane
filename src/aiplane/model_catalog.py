@@ -9,7 +9,7 @@ from .backends import (
     BackendResult,
 )
 from .model_refresh import ModelRefreshCoordinator
-from .persistence import atomic_write_text
+from .model_store import ModelCatalogStore
 from .models import Profile
 from .model_resources import (
     accelerator_api_requirements as _accelerator_api_requirements,
@@ -30,7 +30,6 @@ DISCOVERED_MODELS_BANNER = (
     "# Do not edit it manually; use `aiplane models refresh`, `aiplane models add`, or `aiplane models promote`.\n"
     "# Promote/add reviewed entries into models.yaml for durable profile configuration.\n"
 )
-_GENERATED_CONFIG_CACHE: dict[tuple[Path, int, int], dict[str, Any]] = {}
 
 
 @dataclass(frozen=True)
@@ -53,7 +52,8 @@ class ModelCatalog:
         self.command_runner = command_runner or SubprocessCommandRunner()
         self.http_transport = http_transport or UrllibHttpTransport()
         self.config = profile.models or {}
-        self.generated_config = self._load_generated_config()
+        self.store = ModelCatalogStore(profile.root, DISCOVERED_MODELS_FILE, DISCOVERED_MODELS_BANNER)
+        self.generated_config = self.store.load_generated()
 
     def providers(self) -> dict[str, dict[str, Any]]:
         from .runtime_catalog import PROVIDER_ENDPOINT_DEFAULTS
@@ -104,10 +104,7 @@ class ModelCatalog:
             raise ValueError("default role must be a simple name")
         model = self.get(name)
         self.config.setdefault("defaults", {})[role] = name
-        path = self.profile.root / "models.yaml"
-        from .config import dump_yaml
-
-        atomic_write_text(path, dump_yaml(self.config))
+        path = self.store.write_curated(self.config)
         return {
             "role": role,
             "name": name,
@@ -366,11 +363,7 @@ class ModelCatalog:
         return name, dict(entry)
 
     def _write_curated_config(self) -> Path:
-        from .config import dump_yaml
-
-        path = self.profile.root / "models.yaml"
-        atomic_write_text(path, dump_yaml(self.config))
-        return path
+        return self.store.write_curated(self.config)
 
     def list(self) -> list[dict[str, Any]]:
         rows = []
@@ -599,10 +592,7 @@ class ModelCatalog:
         if name in curated:
             curated[name]["enabled"] = bool(enabled)
             self.config["models"] = curated
-            from .config import dump_yaml
-
-            path = self.profile.root / "models.yaml"
-            atomic_write_text(path, dump_yaml(self.config))
+            path = self.store.write_curated(self.config)
             return {"name": name, "enabled": bool(enabled), "path": str(path)}
         if name in generated:
             raise ValueError(
@@ -871,8 +861,6 @@ class ModelCatalog:
         keep_discovered: bool = True,
         overwrite: bool = False,
     ) -> dict[str, Any]:
-        from .config import dump_yaml
-
         if not name or "/" in name or "\\" in name:
             raise ValueError("model entry name must be a simple name")
         target = new_name or name
@@ -895,8 +883,7 @@ class ModelCatalog:
         if write:
             curated_models[target] = promoted
             self.config["models"] = curated_models
-            curated_path = self.profile.root / "models.yaml"
-            atomic_write_text(curated_path, dump_yaml(self.config))
+            self.store.write_curated(self.config)
             if not keep_discovered:
                 generated_models.pop(name, None)
                 self.generated_config["models"] = generated_models
@@ -956,8 +943,6 @@ class ModelCatalog:
         write: bool = False,
         include_curated: bool = True,
     ) -> dict[str, Any]:
-        from .config import dump_yaml
-
         curated_models = _dict_of_dicts(self.config.get("models", {}))
         generated_models = _dict_of_dicts(self.generated_config.get("models", {}))
         removed_counts: dict[str, int] = {}
@@ -994,7 +979,7 @@ class ModelCatalog:
             self.config["models"] = curated_models
             self.generated_config["models"] = generated_models
             if curated_dirty:
-                atomic_write_text(self.profile.root / "models.yaml", dump_yaml(self.config))
+                self.store.write_curated(self.config)
             if generated_dirty:
                 self._write_generated_config()
         provider_counts = [{"name": source, "count": count} for source, count in sorted(removed_counts.items())]
@@ -1015,31 +1000,10 @@ class ModelCatalog:
         }
 
     def _generated_path(self) -> Path:
-        return self.profile.root / DISCOVERED_MODELS_FILE
-
-    def _load_generated_config(self) -> dict[str, Any]:
-        from .config import parse_yaml
-
-        path = self._generated_path()
-        if not path.exists():
-            return {}
-        stat = path.stat()
-        cache_key = (path.resolve(), stat.st_mtime_ns, stat.st_size)
-        cached = _GENERATED_CONFIG_CACHE.get(cache_key)
-        if cached is not None:
-            return cached
-        data = parse_yaml(path.read_text(encoding="utf-8"))
-        parsed = data if isinstance(data, dict) else {}
-        _GENERATED_CONFIG_CACHE.clear()
-        _GENERATED_CONFIG_CACHE[cache_key] = parsed
-        return parsed
+        return self.store.generated_path
 
     def _write_generated_config(self) -> Path:
-        from .config import dump_yaml
-
-        path = self._generated_path()
-        atomic_write_text(path, DISCOVERED_MODELS_BANNER + dump_yaml(self.generated_config))
-        return path
+        return self.store.write_generated(self.generated_config)
 
     def _execution(self):
         from .model_execution import ModelExecution

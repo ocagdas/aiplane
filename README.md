@@ -115,7 +115,7 @@ Use this when you want the first useful flow with minimal complexity:
 aiplane discover
 aiplane doctor
 aiplane recommend
-aiplane export
+aiplane export continue
 ```
 
 The single-command equivalent is:
@@ -132,7 +132,6 @@ endpoint setup status, and role mappings, report configuration sources (detected
 
 Command categories are explicit in [command coverage](docs/project/command-coverage.md): core commands lead onboarding, supporting commands troubleshoot specific subsystems, and deferred commands stay out of the public beta path unless a scope review moves them.
 
-### Extended common workflow
 ## Execution tracks
 
 The current project direction is organized into three execution tracks:

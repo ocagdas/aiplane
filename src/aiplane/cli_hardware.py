@@ -343,9 +343,13 @@ def add_hardware_machine_parsers(
     )
     profile_arg(machines_profile_remote)
     machines_profile_remote.add_argument("--name", required=True, help="Machine name to assign to the remote export")
-    machines_profile_remote.add_argument("--host", required=True, help="Remote hostname or IP")
-    machines_profile_remote.add_argument("--user", help="SSH username")
-    machines_profile_remote.add_argument("--port", type=int, default=22, help="SSH port")
+    machines_profile_remote.add_argument(
+        "--host", required=True, help="Remote DNS hostname or IPv4/IPv6 address; option-like values are rejected"
+    )
+    machines_profile_remote.add_argument(
+        "--user", help="SSH username (letters, digits, underscore, dot, and hyphen; cannot start with hyphen)"
+    )
+    machines_profile_remote.add_argument("--port", type=int, default=22, help="SSH port (1-65535)")
 
 
 def handle_hardware_machine_command(

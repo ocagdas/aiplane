@@ -253,3 +253,19 @@ from being reintroduced there.
 Configuration and generated state files are written with same-directory atomic replacement, so interruption does not expose a partially written destination. Concurrent writers are serialized across threads and processes with a bounded lock wait; timeout raises a clear error instead of hanging indefinitely. Lock nesting is rejected to prevent cross-file lock-order deadlocks. Local read-modify-write code should use the transactional YAML helper so concurrent changes are merged under the same lock.
 
 Audit records are local JSONL. They store action metadata and sanitized details, not tool command output, raw tool arguments, or exception messages. Sensitive mapping keys, adjacent or assigned secret flags, common token forms, and PEM material are redacted before append.
+
+
+## CLI failure boundary
+
+Operational errors are printed without a traceback after secret redaction. Unexpected internal failures print only the exception type and suggest `--debug`; use `--debug` or `AIPLANE_DEBUG=true` only in a controlled environment because tracebacks may contain sensitive local paths or values. Broken output pipes exit quietly, and Ctrl-C returns status 130.
+
+MCP stdio is read-only unless the operator starts `aiplane mcp serve --allow-writes`. Each actual mutation must also include `confirm=true`; this two-step boundary is enforced before domain manager dispatch and blocked attempts are audited.
+
+
+## Domain ownership boundaries
+
+- `model_catalog.py` owns model-domain operations and delegates provider reconciliation to `model_refresh.py` and all curated/generated persistence to `model_store.py`.
+- `machines.py` owns machine-domain ranking and orchestration; `azure_cli.py` owns Azure subprocess/timeout/redaction behavior and `azure_inventory.py` owns Azure retail-pricing HTTP parsing/normalization.
+- `platform_support.py` owns OS, distribution-family, architecture, and WSL capability classification. Domain modules consume capabilities instead of inventing platform checks.
+
+Structural tests in `tests/test_architecture_boundaries.py` and synthetic platform tests in `tests/test_platform_support.py` enforce these boundaries.

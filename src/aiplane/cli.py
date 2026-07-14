@@ -4,8 +4,10 @@ from pathlib import Path
 import argparse
 import os
 import sys
+import traceback
 
 from .boundaries import CommandRunner, SubprocessCommandRunner
+from .secrets import redact
 from .config import (
     local_config_path,
     load_profile,
@@ -148,11 +150,46 @@ def _integration_selection_args(parser) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    debug = _debug_enabled(argv)
     try:
         return _main(argv)
+    except BrokenPipeError:
+        _silence_stdout()
+        return 0
+    except KeyboardInterrupt:
+        print("error: interrupted", file=sys.stderr)
+        return 130
     except (FileNotFoundError, PermissionError, RuntimeError, ValueError) as exc:
-        print(f"error: {exc}", file=sys.stderr)
+        print(f"error: {redact(str(exc))}", file=sys.stderr)
         return 1
+    except Exception as exc:  # noqa: BLE001 - process boundary must sanitize unexpected failures.
+        if debug:
+            traceback.print_exc()
+        else:
+            print(
+                f"error: unexpected {type(exc).__name__}; rerun with --debug for a traceback",
+                file=sys.stderr,
+            )
+        return 1
+
+
+def _debug_enabled(argv: list[str] | None) -> bool:
+    arguments = sys.argv[1:] if argv is None else argv
+    return "--debug" in arguments or os.environ.get("AIPLANE_DEBUG", "").lower() in {"1", "true", "yes"}
+
+
+def _silence_stdout() -> None:
+    if sys.stdout is not sys.__stdout__:
+        return
+    descriptor: int | None = None
+    try:
+        descriptor = os.open(os.devnull, os.O_WRONLY)
+        os.dup2(descriptor, sys.stdout.fileno())
+    except (AttributeError, OSError):
+        pass
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
 
 
 def _main(argv: list[str] | None = None) -> int:
@@ -175,6 +212,11 @@ def _main(argv: list[str] | None = None) -> int:
         ),
         formatter_class=HelpFormatter,
         allow_abbrev=False,
+    )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Show tracebacks for unexpected internal errors; may expose sensitive local context",
     )
     parser.add_argument(
         "--workspace",

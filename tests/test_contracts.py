@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 import tomllib
 
 from aiplane.integration_contracts import ALL_INTEGRATION_TOOLS, required_roles
@@ -129,3 +130,40 @@ def test_external_io_calls_are_centralized_in_boundaries() -> None:
             if token in text:
                 violations.append(f"{path}:{token}")
     assert violations == []
+
+
+PUBLIC_ONBOARDING_DOCS = (
+    Path("README.md"),
+    Path("docs/user/index.md"),
+    Path("docs/user/README.md"),
+    Path("docs/user/overview.md"),
+)
+
+
+def test_public_onboarding_uses_concrete_export_commands_and_nonempty_sections() -> None:
+    for path in PUBLIC_ONBOARDING_DOCS:
+        text = path.read_text(encoding="utf-8")
+        assert not re.search(r"(?m)^\s*aiplane export\s*$", text), path
+        assert "aiplane export continue" in text, path
+        assert not re.search(r"(?m)^#{1,6} .+\n(?=#{1,6} )", text), path
+
+
+def test_user_workflow_indexes_have_sequential_numbering() -> None:
+    for path in (Path("docs/user/index.md"), Path("docs/user/README.md")):
+        text = path.read_text(encoding="utf-8")
+        expected_sections = (("Start here", [1, 2, 3, 4, 5]), ("Common workflows", [1, 2, 3, 4, 5]))
+        for heading, expected in expected_sections:
+            section = text.split(f"## {heading}\n", 1)[1].split("\n## ", 1)[0]
+            actual = [int(value) for value in re.findall(r"(?m)^(\d+)\. ", section)]
+            assert actual == expected, (path, heading, actual)
+
+
+def test_public_onboarding_links_and_code_fences_are_valid() -> None:
+    for path in PUBLIC_ONBOARDING_DOCS:
+        text = path.read_text(encoding="utf-8")
+        assert text.count("```") % 2 == 0, path
+        for target in re.findall(r"\[[^]]+\]\(([^)]+)\)", text):
+            local_target = target.split("#", 1)[0]
+            if not local_target or "://" in local_target or local_target.startswith("mailto:"):
+                continue
+            assert (path.parent / local_target).exists(), (path, target)

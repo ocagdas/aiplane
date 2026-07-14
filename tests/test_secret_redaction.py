@@ -57,7 +57,7 @@ def test_tool_audit_redacts_arguments_and_does_not_store_command_output() -> Non
 def test_mcp_error_response_and_failed_audit_do_not_expose_exception_text(monkeypatch) -> None:
     with tempfile.TemporaryDirectory() as tmp:
         workspace = Path(tmp)
-        server = AiplaneMcpServer(workspace, default_profile="local-dev")
+        server = AiplaneMcpServer(workspace, default_profile="local-dev", allow_writes=True)
         secret = "opaque-provider-secret-123456"
 
         def fail(*args, **kwargs):
@@ -69,7 +69,7 @@ def test_mcp_error_response_and_failed_audit_do_not_expose_exception_text(monkey
                 "jsonrpc": "2.0",
                 "id": 1,
                 "method": "tools/call",
-                "params": {"name": "aiplane.models.use", "arguments": {"role": "chat", "model": "x"}},
+                "params": {"name": "aiplane.models.use", "arguments": {"role": "chat", "model": "x", "confirm": True}},
             }
         )
 

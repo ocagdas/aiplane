@@ -75,7 +75,7 @@ Read these when you need to customize the environment model or automate team wor
 aiplane discover
 aiplane doctor
 aiplane recommend
-aiplane export
+aiplane export continue
 aiplane quickstart local-coding
 ```
 

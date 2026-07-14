@@ -63,10 +63,15 @@ def add_governance_parsers(
     mcp_serve = mcp_sub.add_parser(
         "serve",
         help="Start stdio MCP server",
-        description="Start the MCP server over stdio for MCP-capable IDEs or agents. Mutating tools execute through the same managers as the CLI.",
+        description="Start the MCP server over stdio for MCP-capable IDEs or agents. It is read-only by default; --allow-writes enables guarded mutations that also require confirm=true per call.",
         formatter_class=formatter_class,
     )
     profile_arg(mcp_serve)
+    mcp_serve.add_argument(
+        "--allow-writes",
+        action="store_true",
+        help="Operator opt-in for mutating MCP tools; every mutating call must also pass confirm=true",
+    )
 
     audit = command_factory(
         subparsers,
@@ -125,7 +130,12 @@ def handle_governance_command(
             print(json_dumps(mcp_manifest(), indent=2))
             return 0
         load_profile(effective_profile, workspace, profiles_dir=profiles_dir)
-        return serve_stdio(workspace, default_profile=effective_profile, profiles_dir=profiles_dir)
+        return serve_stdio(
+            workspace,
+            default_profile=effective_profile,
+            profiles_dir=profiles_dir,
+            allow_writes=args.allow_writes,
+        )
     if args.command == "audit":
         profile = load_profile(effective_profile, workspace, profiles_dir=profiles_dir)
         report = AuditLogger(profile).tail_report(args.limit)

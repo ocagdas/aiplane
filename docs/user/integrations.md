@@ -286,6 +286,8 @@ aiplane remote tunnel start --target gpu_workstation_ssh
 aiplane integrations export continue --endpoint http://localhost:11434/v1
 ```
 
+SSH target fields are validated before a command is rendered: hosts and forward hosts must be DNS names or IPv4/IPv6 addresses, usernames use restricted SSH account syntax, ports must be 1-65535, and the IDE endpoint must be an `http` or `https` URL without embedded credentials or a fragment. Option-like destinations are rejected.
+
 In the tunnel plan, `local_bind` is the address opened on your laptop,
 `remote_service` is what the remote SSH host can reach, and `ide_endpoint` is
 what Continue/Cline/Aider should use. This is normal SSH `-L` local forwarding;

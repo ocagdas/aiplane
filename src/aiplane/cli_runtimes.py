@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import platform
 import sys
 import os
 import subprocess
@@ -12,6 +11,7 @@ from typing import Any, Callable
 from .boundaries import CommandRunner, SubprocessCommandRunner
 from .config import load_profile, local_config_path, provider_helper_path, resolve_output_format
 from .model_catalog import ModelCatalog
+from .platform_support import detect_host_platform
 from .runtime_catalog import RuntimeCatalog
 
 _COMMAND_RUNNER: CommandRunner = SubprocessCommandRunner()
@@ -193,7 +193,11 @@ def add_runtimes_parser(
         lifecycle = runtimes_sub.add_parser(
             command_name,
             help=f"Run provider helper {lifecycle_action.replace('-', ' ')}",
-            description="Delegate runtime lifecycle/download operations to scripts/provider_helper.sh while keeping the operation available through aiplane.",
+            description=(
+                "Delegate runtime lifecycle/download operations to scripts/provider_helper.sh. "
+                "Install and update helpers support native Ubuntu/Debian; use the runtime "
+                "vendor's installer on WSL, other Linux distributions, macOS, or Windows."
+            ),
             formatter_class=formatter_class,
         )
         profile_arg(lifecycle)
@@ -346,24 +350,27 @@ def handle_runtimes_command(
                     )
                 )
                 return 2
-            if args.runtimes_command in {"install", "update", "update-installed"} and platform.system() != "Linux":
-                print(
-                    json_dumps(
-                        {
-                            "name": "runtime_helper_platform_unsupported",
-                            "runtime": args.runtime,
-                            "action": args.runtimes_command,
-                            "platform": platform.system(),
-                            "supported_platforms": ["Linux"],
-                            "reason": "aiplane runtime install helpers are not supported on this platform",
-                            "next_steps": [
-                                "Install the runtime with the platform-native installer.",
-                                "Use aiplane discover, doctor, recommend, and export after the runtime is installed.",
-                            ],
-                        },
-                        indent=2,
-                    )
+            host_platform = detect_host_platform()
+            if (
+                args.runtimes_command in {"install", "update", "update-installed"}
+                and not host_platform.runtime_helper_supported
+            ):
+                payload = host_platform.unsupported(
+                    "runtime_helper_install",
+                    ["Ubuntu Linux", "Debian Linux"],
+                    "runtime install/update helpers are not supported here; they require native Ubuntu/Debian Linux, while WSL, non-Linux, and other Linux distributions must use the runtime vendor installer",
                 )
+                payload.update(
+                    {
+                        "runtime": args.runtime,
+                        "action": args.runtimes_command,
+                        "next_steps": [
+                            "Install the runtime with the platform-native or vendor installer.",
+                            "Use aiplane discover, doctor, recommend, and export after the runtime is installed.",
+                        ],
+                    }
+                )
+                print(json_dumps(payload, indent=2))
                 return 2
             install_reporter: Any | None = None
             if args.runtimes_command == "install" and not args.dry_run:

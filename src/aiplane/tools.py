@@ -12,6 +12,7 @@ from .audit import AuditLogger
 from .env import EnvironmentManager
 from .persistence import atomic_write_text
 from .models import AuditEvent, Profile
+from .platform_support import detect_host_platform
 from .policy import PolicyEngine
 from .runtime_catalog import RuntimeCatalog
 from .tool_catalog import CORE_TOOLCHAIN, TOOLCHAIN, TOOL_WORKFLOWS
@@ -737,32 +738,24 @@ def _checked_command(command: list[str], cwd: Path, command_runner: CommandRunne
 
 
 def _platform_info() -> dict[str, object]:
+    host = detect_host_platform()
     return {
         "name": _platform_id(),
-        "os_release": _os_release_id(),
+        "system": host.system,
+        "distribution": host.distribution,
+        "distribution_like": list(host.distribution_like),
+        "wsl": host.wsl,
         "package_manager": _package_manager(),
     }
 
 
 def _platform_id() -> str:
-    import platform
-
-    if platform.system() == "Darwin":
+    host = detect_host_platform()
+    if host.normalized_system == "darwin":
         return "macos"
-    os_id = _os_release_id()
-    if os_id in {"ubuntu", "debian", "fedora"}:
-        return os_id
-    return "linux"
-
-
-def _os_release_id() -> str | None:
-    path = Path("/etc/os-release")
-    if not path.exists():
-        return None
-    for line in path.read_text(encoding="utf-8", errors="ignore").splitlines():
-        if line.startswith("ID="):
-            return line.split("=", 1)[1].strip().strip('"')
-    return None
+    if host.normalized_system == "windows":
+        return "windows"
+    return host.distribution or "linux"
 
 
 def _package_manager() -> str | None:

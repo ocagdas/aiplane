@@ -11,6 +11,13 @@ from typing import Any, Protocol
 
 from .boundaries import CommandRunner, SubprocessCommandRunner
 from .models import Profile
+from .network_validation import (
+    ssh_forward_host,
+    validate_http_endpoint,
+    validate_port,
+    validate_ssh_host,
+    validate_ssh_user,
+)
 
 _STATE_VERSION = 1
 
@@ -105,19 +112,18 @@ class RemoteManager:
         ssh = _dict(target.get("ssh"))
         forward = _dict(target.get("forward"))
 
-        host = _coerce_host(ssh.get("host"), "ssh.host")
-        user = _coerce_optional_identity(str(ssh.get("user") or ""))
-        ssh_port = _coerce_port(ssh.get("port"), "ssh.port", default=22)
-        local_host = _coerce_host(forward.get("local_host"), "forward.local_host", default="127.0.0.1")
-        local_port = _coerce_port(forward.get("local_port"), "forward.local_port", default=11434)
-        remote_host = _coerce_host(forward.get("remote_host"), "forward.remote_host", default="127.0.0.1")
-        remote_port = _coerce_port(forward.get("remote_port"), "forward.remote_port", default=11434)
+        host = validate_ssh_host(ssh.get("host"), "ssh.host")
+        user = validate_ssh_user(ssh.get("user"), "ssh.user")
+        ssh_port = validate_port(ssh.get("port"), "ssh.port", default=22)
+        local_host = validate_ssh_host(forward.get("local_host"), "forward.local_host", default="127.0.0.1")
+        local_port = validate_port(forward.get("local_port"), "forward.local_port", default=11434)
+        remote_host = validate_ssh_host(forward.get("remote_host"), "forward.remote_host", default="127.0.0.1")
+        remote_port = validate_port(forward.get("remote_port"), "forward.remote_port", default=11434)
 
-        endpoint = str(target.get("endpoint") or "").strip() or f"http://localhost:{local_port}/v1"
-        if "//" not in endpoint:
-            raise ValueError(
-                f"ssh_tunnel target {name!r} endpoint must include a URL scheme, such as http:// or https://"
-            )
+        endpoint = validate_http_endpoint(
+            target.get("endpoint") or f"http://localhost:{local_port}/v1",
+            f"ssh_tunnel target {name!r} endpoint",
+        )
 
         destination = f"{user + '@' if user else ''}{host}"
         command = [
@@ -130,7 +136,7 @@ class RemoteManager:
             "-o",
             "ServerAliveCountMax=3",
             "-L",
-            f"{local_host}:{local_port}:{remote_host}:{remote_port}",
+            f"{ssh_forward_host(local_host)}:{local_port}:{ssh_forward_host(remote_host)}:{remote_port}",
             "-p",
             str(ssh_port),
             destination,
@@ -285,37 +291,6 @@ class RemoteManager:
 
 def _dict(value: object) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
-
-
-def _coerce_host(value: object, field: str, default: str | None = None) -> str:
-    host = str(value or "").strip()
-    if not host:
-        host = str(default or "").strip()
-    if not host:
-        raise ValueError(f"target is missing required field {field}")
-    if any(ch.isspace() for ch in host):
-        raise ValueError(f"target field {field!r} contains whitespace")
-    return host
-
-
-def _coerce_optional_identity(value: str) -> str:
-    candidate = value.strip()
-    if not candidate:
-        return ""
-    if any(ch.isspace() for ch in candidate):
-        raise ValueError("target ssh.user contains whitespace")
-    return candidate
-
-
-def _coerce_port(value: object, field: str, default: int) -> int:
-    raw = value if value is not None else default
-    try:
-        port = int(raw)
-    except (TypeError, ValueError):
-        raise ValueError(f"target field {field} must be an integer in the range 1-65535")
-    if not (1 <= port <= 65535):
-        raise ValueError(f"target field {field} must be an integer in the range 1-65535")
-    return port
 
 
 def _linux_proc_identity(pid: int) -> dict[str, Any] | None:

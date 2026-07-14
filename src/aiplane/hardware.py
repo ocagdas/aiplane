@@ -16,6 +16,7 @@ from .model_catalog import ModelCatalog, capability_profile
 from .runtime_catalog import RuntimeCatalog
 from .policy import PolicyEngine
 from .models import Profile
+from .platform_support import HostPlatform, detect_host_platform
 
 
 @dataclass(frozen=True)
@@ -26,9 +27,15 @@ class HardwareFit:
 
 
 class HardwareManager:
-    def __init__(self, profile: Profile, command_runner: CommandRunner | None = None):
+    def __init__(
+        self,
+        profile: Profile,
+        command_runner: CommandRunner | None = None,
+        host_platform: HostPlatform | None = None,
+    ):
         self.profile = profile
         self.command_runner = command_runner or SubprocessCommandRunner()
+        self.host_platform = host_platform or detect_host_platform()
         self.config = profile.hardware or {}
 
     def show(self, verbosity: int = 0) -> dict[str, Any]:
@@ -217,17 +224,24 @@ class HardwareManager:
         atomic_write_text(path, dump_yaml(self.config))
 
     def discover(self) -> dict[str, Any]:
+        linux_probes = self.host_platform.linux_hardware_probes_supported
         discovered: dict[str, Any] = {
             "platform": platform.platform(),
+            "platform_support": self.host_platform.summary(),
             "machine": platform.machine(),
             "processor": platform.processor(),
             "cpu_count": os.cpu_count(),
-            "memory_gb": _memory_gb(),
+            "memory_gb": _memory_gb() if linux_probes else None,
             "gpus": [],
             "notes": [],
         }
-        discovered["gpus"].extend(_nvidia_gpus(self.command_runner))
-        discovered["gpus"].extend(_amd_gpus(self.command_runner))
+        if linux_probes:
+            discovered["gpus"].extend(_nvidia_gpus(self.command_runner))
+            discovered["gpus"].extend(_amd_gpus(self.command_runner))
+        else:
+            discovered["notes"].append(
+                "Linux procfs, nvidia-smi, rocm-smi, and lspci discovery probes were skipped on this platform"
+            )
         if not discovered["gpus"]:
             discovered["notes"].append("No NVIDIA/AMD GPU discovered through available CLI tools")
         discovered["closest_profiles"] = self._closest_profiles(discovered)

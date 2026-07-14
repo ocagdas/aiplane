@@ -242,7 +242,7 @@ class DeployRemoteTests(unittest.TestCase):
         with self.assertRaises(ValueError) as exc:
             RemoteManager(profile).tunnel_plan("gpu_workstation_ssh")
 
-        self.assertIn("must include a URL scheme", str(exc.exception))
+        self.assertIn("must use http or https", str(exc.exception))
 
     def test_remote_tunnel_plan_uses_ssh_local_forwarding(self) -> None:
         profile = load_profile("local-dev", Path.cwd())

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from aiplane.cli_runtimes import _RuntimeInstallReporter
+from aiplane.platform_support import HostPlatform
 
 from .support import (
     AuditLogger,
@@ -34,13 +35,19 @@ from .support import (
 class RuntimeExecutionTests(unittest.TestCase):
     def test_runtime_install_helper_rejects_non_linux_platforms(self) -> None:
         stdout = StringIO()
-        with patch("aiplane.cli_runtimes.platform.system", return_value="Darwin"), redirect_stdout(stdout):
+        with (
+            patch(
+                "aiplane.cli_runtimes.detect_host_platform",
+                return_value=HostPlatform("Darwin", None, (), "arm64"),
+            ),
+            redirect_stdout(stdout),
+        ):
             code = cli_main(["runtimes", "install", "ollama", "--dry-run"])
         self.assertEqual(code, 2)
         payload = json.loads(stdout.getvalue())
-        self.assertEqual(payload["name"], "runtime_helper_platform_unsupported")
-        self.assertEqual(payload["platform"], "Darwin")
-        self.assertIn("Linux", payload["supported_platforms"])
+        self.assertEqual(payload["name"], "unsupported_platform")
+        self.assertEqual(payload["platform"]["system"], "Darwin")
+        self.assertIn("Ubuntu Linux", payload["supported_platforms"])
         self.assertIn("not supported", payload["reason"])
 
     def test_router_blocks_secret_cloud_escalation(self) -> None:

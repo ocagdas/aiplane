@@ -52,7 +52,7 @@ The public wedge is now a narrow onboarding path:
 aiplane discover
 aiplane doctor
 aiplane recommend
-aiplane export
+aiplane export continue
 ```
 
 A new user should reach a useful result with one command:
@@ -114,7 +114,7 @@ Make these the main commands shown in the README and onboarding:
 aiplane discover
 aiplane doctor
 aiplane recommend
-aiplane export
+aiplane export continue
 ```
 
 Existing detailed commands can remain, but should be treated as advanced commands.
@@ -585,3 +585,21 @@ terminates the new unowned process without persisting state.
 Configuration and state snapshots now use a shared atomic persistence boundary. Writes use same-directory fsynced temporary files followed by atomic replacement, while audit JSONL uses a serialized fsynced append. Cross-process advisory locks have a bounded deadline, nonblocking jittered polling, and reject nested persistence locks to avoid lock-order deadlocks; transactional YAML mutation preserves concurrent changes.
 
 Audit hardening now minimizes recorded tool data and broadens secret sanitation for sensitive keys, command flags, common provider tokens, bearer values, and PEM material. Tool output, raw command arguments, and exception messages are not persisted or returned through MCP failure details.
+
+
+SSH command planning now uses a shared strict network-input boundary. Tunnel and remote-profile plans reject option-like or malformed hosts/users, validate ports, accept only credential-free HTTP(S) endpoint URLs, render IPv6 forwarding safely, and shell-quote the remote `aiplane` command.
+
+
+MCP stdio now fails closed for writes: the server defaults to read-only, operator startup must explicitly pass `--allow-writes`, and each actual mutation must also carry `confirm=true`. Blocked attempts never reach domain managers and are audited without raw payloads.
+
+The CLI process boundary now redacts expected error text, suppresses unexpected exception details by default, handles broken pipes quietly, and returns 130 for interruption. `--debug` or `AIPLANE_DEBUG=true` is an explicit diagnostic opt-in and may expose sensitive local traceback context.
+
+
+Platform behavior is now an explicit capability contract rather than scattered OS checks. Portable operations work independently of mutation helpers; native Ubuntu/Debian is the supported runtime-helper mutation path, WSL is inspection-only for those helpers, and non-Linux hardware discovery skips Linux commands with visible coverage notes.
+
+Model catalog persistence is isolated in `ModelCatalogStore`, provider reconciliation remains in `ModelRefreshCoordinator`, Azure retail pricing is an injectable HTTP service, and Azure CLI execution/redaction/timeouts are a separate adapter. Structural tests prevent those responsibilities returning to the large domain modules.
+
+The external MVP/adoption review was evaluated against current code and recorded as [Product, Adoption, and Monetization Backlog — July 2026](product-adoption-backlog-2026-07.md), including services-first monetization and evidence gates for team/enterprise work.
+
+
+DOC-1 is complete: public onboarding examples use concrete export targets, the empty README workflow heading is removed, and focused contract tests enforce concrete export commands, nonempty sections, and sequential workflow numbering.

@@ -300,7 +300,7 @@ class McpTests(unittest.TestCase):
                 targets=source.targets,
             )
             with patch("aiplane.mcp.load_profile", return_value=profile):
-                server = AiplaneMcpServer(Path.cwd())
+                server = AiplaneMcpServer(Path.cwd(), allow_writes=True)
                 allowed = server.handle_message(
                     {
                         "jsonrpc": "2.0",
@@ -309,6 +309,7 @@ class McpTests(unittest.TestCase):
                         "params": {
                             "name": "aiplane.models.use",
                             "arguments": {
+                                "confirm": True,
                                 "role": "code_model",
                                 "model": "fixture-code-small",
                             },
@@ -349,7 +350,7 @@ class McpTests(unittest.TestCase):
                 orchestrators=source.orchestrators,
             )
             with patch("aiplane.mcp.load_profile", return_value=profile):
-                response = AiplaneMcpServer(root).handle_message(
+                response = AiplaneMcpServer(root, allow_writes=True).handle_message(
                     {
                         "jsonrpc": "2.0",
                         "id": 32,
@@ -357,6 +358,7 @@ class McpTests(unittest.TestCase):
                         "params": {
                             "name": "aiplane.models.use",
                             "arguments": {
+                                "confirm": True,
                                 "role": "code_model",
                                 "model": "missing-model",
                             },

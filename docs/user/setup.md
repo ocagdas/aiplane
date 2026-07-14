@@ -6,7 +6,7 @@ editable/source-linked installs or static/snapshot installs. This is separate
 from provider setup: provider runtimes and API credentials are handled by
 `scripts/provider_helper.sh` and documented in `providers.md`.
 
-Platform support: the Bash setup helper and helper-managed runtime install/update commands are currently supported only on Linux hosts. On Windows or macOS, install `aiplane` and runtimes with platform-native Python/Conda/runtime installers, then use `aiplane discover`, `aiplane doctor`, `aiplane recommend`, and `aiplane export` to inspect and generate configuration. If a helper install command is run on an unsupported platform, it terminates with a clear unsupported-platform error.
+Platform behavior is documented in [Platform support](platform-support.md). Portable profile, validation, recommendation, and export operations are distinct from host-mutating helpers. Runtime install/update helpers are supported on native Ubuntu/Debian only; WSL, other Linux distributions, macOS, and Windows use vendor-native runtime installers. Unsupported mutations return `unsupported_platform` before running host commands.
 
 Install modes:
 
@@ -426,3 +426,8 @@ malformed final line is reported as `truncated_final_record`.
 
 
 Audit records deliberately minimize data: tool events record the action, decision, argument count, and a safe file target where applicable, but not raw command arguments, command output, or exception messages. Sensitive structured fields, secret-bearing command flags, common token formats, and PEM material are redacted before the record is appended. Configuration and audit writes are serialized across processes with bounded waits; lock contention fails with a timeout rather than waiting indefinitely.
+
+
+## Error output and debugging
+
+Normal operational errors are printed after secret redaction and without tracebacks. Unexpected internal failures show only their exception type. If maintainers need a traceback, place the global `--debug` option before the command, or set `AIPLANE_DEBUG=true`; use either only in a controlled environment because traceback context can contain sensitive paths or values. Piping output through tools such as `head` exits quietly when the reader closes the pipe.

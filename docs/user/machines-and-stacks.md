@@ -99,7 +99,7 @@ aiplane machines profile-remote-plan \
   --user dev
 ```
 
-The same pattern applies to a self-managed Azure VM or any Linux machine where `aiplane` can be installed and run once.
+The same pattern applies to a self-managed Azure VM or any Linux machine where `aiplane` can be installed and run once. Hosts must be DNS names or IPv4/IPv6 addresses, users use normal SSH account syntax, and ports must be 1-65535. Option-like destinations (for example, values beginning with `-`), combined `user` host values, whitespace, and shell separators are rejected. The rendered remote `aiplane` command shell-quotes profile and machine names; the command remains a plan and is not executed by this operation.
 
 ## Recommend Machines
 
