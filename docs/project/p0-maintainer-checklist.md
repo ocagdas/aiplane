@@ -1,18 +1,28 @@
 # P0 Maintainer Checklist
 
-This checklist contains only actions that require GitHub administration, public publication, or independent participants. Repository-side automation and tests are handled elsewhere.
+This checklist contains actions that require GitHub administration, public publication, or independent participants.
 
-## 1. Activate repository protection
+## 1. Install and prove the versioning identity
 
 Follow [Repository Protection](repository-protection.md).
 
-- [ ] Activate the `main` branch ruleset.
-- [ ] Require `CI / Release gate` and an up-to-date branch.
-- [ ] Require pull requests for human changes.
-- [ ] Restrict force pushes and deletion.
-- [ ] Add only the GitHub Actions app and designated maintainers to bypass; the Actions exception is required for the CI-owned version commit/tag.
-- [ ] Activate immutable `v*` tag rules.
-- [ ] Open a disposable PR, make its gate fail, and confirm merge is blocked.
+- [ ] Create and install the private `aiplane-versioning` GitHub App only on this repository.
+- [ ] Grant only Contents read/write and Metadata read-only; disable webhooks.
+- [ ] Store `AIPLANE_VERSIONING_APP_ID` as an Actions repository variable.
+- [ ] Store the complete PEM as the `AIPLANE_VERSIONING_APP_PRIVATE_KEY` Actions repository secret.
+- [ ] Merge the app-token workflow before activating protection.
+- [ ] Confirm an ordinary merge is patched and tagged by `aiplane-versioning[bot]`.
+- [ ] Confirm the patch tag runs the release workflow but does not create a public release.
+
+## 2. Activate repository protection
+
+- [ ] Activate the `main`-only branch ruleset.
+- [ ] Require the exact status-check value `Release gate` and an up-to-date branch.
+- [ ] Require PRs, conversation resolution, stale-review dismissal, and one approval when another reviewer exists.
+- [ ] Restrict updates, force pushes, and deletion of `main`.
+- [ ] Add only repository administrators and `aiplane-versioning` to bypass.
+- [ ] Activate immutable `v*` tag rules with the same narrow bypass.
+- [ ] Prove a pending/failing gate or missing review blocks a non-bypass merge.
 - [ ] Save the ruleset URL or screenshot in private evidence.
 
 Read-only confirmation:
@@ -22,50 +32,33 @@ gh api repos/ocagdas/aiplane/branches/main/protection
 gh api repos/ocagdas/aiplane/rulesets --jq '.[] | {id, name, target, enforcement}'
 ```
 
-## 2. Publish one complete developer-preview release
+## 3. Publish one complete developer-preview release
 
-Choose the CI-created tag whose source you reviewed. In GitHub:
+For an intentional minor or major release, follow [CI and Release Process](ci-and-release-process.md); publication should start automatically after the app creates the tag. A selected patch may instead be published through **Actions -> Release artifacts -> Run workflow**.
 
-1. Open **Actions → Release artifacts → Run workflow**.
-2. Enter the exact tag, for example `v0.1.2`.
-3. Run from trusted `main`.
-4. Open the resulting release and confirm it is not a draft.
-
-The release must visibly contain:
+Confirm the release visibly contains:
 
 - [ ] exactly one `aiplane-VERSION-py3-none-any.whl`;
 - [ ] exactly one `aiplane-VERSION.tar.gz`;
 - [ ] `SHA256SUMS`;
-- [ ] a tag matching wheel metadata;
-- [ ] install, platform, upgrade, uninstall, and rollback links or notes.
+- [ ] metadata matching the immutable tag;
+- [ ] platform, upgrade, uninstall, and rollback guidance.
 
-Do not count an empty release page as completion and do not replace assets under an existing published tag. Publish a new patch when correction is needed.
+Do not count an empty release page and never replace assets under an existing version.
 
-## 3. Verify the actual public assets
+## 4. Verify actual public assets
 
-1. Open **Actions → Verify published release → Run workflow**.
-2. Enter the published tag.
-3. Wait for all nine Linux/macOS/Windows × pip/pipx/uv jobs.
-4. Download the nine `release-evidence-*` artifacts.
-5. Review records for private data and retain the approved copies with P0 evidence.
+Publication dispatches **Verify published release** automatically; it may also be run manually.
 
-- [ ] Every job downloaded public release assets rather than rebuilding source.
-- [ ] Every manifest verification passed.
-- [ ] Every install/replacement/uninstall lifecycle passed.
+- [ ] All nine Linux/macOS/Windows x pip/pipx/uv jobs passed.
+- [ ] Every job downloaded public assets rather than rebuilding source.
+- [ ] Every manifest and install/replacement/uninstall lifecycle passed.
 - [ ] Evidence identifies the same URL, tag commit, version, and wheel digest.
-- [ ] Platform limitations are consistent with `docs/user/platform-support.md`.
+- [ ] Evidence contains no private data and reflects documented platform limitations.
 
-## 4. Run independent demonstrations
+## 5. Run independent demonstrations
 
-Give participants only the installed artifact and the relevant section of [Public Demo Plan](public-demo-plan.md). Do not coach beyond the written script unless the record marks assistance.
-
-For each participant and workflow:
-
-1. Copy [the canonical template](trial-evidence/template.json) outside the repository.
-2. Set `classification` to `independent` only for a genuinely independent participant.
-3. Record the first failure rather than restarting silently.
-4. Sanitize and human-review the record.
-5. Validate it:
+Give participants only the installed artifact and the relevant [Public Demo Plan](public-demo-plan.md) section. Record first failures and assistance honestly, sanitize every record, and validate it:
 
 ```bash
 python scripts/validate_trial_evidence.py PATH_TO_RECORD.json
@@ -73,20 +66,16 @@ python scripts/validate_trial_evidence.py PATH_TO_RECORD.json
 
 Required outcomes:
 
-- [ ] primary local adoption flow reproduced from a clean environment;
+- [ ] primary local adoption flow reproduced;
 - [ ] local-only policy plus backup/restore replay reproduced;
 - [ ] existing remote-GPU import/plan/export flow reproduced;
-- [ ] participant understands which files were written;
-- [ ] participant understands that export does not edit the target tool;
-- [ ] every assisted or failed attempt remains in the evidence set.
+- [ ] participants understand written files and export boundaries.
 
-## 5. Trigger the final documentation gate
+## 6. Trigger the final documentation gate
 
-Only after the published-release verification and independent demonstrations:
+Only after public verification and independent demonstrations:
 
-- [ ] re-read README and package metadata;
-- [ ] compare top-level/core help with user docs and demo commands;
-- [ ] re-check product maturity and narrow scope wording;
-- [ ] remove claims not demonstrated by evidence;
+- [ ] compare README, metadata, help, user docs, and demos;
+- [ ] remove unsupported claims and maturity drift;
 - [ ] run public example, link, help, contract, packaging, and full test gates;
 - [ ] update the P0 backlog with evidence paths and final counts.

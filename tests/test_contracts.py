@@ -349,11 +349,11 @@ def test_ci_and_release_process_is_the_single_lifecycle_authority() -> None:
     for heading in (
         "## Lifecycle at a glance",
         "## Pull-request validation",
-        "## Ordinary merges: CI-owned patch versions and tags",
-        "## Agreed minor, major, or explicit versions",
+        "## Ordinary merges: automated patch versions",
+        "## Intentional minor, major, and explicit versions",
         "## Expected edge cases and recovery",
-        "## Publish an existing CI tag",
-        "## Verify the published artifact",
+        "## Publication and manual patch override",
+        "## Verify and consume a published release",
         "## Integrity and rollback",
     ):
         assert heading in process
@@ -361,8 +361,8 @@ def test_ci_and_release_process_is_the_single_lifecycle_authority() -> None:
         "Two PRs merge close together",
         "A stale PR changes no version field",
         "A PR changes a version field",
-        "`main` moves during the CI push",
-        "The bot patch commit starts CI again",
+        "`main` moves during the push",
+        "The app patch commit starts CI",
     ):
         assert edge_case in process
 
@@ -395,12 +395,14 @@ def test_ci_exposes_one_stable_release_gate_and_documents_hosted_protection() ->
     assert "  release-gate:" in workflow
     assert "needs: [checks, compatibility, install-channels]" in workflow
     assert "name: Release gate" in workflow
-    assert "CI / Release gate" in protection
+    assert "required-check value" in protection
+    assert "Release gate" in protection
     assert "Require a pull request before merging" in protection
     assert "Block force pushes" in protection
-    assert "GitHub Actions app" in protection
+    assert "aiplane-versioning" in protection
+    assert "GitHub App" in protection
     assert "targeting `v*`" in protection
-    assert "enforcement: active" in protection
+    assert "branch ruleset is active" in protection
 
 
 def test_preview_scope_freeze_keeps_advanced_surface_out_of_public_promise() -> None:
@@ -457,7 +459,7 @@ def test_successful_main_merge_versions_tags_and_uploads_a_bound_wheel() -> None
     assert "for attempt in 1 2 3" in workflow
     assert "main moved during versioning; retrying" in workflow
     assert "|| printf 'false'" not in workflow
-    assert "github.actor != 'github-actions[bot]'" in workflow
+    assert "github.actor != 'aiplane-versioning[bot]'" in workflow
     assert "!contains(github.event.head_commit.message, '[skip ci-version]')" in workflow
     assert "python scripts/version.py tag --ci-artifact" in workflow
     assert "git push origin HEAD:main" in workflow
@@ -495,9 +497,32 @@ def test_successful_main_merge_versions_tags_and_uploads_a_bound_wheel() -> None
         not in workflow
     )
     assert "retention-days: 30" in workflow
-    assert "ci-artifact" in release
-    assert "skipping public GitHub Release publication" in release
+    assert "uses: actions/create-github-app-token@v3" in workflow
+    assert "AIPLANE_VERSIONING_APP_ID" in workflow
+    assert "AIPLANE_VERSIONING_APP_PRIVATE_KEY" in workflow
+    assert "PRIVATE_KEY_CONFIGURED:" in workflow
+    assert "PRIVATE_KEY: ${{ secrets." not in workflow
+    assert "token: ${{ steps.versioning-token.outputs.token }}" in workflow
+    assert "aiplane-versioning[bot]" in workflow
+    assert "python scripts/version.py classify-release --previous-ref HEAD^1 --github-output" in release
+    assert "Skip automatic patch publication" in release
+    assert 'test "$tag" = "v$(python scripts/version.py current --plain)"' in release
+    assert "steps.tag.outputs.automatic_publish == 'true'" in release
+    assert "github.event_name == 'workflow_dispatch'" in release
+    assert 'gh workflow run verify-release.yml --ref main -f tag="$TAG"' in release
     assert "not immutable public releases" in documentation
+
+
+def test_release_policy_auto_publishes_milestones_and_keeps_manual_patch_override() -> None:
+    workflow = Path(".github/workflows/release.yml").read_text(encoding="utf-8")
+
+    assert 'tags:\n      - "v*"' in workflow
+    assert "python scripts/version.py classify-release --previous-ref HEAD^1 --github-output" in workflow
+    assert "steps.tag.outputs.automatic_publish == 'true'" in workflow
+    assert "Skip automatic patch publication" in workflow
+    assert "workflow_dispatch:" in workflow
+    assert "actions: write" in workflow
+    assert 'gh workflow run verify-release.yml --ref main -f tag="$TAG"' in workflow
 
 
 def test_published_release_workflow_verifies_every_os_and_install_owner() -> None:

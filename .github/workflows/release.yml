@@ -12,6 +12,7 @@ on:
         type: string
 
 permissions:
+  actions: write
   contents: write
 
 jobs:
@@ -24,73 +25,72 @@ jobs:
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
           fetch-depth: 0
 
-      - name: Classify tag
+      - name: Classify release version
         id: tag
+        shell: bash
         run: |
+          set -euo pipefail
           tag="${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}"
+          test "$(git rev-parse "$tag^{commit}")" = "$(git rev-parse HEAD)"
+          test "$tag" = "v$(python scripts/version.py current --plain)"
           echo "name=$tag" >> "$GITHUB_OUTPUT"
-          contents="$(git for-each-ref "refs/tags/$tag" --format='%(contents)')"
-          if printf '%s\n' "$contents" | grep -q '\[ci-artifact\]'; then
-            echo "ci_artifact=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "ci_artifact=false" >> "$GITHUB_OUTPUT"
-          fi
+          python scripts/version.py classify-release --previous-ref HEAD^1 --github-output
 
-      - name: Skip CI artifact tag
-        if: ${{ steps.tag.outputs.ci_artifact == 'true' && github.event_name != 'workflow_dispatch' }}
-        run: echo "${{ steps.tag.outputs.name }} is a CI artifact tag; skipping public GitHub Release publication."
+      - name: Skip automatic patch publication
+        if: ${{ github.event_name == 'push' && steps.tag.outputs.automatic_publish != 'true' }}
+        run: echo "${{ steps.tag.outputs.name }} is a patch release; retaining its tag and workflow artifact without creating a public GitHub Release."
 
       - name: Set up Python
-        if: ${{ steps.tag.outputs.ci_artifact != 'true' || github.event_name == 'workflow_dispatch' }}
+        if: ${{ github.event_name == 'workflow_dispatch' || steps.tag.outputs.automatic_publish == 'true' }}
         uses: actions/setup-python@v6
         with:
           python-version: "3.13"
           cache: pip
 
       - name: Set up uv
-        if: ${{ steps.tag.outputs.ci_artifact != 'true' || github.event_name == 'workflow_dispatch' }}
+        if: ${{ github.event_name == 'workflow_dispatch' || steps.tag.outputs.automatic_publish == 'true' }}
         uses: astral-sh/setup-uv@v8.3.2
 
       - name: Install build and validation tools
-        if: ${{ steps.tag.outputs.ci_artifact != 'true' || github.event_name == 'workflow_dispatch' }}
+        if: ${{ github.event_name == 'workflow_dispatch' || steps.tag.outputs.automatic_publish == 'true' }}
         run: python -m pip install build pipx setuptools==83.0.0 -e ".[dev]"
 
       - name: Run full quality gate
-        if: ${{ steps.tag.outputs.ci_artifact != 'true' || github.event_name == 'workflow_dispatch' }}
+        if: ${{ github.event_name == 'workflow_dispatch' || steps.tag.outputs.automatic_publish == 'true' }}
         run: scripts/check.sh
 
       - name: Require tag to match package version
-        if: ${{ steps.tag.outputs.ci_artifact != 'true' || github.event_name == 'workflow_dispatch' }}
+        if: ${{ github.event_name == 'workflow_dispatch' || steps.tag.outputs.automatic_publish == 'true' }}
         run: python -c 'import os, tomllib, pathlib; version = tomllib.loads(pathlib.Path("pyproject.toml").read_text())["project"]["version"]; tag = os.environ["RELEASE_TAG"]; assert tag == f"v{version}", f"tag {tag} does not match package version {version}"'
         env:
           RELEASE_TAG: ${{ steps.tag.outputs.name }}
 
       - name: Build wheel and source distribution
-        if: ${{ steps.tag.outputs.ci_artifact != 'true' || github.event_name == 'workflow_dispatch' }}
+        if: ${{ github.event_name == 'workflow_dispatch' || steps.tag.outputs.automatic_publish == 'true' }}
         run: python -m build
 
       - name: Build and verify SHA-256 manifest
-        if: ${{ steps.tag.outputs.ci_artifact != 'true' || github.event_name == 'workflow_dispatch' }}
+        if: ${{ github.event_name == 'workflow_dispatch' || steps.tag.outputs.automatic_publish == 'true' }}
         run: |
           cd dist
           sha256sum aiplane-* > SHA256SUMS
           sha256sum --check SHA256SUMS
 
       - name: Validate wheel through every install channel
-        if: ${{ steps.tag.outputs.ci_artifact != 'true' || github.event_name == 'workflow_dispatch' }}
+        if: ${{ github.event_name == 'workflow_dispatch' || steps.tag.outputs.automatic_publish == 'true' }}
         run: python scripts/verify_install_channels.py dist
 
       - name: Require complete release artifact set
-        if: ${{ steps.tag.outputs.ci_artifact != 'true' || github.event_name == 'workflow_dispatch' }}
+        if: ${{ github.event_name == 'workflow_dispatch' || steps.tag.outputs.automatic_publish == 'true' }}
         run: python scripts/verify_release_manifest.py dist
 
       - name: Write generated release notes
-        if: ${{ steps.tag.outputs.ci_artifact != 'true' || github.event_name == 'workflow_dispatch' }}
+        if: ${{ github.event_name == 'workflow_dispatch' || steps.tag.outputs.automatic_publish == 'true' }}
         run: |
           {
             echo "# aiplane ${{ steps.tag.outputs.name }}"
             echo
-            echo "Automated release artifacts for ${{ steps.tag.outputs.name }}."
+            echo "Validated ${{ steps.tag.outputs.change_kind }} release artifacts for ${{ steps.tag.outputs.name }}."
             echo
             echo "Commit: $(git rev-parse HEAD)"
             echo
@@ -98,13 +98,13 @@ jobs:
           } > RELEASE_NOTES.md
 
       - name: Publish GitHub Release artifacts
-        if: ${{ steps.tag.outputs.ci_artifact != 'true' || github.event_name == 'workflow_dispatch' }}
+        if: ${{ github.event_name == 'workflow_dispatch' || steps.tag.outputs.automatic_publish == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release create "${{ steps.tag.outputs.name }}" dist/* --title "aiplane ${{ steps.tag.outputs.name }}" --notes-file RELEASE_NOTES.md --verify-tag
 
       - name: Verify published release assets
-        if: ${{ steps.tag.outputs.ci_artifact != 'true' || github.event_name == 'workflow_dispatch' }}
+        if: ${{ github.event_name == 'workflow_dispatch' || steps.tag.outputs.automatic_publish == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.tag.outputs.name }}
@@ -115,3 +115,10 @@ jobs:
           test "$(grep -Ec '^aiplane-.*\.whl$' published-assets.txt)" -eq 1
           test "$(grep -Ec '^aiplane-.*\.tar\.gz$' published-assets.txt)" -eq 1
           test "$(grep -Ec '^SHA256SUMS$' published-assets.txt)" -eq 1
+
+      - name: Start public cross-platform verification
+        if: ${{ github.event_name == 'workflow_dispatch' || steps.tag.outputs.automatic_publish == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.name }}
+        run: gh workflow run verify-release.yml --ref main -f tag="$TAG"

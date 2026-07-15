@@ -1,8 +1,6 @@
 # CI and Release Process
 
-GitHub Releases are the current no-clone distribution channel. PyPI or another package index is not advertised until ownership, trusted publishing, and the first publication have been verified.
-
-This document is the operational reference from pull-request validation through a validated CI artifact, optional GitHub Release publication, verification, and rollback.
+This is the operational reference from pull-request validation through CI versioning, workflow artifacts, selective GitHub Release publication, verification, and rollback. GitHub Releases are the current no-clone distribution channel; a package index is not advertised until ownership and trusted publishing are verified.
 
 ## Lifecycle at a glance
 
@@ -10,31 +8,41 @@ This document is the operational reference from pull-request validation through 
 pull request
   -> quality, compatibility, install, and version-policy checks
   -> protected merge to main
-  -> CI patch commit and immutable version tag
-  -> validated wheel workflow artifact
-  -> optional GitHub Release publication
+  -> CI-owned version commit/tag using a short-lived GitHub App token
+  -> validated 30-day wheel workflow artifact
+  -> minor/major: automatic GitHub Release
+     patch: no public release unless manually selected
   -> public cross-platform installation verification
 ```
 
-The durable required check is **CI / Release gate**. The hosted rules and narrow permissions required by the versioning workflow are documented in [Repository Protection](repository-protection.md).
+The PR UI displays **CI / Release gate**. The ruleset check value is the job name, `Release gate`. Hosted setup and trust boundaries are documented in [Repository Protection](repository-protection.md).
 
 ## Pull-request validation
 
-Pull requests run the quality gate, supported-Python packaging checks, and Linux, macOS, and Windows installed-wheel lifecycle checks. They must not change package versions in `pyproject.toml` or `src/aiplane/__init__.py`; CI rejects such changes before merge. This keeps version ownership on `main` and prevents parallel branches from choosing the same release number.
+PRs run the quality gate, supported-Python packaging checks, and Linux/macOS/Windows installed-wheel lifecycle checks. They must not change package versions in `pyproject.toml` or `src/aiplane/__init__.py`; CI rejects those edits before merge.
 
-Two PRs created from the same `main` version do not conflict solely because the first merge causes a version bump. If the second PR did not modify the version lines, merging it against current `main` retains the newer version. It needs updating only for a real content conflict or when the repository rule requiring the branch to be current blocks its merge.
+Two PRs created from the same `main` version do not conflict solely because the first merge causes a patch bump. A second PR that did not modify the version lines retains the newer `main` value when merged. It needs updating only for a real conflict or because the branch-current rule requires it.
 
-## Ordinary merges: CI-owned patch versions and tags
+## Ordinary merges: automated patch versions
 
-After an ordinary pull request merges to `main` and **CI / Release gate** succeeds, CI refreshes from the latest `origin/main`, increments the patch component in both tracked version files, pushes a `[skip ci-version]` commit, creates an annotated immutable `vVERSION` tag marked `[ci-artifact]`, validates the exact tagged wheel, and uploads checksum- and provenance-bound workflow artifacts.
+After an ordinary PR merges and `Release gate` succeeds, CI:
 
-Version-mutation jobs share one concurrency group. If another merge moves `main` during the patch push, CI starts again from the latest tip and retries up to three times. Continued contention fails visibly instead of force-pushing or tagging the wrong commit; rerunning the failed workflow is then safe.
+1. obtains a short-lived token for the private `aiplane-versioning` GitHub App;
+2. refreshes from the latest `origin/main`;
+3. increments the patch component in both version files;
+4. pushes `chore(release): vVERSION [skip ci-version]`;
+5. retries from the latest `main` up to three times if another merge wins the race;
+6. creates the immutable annotated `vVERSION` tag;
+7. builds and validates the exact tagged wheel; and
+8. uploads the wheel, checksum, and provenance as a 30-day Actions artifact.
 
-`[skip ci-version]` prevents another version mutation and skips the expensive matrix on the CI-owned commit. The skip applies only when the actor is `github-actions[bot]` and its commit contains the marker; contributor-authored marker text cannot bypass checks.
+The mutation jobs share one concurrency group. They never force-push. Continued contention fails visibly and can be rerun safely.
 
-## Agreed minor, major, or explicit versions
+The loop marker is trusted only when the event actor is `aiplane-versioning[bot]`; author text in a forged commit cannot bypass checks. The app tag push starts **Release artifacts**, where semantic classification recognizes a patch and intentionally skips public publication.
 
-For an agreed minor, major, or explicit version, an authorized maintainer uses the script in a clean, current `main` checkout and pushes that direct version commit through the configured maintainer bypass:
+## Intentional minor, major, and explicit versions
+
+Package versions are never changed on PR branches. An authorized administrator starts from clean, current `main`:
 
 ```bash
 git switch main
@@ -44,54 +52,63 @@ python scripts/version.py minor
 # or: python scripts/version.py major
 # or: python scripts/version.py set 1.0.0
 python scripts/version.py check
+git diff -- pyproject.toml src/aiplane/__init__.py
 ```
 
-CI preserves that authorized direct-main value and tags it without adding a patch. Ordinary PR merges never carry version edits and receive the automatic patch increment. Do not edit only one version file and do not create or move the tag manually.
+Commit only the synchronized version files and push through the documented administrator bypass. The local helper rejects equal or decreasing versions, and CI repeats that defense, preserves a valid selected value without adding a patch, and lets the app create the immutable tag.
+
+The release workflow compares that version with its first parent:
+
+- patch change: keep the tag and Actions artifact, but do not publish automatically;
+- minor or major change: run the full release gate and publish automatically;
+- invalid/equal/decreasing change: fail without publication.
+
+## Publication and manual patch override
+
+Automatic minor/major publication and manual selected-tag publication both:
+
+1. verify tag, commit, and package-version agreement;
+2. run the full quality gate;
+3. build one wheel and one source distribution;
+4. generate and verify `SHA256SUMS`;
+5. validate pip, pipx, and uv installation;
+6. reject an incomplete artifact set;
+7. create the GitHub Release;
+8. confirm exactly one wheel, one source distribution, and `SHA256SUMS`; and
+9. dispatch the public cross-platform verification workflow.
+
+To deliberately publish an existing patch tag, open **Actions -> Release artifacts -> Run workflow**, enter the exact tag, and run it from trusted `main`. Manual selection changes publication intent, not validation strength.
+
+A workflow artifact is not a GitHub Release, and a release page without its required assets is not complete. Never move a tag or replace assets under a published version; correct a fault with a new version.
 
 ## Expected edge cases and recovery
 
-- **Two PRs merge close together:** serialized versioning refreshes from the latest `main`, so successive merges receive successive patch versions.
-- **A stale PR changes no version field:** it remains valid unless it has a real merge conflict or the branch-current rule requires an update.
-- **A PR changes a version field:** the version guard fails. Remove the edit and use the authorized direct-`main` flow for an agreed release.
-- **`main` moves during the CI push:** CI retries from the new tip. After three failed races it stops without force-pushing; rerun it when activity settles.
-- **The bot patch commit starts CI again:** the bot-and-marker guard prevents a second bump and duplicate expensive checks.
-- **A tag already identifies the commit:** CI treats it idempotently; it must not create another version or move the tag.
-- **Validation or publication fails:** do not claim or repair that release in place. Fix the cause through review and produce a new version.
+- **Two PRs merge close together:** serialized versioning refreshes from latest `main`, producing successive patch versions.
+- **A stale PR changes no version field:** it remains valid unless it conflicts or the current-branch rule requires an update.
+- **A PR changes a version field:** the PR guard fails; remove the edit.
+- **`main` moves during the push:** CI retries three times, then stops without force-pushing.
+- **App configuration is absent or invalid:** the mutation job fails with a named variable/secret error before checkout or push.
+- **The app patch commit starts CI:** actor-plus-marker checks prevent a second bump and duplicate expensive jobs.
+- **A patch tag starts the release workflow:** classification succeeds but public publication is skipped.
+- **A minor/major publication fails:** no complete release is claimed; fix through review and issue a new version.
+- **A tag already identifies the commit:** tagging is idempotent and never moves the tag.
 
-## Rehearse locally
+## Local rehearsal
 
 ```bash
 scripts/check.sh
 python scripts/build_local_wheel.py --clean --validate-pip
 ```
 
-Local snapshots are written under ignored `.aiplane/wheelhouse` with PEP 440 local metadata, checksum, and provenance. They are developer test artifacts, not public releases.
+Local snapshots under ignored `.aiplane/wheelhouse` use PEP 440 local metadata and are not official release wheels.
 
-## Publish an existing CI tag
+## Verify and consume a published release
 
-CI artifact tags do not publish automatically. In GitHub, open **Actions → Release artifacts → Run workflow**, enter the exact tag such as `v0.1.2`, and run it from trusted `main`.
+Successful publication dispatches **Verify published release** automatically. Maintainers may also run it manually with the same tag. Its nine Linux/macOS/Windows x pip/pipx/uv jobs download the public assets, verify the manifest, exercise install/replacement/uninstall, and upload sanitized evidence.
 
-The release workflow:
-
-1. checks out the immutable tag and verifies tag/package agreement;
-2. runs the full quality gate;
-3. builds one wheel and one source distribution;
-4. generates and verifies `SHA256SUMS`;
-5. validates all installation owners;
-6. refuses an incomplete artifact set;
-7. creates the GitHub Release; and
-8. confirms the published release has exactly one wheel, one source distribution, and `SHA256SUMS`.
-
-A workflow run is not a successful release if the GitHub Release has no attached assets. Do not retag or silently replace a published version; correct it with a new version.
-
-## Verify the published artifact
-
-After publication, run **Actions → Verify published release → Run workflow** with the same tag. Its nine Linux/macOS/Windows × pip/pipx/uv jobs download the actual public assets, verify the portable checksum manifest, exercise install/replacement/uninstall, and upload canonical sanitized evidence.
-
-Manual consumer smoke:
+Manual smoke after downloading the wheel and manifest:
 
 ```bash
-# Download the wheel and SHA256SUMS into one clean directory first.
 python scripts/verify_release_manifest.py .
 python -m pip install ./aiplane-VERSION-py3-none-any.whl
 python -m pip show aiplane
@@ -99,10 +116,10 @@ aiplane --version
 aiplane quickstart local-coding --dry-run
 ```
 
-Use the same installation owner for upgrade and uninstall. Preserve reviewed profile YAML before changing versions. Credentials, caches, audit logs, tunnel state, and runtime weights remain owned by their respective systems.
+Use the same installation owner for upgrade and uninstall. Preserve reviewed profile YAML; credentials, caches, logs, tunnel state, and runtime weights remain owned by their respective systems.
 
 ## Integrity and rollback
 
-Linux users may also run `sha256sum --check SHA256SUMS`; macOS users may run `shasum -a 256 --check SHA256SUMS`. On Windows, the project’s portable verifier avoids shell-specific checksum behavior; PowerShell users can independently compare `Get-FileHash -Algorithm SHA256 FILE` with the manifest.
+Linux can run `sha256sum --check SHA256SUMS`; macOS can run `shasum -a 256 --check SHA256SUMS`. The portable verifier avoids shell-specific checksum behavior on Windows.
 
-For rollback, uninstall with the original installation owner, verify the previously downloaded immutable wheel, and reinstall it. Published tags and assets must never be moved or silently replaced.
+For rollback, uninstall with the original installation owner, verify a previously downloaded immutable wheel, and reinstall it. Published tags and assets must never be moved or silently replaced.

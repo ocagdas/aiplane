@@ -15,6 +15,7 @@ PYPROJECT = ROOT / "pyproject.toml"
 PACKAGE_INIT = ROOT / "src" / "aiplane" / "__init__.py"
 VERSION_RE = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
 VERSION_FILES = {"pyproject.toml", "src/aiplane/__init__.py"}
+VERSIONING_ACTOR = "aiplane-versioning[bot]"
 
 
 @dataclass(frozen=True)
@@ -41,6 +42,33 @@ class Version:
 
     def __str__(self) -> str:
         return f"{self.major}.{self.minor}.{self.patch}"
+
+
+def classify_version_change(previous: str, current: str) -> str:
+    before = Version.parse(previous)
+    after = Version.parse(current)
+    before_parts = (before.major, before.minor, before.patch)
+    after_parts = (after.major, after.minor, after.patch)
+    if after_parts <= before_parts:
+        return "invalid"
+    if after.major != before.major:
+        return "major"
+    if after.minor != before.minor:
+        return "minor"
+    return "patch"
+
+
+def release_plan(previous: str, current: str) -> dict[str, object]:
+    change_kind = classify_version_change(previous, current)
+    if change_kind == "invalid":
+        raise ValueError(f"release version must increase: previous={previous}, current={current}")
+    return {
+        "previous_version": previous,
+        "current_version": current,
+        "change_kind": change_kind,
+        "automatic_publish": change_kind in {"minor", "major"},
+        "tag": f"v{current}",
+    }
 
 
 def run(command: list[str], *, expected: tuple[int, ...] = (0,)) -> subprocess.CompletedProcess[str]:
@@ -106,8 +134,10 @@ def check_pr_version(base_ref: str) -> str:
 def write_version(version: str, *, dry_run: bool = False) -> None:
     Version.parse(version)
     old = check_versions()
+    if classify_version_change(old, version) == "invalid":
+        raise ValueError(f"version must increase: current={old}, requested={version}")
     if dry_run:
-        print(json.dumps({"old_version": old, "new_version": version, "changed": old != version}, indent=2))
+        print(json.dumps({"old_version": old, "new_version": version, "changed": True}, indent=2))
         return
     pyproject_text = PYPROJECT.read_text(encoding="utf-8")
     init_text = PACKAGE_INIT.read_text(encoding="utf-8")
@@ -166,25 +196,32 @@ def classify_from_data(
     matching_tag_points_at_head: bool,
     associated_pull_request: bool = False,
     parent_version: str | None = None,
+    actor: str = "",
 ) -> dict[str, object]:
     current = Version.parse(version)
     version_files_changed = bool(changed_files & VERSION_FILES)
     version_value_changed = parent_version is not None and parent_version != version
+    version_change = (
+        classify_version_change(parent_version, version) if version_value_changed and parent_version is not None else "none"
+    )
     mode = "none"
     reason = "not a main push"
     if event == "push" and ref == "refs/heads/main":
-        if "[skip ci-version]" in message and "github-actions[bot]" in author:
+        if "[skip ci-version]" in message and actor == VERSIONING_ACTOR:
             mode = "validate_only"
-            reason = "version loop breaker on GitHub Actions bot commit"
+            reason = "version loop breaker on trusted versioning app commit"
         elif matching_tag_points_at_head:
             mode = "validate_only"
             reason = "matching version tag already points at HEAD"
         elif (parent_count > 1 or associated_pull_request) and version_value_changed:
             mode = "invalid_pr_version_change"
             reason = "pull-request merge changed tracked version value"
+        elif version_files_changed and version_value_changed and version_change == "invalid":
+            mode = "invalid_direct_version_change"
+            reason = "direct main version must increase"
         elif version_files_changed and version_value_changed:
             mode = "maintainer_direct_main_version_commit"
-            reason = "maintainer changed tracked version value"
+            reason = f"maintainer selected a {version_change} version"
         elif parent_count > 1 or associated_pull_request:
             mode = "ci_patch_after_merge"
             reason = "pull-request merge on main"
@@ -204,6 +241,8 @@ def classify_from_data(
         "version_files_changed": version_files_changed,
         "associated_pull_request": associated_pull_request,
         "parent_version": parent_version,
+        "version_change": version_change,
+        "actor": actor,
     }
 
 
@@ -224,6 +263,7 @@ def classify_ci() -> dict[str, object]:
         matching_tag_points_at_head=tag_points_at_head(tag),
         associated_pull_request=os.environ.get("AIPLANE_ASSOCIATED_PR", "").lower() == "true",
         parent_version=version_at_ref("HEAD^1") if parent_count else None,
+        actor=os.environ.get("GITHUB_ACTOR", ""),
     )
 
 
@@ -233,7 +273,16 @@ def write_github_outputs(values: dict[str, object]) -> None:
         return
     with Path(output_path).open("a", encoding="utf-8") as handle:
         for key, value in values.items():
-            handle.write(f"{key}={value}\n")
+            rendered = str(value).lower() if isinstance(value, bool) else str(value)
+            handle.write(f"{key}={rendered}\n")
+
+
+def classify_release(previous_ref: str) -> dict[str, object]:
+    current = check_versions()
+    previous = version_at_ref(previous_ref)
+    if previous is None:
+        raise ValueError(f"cannot read previous version from {previous_ref}")
+    return release_plan(previous, current)
 
 
 def require_clean_tree() -> None:
@@ -288,6 +337,9 @@ def main(argv: list[str] | None = None) -> int:
     classify_cmd.add_argument("--github-output", action="store_true")
     check_pr_cmd = sub.add_parser("check-pr")
     check_pr_cmd.add_argument("--base-ref", required=True)
+    classify_release_cmd = sub.add_parser("classify-release")
+    classify_release_cmd.add_argument("--previous-ref", default="HEAD^1")
+    classify_release_cmd.add_argument("--github-output", action="store_true")
 
     args = parser.parse_args(argv)
     try:
@@ -318,11 +370,17 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(result, indent=2, sort_keys=True))
             if args.github_output:
                 write_github_outputs(result)
-            if result["mode"] == "invalid_pr_version_change":
+            if result["mode"] in {"invalid_pr_version_change", "invalid_direct_version_change"}:
                 raise ValueError(str(result["reason"]))
             return 0
         if args.command == "check-pr":
             print(check_pr_version(args.base_ref))
+            return 0
+        if args.command == "classify-release":
+            result = classify_release(args.previous_ref)
+            print(json.dumps(result, indent=2, sort_keys=True))
+            if args.github_output:
+                write_github_outputs(result)
             return 0
     except Exception as exc:
         print(f"error: {exc}", file=sys.stderr)
