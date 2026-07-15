@@ -64,11 +64,13 @@ AI workflow setups are fragmented:
 - **Runtime**: software that loads model weights or serves inference. Examples: Ollama, vLLM, TGI, llama.cpp server, LocalAI, Transformers, LM Studio.
 - **Runtime endpoint**: the URL exposed by a runtime, often OpenAI-compatible `/v1`.
 - **Model**: a profile-approved alias mapped to a source-native model id or deployment plus metadata.
-- **Profile**: editable YAML configuration for one workflow or machine context.
+- **Profile**: editable YAML source of truth for an intended workflow or machine class; secrets and runtime-owned state remain external.
+- **Profile render**: canonical read-only JSON evidence assembled from a profile for validation, comparison, CI, or archival; it is not restore input or target-tool configuration.
+- **Replay**: validate a reviewed profile against another machine, explain destination drift, and compile fresh exports. Identical or capability-equivalent machines may satisfy the same profile despite non-material hardware differences.
 - **Machine**: normalized hardware, OS, runtime, and capacity description.
 - **Stack**: operational binding of machine, runtime, primary model, optional orchestrator, and access policy.
 - **Target**: deployment or access target such as Azure VM, AKS, Docker host, or SSH tunnel plan.
-- **Integration export**: generated config text for an IDE or CLI tool. It does not edit the target tool.
+- **Integration export**: target-tool configuration text compiled from a selected profile. It prints for review and does not install, edit, start, or provision the target tool or runtime.
 - **MCP adapter**: stdio tool surface for structured `aiplane` inspection and guarded mutations.
 
 ## Architecture Direction

@@ -364,6 +364,25 @@ Advanced concepts:
 4. Every example identifies whether it mutates state
 5. Every workflow ends with a verifiable outcome
 
+### Priority 13: Replay approved profiles across machines
+
+**Status: Planned after the P0 evidence gate; manual YAML backup/restore and deterministic render/export evidence exist today.**
+
+**Target**
+
+Provide a safe, reviewable workflow to back up and replay profile configuration across machines without treating credentials, model weights, caches, or runtime state as portable profile data. Replay must support both identical machines and capability-equivalent machines whose small CPU, RAM, VRAM, or device differences do not change the suitability of the reviewed models, runtimes, endpoints, and policy.
+
+**Success criteria**
+
+1. A documented manifest defines portable profile files and explicitly excluded machine-local state.
+2. Archive and restore operations are previewable, reject unsafe paths, preserve the original on conflict, and never include raw credentials.
+3. Profile-to-profile and profile-to-current-machine comparison separates exact equality, capability-equivalent variance, material incompatibility, and unresolved evidence.
+4. Capability equivalence is based on explicit model/runtime/policy requirements and conservative thresholds, not generic hardware similarity.
+5. Identical resolved inputs reproduce byte-stable supported exports; non-material variance is reported without forcing changes.
+6. Material differences produce provenance-aware doctor/drift findings and may trigger revised recommendations or blocked exports.
+7. Replay is tested across at least two identical VMs, two near-equivalent machines, and one intentionally incompatible destination.
+8. The workflow delegates environment, runtime, weight, credential, and infrastructure restoration to Conda/venv, runtime vendors, secret owners, and established infrastructure tools.
+
 ### Recommended delivery order
 
 #### Milestone 1: External beta readiness
@@ -380,12 +399,13 @@ Exit target: five external users complete the main workflow without developer as
 
 #### Milestone 2: Team reproducibility
 
-1. Stable plan replay
-2. Policy state model
-3. Profile comparison
-4. Policy drift detection
-5. Shared profile validation
-6. Remote workstation workflow
+1. Portable profile archive/restore with an explicit exclusion manifest
+2. Stable plan and export replay
+3. Profile comparison and current-machine drift
+4. Capability-equivalence classification for identical, near-equivalent, and incompatible machines
+5. Policy state and drift model
+6. Shared profile validation
+7. Remote workstation replay from multiple clients
 
 Exit target: Two teams reproduce the same approved setup across at least three machines.
 

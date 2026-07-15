@@ -5,11 +5,7 @@ does not try to replace IDE assistants or CLI agents.
 
 ## What Export Means
 
-`aiplane integrations export ...` prints configuration to stdout. It does not
-install an IDE extension, edit your IDE settings, start a server, or create an
-account. The intent is to make model/provider selection repeatable and then let
-you paste or commit the generated snippet in the target tool's normal config
-location.
+`aiplane integrations export ...` compiles the selected Aiplane profile into configuration syntax understood by the target tool and prints it to stdout. For example, a Continue export translates reviewed model-role aliases, providers, runtimes, endpoints, and credential environment-variable references into Continue YAML. It does not install an IDE extension, edit IDE settings, start a server, copy credentials, or create an account. Redirect or paste the generated text into the target tool only after review.
 
 The exported values come from the selected `aiplane` profile: provider, model
 name, endpoint/base URL, and API key environment variable where applicable. Use

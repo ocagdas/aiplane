@@ -44,7 +44,9 @@ These are the public-first, inspect-first commands for onboarding before advance
 
 ## Common Terms
 
-- **Profile**: A named working configuration. It points to selected providers, models, defaults, hardware, machines, stacks, targets, and environment settings.
+- **Profile**: The editable YAML source of truth for an intended setup. It records reviewed model aliases, runtimes, endpoints, hardware expectations, tool roles, and policy; machine-local secrets and runtime data stay outside it.
+- **Profile render**: `aiplane profiles render PROFILE` assembles one consistently ordered JSON snapshot from all YAML files in a profile. It is comparison, validation, CI, and archival evidence—not restorable source YAML or target-tool configuration.
+- **Replay**: Copy reviewed profile YAML to another workspace or machine, validate it, inspect the destination, and compile fresh integration configuration there.
 - **Provider / Model Source / Catalog**: Where model identifiers or weights come from, such as the Ollama library, Hugging Face Hub, GGUF files, Azure Speech voices, or a local file path.
 - **Runtime**: The software that loads model weights and serves inference, such as Ollama, vLLM, llama.cpp server, TGI, Transformers, LocalAI, faster-whisper, Diffusers, or ComfyUI.
 - **Runtime Endpoint**: A configured service URL exposed by a runtime, such as local Ollama, vLLM on a shared workstation, or llama.cpp behind an SSH tunnel.
@@ -53,7 +55,7 @@ These are the public-first, inspect-first commands for onboarding before advance
 - **Machine**: A hardware/OS profile for a local PC, shared workstation, VM, or cluster node. A machine can be discovered live or imported from a captured schema.
 - **Stack**: A pairing of machine, runtime, model, and deployment/access settings. It answers questions like “run this model with vLLM on that GPU machine”.
 - **Target**: A deployment or access target such as an Azure VM plan, AKS plan, Docker host, or SSH tunnel target.
-- **Integration Export**: A generated config snippet for a tool. It prints text; it does not install extensions or modify your settings files.
+- **Integration Export**: Configuration text compiled from the selected profile into another tool's syntax. It prints to stdout; it does not install the tool, modify its settings, start runtimes, or copy credentials.
 - **MCP Adapter**: A stdio server that lets IDEs/agents query `aiplane` as structured tools. It is separate from the model inference endpoint.
 - **Doctor**: A readiness check. It explains whether required tools, endpoints, credentials, or runtimes look usable.
 - **Benchmark**: A small smoke test for a model/runtime/profile combination. Current scores are practical smoke indicators, not formal benchmark claims.

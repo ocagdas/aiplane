@@ -122,6 +122,32 @@ Quickstart preserves existing profile files on repeat runs and reports one exact
 This path is designed to detect local hardware, runtimes, model catalog state,
 endpoint setup status, and role mappings, report configuration sources (detected, built-in, provider-discovered cache, profile-configured, and unresolved records), and then report one exact next action. Doctor findings include severity, impact, remediation command metadata, mutability, and dry-run support where action is needed.
 
+## Profiles, render, export, and replay
+
+- A **profile** is the editable YAML source of truth for an intended AI development setup: reviewed model aliases, runtimes, endpoints, hardware expectations, tool roles, and policy.
+- `aiplane profiles render PROFILE` reads the profile's YAML files and prints one consistently ordered JSON snapshot. Use that snapshot for validation, comparison, CI, or archival evidence; it is not an installable config and cannot currently restore the YAML.
+- `aiplane export TARGET` compiles the selected profile into configuration text understood by another tool, such as Continue. It prints to stdout and does not install the tool, edit its files, start a runtime, or copy credentials.
+- A **replay** copies the reviewed YAML profile to another workspace or machine, validates it, inspects the destination, and compiles fresh target-tool configuration there.
+
+Today, ordinary reviewed filesystem or version-control procedures own backup and transfer:
+
+```bash
+# Source machine: preserve the editable source and comparison evidence.
+cp -a profiles/local-dev portable-local-dev
+aiplane profiles render local-dev > local-dev.profile.json
+aiplane export continue > continue.expected.yaml
+
+# Destination machine: restore the YAML source, then evaluate this machine.
+cp -a portable-local-dev profiles/local-dev
+aiplane profiles validate local-dev
+aiplane discover
+aiplane doctor
+aiplane recommend
+aiplane export continue > continue.actual.yaml
+```
+
+Identical machines with equivalent resolved inputs should reproduce the same export. Machines with small hardware differences may still be **capability-equivalent** when the reviewed models, runtimes, endpoints, and policy remain suitable; discovery and doctor should expose the variance without forcing a different result. Material differences must remain visible and may legitimately change recommendations or exports. Credentials, model weights, discovery caches, audit logs, tunnel state, and runtime-owned data are machine-local and are not part of the portable profile. See [Profile backup, recovery, and replay](docs/user/profile-schema.md#backup-recovery-and-cross-machine-replay).
+
 Command categories are explicit in [command coverage](docs/project/command-coverage.md): core commands lead onboarding, supporting commands troubleshoot specific subsystems, and experimental commands remain outside the developer-preview path.
 
 ## Advanced and experimental commands

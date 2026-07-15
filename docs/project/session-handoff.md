@@ -7,6 +7,8 @@ This file is the short resume point for future `aiplane` development sessions. U
 
 **Current target: Milestone 1 (External Beta Readiness)**
 
+Profile portability terminology and post-P0 direction are aligned: editable YAML is the backup/replay source of truth, `profiles render` is canonical read-only evidence, and `export` compiles target-tool configuration without mutation. Roadmap Priority 13 and P1 backlog item 8 plan safe archive/restore plus exact, capability-equivalent, incompatible, and unresolved destination classification, while excluding credentials and runtime-owned state.
+
 Quickstart progress and terminology are aligned: `quickstart local-coding` updates one deterministic phase-status line on stderr without contaminating stdout, and public entrypoints define the environment doctor as a read-only readiness diagnosis addressing model/task/hardware fit and reproducibility.
 
 P0.5 quickstart sufficiency is complete: provider discovery is opt-in, repeat runs preserve profile edits, empty profiles receive at most two no-YAML setup paths plus a no-runtime dry-run plan, and configured profiles receive one exact Continue export action. Validation: focused quickstart suite 6 passed; quick gate 19 passed; full suite 436 passed; required profile and environment doctor checks passed.

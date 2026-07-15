@@ -46,7 +46,7 @@ Rejected or gated:
 
 ### P1 — Prove repeated value
 
-8. Implement profile comparison and current-environment drift detection with deterministic provenance-aware explanations.
+8. Implement safe portable-profile backup/replay, profile comparison, and current-environment drift detection with deterministic provenance-aware explanations. Define an explicit inclusion/exclusion manifest; classify destinations as exact, capability-equivalent, materially incompatible, or unresolved based on reviewed model/runtime/policy requirements; and validate identical VMs, near-equivalent hardware, and an incompatible machine. Do not copy credentials, model weights, caches, audit/tunnel state, or runtime-owned data, and do not turn replay into broad host/cloud apply.
 9. Run the six clean-environment trials defined by the public demo plan and record failures by stage.
 10. Recruit external design partners, targeting ten unaided successful onboardings before public beta.
 11. Measure opt-in activation and recurrence: first useful export, second integration, profile replay, seven/thirty-day return, and support points.

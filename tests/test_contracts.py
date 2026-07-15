@@ -538,3 +538,32 @@ def test_published_release_workflow_verifies_every_os_and_install_owner() -> Non
     assert "python scripts/validate_trial_evidence.py" in workflow
     assert "uses: actions/upload-artifact@v7" in workflow
     assert "retention-days: 90" in workflow
+
+
+def test_profile_render_export_and_replay_terminology_is_consistent() -> None:
+    readme = Path("README.md").read_text(encoding="utf-8")
+    overview = Path("docs/user/overview.md").read_text(encoding="utf-8")
+    schema = Path("docs/user/profile-schema.md").read_text(encoding="utf-8")
+    demo = Path("docs/project/public-demo-plan.md").read_text(encoding="utf-8")
+    roadmap = Path("docs/project/roadmap.md").read_text(encoding="utf-8")
+    backlog = Path("docs/project/product-adoption-backlog-2026-07.md").read_text(encoding="utf-8")
+
+    for document in (readme, overview, schema, demo):
+        assert "editable" in document.lower()
+        assert "profiles render" in document
+        assert "export" in document.lower()
+        assert "replay" in document.lower()
+
+    assert "cannot currently restore the YAML" in readme
+    assert "prints to stdout" in readme
+    assert "capability-equivalent" in readme
+    assert "not currently accepted as restore input" in schema
+    assert "Priority 13: Replay approved profiles across machines" in roadmap
+    for classification in (
+        "exact equality",
+        "capability-equivalent variance",
+        "material incompatibility",
+        "unresolved evidence",
+    ):
+        assert classification in roadmap
+    assert "Do not copy credentials, model weights" in backlog

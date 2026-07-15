@@ -4,6 +4,8 @@ This plan presents `aiplane` as it exists in the developer preview: it inventori
 
 The public story is deliberately narrow. `aiplane` turns environment facts and reviewed YAML profiles into readiness findings, hardware-aware recommendations, and deterministic configuration exports. It does not become a model runtime, coding agent, IDE extension, secret manager, or hidden cloud deployment system.
 
+Terminology used throughout: the editable profile YAML is the backup/replay source of truth; `profiles render` prints a consistently ordered JSON snapshot for validation, comparison, CI, or archival evidence and cannot restore the YAML; `export` compiles profile choices into another tool's configuration syntax and prints it without editing that tool. A replay restores reviewed YAML and evaluates the destination before producing fresh exports.
+
 ## Recording hierarchy
 
 ### Primary public adoption cut — one outcome in under three minutes
@@ -235,6 +237,8 @@ find demo-backup -maxdepth 2 -type f -print
 Narration:
 
 > This backup contains the reviewed profile YAML, canonical render, optional non-secret local defaults, and generated integration text. Credentials, model weights, provider caches, audit logs, tunnel state, and machine-specific runtime data stay with the systems that own them.
+
+This P0 recording proves lossless restoration and deterministic replay in one workspace. Post-P0 cross-machine validation will add identical-VM, capability-equivalent, and deliberately incompatible destinations so hardware variance and material drift are demonstrated honestly.
 
 ## P0 validation recording 2 — Reuse the setup with an existing remote GPU workstation
 
