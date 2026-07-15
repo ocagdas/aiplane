@@ -1,0 +1,95 @@
+name: Verify published release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Published release tag, for example v0.1.2"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  verify-release:
+    name: Published release (${{ matrix.os }}, ${{ matrix.channel }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-14, windows-latest]
+        channel: [pip, pipx, uv]
+    steps:
+      - name: Check out the tagged source
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag }}
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v8.3.2
+
+      - name: Install verification tools
+        run: python -m pip install pipx setuptools==83.0.0
+
+      - name: Download the exact public release assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          mkdir release
+          test "$(gh release view "$TAG" --json isDraft --jq '.isDraft')" = false
+          test "$(gh release view "$TAG" --json tagName --jq '.tagName')" = "$TAG"
+          gh release download "$TAG" --dir release --pattern 'aiplane-*.whl'
+          gh release download "$TAG" --dir release --pattern 'aiplane-*.tar.gz'
+          gh release download "$TAG" --dir release --pattern 'SHA256SUMS'
+
+      - name: Verify release checksums and artifact shape
+        run: python scripts/verify_release_manifest.py release
+
+      - name: Exercise the selected no-clone install owner
+        id: lifecycle
+        shell: bash
+        env:
+          CHANNEL: ${{ matrix.channel }}
+        run: |
+          started="$(python -c 'import time; print(time.time())')"
+          python scripts/verify_install_channels.py release --channel "$CHANNEL"
+          elapsed="$(python -c "import time; print(max(0.0, time.time() - float('$started')))" )"
+          echo "elapsed=$elapsed" >> "$GITHUB_OUTPUT"
+
+      - name: Write canonical sanitized evidence
+        shell: bash
+        env:
+          TAG: ${{ inputs.tag }}
+          CHANNEL: ${{ matrix.channel }}
+          ELAPSED: ${{ steps.lifecycle.outputs.elapsed }}
+        run: |
+          commit="$(git rev-list -n 1 "$TAG")"
+          release_url="https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TAG}"
+          python scripts/write_release_evidence.py \
+            --release-dir release \
+            --release-url "$release_url" \
+            --tag "$TAG" \
+            --commit "$commit" \
+            --channel "$CHANNEL" \
+            --elapsed-seconds "$ELAPSED" \
+            --output "evidence/${RUNNER_OS}-${CHANNEL}.json"
+          python scripts/validate_trial_evidence.py "evidence/${RUNNER_OS}-${CHANNEL}.json"
+
+      - name: Upload verification evidence
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-evidence-${{ inputs.tag }}-${{ runner.os }}-${{ matrix.channel }}
+          path: evidence/
+          if-no-files-found: error
+          retention-days: 90

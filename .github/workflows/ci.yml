@@ -10,10 +10,20 @@ on:
 
 jobs:
   checks:
+    if: ${{ github.event_name != 'push' || github.actor != 'github-actions[bot]' || !contains(github.event.head_commit.message, '[skip ci-version]') }}
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Reject package-version changes in pull requests
+        if: ${{ github.event_name == 'pull_request' }}
+        shell: bash
+        run: |
+          git fetch origin "$GITHUB_BASE_REF"
+          python scripts/version.py check-pr --base-ref "origin/$GITHUB_BASE_REF"
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -28,6 +38,7 @@ jobs:
         run: make check
 
   compatibility:
+    if: ${{ github.event_name != 'push' || github.actor != 'github-actions[bot]' || !contains(github.event.head_commit.message, '[skip ci-version]') }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -50,6 +61,7 @@ jobs:
         run: python -m pytest -q tests/test_contracts.py tests/test_packaging.py
 
   install-channels:
+    if: ${{ github.event_name != 'push' || github.actor != 'github-actions[bot]' || !contains(github.event.head_commit.message, '[skip ci-version]') }}
     name: Install channels (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
@@ -83,7 +95,7 @@ jobs:
 
   release-gate:
     name: Release gate
-    if: ${{ always() }}
+    if: ${{ always() && (github.event_name != 'push' || github.actor != 'github-actions[bot]' || !contains(github.event.head_commit.message, '[skip ci-version]')) }}
     needs: [checks, compatibility, install-channels]
     runs-on: ubuntu-latest
     steps:
@@ -122,7 +134,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          associated="$(gh api -H "Accept: application/vnd.github+json" "/repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/pulls" --jq 'if length > 0 then "true" else "false" end' 2>/dev/null || printf 'false')"
+          associated="$(gh api -H "Accept: application/vnd.github+json" "/repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/pulls" --jq 'if length > 0 then "true" else "false" end')"
           echo "value=$associated" >> "$GITHUB_OUTPUT"
 
       - name: Classify version action
@@ -138,6 +150,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    concurrency:
+      group: aiplane-main-version-mutation
+      cancel-in-progress: false
     outputs:
       version: ${{ steps.result.outputs.version }}
       tag: ${{ steps.result.outputs.tag }}
@@ -156,27 +171,31 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Apply next patch version
-        run: python scripts/version.py set "${{ needs.classify-main-push.outputs.next_version }}"
-
-      - name: Commit version bump
-        run: |
-          git add pyproject.toml src/aiplane/__init__.py
-          git commit -m "chore(release): v${{ needs.classify-main-push.outputs.next_version }} [skip ci-version]"
-
-      - name: Create CI artifact tag
-        run: python scripts/version.py tag --ci-artifact
-
-      - name: Push version commit and tag
-        run: |
-          git push origin HEAD:main
-          git push origin "${{ needs.classify-main-push.outputs.tag }}"
-
-      - name: Emit resolved version commit
+      - name: Rebase versioning on latest main and push atomically
         id: result
+        shell: bash
         run: |
-          echo "version=${{ needs.classify-main-push.outputs.next_version }}" >> "$GITHUB_OUTPUT"
-          echo "tag=${{ needs.classify-main-push.outputs.tag }}" >> "$GITHUB_OUTPUT"
+          set -euo pipefail
+          pushed=false
+          for attempt in 1 2 3; do
+            git fetch origin main --tags
+            git checkout -B main origin/main
+            python scripts/version.py patch
+            version="$(python scripts/version.py current --plain)"
+            tag="v${version}"
+            git add pyproject.toml src/aiplane/__init__.py
+            git commit -m "chore(release): ${tag} [skip ci-version]"
+            if git push origin HEAD:main; then
+              pushed=true
+              break
+            fi
+            echo "main moved during versioning; retrying from latest main (${attempt}/3)" >&2
+          done
+          test "$pushed" = true
+          python scripts/version.py tag --ci-artifact
+          git push origin "$tag"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "version_commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "source_commit=${{ github.sha }}" >> "$GITHUB_OUTPUT"
           echo "version_source=ci_patch_after_merge" >> "$GITHUB_OUTPUT"
@@ -188,6 +207,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    concurrency:
+      group: aiplane-main-version-mutation
+      cancel-in-progress: false
     outputs:
       version: ${{ steps.result.outputs.version }}
       tag: ${{ steps.result.outputs.tag }}
@@ -285,7 +307,6 @@ jobs:
           cd artifacts
           sha256sum aiplane-*.whl > SHA256SUMS
           sha256sum --check SHA256SUMS
-          wheel="$(ls aiplane-*.whl)"
           python - <<'PY'
           import json, os, pathlib
           payload = {

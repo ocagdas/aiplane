@@ -80,6 +80,10 @@ jobs:
         if: ${{ steps.tag.outputs.ci_artifact != 'true' || github.event_name == 'workflow_dispatch' }}
         run: python scripts/verify_install_channels.py dist
 
+      - name: Require complete release artifact set
+        if: ${{ steps.tag.outputs.ci_artifact != 'true' || github.event_name == 'workflow_dispatch' }}
+        run: python scripts/verify_release_manifest.py dist
+
       - name: Write generated release notes
         if: ${{ steps.tag.outputs.ci_artifact != 'true' || github.event_name == 'workflow_dispatch' }}
         run: |
@@ -98,3 +102,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release create "${{ steps.tag.outputs.name }}" dist/* --title "aiplane ${{ steps.tag.outputs.name }}" --notes-file RELEASE_NOTES.md --verify-tag
+
+      - name: Verify published release assets
+        if: ${{ steps.tag.outputs.ci_artifact != 'true' || github.event_name == 'workflow_dispatch' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release view "$TAG" --json assets --jq '.assets[].name' > published-assets.txt
+          test "$(grep -Ec '^aiplane-.*\.whl$' published-assets.txt)" -eq 1
+          test "$(grep -Ec '^aiplane-.*\.tar\.gz$' published-assets.txt)" -eq 1
+          test "$(grep -Ec '^SHA256SUMS$' published-assets.txt)" -eq 1

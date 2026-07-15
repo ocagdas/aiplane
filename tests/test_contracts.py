@@ -341,10 +341,36 @@ def test_primary_adoption_cut_contains_only_the_core_command_story() -> None:
         assert advanced not in primary.lower()
 
 
+def test_ci_and_release_process_is_the_single_lifecycle_authority() -> None:
+    process_path = Path("docs/project/ci-and-release-process.md")
+    process = process_path.read_text(encoding="utf-8")
+
+    assert not Path("docs/project/release-process.md").exists()
+    for heading in (
+        "## Lifecycle at a glance",
+        "## Pull-request validation",
+        "## Ordinary merges: CI-owned patch versions and tags",
+        "## Agreed minor, major, or explicit versions",
+        "## Expected edge cases and recovery",
+        "## Publish an existing CI tag",
+        "## Verify the published artifact",
+        "## Integrity and rollback",
+    ):
+        assert heading in process
+    for edge_case in (
+        "Two PRs merge close together",
+        "A stale PR changes no version field",
+        "A PR changes a version field",
+        "`main` moves during the CI push",
+        "The bot patch commit starts CI again",
+    ):
+        assert edge_case in process
+
+
 def test_release_workflow_is_checksummed_versioned_and_quality_gated() -> None:
     workflow = Path(".github/workflows/release.yml").read_text(encoding="utf-8")
     setup = Path("docs/user/setup.md").read_text(encoding="utf-8")
-    process = Path("docs/project/release-process.md").read_text(encoding="utf-8")
+    process = Path("docs/project/ci-and-release-process.md").read_text(encoding="utf-8")
 
     assert "run: scripts/check.sh" in workflow
     assert "sha256sum aiplane-* > SHA256SUMS" in workflow
@@ -354,6 +380,9 @@ def test_release_workflow_is_checksummed_versioned_and_quality_gated() -> None:
     assert "docs/project/releases" not in workflow
     assert "--notes-file RELEASE_NOTES.md" in workflow
     assert 'gh release create "${{ steps.tag.outputs.name }}"' in workflow
+    assert "python scripts/verify_release_manifest.py dist" in workflow
+    assert "Verify published release assets" in workflow
+    assert "published-assets.txt" in workflow
     for text in (setup, process):
         assert "SHA256SUMS" in text
         assert "rollback" in text.lower()
@@ -367,9 +396,11 @@ def test_ci_exposes_one_stable_release_gate_and_documents_hosted_protection() ->
     assert "needs: [checks, compatibility, install-channels]" in workflow
     assert "name: Release gate" in workflow
     assert "CI / Release gate" in protection
-    assert "require pull requests" in protection
-    assert "block force pushes" in protection
-    assert "hosted state" in protection
+    assert "Require a pull request before merging" in protection
+    assert "Block force pushes" in protection
+    assert "GitHub Actions app" in protection
+    assert "targeting `v*`" in protection
+    assert "enforcement: active" in protection
 
 
 def test_preview_scope_freeze_keeps_advanced_surface_out_of_public_promise() -> None:
@@ -385,7 +416,7 @@ def test_preview_scope_freeze_keeps_advanced_surface_out_of_public_promise() -> 
 
 def test_every_demo_timeline_step_has_exact_commands_and_spoken_narration() -> None:
     text = Path("docs/project/public-demo-plan.md").read_text(encoding="utf-8")
-    matches = list(re.finditer(r"(?m)^#{3,4} (\d:\d{2}-\d:\d{2}) — .+$", text))
+    matches = list(re.finditer(r"(?m)^#{3,4} (\d):(\d{2})-(\d):(\d{2}) — .+$", text))
 
     assert len(matches) == 16
     for index, match in enumerate(matches):
@@ -395,9 +426,14 @@ def test_every_demo_timeline_step_has_exact_commands_and_spoken_narration() -> N
             else text.find("## Optional fourth video", match.end())
         )
         section = text[match.end() : end]
-        assert "Exact command" in section, match.group(1)
-        assert "Narration:" in section, match.group(1)
-        assert "> " in section, match.group(1)
+        assert "On screen:" in section, match.group(0)
+        assert "Exact command" in section, match.group(0)
+        assert "Narration:" in section, match.group(0)
+        narration = " ".join(line[2:] for line in section.splitlines() if line.startswith("> "))
+        words = len(re.findall(r"\b[\w’-]+\b", narration))
+        start_minute, start_second, end_minute, end_second = map(int, match.groups())
+        seconds = (end_minute * 60 + end_second) - (start_minute * 60 + start_second)
+        assert words / seconds * 60 <= 140, match.group(0)
 
 
 def test_successful_main_merge_versions_tags_and_uploads_a_bound_wheel() -> None:
@@ -410,10 +446,19 @@ def test_successful_main_merge_versions_tags_and_uploads_a_bound_wheel() -> None
     assert "Detect associated pull request" in workflow
     assert "AIPLANE_ASSOCIATED_PR" in workflow
     assert "python scripts/version.py classify-ci --github-output" in workflow
+    assert "Reject package-version changes in pull requests" in workflow
+    assert 'python scripts/version.py check-pr --base-ref "origin/$GITHUB_BASE_REF"' in workflow
     assert "ci-version-bump-and-tag:" in workflow
     assert "needs.classify-main-push.outputs.mode == 'ci_patch_after_merge'" in workflow
-    assert "python scripts/version.py set" in workflow
+    assert "python scripts/version.py patch" in workflow
     assert "[skip ci-version]" in workflow
+    assert "aiplane-main-version-mutation" in workflow
+    assert "git checkout -B main origin/main" in workflow
+    assert "for attempt in 1 2 3" in workflow
+    assert "main moved during versioning; retrying" in workflow
+    assert "|| printf 'false'" not in workflow
+    assert "github.actor != 'github-actions[bot]'" in workflow
+    assert "!contains(github.event.head_commit.message, '[skip ci-version]')" in workflow
     assert "python scripts/version.py tag --ci-artifact" in workflow
     assert "git push origin HEAD:main" in workflow
     assert "git push origin" in workflow
@@ -453,3 +498,18 @@ def test_successful_main_merge_versions_tags_and_uploads_a_bound_wheel() -> None
     assert "ci-artifact" in release
     assert "skipping public GitHub Release publication" in release
     assert "not immutable public releases" in documentation
+
+
+def test_published_release_workflow_verifies_every_os_and_install_owner() -> None:
+    workflow = Path(".github/workflows/verify-release.yml").read_text(encoding="utf-8")
+
+    for os_runner in ("ubuntu-latest", "macos-14", "windows-latest"):
+        assert os_runner in workflow
+    assert "channel: [pip, pipx, uv]" in workflow
+    assert "gh release download" in workflow
+    assert "python scripts/verify_release_manifest.py release" in workflow
+    assert 'python scripts/verify_install_channels.py release --channel "$CHANNEL"' in workflow
+    assert "python scripts/write_release_evidence.py" in workflow
+    assert "python scripts/validate_trial_evidence.py" in workflow
+    assert "uses: actions/upload-artifact@v7" in workflow
+    assert "retention-days: 90" in workflow

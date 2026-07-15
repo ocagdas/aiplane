@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import importlib.util
 import sys
+
+import pytest
 from pathlib import Path
 
 
@@ -43,9 +45,22 @@ def test_ci_version_classification_bumps_only_main_merge_commits() -> None:
 
 
 def test_ci_version_classification_does_not_recurse_on_ci_version_commit() -> None:
-    result = classify(message="chore(release): v0.1.1 [skip ci-version]", changed_files={"pyproject.toml"})
+    result = classify(
+        message="chore(release): v0.1.1 [skip ci-version]",
+        author="github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>",
+        changed_files={"pyproject.toml"},
+    )
     assert result["mode"] == "validate_only"
     assert result["next_version"] == "0.1.0"
+
+
+def test_ci_version_classification_does_not_honor_human_skip_marker() -> None:
+    result = classify(
+        parent_count=2,
+        message="Merge feature [skip ci-version]",
+        author="Human <human@example.com>",
+    )
+    assert result["mode"] == "ci_patch_after_merge"
 
 
 def test_ci_version_classification_respects_direct_maintainer_version_commit() -> None:
@@ -57,6 +72,18 @@ def test_ci_version_classification_respects_direct_maintainer_version_commit() -
     assert result["mode"] == "maintainer_direct_main_version_commit"
     assert result["next_version"] == "0.2.0"
     assert result["tag"] == "v0.2.0"
+
+
+def test_ci_version_classification_rejects_version_change_merged_through_pr() -> None:
+    result = classify(
+        version="1.0.0",
+        parent_version="0.1.7",
+        parent_count=2,
+        associated_pull_request=True,
+        changed_files={"pyproject.toml", "src/aiplane/__init__.py"},
+    )
+    assert result["mode"] == "invalid_pr_version_change"
+    assert result["reason"] == "pull-request merge changed tracked version value"
 
 
 def test_ci_version_classification_does_not_treat_unchanged_version_file_as_user_versioning() -> None:
@@ -115,3 +142,19 @@ def test_local_snapshot_version_uses_base_sha_and_timestamp() -> None:
         datetime(2026, 7, 14, 15, 30, 0, tzinfo=timezone.utc),
     )
     assert version == "0.1.0+gabcdef1.20260714t153000z"
+
+
+def test_pr_version_guard_accepts_unchanged_version(monkeypatch) -> None:
+    monkeypatch.setattr(version_script, "check_versions", lambda: "0.1.2")
+    monkeypatch.setattr(version_script, "version_at_ref", lambda _ref: "0.1.2")
+    assert version_script.check_pr_version("origin/main") == "0.1.2"
+
+
+def test_pr_version_guard_rejects_changed_or_unreadable_base(monkeypatch) -> None:
+    monkeypatch.setattr(version_script, "check_versions", lambda: "1.0.0")
+    monkeypatch.setattr(version_script, "version_at_ref", lambda _ref: "0.1.2")
+    with pytest.raises(ValueError, match="pull requests must not change package version"):
+        version_script.check_pr_version("origin/main")
+    monkeypatch.setattr(version_script, "version_at_ref", lambda _ref: None)
+    with pytest.raises(ValueError, match="cannot read base version"):
+        version_script.check_pr_version("origin/main")

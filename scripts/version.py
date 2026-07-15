@@ -89,6 +89,20 @@ def check_versions() -> str:
     return project
 
 
+def check_pr_version(base_ref: str) -> str:
+    current = check_versions()
+    base = version_at_ref(base_ref)
+    if base is None:
+        raise ValueError(f"cannot read base version from {base_ref}")
+    if current != base:
+        raise ValueError(
+            f"pull requests must not change package version: {base_ref}={base}, current={current}; "
+            "merge ordinary changes for an automatic patch bump, or have an authorized maintainer "
+            "run scripts/version.py minor|major|set directly on main"
+        )
+    return current
+
+
 def write_version(version: str, *, dry_run: bool = False) -> None:
     Version.parse(version)
     old = check_versions()
@@ -159,18 +173,21 @@ def classify_from_data(
     mode = "none"
     reason = "not a main push"
     if event == "push" and ref == "refs/heads/main":
-        if "[skip ci-version]" in message:
+        if "[skip ci-version]" in message and "github-actions[bot]" in author:
             mode = "validate_only"
-            reason = "version loop breaker in commit message"
+            reason = "version loop breaker on GitHub Actions bot commit"
         elif matching_tag_points_at_head:
             mode = "validate_only"
             reason = "matching version tag already points at HEAD"
+        elif (parent_count > 1 or associated_pull_request) and version_value_changed:
+            mode = "invalid_pr_version_change"
+            reason = "pull-request merge changed tracked version value"
+        elif version_files_changed and version_value_changed:
+            mode = "maintainer_direct_main_version_commit"
+            reason = "maintainer changed tracked version value"
         elif parent_count > 1 or associated_pull_request:
             mode = "ci_patch_after_merge"
             reason = "pull-request merge on main"
-        elif version_files_changed and version_value_changed:
-            mode = "maintainer_direct_main_version_commit"
-            reason = "direct main commit changed tracked version value"
         else:
             mode = "validate_only"
             reason = "direct main commit without version change"
@@ -269,6 +286,8 @@ def main(argv: list[str] | None = None) -> int:
     tag_cmd.add_argument("--dry-run", action="store_true")
     classify_cmd = sub.add_parser("classify-ci")
     classify_cmd.add_argument("--github-output", action="store_true")
+    check_pr_cmd = sub.add_parser("check-pr")
+    check_pr_cmd.add_argument("--base-ref", required=True)
 
     args = parser.parse_args(argv)
     try:
@@ -299,6 +318,11 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(result, indent=2, sort_keys=True))
             if args.github_output:
                 write_github_outputs(result)
+            if result["mode"] == "invalid_pr_version_change":
+                raise ValueError(str(result["reason"]))
+            return 0
+        if args.command == "check-pr":
+            print(check_pr_version(args.base_ref))
             return 0
     except Exception as exc:
         print(f"error: {exc}", file=sys.stderr)

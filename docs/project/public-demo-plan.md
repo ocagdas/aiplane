@@ -14,7 +14,11 @@ This is the one introductory product video. It contains exactly five core comman
 
 **Prepared state:** `aiplane` is installed from a release wheel in a clean workspace. Use a sanitized, rehearsed local Ollama profile so output is useful and deterministic; preparing the runtime/model is part of trial setup, not this public cut.
 
+**Recording convention:** The quoted narration is the exact script to read. Do not read headings, command labels, or stage directions aloud. Type or paste the exact command, pause on the named output cue, then read the quotation at a normal pace. Keep terminal font and window size fixed so output does not reflow between rehearsals.
+
 #### 0:00-0:25 — Preview without mutation
+
+On screen: begin with an empty prompt, execute the command, then hold on `next_action` and the dry-run/write metadata.
 
 Exact command:
 
@@ -24,9 +28,11 @@ aiplane quickstart local-coding --dry-run
 
 Narration:
 
-> Aiplane starts with a dry-run. It previews the editable local profile and gives me one exact next action without installing a runtime, editing my IDE, contacting a catalog, or changing cloud resources.
+> Aiplane is an environment doctor and configuration compiler for repeatable AI development setups. I start with a dry-run, which previews the editable local profile and gives me one exact next action without installing a runtime, editing my IDE, contacting a catalog, or changing cloud resources.
 
 #### 0:25-0:55 — Inspect provenance
+
+On screen: keep the summary visible and point once to detected, generated/discovered, user-supplied, and unresolved counts.
 
 Exact command:
 
@@ -40,6 +46,8 @@ Narration:
 
 #### 0:55-1:40 — Diagnose readiness
 
+On screen: pause on one representative finding and its reason, impact, remediation, and mutation metadata.
+
 Exact command:
 
 ```bash
@@ -51,6 +59,8 @@ Narration:
 > Doctor turns that inventory into actionable findings. Each blocker or advisory identifies the affected resource, explains the impact, and gives a remediation while making any mutation or dry-run requirement explicit.
 
 #### 1:40-2:10 — Choose a suitable configuration
+
+On screen: hold on the recommended model/configuration and the hardware or policy reasons—not the full candidate list.
 
 Exact command:
 
@@ -64,6 +74,8 @@ Narration:
 
 #### 2:10-2:45 — Compile Continue configuration
 
+On screen: scroll only enough to show the model alias and endpoint fields, then return to the command prompt without saving the output.
+
 Exact command:
 
 ```bash
@@ -76,11 +88,13 @@ Narration:
 
 #### 2:45-2:55 — Close on the repeatable loop
 
+On screen: leave the deterministic export visible and add a small overlay reading `profile → discover → doctor → recommend → export`.
+
 Exact command: none; leave the export visible.
 
 Narration:
 
-> That is the complete loop: profile, discover, doctor, recommend, and export. The inputs stay reviewable and the generated configuration can be reproduced whenever the environment changes.
+> That is the repeatable loop: profile, discover, doctor, recommend, and export. Reviewable inputs produce reproducible configuration when the environment changes.
 
 Do not show model pulls, chat/run/code commands, runtime lifecycle, MCP, stacks, orchestrators, deployment, benchmarks, or cloud discovery in this cut. Link advanced documentation below the video rather than adding another segment.
 
@@ -125,6 +139,8 @@ The installed CLI creates editable profiles relative to this workspace. Keep the
 
 ### 0:00-0:35 — Make policy visible
 
+On screen: show the blocked cloud decision, allowed Ollama decision, and doctor summary; do not expose the policy file path.
+
 Exact commands:
 
 ```bash
@@ -140,6 +156,8 @@ Narration:
 > Policy is profile-owned and inspectable. Doctor and policy explanation expose the decision before a model or endpoint is used.
 
 ### 0:35-1:10 — Archive editable and canonical forms
+
+On screen: paste commands one at a time and briefly show the backup filenames, not their potentially private contents.
 
 Exact commands:
 
@@ -166,6 +184,8 @@ Before sharing any archive, review it for private endpoints, machine names, acco
 
 ### 1:10-1:45 — Demonstrate failure and template repair
 
+On screen: hold on the missing-file validation error and the repair dry-run; make the `dry_run` state visible.
+
 Exact commands; remove one file only after the backup exists:
 
 ```bash
@@ -181,6 +201,8 @@ Narration:
 Do not run repair without `--dry-run` in this sequence; restoring the blank template would not recover the reviewed model choices.
 
 ### 1:45-2:30 — Restore and prove equivalence
+
+On screen: keep both silent `cmp` commands and their zero exit status visible, followed by successful validation.
 
 Exact commands:
 
@@ -202,6 +224,8 @@ Narration:
 
 ### 2:30-2:50 — Close with portability boundaries
 
+On screen: show only the sanitized relative backup file list while the narration separates portable and machine-owned state.
+
 Exact command:
 
 ```bash
@@ -220,6 +244,8 @@ Narration:
 
 ### 0:00-0:40 — Capture the GPU machine
 
+On screen: run on the workstation, then show the exported filename and successful profile validation—not raw private hardware identifiers.
+
 Exact commands to run on the GPU workstation:
 
 ```bash
@@ -237,6 +263,8 @@ Narration:
 Transfer `gpu-workstation.machine.yaml` through the team’s approved file-transfer path.
 
 ### 0:40-1:20 — Import and rank on the laptop
+
+On screen: switch clearly to the laptop terminal, show the imported machine summary, then hold on the ranked recommendation reasons.
 
 Exact commands to run in the laptop demo workspace:
 
@@ -259,6 +287,8 @@ Narration:
 
 ### 1:20-2:05 — Plan access without opening it
 
+On screen: emphasize `plan`, the local forwarded endpoint, and status. Do not run `tunnel start` during this segment.
+
 Use a sanitized `ssh_tunnel` target already reviewed in `profiles/local-dev/targets.yaml`. Exact commands:
 
 ```bash
@@ -274,6 +304,8 @@ If lifecycle support is unavailable on the recording platform, show the explicit
 
 ### 2:05-2:40 — Compile endpoint configuration
 
+On screen: hold on doctor readiness and sanitized endpoint/model fields in both exports; do not save or open an IDE.
+
 Exact commands, with the tunnel or approved endpoint already running:
 
 ```bash
@@ -288,11 +320,13 @@ Narration:
 
 ### 2:40-2:50 — Close
 
+On screen: leave the sanitized Continue export visible and overlay `describe → diagnose → choose → plan → export`.
+
 Exact command: none; leave the exported configuration visible.
 
 Narration:
 
-> Local laptop or remote GPU, the workflow stays the same: describe facts, diagnose readiness, choose placement, plan access, and export deterministic configuration.
+> Local or remote, the loop stays the same: describe, diagnose, choose, plan, and export deterministic configuration.
 
 ## Optional fourth video — hold until evidence supports it
 
