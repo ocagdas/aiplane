@@ -51,7 +51,7 @@ pipx install ./aiplane-0.1.0-py3-none-any.whl
 python -m pip install ./aiplane-0.1.0-py3-none-any.whl
 ```
 
-Use the filename attached to the release; `0.1.0` is illustrative. All three methods register the `aiplane` command and include the profile/config templates and runtime helper assets. See [Setup](docs/user/setup.md#standard-wheel-install-no-repository-clone) for verification, upgrades, uninstallation, index-based commands, Conda usage, and platform limitations.
+Use the filename attached to the release; `0.1.0` is illustrative. All three methods register the `aiplane` command and include the profile/config templates and runtime helper assets. Verify the installed package with `aiplane --version`; it reports the effective version, package metadata version, module version, install type, and module path. See [Setup](docs/user/setup.md#standard-wheel-install-no-repository-clone) for verification, upgrades, uninstallation, index-based commands, Conda usage, and platform limitations.
 
 Contributor and source-checkout installs remain available through `scripts/setup_env.sh`; they are not required for normal evaluation.
 

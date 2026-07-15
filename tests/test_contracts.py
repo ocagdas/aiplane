@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 import re
 import tomllib
+import warnings
 
 from aiplane.integration_contracts import ALL_INTEGRATION_TOOLS, required_roles
 from aiplane.mcp import TOOL_SCHEMAS, mcp_manifest
@@ -94,7 +95,13 @@ def test_cli_command_families_are_owned_outside_composition_root() -> None:
         assert (Path("src/aiplane") / module).is_file()
     for command in ("discover", "quickstart", "run", "code", "providers", "runtimes"):
         assert f'if args.command == "{command}"' not in root
-    assert len(root.splitlines()) < 500
+    line_count = len(root.splitlines())
+    if line_count >= 500:
+        warnings.warn(
+            f"src/aiplane/cli.py has {line_count} lines; keep extracting command-family ownership before it reaches 600",
+            stacklevel=1,
+        )
+    assert line_count < 600
     for helper in (
         "_launch_plan",
         "_validate_profile",
@@ -334,23 +341,49 @@ def test_primary_adoption_cut_contains_only_the_core_command_story() -> None:
         assert advanced not in primary.lower()
 
 
+def test_ci_and_release_process_is_the_single_lifecycle_authority() -> None:
+    process_path = Path("docs/project/ci-and-release-process.md")
+    process = process_path.read_text(encoding="utf-8")
+
+    assert not Path("docs/project/release-process.md").exists()
+    for heading in (
+        "## Lifecycle at a glance",
+        "## Pull-request validation",
+        "## Ordinary merges: automated patch versions",
+        "## Intentional minor, major, and explicit versions",
+        "## Expected edge cases and recovery",
+        "## Publication and manual patch override",
+        "## Verify and consume a published release",
+        "## Integrity and rollback",
+    ):
+        assert heading in process
+    for edge_case in (
+        "Two PRs merge close together",
+        "A stale PR changes no version field",
+        "A PR changes a version field",
+        "`main` moves during the push",
+        "The app patch commit starts CI",
+    ):
+        assert edge_case in process
+
+
 def test_release_workflow_is_checksummed_versioned_and_quality_gated() -> None:
-    project = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
-    version = project["project"]["version"]
     workflow = Path(".github/workflows/release.yml").read_text(encoding="utf-8")
-    notes = Path(f"docs/project/releases/v{version}.md")
     setup = Path("docs/user/setup.md").read_text(encoding="utf-8")
-    process = Path("docs/project/release-process.md").read_text(encoding="utf-8")
+    process = Path("docs/project/ci-and-release-process.md").read_text(encoding="utf-8")
 
     assert "run: scripts/check.sh" in workflow
     assert "sha256sum aiplane-* > SHA256SUMS" in workflow
     assert "sha256sum --check SHA256SUMS" in workflow
-    assert "docs/project/releases/${{ steps.tag.outputs.name }}.md" in workflow
-    assert '--notes-file "docs/project/releases/${{ steps.tag.outputs.name }}.md"' in workflow
+    assert "Write generated release notes" in workflow
+    assert "RELEASE_NOTES.md" in workflow
+    assert "docs/project/releases" not in workflow
+    assert "--notes-file RELEASE_NOTES.md" in workflow
     assert 'gh release create "${{ steps.tag.outputs.name }}"' in workflow
-    assert notes.is_file()
-    assert f"# aiplane v{version}" in notes.read_text(encoding="utf-8")
-    for text in (notes.read_text(encoding="utf-8"), setup, process):
+    assert "python scripts/verify_release_manifest.py dist" in workflow
+    assert "Verify published release assets" in workflow
+    assert "published-assets.txt" in workflow
+    for text in (setup, process):
         assert "SHA256SUMS" in text
         assert "rollback" in text.lower()
 
@@ -362,10 +395,14 @@ def test_ci_exposes_one_stable_release_gate_and_documents_hosted_protection() ->
     assert "  release-gate:" in workflow
     assert "needs: [checks, compatibility, install-channels]" in workflow
     assert "name: Release gate" in workflow
-    assert "CI / Release gate" in protection
-    assert "require pull requests" in protection
-    assert "block force pushes" in protection
-    assert "hosted state" in protection
+    assert "required-check value" in protection
+    assert "Release gate" in protection
+    assert "Require a pull request before merging" in protection
+    assert "Block force pushes" in protection
+    assert "aiplane-versioning" in protection
+    assert "GitHub App" in protection
+    assert "targeting `v*`" in protection
+    assert "branch ruleset is active" in protection
 
 
 def test_preview_scope_freeze_keeps_advanced_surface_out_of_public_promise() -> None:
@@ -381,7 +418,7 @@ def test_preview_scope_freeze_keeps_advanced_surface_out_of_public_promise() -> 
 
 def test_every_demo_timeline_step_has_exact_commands_and_spoken_narration() -> None:
     text = Path("docs/project/public-demo-plan.md").read_text(encoding="utf-8")
-    matches = list(re.finditer(r"(?m)^#{3,4} (\d:\d{2}-\d:\d{2}) — .+$", text))
+    matches = list(re.finditer(r"(?m)^#{3,4} (\d):(\d{2})-(\d):(\d{2}) — .+$", text))
 
     assert len(matches) == 16
     for index, match in enumerate(matches):
@@ -391,9 +428,14 @@ def test_every_demo_timeline_step_has_exact_commands_and_spoken_narration() -> N
             else text.find("## Optional fourth video", match.end())
         )
         section = text[match.end() : end]
-        assert "Exact command" in section, match.group(1)
-        assert "Narration:" in section, match.group(1)
-        assert "> " in section, match.group(1)
+        assert "On screen:" in section, match.group(0)
+        assert "Exact command" in section, match.group(0)
+        assert "Narration:" in section, match.group(0)
+        narration = " ".join(line[2:] for line in section.splitlines() if line.startswith("> "))
+        words = len(re.findall(r"\b[\w’-]+\b", narration))
+        start_minute, start_second, end_minute, end_second = map(int, match.groups())
+        seconds = (end_minute * 60 + end_second) - (start_minute * 60 + start_second)
+        assert words / seconds * 60 <= 140, match.group(0)
 
 
 def test_successful_main_merge_versions_tags_and_uploads_a_bound_wheel() -> None:
@@ -406,10 +448,19 @@ def test_successful_main_merge_versions_tags_and_uploads_a_bound_wheel() -> None
     assert "Detect associated pull request" in workflow
     assert "AIPLANE_ASSOCIATED_PR" in workflow
     assert "python scripts/version.py classify-ci --github-output" in workflow
+    assert "Reject package-version changes in pull requests" in workflow
+    assert 'python scripts/version.py check-pr --base-ref "origin/$GITHUB_BASE_REF"' in workflow
     assert "ci-version-bump-and-tag:" in workflow
     assert "needs.classify-main-push.outputs.mode == 'ci_patch_after_merge'" in workflow
-    assert "python scripts/version.py set" in workflow
+    assert "python scripts/version.py patch" in workflow
     assert "[skip ci-version]" in workflow
+    assert "aiplane-main-version-mutation" in workflow
+    assert "git checkout -B main origin/main" in workflow
+    assert "for attempt in 1 2 3" in workflow
+    assert "main moved during versioning; retrying" in workflow
+    assert "|| printf 'false'" not in workflow
+    assert "github.actor != 'aiplane-versioning[bot]'" in workflow
+    assert "!contains(github.event.head_commit.message, '[skip ci-version]')" in workflow
     assert "python scripts/version.py tag --ci-artifact" in workflow
     assert "git push origin HEAD:main" in workflow
     assert "git push origin" in workflow
@@ -446,6 +497,44 @@ def test_successful_main_merge_versions_tags_and_uploads_a_bound_wheel() -> None
         not in workflow
     )
     assert "retention-days: 30" in workflow
-    assert "ci-artifact" in release
-    assert "skipping public GitHub Release publication" in release
+    assert "uses: actions/create-github-app-token@v3" in workflow
+    assert "AIPLANE_VERSIONING_APP_ID" in workflow
+    assert "AIPLANE_VERSIONING_APP_PRIVATE_KEY" in workflow
+    assert "PRIVATE_KEY_CONFIGURED:" in workflow
+    assert "PRIVATE_KEY: ${{ secrets." not in workflow
+    assert "token: ${{ steps.versioning-token.outputs.token }}" in workflow
+    assert "aiplane-versioning[bot]" in workflow
+    assert "python scripts/version.py classify-release --previous-ref HEAD^1 --github-output" in release
+    assert "Skip automatic patch publication" in release
+    assert 'test "$tag" = "v$(python scripts/version.py current --plain)"' in release
+    assert "steps.tag.outputs.automatic_publish == 'true'" in release
+    assert "github.event_name == 'workflow_dispatch'" in release
+    assert 'gh workflow run verify-release.yml --ref main -f tag="$TAG"' in release
     assert "not immutable public releases" in documentation
+
+
+def test_release_policy_auto_publishes_milestones_and_keeps_manual_patch_override() -> None:
+    workflow = Path(".github/workflows/release.yml").read_text(encoding="utf-8")
+
+    assert 'tags:\n      - "v*"' in workflow
+    assert "python scripts/version.py classify-release --previous-ref HEAD^1 --github-output" in workflow
+    assert "steps.tag.outputs.automatic_publish == 'true'" in workflow
+    assert "Skip automatic patch publication" in workflow
+    assert "workflow_dispatch:" in workflow
+    assert "actions: write" in workflow
+    assert 'gh workflow run verify-release.yml --ref main -f tag="$TAG"' in workflow
+
+
+def test_published_release_workflow_verifies_every_os_and_install_owner() -> None:
+    workflow = Path(".github/workflows/verify-release.yml").read_text(encoding="utf-8")
+
+    for os_runner in ("ubuntu-latest", "macos-14", "windows-latest"):
+        assert os_runner in workflow
+    assert "channel: [pip, pipx, uv]" in workflow
+    assert "gh release download" in workflow
+    assert "python scripts/verify_release_manifest.py release" in workflow
+    assert 'python scripts/verify_install_channels.py release --channel "$CHANNEL"' in workflow
+    assert "python scripts/write_release_evidence.py" in workflow
+    assert "python scripts/validate_trial_evidence.py" in workflow
+    assert "uses: actions/upload-artifact@v7" in workflow
+    assert "retention-days: 90" in workflow

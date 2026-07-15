@@ -27,11 +27,12 @@ pipx install ./aiplane-0.1.0-py3-none-any.whl
 python -m pip install ./aiplane-0.1.0-py3-none-any.whl
 ```
 
-Replace the illustrative version with the downloaded filename. Do not run all three commands: use `uv tool` or `pipx` for a dedicated application environment, or `pip` when you deliberately want `aiplane` in an already active venv/Conda environment.
+Replace the illustrative version with the downloaded filename. Do not run all three commands: use `uv tool` or `pipx` for a dedicated application environment, or `pip` when you deliberately want `aiplane` in an already active venv/Conda environment. `aiplane --version` prints the effective version plus package metadata, module version, install type (`wheel`, `editable`, `static`, `installed`, or `source`), and module path so wheel, static, editable, and direct source-checkout runs can be distinguished.
 
 Verify and create a local editable profile in the working directory where you want to use it:
 
 ```bash
+aiplane --version
 aiplane --help
 aiplane profiles templates
 aiplane profiles bootstrap-local --no-overwrite --no-discovery
