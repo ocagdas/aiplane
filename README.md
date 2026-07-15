@@ -53,7 +53,21 @@ python -m pip install ./aiplane-0.1.0-py3-none-any.whl
 
 Use the filename attached to the release; `0.1.0` is illustrative. All three methods register the `aiplane` command and include the profile/config templates and runtime helper assets. Verify the installed package with `aiplane --version`; it reports the effective version, package metadata version, module version, install type, and module path. See [Setup](docs/user/setup.md#standard-wheel-install-no-repository-clone) for verification, upgrades, uninstallation, index-based commands, Conda usage, and platform limitations.
 
-Contributor and source-checkout installs remain available through `scripts/setup_env.sh`; they are not required for normal evaluation.
+Contributor and source-checkout installs remain available through `scripts/setup_env.sh`; they are not required for normal evaluation. From the repository root, choose one environment owner:
+
+```bash
+# Native/current Python environment (prefer an already isolated environment)
+scripts/setup_env.sh --mode local --action install --editable
+
+# Project-local venv; activate it after installation
+scripts/setup_env.sh --mode venv --action install --editable
+source .venv/bin/activate
+
+# Dedicated Conda environment; sourcing keeps it active in this shell
+source scripts/setup_env.sh --mode conda --conda-env aiplane --action install --editable
+```
+
+Use only one of these paths. `--editable` keeps the installation linked to the checkout; use `--static` for a snapshot that changes only when reinstalled. See [Source-checkout install modes](docs/user/setup.md#source-checkout-install-modes) for prerequisites, activation behavior, dry-run examples, verification, and platform support.
 
 After installation, create the editable `profiles/local-dev/` profile used by
 the CLI. It contains the reviewed hardware, model, runtime, endpoint, and policy
