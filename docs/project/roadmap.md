@@ -609,6 +609,9 @@ The external MVP/adoption review was evaluated against current code and recorded
 DOC-1 is complete: public onboarding examples use concrete export targets, the empty README workflow heading is removed, and focused contract tests enforce concrete export commands, nonempty sections, and sequential workflow numbering.
 
 
+Quickstart observability is implemented: `quickstart local-coding` updates one deterministic phase-status line on stderr while preserving machine-readable stdout. Public wording now leads with the environment-selection and reproducibility problem and defines the environment doctor as a read-only readiness diagnosis.
+
+
 The positioning and default-help pass is complete. README, package metadata, user entrypoints, strategy, launch review, demo framing, and CLI help lead with the environment doctor and configuration compiler outcome. Top-level help groups all commands into Core workflow, Advanced and supporting, and Experimental tiers, prints one safe next command, and fails its contract test if a command is unclassified.
 
 

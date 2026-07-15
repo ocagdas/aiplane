@@ -1,6 +1,6 @@
 # Public Demo Plan
 
-This plan presents `aiplane` as it exists in the developer preview: an environment doctor and configuration compiler for reproducible local and hybrid AI development environments.
+This plan presents `aiplane` as it exists in the developer preview: it inventories AI development capabilities, diagnoses readiness, matches reviewed models to their purpose and available hardware, and compiles reproducible tool configuration. This read-only diagnosis is its environment doctor role.
 
 The public story is deliberately narrow. `aiplane` turns environment facts and reviewed YAML profiles into readiness findings, hardware-aware recommendations, and deterministic configuration exports. It does not become a model runtime, coding agent, IDE extension, secret manager, or hidden cloud deployment system.
 
@@ -18,7 +18,7 @@ This is the one introductory product video. It contains exactly five core comman
 
 #### 0:00-0:25 — Preview without mutation
 
-On screen: begin with an empty prompt, execute the command, then hold on `next_action` and the dry-run/write metadata.
+On screen: begin with an empty prompt, execute the command, let the `[quickstart]` status line show each phase, then hold on `next_action` and the dry-run/write metadata.
 
 Exact command:
 
@@ -28,7 +28,7 @@ aiplane quickstart local-coding --dry-run
 
 Narration:
 
-> Aiplane is an environment doctor and configuration compiler for repeatable AI development setups. I start with a dry-run, which previews the editable local profile and gives me one exact next action without installing a runtime, editing my IDE, contacting a catalog, or changing cloud resources.
+> An AI coding setup must match model capabilities to the task, available RAM and VRAM, runtimes, endpoints, and development tools, then remain reproducible on another machine. Aiplane inventories those facts, diagnoses what is ready or missing—its doctor role—and compiles a reviewable profile and deterministic tool configuration. This dry-run previews the process without changing anything.
 
 #### 0:25-0:55 — Inspect provenance
 

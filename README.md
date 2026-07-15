@@ -1,6 +1,6 @@
 # aiplane
 
-`aiplane` is an environment doctor and configuration compiler for reproducible local and hybrid AI development environments. It turns detected environment facts into a reviewable profile, actionable readiness findings, hardware-aware recommendations, and deterministic configuration exports.
+AI development setups are difficult to reproduce because model capabilities must fit the intended task, available RAM/VRAM, installed runtimes, endpoints, and development tools. `aiplane` is an environment doctor and configuration compiler: it inventories those facts, diagnoses what is ready or missing (the read-only doctor role), and compiles reviewed profiles into hardware-aware recommendations and deterministic tool configuration.
 
 First outcome: inspect the proposed local setup and receive exact doctor, recommendation, and export steps without changing runtimes, development-tool files, or external services.
 

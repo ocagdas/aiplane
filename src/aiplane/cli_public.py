@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 from typing import Any, Callable
 
@@ -97,7 +98,7 @@ def add_public_parsers(
         subparsers,
         "quickstart",
         "Start a guided local AI coding setup",
-        "Run a focused environment-doctor workflow that discovers, validates, and compiles reproducible local/hybrid AI coding profiles.",
+        "Inspect local capabilities, diagnose readiness gaps, and compile a reproducible local/hybrid AI coding profile.",
         "Examples:\n  aiplane quickstart local-coding\n  aiplane quickstart local-coding --dry-run\n  aiplane quickstart local-coding --discovery",
     )
     quickstart_sub = quickstart_cmd.add_subparsers(dest="quickstart_command", required=True, metavar="command")
@@ -193,6 +194,22 @@ def add_public_parsers(
     )
 
 
+def _quickstart_progress() -> Callable[[str], None]:
+    started = False
+    width = 0
+
+    def report(message: str) -> None:
+        nonlocal started, width
+        rendered = f"[quickstart] {message}"
+        width = max(width, len(rendered))
+        finished = message.endswith("complete")
+        sys.stderr.write(("\r" if started else "") + rendered.ljust(width) + ("\n" if finished else ""))
+        sys.stderr.flush()
+        started = not finished
+
+    return report
+
+
 def handle_public_command(
     args: argparse.Namespace,
     *,
@@ -210,7 +227,7 @@ def handle_public_command(
 ) -> int | None:
     if args.command == "quickstart":
         if args.quickstart_command == "local-coding":
-            result = quickstart(args, workspace, profiles_dir)
+            result = quickstart(args, workspace, profiles_dir, progress=_quickstart_progress())
             output_format = resolve_output_format(
                 args.format,
                 profile=args.name,

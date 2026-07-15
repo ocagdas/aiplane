@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import shutil
 from pathlib import Path
+from typing import Callable
 
 from .cli_models import refresh_cli_payload
 from .cli_profile_support import _validate_profile
@@ -164,7 +165,15 @@ def _profile_provenance(
     return {"summary": summary, "values": values}
 
 
-def _bootstrap_local_profile(args, workspace: Path, profiles_dir: Path | None) -> dict[str, object]:
+def _bootstrap_local_profile(
+    args,
+    workspace: Path,
+    profiles_dir: Path | None,
+    *,
+    progress: Callable[[str], None] | None = None,
+) -> dict[str, object]:
+    if progress:
+        progress("Preparing the editable profile preview" if args.dry_run else "Preparing the editable profile")
     root = profiles_root(profiles_dir)
     profile_path = root / args.name
     created = False
@@ -185,10 +194,14 @@ def _bootstrap_local_profile(args, workspace: Path, profiles_dir: Path | None) -
     hardware = None
     provenance = None
     if profile_exists:
+        if progress:
+            progress("Loading and validating the profile")
         profile = load_profile(args.name, workspace, profiles_dir=profiles_dir)
         validation = _validate_profile(profile)
         verbosity = int(getattr(args, "verbosity", 0))
         if not args.no_hardware_discovery:
+            if progress:
+                progress("Discovering local hardware capabilities")
             manager = HardwareManager(profile)
             hardware = (
                 manager.select_closest_discovered(dry_run=args.dry_run)
@@ -196,9 +209,11 @@ def _bootstrap_local_profile(args, workspace: Path, profiles_dir: Path | None) -
                 else manager.discover()
             )
         if not args.no_discovery:
+            if progress:
+                progress("Contacting configured provider catalogs")
             catalog = ModelCatalog(profile)
             provider_limits = _parse_provider_limits(args.provider_limit)
-            progress = _refresh_progress()
+            catalog_progress = _refresh_progress()
             write = not args.dry_run
             try:
                 if args.provider == "all":
@@ -207,7 +222,7 @@ def _bootstrap_local_profile(args, workspace: Path, profiles_dir: Path | None) -
                         "enable": not args.disable_new,
                         "query": args.query,
                         "provider_limits": provider_limits,
-                        "progress": progress,
+                        "progress": catalog_progress,
                         "verbose": verbosity >= 2,
                     }
                     if args.limit is not None:
@@ -218,7 +233,7 @@ def _bootstrap_local_profile(args, workspace: Path, profiles_dir: Path | None) -
                         "write": write,
                         "enable": not args.disable_new,
                         "query": args.query,
-                        "progress": progress,
+                        "progress": catalog_progress,
                         "verbose": verbosity >= 2,
                     }
                     provider_limit = provider_limits.get(args.provider)
@@ -228,10 +243,12 @@ def _bootstrap_local_profile(args, workspace: Path, profiles_dir: Path | None) -
                         refresh_kwargs["limit"] = args.limit
                     discovery = catalog.refresh(args.provider, **refresh_kwargs)
             finally:
-                if progress:
-                    progress("done", "", "")
+                if catalog_progress:
+                    catalog_progress("done", "", "")
             if isinstance(discovery, dict) and "results" in discovery:
                 discovery = refresh_cli_payload(discovery, verbosity=verbosity)
+        if progress:
+            progress("Summarizing configuration provenance")
         provenance = _public_discover(profile)["provenance"]
     elif not args.no_discovery or not args.no_hardware_discovery:
         skipped = "profile does not exist yet; rerun without --dry-run to create it before discovery"
@@ -258,9 +275,17 @@ def _bootstrap_local_profile(args, workspace: Path, profiles_dir: Path | None) -
     }
 
 
-def _quickstart_local_coding(args, workspace: Path, profiles_dir: Path | None) -> dict[str, object]:
+def _quickstart_local_coding(
+    args,
+    workspace: Path,
+    profiles_dir: Path | None,
+    *,
+    progress: Callable[[str], None] | None = None,
+) -> dict[str, object]:
+    if progress:
+        progress("Starting a read-only quickstart preview" if args.dry_run else "Starting quickstart")
     args.no_discovery = not args.discovery
-    bootstrap = _bootstrap_local_profile(args, workspace, profiles_dir)
+    bootstrap = _bootstrap_local_profile(args, workspace, profiles_dir, progress=progress)
     doctor_payload = None
     recommendation_payload = None
     pull = None
@@ -269,6 +294,8 @@ def _quickstart_local_coding(args, workspace: Path, profiles_dir: Path | None) -
     if profile_path.exists():
         profile = load_profile(args.name, workspace, profiles_dir=profiles_dir)
         if args.pull_model:
+            if progress:
+                progress("Planning the requested model pull" if args.dry_run else "Running the requested model pull")
             pull = _quickstart_pull_model(
                 profile,
                 args.name,
@@ -278,7 +305,11 @@ def _quickstart_local_coding(args, workspace: Path, profiles_dir: Path | None) -
                 execute=not args.dry_run,
                 profiles_dir=profiles_dir,
             )
+        if progress:
+            progress("Diagnosing environment and model readiness")
         doctor_payload = local_coding_doctor(profile, include_optional=False)
+        if progress:
+            progress("Matching configured models to available hardware")
         recommendation_payload = HardwareManager(profile).recommend()
     elif args.pull_model:
         pull = {
@@ -289,6 +320,8 @@ def _quickstart_local_coding(args, workspace: Path, profiles_dir: Path | None) -
             "skipped": True,
             "reason": "profile does not exist yet; rerun quickstart without --dry-run before pulling models",
         }
+    if progress:
+        progress("Selecting one safe next action")
     readiness = _quickstart_readiness(profile, args.name)
     commands = [str(readiness["next_action"]["command"])]
     if args.pull_model:
@@ -297,6 +330,8 @@ def _quickstart_local_coding(args, workspace: Path, profiles_dir: Path | None) -
             1,
             f"aiplane runtimes pull {pull_runtime} --model {args.pull_model}" + (" --dry-run" if args.dry_run else ""),
         )
+    if progress:
+        progress("Quickstart preview complete" if args.dry_run else "Quickstart complete")
     return {
         "name": "quickstart_local_coding",
         "profile": args.name,
@@ -308,7 +343,7 @@ def _quickstart_local_coding(args, workspace: Path, profiles_dir: Path | None) -
         "readiness": readiness,
         "commands": commands,
         "notes": [
-            "This quickstart stays in the environment-doctor workflow lane: it creates or previews a local profile, runs discovery/doctor checks, optionally delegates an explicit model pull, and prints export commands.",
+            "This quickstart creates or previews a local profile, diagnoses readiness, matches configured models to available hardware, optionally delegates an explicit model pull, and prints one next action.",
             "Use --dry-run with --pull-model to preview the existing runtime helper pull path without pulling model weights.",
             "It does not install runtimes, edit IDE configuration, start cloud resources, or run an agent conversation.",
         ],
