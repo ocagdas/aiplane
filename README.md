@@ -104,7 +104,9 @@ Use this when you want the first useful flow with minimal complexity:
 aiplane discover
 aiplane doctor
 aiplane recommend
-aiplane export continue
+aiplane export codex --model MODEL_ALIAS
+aiplane export copilot-cli --model MODEL_ALIAS --format json
+aiplane export copilot-vscode --model MODEL_ALIAS
 ```
 
 `discover` inspects the model catalog state already present in the selected
@@ -169,26 +171,27 @@ aiplane models promote DISCOVERED_ALIAS --as local_chat
 aiplane models use chat_model local_chat
 
 # 5. Preview and perform supported runtime/model preparation.
-aiplane integrations setup continue --chat local_chat --runtime ollama --dry-run
-aiplane integrations setup continue --chat local_chat --runtime ollama
+aiplane integrations setup codex --model local_chat --runtime ollama --dry-run
+aiplane integrations setup codex --model local_chat --runtime ollama
 aiplane runtimes status ollama
 aiplane runtimes list-runtime-models ollama
 
-# 6. Print Continue configuration, then smoke-test the endpoint interactively.
-aiplane integrations export continue --chat local_chat --runtime ollama
+# 6. Print host-client configuration, then smoke-test the endpoint interactively.
+aiplane export codex --model local_chat
+aiplane export copilot-cli --model local_chat --format json --offline
+aiplane export copilot-vscode --model local_chat
 aiplane chat --model local_chat
 ```
 
 `models list` shows the Aiplane `ALIAS` beside the provider-native `MODEL` by
 default. Use `--identity alias` or `--identity model` for one value per line, or
-`--identity both` explicitly for the normal full output. Continue export prints
-configuration; it does not install or launch Continue. Type `/exit` to leave chat.
+`--identity both` explicitly for the normal full output. Host-client exports print reviewed configuration; they do not install, launch, or edit Codex, Copilot CLI, or VS Code. Type `/exit` to leave chat.
 
 ## Profiles, render, export, and replay
 
 - A **profile** is the editable YAML source of truth for an intended AI development setup: reviewed model aliases, runtimes, endpoints, hardware expectations, tool roles, and policy.
 - `aiplane profiles render PROFILE` reads the profile's YAML files and prints one consistently ordered JSON snapshot. Use that snapshot for validation, comparison, CI, or archival evidence; it is not an installable config and cannot currently restore the YAML.
-- `aiplane export TARGET` compiles the selected profile into configuration text understood by another tool, such as Continue. It prints to stdout and does not install the tool, edit its files, start a runtime, or copy credentials.
+- `aiplane export TARGET` compiles the selected profile into configuration text understood by another tool, such as Codex, Copilot CLI, Copilot in VS Code, or Continue. It prints to stdout and does not install the tool, edit its files, start a runtime, or copy credentials.
 - A **replay** copies the reviewed YAML profile to another workspace or machine, validates it, inspects the destination, and compiles fresh target-tool configuration there.
 
 Today, ordinary reviewed filesystem or version-control procedures own backup and transfer:

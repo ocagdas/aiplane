@@ -478,7 +478,7 @@ P0.8 public profile schema v1 is implemented with external validation and canoni
 - Azure deployment: planning, doctor checks, and narrow VM apply exist; broader AKS/cloud apply needs hardening before expansion.
 - MCP governance: read tools and audited narrow writes exist; broader write tools require explicit risk controls.
 - Benchmarking: smoke/custom tasks and framework planning exist; repeated runs, token metrics, comparison views, and sandboxed grading remain planned.
-- IDE/CLI integration: config export exists; deeper Cursor, JetBrains, Windsurf, Copilot, Codex, and Claude Code integration remains research/planned.
+- IDE/CLI integration: Tier-1 print-only Codex, Copilot CLI, and Copilot-in-VS-Code exports now cover local and compatible managed endpoints; deeper Cursor, JetBrains, Windsurf, and Claude Code integration remains research/planned.
 
 ## Planned Milestones
 
@@ -655,7 +655,7 @@ The July test profile found one duplicated integration boundary: `test_packaging
 The latest external dev/mvp_0.5 review is evaluated in `docs/project/reviews/dev-mvp-0.5-latest-review-evaluation.md`. The numbered P0 backlog is replaced with the remaining release/adoption work: adoption-cut hierarchy, first public artifact, no-clone public verification, mandatory release-path CI, standardized trial evidence, a breadth freeze, and portable review provenance. The two unnumbered P0 completion gates remain open. Drift moves to the front of P1, and schema tightening is explicitly evidence-led.
 
 Cross-platform install verification now uses an OS-neutral relative synthetic model ID for Tier-1 exports. It always checks tunnel planning without mutation, checks runtime-helper rejection on macOS/Windows, and checks tunnel-lifecycle rejection only on Windows. macOS is never asked to start an SSH tunnel during install verification. Focused verifier/contracts/platform/packaging coverage passes 41 tests, and a rebuilt-wheel pip install/verify/reinstall/uninstall lifecycle passes locally.
-P0.1 is complete: the public demo hierarchy now has one five-command adoption cut, while privacy/replay and remote-GPU flows are explicitly validation recordings. P0.2 publication automation is hardened but remains open until a complete public GitHub Release has verified wheel/source/checksum assets; the release workflow now runs the full gate, generates preview notes, requires complete artifacts, verifies checksums, and post-verifies the published attachments.
+P0.1 is complete: the public demo hierarchy now has one seven-command adoption cut, while privacy/replay and remote-GPU flows are explicitly validation recordings. P0.2 publication automation is hardened but remains open until a complete public GitHub Release has verified wheel/source/checksum assets; the release workflow now runs the full gate, generates preview notes, requires complete artifacts, verifies checksums, and post-verifies the published attachments.
 
 P0.3-P0.6 local implementation is complete: clean-wheel lifecycle verification has a canonical evidence format; `CI / Release gate` aggregates quality, compatibility, and cross-OS install jobs; repository protection requirements are explicit; trial records have a deterministic sanitizer/shape validator; and the preview scope freeze has an exception contract. Public-artifact evidence, hosted ruleset activation, and independent-user trials remain maintainer/external actions.
 
@@ -668,9 +668,11 @@ Release-path hardening now serializes and retries CI-owned version mutation from
 The local evaluator workflow now has one explicit install-to-execution runbook in
 README and the public demo plan. It covers profile creation, current-machine
 hardware discovery, provider refresh, alias/native-id review, promotion, runtime
-and model preparation, Continue export, and endpoint-backed chat. Model listing
+and model preparation, Codex/Copilot host-client exports, and endpoint-backed chat. Model listing
 now defaults to adjacent `ALIAS` and provider-native `MODEL` columns and supports
 `--identity alias|model|both`, reducing the risk of passing a native model id to
 commands that require a profile alias. This improves demo usability but does not
 close the remaining P0 external gates: verified public release assets, hosted
 ruleset activation, independent-user trials, and the final post-trial docs sweep.
+
+The approved host-client export scope exception is implemented: Codex, Copilot CLI, and Copilot-in-VS-Code are Tier-1 v1 print-only targets with explicit API/capability checks, canonical cross-platform Copilot JSON, named Codex profiles, VS Code Custom Endpoint JSON, and synchronized primary-demo commands. Client installation, file mutation, and launching remain out of scope. Release promotion still requires current-client smoke evidence on local Ollama and one authenticated Responses-compatible gateway.

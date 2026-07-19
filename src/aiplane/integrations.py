@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import re
 import select
@@ -10,6 +11,7 @@ import time
 from pathlib import Path
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 from .boundaries import CommandRunner, SubprocessCommandRunner
 from .config import provider_helper_path
@@ -35,6 +37,7 @@ class IntegrationExport:
     endpoint: str
     content: str
     notes: list[str]
+    content_format: str = "text"
 
 
 class IntegrationManager:
@@ -74,7 +77,11 @@ class IntegrationManager:
         chat: str | None = None,
         autocomplete: str | None = None,
         embedding: str | None = None,
+        output_format: str | None = None,
+        api_type: str | None = None,
+        offline: bool = False,
     ) -> IntegrationExport:
+        self._validate_target_options(tool, output_format, api_type, offline)
         if tool in MCP_EXPORT_TOOLS:
             return self._mcp_export(tool)
         if tool == "continue" and not model_name:
@@ -105,6 +112,9 @@ class IntegrationManager:
                 select_best=select_best,
                 endpoint=endpoint,
                 api_key_env=api_key_env,
+                output_format=output_format,
+                api_type=api_type,
+                offline=offline,
             )
             model_name = str(plan["selection"]["primary"]["name"])
         model_name = model_name or self._default_model_name("chat_model", "code_model", "self_managed_model")
@@ -122,6 +132,18 @@ class IntegrationManager:
             return self._aider_export(model_name, model, provider_name, endpoint_value, api_key_value)
         if tool == "openai-compatible":
             return self._openai_compatible_export(model_name, model, provider_name, endpoint_value, api_key_value)
+        if tool in {"codex", "copilot-cli", "copilot-vscode"}:
+            return self._host_client_export(
+                tool,
+                model_name,
+                model,
+                provider_name,
+                endpoint_value,
+                api_key_value,
+                output_format,
+                api_type,
+                offline,
+            )
         raise ValueError(f"unknown integration: {tool}")
 
     def export_from_plan(self, plan: Any) -> IntegrationExport:
@@ -143,6 +165,32 @@ class IntegrationManager:
         provider_name = str(row.get("provider") or "")
         endpoint = str(row.get("endpoint") or "")
         api_key_env = str(row.get("api_key_env") or "")
+        options = plan.get("target_options") if isinstance(plan.get("target_options"), dict) else {}
+        if tool in {"codex", "copilot-cli", "copilot-vscode"}:
+            model.update(
+                {
+                    key: row.get(key)
+                    for key in (
+                        "context_window_tokens",
+                        "max_output_tokens",
+                        "supports_tool_calling",
+                        "supports_streaming",
+                        "capability_scores",
+                        "supported_apis",
+                    )
+                }
+            )
+            return self._host_client_export(
+                tool,
+                model_name,
+                model,
+                provider_name,
+                endpoint,
+                api_key_env,
+                options.get("format"),
+                options.get("api_type"),
+                bool(options.get("offline")),
+            )
         if tool == "cline":
             return self._cline_export(model_name, model, provider_name, endpoint, api_key_env)
         if tool == "zed":
@@ -164,7 +212,11 @@ class IntegrationManager:
         embedding: str | None = None,
         endpoint: str | None = None,
         api_key_env: str | None = None,
+        output_format: str | None = None,
+        api_type: str | None = None,
+        offline: bool = False,
     ) -> dict[str, Any]:
+        self._validate_target_options(tool, output_format, api_type, offline)
         if tool in MCP_EXPORT_TOOLS:
             return {
                 "name": "integration_plan",
@@ -244,6 +296,22 @@ class IntegrationManager:
                     runtime_constraint=runtime,
                 )
             selection["primary"] = row
+        if tool in {"codex", "copilot-cli", "copilot-vscode"}:
+            selected = selection["primary"]
+            selected_model = dict(self.catalog.get(str(selected["name"])))
+            selected_model["capability_scores"] = selected.get("capability_scores", {})
+            selected_model["supported_apis"] = selected.get("supported_apis", [])
+            selected["compatibility_warnings"] = self._agent_warnings(
+                tool,
+                str(selected["name"]),
+                selected_model,
+            )
+            selected["selected_api_type"] = self._select_api_type(
+                tool,
+                str(selected["provider"]),
+                selected_model,
+                api_type,
+            )
         return {
             "name": "integration_plan",
             "tool": tool,
@@ -251,6 +319,11 @@ class IntegrationManager:
             "required_roles": self._required_roles(tool),
             "constraints": constraints,
             "overrides": {key: value for key, value in overrides.items() if value},
+            "target_options": {
+                "format": output_format,
+                "api_type": api_type,
+                "offline": bool(offline),
+            },
             "selection": selection,
             "notes": [
                 "plan prints the model/runtime/endpoint decision; it does not write IDE config or start runtimes",
@@ -272,6 +345,9 @@ class IntegrationManager:
         embedding: str | None = None,
         endpoint: str | None = None,
         api_key_env: str | None = None,
+        output_format: str | None = None,
+        api_type: str | None = None,
+        offline: bool = False,
         dry_run: bool = True,
         yes: bool = False,
     ) -> dict[str, Any]:
@@ -291,6 +367,9 @@ class IntegrationManager:
             embedding=embedding,
             endpoint=endpoint,
             api_key_env=api_key_env,
+            output_format=output_format,
+            api_type=api_type,
+            offline=offline,
         )
         actions = []
         seen_start: set[str] = set()
@@ -473,6 +552,15 @@ class IntegrationManager:
         )
         api_key_value = api_key_env or self._api_key_env_for(model, provider_name)
         capabilities = self.catalog.show(model_name)["capabilities"]
+        capability_scores = capabilities.get("scores", {})
+        context_window = model.get("context_window_tokens") or self._token_count(model.get("context"))
+        tool_calling = model.get("supports_tool_calling")
+        if tool_calling is None and int(capability_scores.get("tool_use", 0) or 0) > 0:
+            tool_calling = True
+        provider = self.catalog.providers().get(provider_name, {})
+        supported_apis = provider.get("supported_apis")
+        if not isinstance(supported_apis, list):
+            supported_apis = self._default_supported_apis(provider_name, str(provider.get("protocol") or ""))
         return {
             "name": model_name,
             "role": role,
@@ -484,7 +572,12 @@ class IntegrationManager:
             "api_key_env": api_key_value or None,
             "supported_runtimes": supported,
             "roles": model.get("roles", []),
-            "capability_scores": capabilities.get("scores", {}),
+            "capability_scores": capability_scores,
+            "context_window_tokens": context_window,
+            "max_output_tokens": model.get("max_output_tokens"),
+            "supports_tool_calling": tool_calling,
+            "supports_streaming": model.get("supports_streaming"),
+            "supported_apis": supported_apis,
             "role_capabilities": ROLE_CAPABILITY_MAP.get(role, []),
             "role_score": self._role_score(role, self.catalog.show(model_name)),
             "reason": reason,
@@ -942,7 +1035,15 @@ class IntegrationManager:
             "The MCP server lets clients query aiplane configuration and guarded tools; it is not the model inference endpoint."
         )
         notes.append("Profile selection uses the normal aiplane default rules unless you add --profile to the args.")
-        return IntegrationExport(tool, "mcp", "aiplane", "stdio", content, notes)
+        return IntegrationExport(
+            tool,
+            "mcp",
+            "aiplane",
+            "stdio",
+            content,
+            notes,
+            "text" if tool == "continue-mcp" else "json",
+        )
 
     def _cline_export(
         self,
@@ -970,6 +1071,7 @@ class IntegrationManager:
             endpoint,
             json_dumps(payload, indent=2),
             notes,
+            "json",
         )
 
     def _zed_export(
@@ -1002,6 +1104,7 @@ class IntegrationManager:
             endpoint,
             json_dumps(payload, indent=2),
             notes,
+            "json",
         )
 
     def _aider_export(
@@ -1023,6 +1126,375 @@ class IntegrationManager:
             "For local Ollama/OpenAI-compatible endpoints, a dummy API key is often accepted by the local server.",
         ]
         return IntegrationExport("aider", model_name, provider_name, endpoint, content, notes)
+
+    @staticmethod
+    def _validate_target_options(
+        tool: str,
+        output_format: str | None,
+        api_type: str | None,
+        offline: bool,
+    ) -> None:
+        host_tools = {"codex", "copilot-cli", "copilot-vscode"}
+        if tool not in host_tools and (output_format or api_type or offline):
+            raise ValueError("--format, --api-type, and --offline are only supported by host-client exports")
+        if offline and tool != "copilot-cli":
+            raise ValueError("--offline is only supported for copilot-cli")
+        supported_formats = {
+            "codex": {None, "native", "toml"},
+            "copilot-cli": {None, "native", "json", "posix", "powershell"},
+            "copilot-vscode": {None, "native", "json"},
+        }
+        if tool in host_tools and output_format not in supported_formats[tool]:
+            rendered = ", ".join(sorted(value for value in supported_formats[tool] if value))
+            raise ValueError(f"{tool} --format must be one of: {rendered}")
+
+    def _host_client_export(
+        self,
+        tool: str,
+        model_name: str,
+        model: dict[str, Any],
+        provider_name: str,
+        endpoint: str,
+        api_key_env: str,
+        output_format: str | None,
+        api_type: str | None,
+        offline: bool,
+    ) -> IntegrationExport:
+        model = dict(model)
+        if not isinstance(model.get("capability_scores"), dict):
+            model["capability_scores"] = self.catalog.show(model_name)["capabilities"].get("scores", {})
+        warnings = self._agent_warnings(tool, model_name, model)
+        selected_api = self._select_api_type(tool, provider_name, model, api_type)
+        if tool == "codex":
+            if output_format not in {None, "native", "toml"}:
+                raise ValueError("codex export supports only the native TOML format")
+            if offline:
+                raise ValueError("--offline is only supported for copilot-cli")
+            return self._codex_export(model_name, model, provider_name, endpoint, api_key_env, selected_api, warnings)
+        if tool == "copilot-cli":
+            return self._copilot_cli_export(
+                model_name,
+                model,
+                provider_name,
+                endpoint,
+                api_key_env,
+                output_format or "json",
+                offline,
+                warnings,
+            )
+        if output_format not in {None, "native", "json"}:
+            raise ValueError("copilot-vscode export supports only JSON")
+        if offline:
+            raise ValueError("--offline is only supported for copilot-cli")
+        return self._copilot_vscode_export(
+            model_name,
+            model,
+            provider_name,
+            endpoint,
+            api_key_env,
+            selected_api,
+            warnings,
+        )
+
+    def _agent_warnings(self, tool: str, model_name: str, model: dict[str, Any]) -> list[str]:
+        warnings: list[str] = []
+        tool_calling = model.get("supports_tool_calling")
+        scores = model.get("capability_scores") if isinstance(model.get("capability_scores"), dict) else {}
+        if tool_calling is None and int(scores.get("tool_use", 0) or 0) > 0:
+            tool_calling = True
+            warnings.append(
+                "Tool-calling support is inferred from the catalog tool_use score; verify it with the client."
+            )
+        if tool_calling is False:
+            raise ValueError(f"{tool} requires tool calling, but model {model_name!r} is marked incompatible")
+        if tool_calling is None:
+            warnings.append("Tool-calling support is unknown; agent mode may reject this model.")
+        streaming = model.get("supports_streaming")
+        if tool == "copilot-cli" and streaming is False:
+            raise ValueError(f"copilot-cli requires streaming, but model {model_name!r} is marked incompatible")
+        if streaming is None:
+            warnings.append("Streaming support is unknown; verify the selected endpoint before agent use.")
+        context = self._token_count(model.get("context_window_tokens") or model.get("context"))
+        if context is None:
+            warnings.append("Context-window size is unknown.")
+        elif tool == "copilot-cli" and context < 128000:
+            warnings.append(f"Context window is {context} tokens; GitHub recommends at least 128000 for Copilot CLI.")
+        return warnings
+
+    def _select_api_type(
+        self,
+        tool: str,
+        provider_name: str,
+        model: dict[str, Any],
+        override: str | None,
+    ) -> str:
+        normalized_override = str(override or "").replace("-", "_")
+        allowed = {"responses", "chat_completions", "messages"}
+        if normalized_override and normalized_override not in allowed:
+            raise ValueError("--api-type must be responses, chat-completions, or messages")
+        configured = model.get("supported_apis")
+        if not isinstance(configured, list):
+            provider = self.catalog.providers().get(provider_name, {})
+            configured = provider.get("supported_apis")
+            if not isinstance(configured, list):
+                configured = self._default_supported_apis(provider_name, str(provider.get("protocol") or ""))
+        supported = {str(value).replace("-", "_") for value in configured}
+        if normalized_override:
+            selected = normalized_override
+        elif provider_name == "anthropic":
+            selected = "messages"
+        elif tool == "codex":
+            selected = "responses"
+        elif tool == "copilot-cli":
+            selected = "chat_completions"
+        elif "responses" in supported:
+            selected = "responses"
+        elif "chat_completions" in supported:
+            selected = "chat_completions"
+        elif "messages" in supported:
+            selected = "messages"
+        else:
+            raise ValueError(f"provider {provider_name!r} has no supported host-client API metadata; pass --api-type")
+        if provider_name != "ollama" and supported and selected not in supported:
+            raise ValueError(
+                f"provider {provider_name!r} does not declare {selected.replace('_', '-')} support; "
+                f"supported: {', '.join(sorted(value.replace('_', '-') for value in supported))}"
+            )
+        if tool == "codex" and provider_name != "ollama" and selected != "responses":
+            raise ValueError(
+                "Codex custom providers require the Responses API; use a Responses-compatible gateway such as LiteLLM"
+            )
+        if (
+            tool == "copilot-cli"
+            and provider_name not in {"anthropic", "azure_openai"}
+            and selected != "chat_completions"
+        ):
+            raise ValueError("Copilot CLI OpenAI-compatible BYOK endpoints require Chat Completions")
+        return selected
+
+    @staticmethod
+    def _default_supported_apis(provider_name: str, protocol: str) -> list[str]:
+        if provider_name == "openai":
+            return ["responses", "chat_completions"]
+        if provider_name == "anthropic" or protocol in {"anthropic_api", "anthropic_messages"}:
+            return ["messages"]
+        if provider_name == "azure_openai" or protocol == "azure_openai":
+            return ["responses", "chat_completions"]
+        if provider_name == "ollama" or protocol in {"ollama_api", "openai_compatible"}:
+            return ["chat_completions"]
+        return []
+
+    @staticmethod
+    def _token_count(value: object) -> int | None:
+        if value in {None, ""}:
+            return None
+        if isinstance(value, (int, float)):
+            return int(value)
+        text = str(value).strip().lower().replace(",", "")
+        multiplier = 1
+        if text.endswith("k"):
+            multiplier, text = 1000, text[:-1]
+        elif text.endswith("m"):
+            multiplier, text = 1000000, text[:-1]
+        try:
+            return int(float(text) * multiplier)
+        except ValueError:
+            return None
+
+    @staticmethod
+    def _client_slug(model_name: str) -> str:
+        slug = re.sub(r"[^a-z0-9_-]+", "-", model_name.lower()).strip("-_")
+        return f"aiplane-{slug or 'model'}"
+
+    def _codex_export(
+        self,
+        model_name: str,
+        model: dict[str, Any],
+        provider_name: str,
+        endpoint: str,
+        api_key_env: str,
+        api_type: str,
+        warnings: list[str],
+    ) -> IntegrationExport:
+        profile_id = self._client_slug(model_name)
+        model_id = str(model.get("model") or "")
+        if provider_name == "ollama":
+            hostname = (urlsplit(endpoint).hostname or "").lower()
+            if hostname not in {"localhost", "127.0.0.1", "::1"}:
+                raise ValueError(
+                    "Codex built-in Ollama configuration is local-only; use a Responses-compatible gateway for remote Ollama"
+                )
+            content = (
+                f'[profiles.{json.dumps(profile_id)}]\nmodel = {json.dumps(model_id)}\nmodel_provider = "ollama"\n'
+            )
+        else:
+            provider_id = profile_id
+            content = (
+                f"[model_providers.{json.dumps(provider_id)}]\n"
+                f"name = {json.dumps('Aiplane: ' + model_name)}\n"
+                f"base_url = {json.dumps(endpoint.rstrip('/'))}\n"
+                + (f"env_key = {json.dumps(api_key_env)}\n" if api_key_env else "")
+                + f"wire_api = {json.dumps(api_type)}\n\n"
+                + f"[profiles.{json.dumps(profile_id)}]\n"
+                + f"model = {json.dumps(model_id)}\n"
+                + f"model_provider = {json.dumps(provider_id)}\n"
+            )
+        notes = [
+            "Merge this into the user-level ~/.codex/config.toml; repository provider overrides are not supported.",
+            f"Start the CLI with: codex --profile {profile_id}",
+            "The named profile preserves the current Codex default; IDE profile activation depends on the installed Codex version.",
+            *warnings,
+        ]
+        return IntegrationExport("codex", model_name, provider_name, endpoint, content, notes, "toml")
+
+    def _copilot_cli_export(
+        self,
+        model_name: str,
+        model: dict[str, Any],
+        provider_name: str,
+        endpoint: str,
+        api_key_env: str,
+        output_format: str,
+        offline: bool,
+        warnings: list[str],
+    ) -> IntegrationExport:
+        output_format = "json" if output_format == "native" else output_format
+        if output_format not in {"json", "posix", "powershell"}:
+            raise ValueError("copilot-cli --format must be json, posix, or powershell")
+        provider_type = (
+            "anthropic" if provider_name == "anthropic" else "azure" if provider_name == "azure_openai" else "openai"
+        )
+        base_url = endpoint.rstrip("/")
+        if provider_name == "ollama" and base_url.endswith("/v1"):
+            base_url = base_url[:-3]
+        environment = {
+            "COPILOT_PROVIDER_BASE_URL": base_url,
+            "COPILOT_PROVIDER_TYPE": provider_type,
+            "COPILOT_MODEL": str(model.get("model") or ""),
+        }
+        if offline:
+            environment["COPILOT_OFFLINE"] = "true"
+        environment_refs = {"COPILOT_PROVIDER_API_KEY": api_key_env} if api_key_env else {}
+        notes = [
+            "Plugins, built-in sub-agents, skills, and MCP tools inherit this host-session provider and model.",
+            "GitHub authentication is still required for GitHub-backed delegation, code search, and the GitHub MCP server.",
+            *warnings,
+        ]
+        payload = {
+            "alias": model_name,
+            "model": str(model.get("model") or ""),
+            "provider": provider_name,
+            "environment": environment,
+            "environment_refs": environment_refs,
+            "command": ["copilot"],
+            "warnings": warnings,
+            "notes": notes[:2],
+        }
+        if output_format == "json":
+            return IntegrationExport(
+                "copilot-cli",
+                model_name,
+                provider_name,
+                base_url,
+                json_dumps(payload, indent=2),
+                [],
+                "json",
+            )
+        if output_format == "posix":
+            lines = [f"export {key}={json.dumps(value)}" for key, value in environment.items()]
+            lines.extend(f'export {target}="${{{source}}}"' for target, source in environment_refs.items())
+            lines.append("copilot")
+        else:
+
+            def ps(value: str) -> str:
+                return "'" + value.replace("'", "''") + "'"
+
+            lines = [f"$env:{key} = {ps(value)}" for key, value in environment.items()]
+            lines.extend(f"$env:{target} = $env:{source}" for target, source in environment_refs.items())
+            lines.append("copilot")
+        return IntegrationExport(
+            "copilot-cli",
+            model_name,
+            provider_name,
+            base_url,
+            "\n".join(lines) + "\n",
+            notes,
+            output_format,
+        )
+
+    @staticmethod
+    def _endpoint_with_suffix(endpoint: str, suffix: str, *, trim_v1: bool = False) -> str:
+        parsed = urlsplit(endpoint)
+        path = parsed.path.rstrip("/")
+        if trim_v1 and path.endswith("/v1"):
+            path = path[:-3]
+        if not path.endswith(suffix):
+            path += suffix
+        return urlunsplit((parsed.scheme, parsed.netloc, path, parsed.query, parsed.fragment))
+
+    def _copilot_vscode_export(
+        self,
+        model_name: str,
+        model: dict[str, Any],
+        provider_name: str,
+        endpoint: str,
+        api_key_env: str,
+        api_type: str,
+        warnings: list[str],
+    ) -> IntegrationExport:
+        api_name = api_type.replace("_", "-")
+        suffix = {"responses": "/responses", "chat-completions": "/chat/completions", "messages": "/v1/messages"}[
+            api_name
+        ]
+        base = self._endpoint_with_suffix(endpoint, suffix, trim_v1=api_name == "messages")
+        context = self._token_count(model.get("context_window_tokens") or model.get("context"))
+        max_output = self._token_count(model.get("max_output_tokens"))
+        model_row: dict[str, Any] = {
+            "id": str(model.get("model") or ""),
+            "name": model_name,
+            "url": base,
+            "apiType": api_name,
+        }
+        tool_calling = model.get("supports_tool_calling")
+        scores = model.get("capability_scores") if isinstance(model.get("capability_scores"), dict) else {}
+        if tool_calling is None and int(scores.get("tool_use", 0) or 0) > 0:
+            tool_calling = True
+        if tool_calling is not None:
+            model_row["toolCalling"] = bool(tool_calling)
+        if model.get("supports_streaming") is not None:
+            model_row["streaming"] = bool(model.get("supports_streaming"))
+        if context and max_output and context > max_output:
+            model_row["maxInputTokens"] = context - max_output
+            model_row["maxOutputTokens"] = max_output
+        payload: dict[str, Any] = {
+            "name": f"Aiplane: {model_name}",
+            "vendor": "customendpoint",
+            "apiType": api_name,
+            "models": [model_row],
+        }
+        notes = [
+            "Merge this provider object into VS Code chatLanguageModels.json through Manage Language Models.",
+            "BYOK applies to chat, agents, and utility models, not inline completions, semantic search, or embeddings.",
+            *warnings,
+        ]
+        if api_key_env:
+            notes.insert(
+                1,
+                f"Enter the key referenced by {api_key_env} in VS Code Manage Language Models; it is not printed here.",
+            )
+        if provider_name == "ollama":
+            notes.append(
+                "VS Code recommends the official Ollama extension for the maintained local Ollama provider path."
+            )
+        return IntegrationExport(
+            "copilot-vscode",
+            model_name,
+            provider_name,
+            base,
+            json_dumps([payload], indent=2),
+            notes,
+            "json",
+        )
 
     def _openai_compatible_export(
         self,
@@ -1046,4 +1518,5 @@ class IntegrationManager:
             endpoint,
             json_dumps(payload, indent=2),
             ["Generic OpenAI-compatible config payload."],
+            "json",
         )

@@ -127,6 +127,7 @@ RUNTIME_DEFINITIONS: dict[str, dict[str, Any]] = {
 SOURCE_DEFINITIONS: dict[str, dict[str, Any]] = {
     "ollama": {
         "ownership": "self_managed",
+        "supported_apis": ["chat_completions"],
         "description": "Ollama model library and local pull store",
         "typical_runtimes": ["ollama"],
         "catalog_adapter": "ollama",
@@ -185,6 +186,7 @@ SOURCE_DEFINITIONS: dict[str, dict[str, Any]] = {
     },
     "openai": {
         "ownership": "managed_service",
+        "supported_apis": ["responses", "chat_completions"],
         "description": "OpenAI hosted model catalog and deployments",
         "endpoint_family": "openai",
         "endpoint": "https://api.openai.com/v1",
@@ -195,6 +197,7 @@ SOURCE_DEFINITIONS: dict[str, dict[str, Any]] = {
     },
     "anthropic": {
         "ownership": "managed_service",
+        "supported_apis": ["messages"],
         "description": "Anthropic hosted model catalog",
         "endpoint_family": "anthropic",
         "endpoint": "https://api.anthropic.com",
@@ -205,6 +208,7 @@ SOURCE_DEFINITIONS: dict[str, dict[str, Any]] = {
     },
     "azure_openai": {
         "ownership": "managed_service",
+        "supported_apis": ["responses", "chat_completions"],
         "description": "Azure OpenAI deployments in a configured Azure OpenAI resource",
         "endpoint_family": "azure_openai",
         "api_key_env": "AZURE_OPENAI_API_KEY",
@@ -227,6 +231,7 @@ SOURCE_DEFINITIONS: dict[str, dict[str, Any]] = {
 
 PROVIDER_ENDPOINT_DEFAULTS: dict[str, dict[str, Any]] = {
     "ollama": {
+        "supported_apis": ["chat_completions"],
         "ownership": "self_managed",
         "access": {"kind": "same_host"},
         "substrate": "native",
@@ -239,6 +244,7 @@ PROVIDER_ENDPOINT_DEFAULTS: dict[str, dict[str, Any]] = {
         "notes": "Conventional Ollama endpoint default. Doctor/test commands still verify whether Ollama is actually installed, running, and has the model pulled.",
     },
     "vllm": {
+        "supported_apis": ["chat_completions"],
         "ownership": "self_managed",
         "access": {"kind": "same_host"},
         "substrate": "docker",
@@ -250,6 +256,7 @@ PROVIDER_ENDPOINT_DEFAULTS: dict[str, dict[str, Any]] = {
         "notes": "Conventional vLLM OpenAI-compatible endpoint default. Enable or override only after deploying the runtime.",
     },
     "lmstudio": {
+        "supported_apis": ["responses", "chat_completions"],
         "ownership": "self_managed",
         "access": {"kind": "same_host"},
         "substrate": "native",
@@ -261,6 +268,7 @@ PROVIDER_ENDPOINT_DEFAULTS: dict[str, dict[str, Any]] = {
         "notes": "Conventional LM Studio local server endpoint default. Start/configure LM Studio before use.",
     },
     "llamacpp": {
+        "supported_apis": ["chat_completions"],
         "ownership": "self_managed",
         "access": {"kind": "same_host"},
         "substrate": "native",
@@ -272,6 +280,7 @@ PROVIDER_ENDPOINT_DEFAULTS: dict[str, dict[str, Any]] = {
         "notes": "Conventional llama.cpp server endpoint default. Start/configure llama-server before use.",
     },
     "tgi": {
+        "supported_apis": ["chat_completions"],
         "ownership": "self_managed",
         "access": {"kind": "same_host"},
         "substrate": "docker",
@@ -293,6 +302,7 @@ PROVIDER_ENDPOINT_DEFAULTS: dict[str, dict[str, Any]] = {
         "notes": "Library runtime; no HTTP endpoint is implied.",
     },
     "localai": {
+        "supported_apis": ["chat_completions"],
         "ownership": "self_managed",
         "access": {"kind": "same_host"},
         "substrate": "docker",
@@ -335,6 +345,7 @@ PROVIDER_ENDPOINT_DEFAULTS: dict[str, dict[str, Any]] = {
         "notes": "Library runtime; no HTTP endpoint is implied.",
     },
     "openai": {
+        "supported_apis": ["responses", "chat_completions"],
         "ownership": "managed_service",
         "access": {"kind": "hosted_api"},
         "substrate": "managed_service",
@@ -347,6 +358,7 @@ PROVIDER_ENDPOINT_DEFAULTS: dict[str, dict[str, Any]] = {
         "notes": "Hosted service endpoint default. Enable only after selecting profile-owned model entries and configuring credentials.",
     },
     "anthropic": {
+        "supported_apis": ["messages"],
         "ownership": "managed_service",
         "access": {"kind": "hosted_api"},
         "substrate": "managed_service",
@@ -359,6 +371,7 @@ PROVIDER_ENDPOINT_DEFAULTS: dict[str, dict[str, Any]] = {
         "notes": "Hosted service endpoint default. Enable only after configuring credentials.",
     },
     "azure_openai": {
+        "supported_apis": ["responses", "chat_completions"],
         "ownership": "managed_service",
         "access": {"kind": "hosted_api"},
         "substrate": "azure",

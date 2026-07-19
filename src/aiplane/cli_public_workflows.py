@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import sys
 from pathlib import Path
 from typing import Callable
 
@@ -88,12 +89,16 @@ def _print_public_export(args, profile) -> None:
             chat=args.chat,
             autocomplete=args.autocomplete,
             embedding=args.embedding,
+            output_format=args.integration_format,
+            api_type=args.api_type,
+            offline=args.offline,
         )
     print(exported.content)
     if exported.notes:
-        print("\n# Notes")
+        destination = sys.stderr if exported.content_format == "json" else sys.stdout
+        print("\n# Notes", file=destination)
         for note in exported.notes:
-            print(f"# - {note}")
+            print(f"# - {note}", file=destination)
 
 
 def _doctor_exit_code(payload: dict[str, object]) -> int:

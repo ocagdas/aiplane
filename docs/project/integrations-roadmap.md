@@ -17,7 +17,7 @@ chat UI before the provider/session contracts are stable.
 ## Recommended Order and Status
 
 1. **Configuration exporters for existing tools - Implemented / ongoing**
-   - Implemented: Continue, Cline, Zed, Aider, generic OpenAI-compatible endpoint exports.
+   - Implemented: Continue, Cline, Zed, Aider, generic OpenAI-compatible, Codex, Copilot CLI, and Copilot-in-VS-Code endpoint exports.
    - Implemented: VS Code MCP, Continue MCP, Cline-style MCP, and generic MCP config exports.
    - Ongoing: validate more client-specific config shapes as tools evolve.
 

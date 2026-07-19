@@ -1,5 +1,6 @@
 ollama:
   ownership: self_managed
+  supported_apis: [chat_completions]
   description: Ollama model library and local pull store
   typical_runtimes: [ollama]
   catalog_adapter: ollama
@@ -61,6 +62,7 @@ elevenlabs:
   origin: default
 openai:
   ownership: managed_service
+  supported_apis: [responses, chat_completions]
   description: OpenAI hosted model catalog and deployments
   endpoint_family: openai
   endpoint: 'https://api.openai.com/v1'
@@ -74,6 +76,7 @@ openai:
   origin: default
 anthropic:
   ownership: managed_service
+  supported_apis: [messages]
   description: Anthropic hosted model catalog
   endpoint_family: anthropic
   endpoint: 'https://api.anthropic.com'
@@ -87,6 +90,7 @@ anthropic:
   origin: default
 azure_openai:
   ownership: managed_service
+  supported_apis: [responses, chat_completions]
   description: Azure OpenAI deployments in a configured Azure OpenAI resource
   endpoint_family: azure_openai
   api_key_env: AZURE_OPENAI_API_KEY

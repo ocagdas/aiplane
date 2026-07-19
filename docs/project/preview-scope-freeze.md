@@ -16,3 +16,7 @@ An exception requires one tracked decision before implementation or promotion. I
 6. synchronized changes to strategy, roadmap, command coverage, help, and public documentation.
 
 Convenience, speculative market breadth, or the existence of advanced code is not evidence for an exception. Without the decision record, the feature remains subordinate and must not enter the public adoption story.
+
+Approved exceptions:
+
+- [Host-client model exports](host-client-export-scope-exception.md) - Codex, Copilot CLI, and Copilot-in-VS-Code deterministic print-only exports.

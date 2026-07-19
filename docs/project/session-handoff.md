@@ -5,6 +5,8 @@ This file is the short resume point for future `aiplane` development sessions. U
 
 ## Current Milestone
 
+The approved P0 host-client export exception is implemented locally. `codex`, `copilot-cli`, and `copilot-vscode` are Tier-1 v1 plan/setup/export targets. Codex emits user-level named-profile TOML and requires Responses for custom providers; Copilot CLI emits canonical secret-safe JSON plus POSIX/PowerShell renderings; VS Code emits Custom Endpoint JSON for chat/agent use. Explicit model context/output, tool-calling, streaming, and provider API metadata now flow into plans and compatibility checks. The primary demo exports one reviewed alias to all three hosts without installing, launching, or editing them. Current-client smoke evidence remains required before release promotion. Validation: focused integration/documentation contracts 73 passed plus 13 subtests; full suite 518 passed; focused Ruff, profile validation, and required text/JSON environment doctor checks passed. The repository patch wrapper hit the documented `bwrap: loopback` failure, so edits used narrow `perl`/`ex` rewrites with immediate diff, syntax, format, and test verification.
+
 **Current target: Milestone 1 (External Beta Readiness)**
 
 Profile portability terminology and post-P0 direction are aligned: editable YAML is the backup/replay source of truth, `profiles render` is canonical read-only evidence, and `export` compiles target-tool configuration without mutation. Roadmap Priority 13 and P1 backlog item 8 plan safe archive/restore plus exact, capability-equivalent, incompatible, and unresolved destination classification, while excluding credentials and runtime-owned state.
@@ -15,13 +17,13 @@ P0.5 quickstart sufficiency is complete: provider discovery is opt-in, repeat ru
 
 P0.6 stable doctor contract v1 is complete: all findings expose stable IDs, severity, reason, impact, affected resources, and uniform remediation/mutation/dry-run metadata; blocker actions are deterministic and payload exit semantics are authoritative. Validation: focused doctor/contract suite 29 passed; focused doctor suite 14 passed; quick gate 19 passed; full suite 438 passed; required profile and environment doctor checks passed.
 
-P0.7 Tier-1 deterministic exports are implemented: four v1 golden contracts define the release boundary, advanced exporters are explicitly unversioned, and installed-wheel CI performs real MCP stdio verification on every supported OS.
+P0.7 Tier-1 deterministic exports are implemented: seven v1 golden contracts define the release boundary, advanced exporters are explicitly unversioned, and installed-wheel CI performs real MCP stdio verification on every supported OS.
 
 P0.8 public profile schema v1 is complete: packaged JSON Schema, canonical read-only rendering, deterministic merge semantics, validation paths/remedies, and a no-silent-migration pre-1.0 policy.
 
 The end-to-end local evaluator path is now explicit in README and the public demo
 plan: install, profile bootstrap, hardware inspection, provider refresh, hardware-
-aware alias selection, promotion, runtime/model setup, Continue export, and
+aware alias selection, promotion, runtime/model setup, Codex/Copilot host-client exports, and
 interactive endpoint chat. `models list` defaults to adjacent alias/native-model
 identities and supports `--identity alias|model|both`; this replaces the ambiguous
 `--name-only` interface during the pre-1.0 preview. Validation: focused identity checks 4 passed; combined model/integration/documentation/governance suite 113 passed plus 10 subtests; full suite 512 passed plus 20 subtests; focused Ruff, profile validation, and required environment doctor passed.
@@ -213,7 +215,7 @@ SEC-1 and ARCH-1 are complete. SEC-1 focused tests cover non-TTY denial without 
  The latest external review has a tracked evaluation at `docs/project/reviews/dev-mvp-0.5-latest-review-evaluation.md`. Numbered P0 now contains only current release/adoption actions; the independent-user and final-documentation gates remain unnumbered and open. The durable CI recommendation is protected checks on the main/release path, not a permanent feature-branch trigger.
 
  The macOS/Windows install-channel CI regressions are fixed. Tier-1 verification uses the stable relative model ID `portable-smoke.gguf`; all OSes exercise read-only tunnel planning; macOS/Windows assert unsupported runtime-helper mutation; only Windows asserts unsupported tunnel lifecycle. The verifier cannot start a tunnel on Linux or macOS in its platform contract. Behavioral synthetic tests cover Linux, Darwin, and Windows. Focused suite: 41 passed; rebuilt-wheel real pip lifecycle passed.
-P0.1 is complete with a contract-enforced five-command primary adoption cut and two subordinate validation recordings. P0.2 repository implementation is hardened: CI-owned tags, generated preview notes, checksum generation/verification, complete-asset enforcement, full-gate release automation, supported-platform guidance, and rollback guidance are present. P0.2 remains open until one public release contains and verifies the required wheel, source distribution, and checksum assets.
+P0.1 is complete with a contract-enforced seven-command primary adoption cut and two subordinate validation recordings. P0.2 repository implementation is hardened: CI-owned tags, generated preview notes, checksum generation/verification, complete-asset enforcement, full-gate release automation, supported-platform guidance, and rollback guidance are present. P0.2 remains open until one public release contains and verifies the required wheel, source distribution, and checksum assets.
 
 P0.3-P0.6 local implementation is complete: clean-wheel lifecycle verification has a canonical evidence format; `CI / Release gate` aggregates quality, compatibility, and cross-OS install jobs; repository protection requirements are explicit; trial records have a deterministic sanitizer/shape validator; and the preview scope freeze has an exception contract. Public-artifact evidence, hosted ruleset activation, and independent-user trials remain maintainer/external actions.
 

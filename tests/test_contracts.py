@@ -26,6 +26,7 @@ from aiplane.runtime_pull import runtime_pull_support
 def test_integration_contracts_define_tools_and_roles_once() -> None:
     assert "continue" in ALL_INTEGRATION_TOOLS
     assert "generic-mcp" in ALL_INTEGRATION_TOOLS
+    assert {"codex", "copilot-cli", "copilot-vscode"} <= set(ALL_INTEGRATION_TOOLS)
     assert [role["name"] for role in required_roles("continue")] == [
         "chat",
         "autocomplete",
@@ -310,9 +311,11 @@ def test_readme_and_demo_plan_keep_end_to_end_local_evaluator_order() -> None:
         "aiplane models refresh --provider ollama --query chat --limit 25",
         "aiplane models list --provider ollama --runtime ollama --role chat --current-machine",
         "aiplane models promote DISCOVERED_ALIAS --as local_chat",
-        "aiplane integrations setup continue --chat local_chat --runtime ollama",
+        "aiplane integrations setup codex --model local_chat --runtime ollama",
         "aiplane runtimes status ollama",
-        "aiplane integrations export continue --chat local_chat --runtime ollama",
+        "aiplane export codex --model local_chat",
+        "aiplane export copilot-cli --model local_chat --format json --offline",
+        "aiplane export copilot-vscode --model local_chat",
         "aiplane chat --model local_chat",
     ]
     for path in (Path("README.md"), Path("docs/project/public-demo-plan.md")):
@@ -357,7 +360,9 @@ def test_primary_adoption_cut_contains_only_the_core_command_story() -> None:
         "aiplane discover",
         "aiplane doctor",
         "aiplane recommend",
-        "aiplane export continue",
+        "aiplane export codex --model local_chat",
+        "aiplane export copilot-cli --model local_chat --format json --offline",
+        "aiplane export copilot-vscode --model local_chat",
     ]
     for advanced in (" chat ", " run ", " code ", " mcp ", " stacks ", " orchestrators ", " deploy ", " benchmarks "):
         assert advanced not in primary.lower()

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import tomllib
+
 from aiplane.integration_contracts import EXPORT_CONTRACT_VERSION, TIER1_EXPORT_TOOLS
 
 from .support import (
@@ -756,11 +758,128 @@ class IntegrationChatTests(unittest.TestCase):
         self.assertIn("aider --model openai/", output)
         self.assertIn("OPENAI_API_BASE", output)
 
+    def test_host_client_plan_reports_api_compatibility_and_rejects_foreign_flags(self) -> None:
+        with _isolated_test_profile() as profile:
+            manager = IntegrationManager(profile)
+            plan = manager.plan("copilot-cli", model_name="fixture-chat-small")
+            with self.assertRaisesRegex(ValueError, "only supported by host-client"):
+                manager.export("continue", output_format="json")
+        selected = plan["selection"]["primary"]
+        self.assertEqual(selected["selected_api_type"], "chat_completions")
+        self.assertEqual(selected["compatibility_warnings"], [])
+        self.assertEqual(selected["name"], "fixture-chat-small")
+        self.assertEqual(selected["model"], "provider-chat-small:8b")
+
+    def test_host_client_exports_are_cross_platform_and_secret_safe(self) -> None:
+        with _isolated_test_profile() as profile:
+            manager = IntegrationManager(profile)
+            payload = json.loads(
+                manager.export(
+                    "copilot-cli",
+                    model_name="fixture-chat-small",
+                    api_key_env="AIPLANE_TEST_KEY",
+                    offline=True,
+                ).content
+            )
+            posix = manager.export(
+                "copilot-cli",
+                model_name="fixture-chat-small",
+                api_key_env="AIPLANE_TEST_KEY",
+                output_format="posix",
+            ).content
+            powershell = manager.export(
+                "copilot-cli",
+                model_name="fixture-chat-small",
+                api_key_env="AIPLANE_TEST_KEY",
+                output_format="powershell",
+            ).content
+        self.assertEqual(
+            payload["environment_refs"],
+            {"COPILOT_PROVIDER_API_KEY": "AIPLANE_TEST_KEY"},
+        )
+        self.assertNotIn("secret-value", json.dumps(payload))
+        self.assertIn('export COPILOT_PROVIDER_API_KEY="${AIPLANE_TEST_KEY}"', posix)
+        self.assertIn("$env:COPILOT_PROVIDER_API_KEY = $env:AIPLANE_TEST_KEY", powershell)
+
+    def test_codex_export_uses_named_user_profile_and_rejects_anthropic_messages(self) -> None:
+        with _isolated_test_profile() as profile:
+            manager = IntegrationManager(profile)
+            exported = manager.export("codex", model_name="fixture-chat-small")
+            parsed = tomllib.loads(exported.content)
+            profile.models["models"]["fixture-anthropic"] = {
+                "provider": "anthropic",
+                "model": "claude-test",
+                "roles": ["chat"],
+                "supports_tool_calling": True,
+                "supports_streaming": True,
+            }
+            with self.assertRaisesRegex(ValueError, "Responses API"):
+                manager.export("codex", model_name="fixture-anthropic")
+        self.assertEqual(
+            parsed["profiles"]["aiplane-fixture-chat-small"]["model_provider"],
+            "ollama",
+        )
+
+    def test_codex_rejects_remote_ollama_and_vscode_preserves_endpoint_query(self) -> None:
+        with _isolated_test_profile() as profile:
+            manager = IntegrationManager(profile)
+            with self.assertRaisesRegex(ValueError, "local-only"):
+                manager.export(
+                    "codex",
+                    model_name="fixture-chat-small",
+                    endpoint="https://ollama.example.com/v1",
+                )
+            exported = manager.export(
+                "copilot-vscode",
+                model_name="fixture-chat-small",
+                endpoint="https://gateway.example.com/v1?api-version=2026-01-01",
+            )
+        url = json.loads(exported.content)[0]["models"][0]["url"]
+        self.assertEqual(
+            url,
+            "https://gateway.example.com/v1/chat/completions?api-version=2026-01-01",
+        )
+
+    def test_agent_exports_reject_known_capability_incompatibility(self) -> None:
+        with _isolated_test_profile() as profile:
+            profile.models["models"]["fixture-chat-small"]["supports_tool_calling"] = False
+            manager = IntegrationManager(profile)
+            with self.assertRaisesRegex(ValueError, "requires tool calling"):
+                manager.export("copilot-vscode", model_name="fixture-chat-small")
+
+    def test_public_copilot_json_stdout_remains_valid_json(self) -> None:
+        with _isolated_profiles_dir("local-dev") as profiles_dir:
+            stdout = StringIO()
+            stderr = StringIO()
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                code = cli_main(
+                    [
+                        "--profiles-dir",
+                        str(profiles_dir),
+                        "export",
+                        "copilot-cli",
+                        "--model",
+                        "fixture-chat-small",
+                        "--format",
+                        "json",
+                    ]
+                )
+        self.assertEqual(code, 0)
+        self.assertEqual(json.loads(stdout.getvalue())["alias"], "fixture-chat-small")
+
     def test_tier1_exports_match_versioned_golden_files(self) -> None:
         self.assertEqual(EXPORT_CONTRACT_VERSION, "1.0")
         self.assertEqual(
             TIER1_EXPORT_TOOLS,
-            ("continue", "aider", "openai-compatible", "generic-mcp"),
+            (
+                "continue",
+                "aider",
+                "openai-compatible",
+                "generic-mcp",
+                "codex",
+                "copilot-cli",
+                "copilot-vscode",
+            ),
         )
         with _isolated_test_profile() as profile:
             manager = IntegrationManager(profile)
@@ -776,6 +895,16 @@ class IntegrationChatTests(unittest.TestCase):
                     "openai-compatible", model_name="fixture-analysis-small"
                 ).content,
                 "generic-mcp.json": manager.export("generic-mcp").content,
+                "codex.toml": manager.export("codex", model_name="fixture-chat-small").content,
+                "copilot-cli.json": manager.export(
+                    "copilot-cli",
+                    model_name="fixture-chat-small",
+                    offline=True,
+                ).content,
+                "copilot-vscode.json": manager.export(
+                    "copilot-vscode",
+                    model_name="fixture-chat-small",
+                ).content,
             }
 
         golden_root = Path("tests/golden/integrations/v1")

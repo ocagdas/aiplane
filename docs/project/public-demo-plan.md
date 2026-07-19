@@ -40,30 +40,30 @@ aiplane models promote DISCOVERED_ALIAS --as local_chat
 aiplane models use chat_model local_chat
 
 # Preview and perform supported Ollama/model preparation, then verify runtime inventory.
-aiplane integrations setup continue --chat local_chat --runtime ollama --dry-run
-aiplane integrations setup continue --chat local_chat --runtime ollama
+aiplane integrations setup codex --model local_chat --runtime ollama --dry-run
+aiplane integrations setup codex --model local_chat --runtime ollama
 aiplane runtimes status ollama
 aiplane runtimes list-runtime-models ollama
 
 # Compile client configuration and run the small endpoint-backed chat smoke test.
-aiplane integrations export continue --chat local_chat --runtime ollama
+aiplane export codex --model local_chat
+aiplane export copilot-cli --model local_chat --format json --offline
+aiplane export copilot-vscode --model local_chat
 aiplane chat --model local_chat
 ```
 
 The compact model table defaults to adjacent `ALIAS` and `MODEL` columns. Use
 `--identity alias`, `--identity model`, or `--identity both` when a rehearsal needs
-one identity or both explicitly. The final export still only prints Continue
-configuration, while `aiplane chat` talks to the prepared endpoint; neither command
-launches the Continue extension. This evaluator runbook is preparation evidence and
+one identity or both explicitly. The three host-client exports print reviewed configuration, while `aiplane chat` talks to the prepared endpoint; none installs, launches, or edits Codex, Copilot CLI, or VS Code. This evaluator runbook is preparation evidence and
 does not add commands to the bounded primary adoption cut.
 
 ## Recording hierarchy
 
 ### Primary public adoption cut — one outcome in under three minutes
 
-This is the one introductory product video. It contains exactly five core commands—quickstart dry-run, discover, doctor, recommend, and Continue export—with no advanced command detours.
+This is the one introductory product video. It contains exactly seven core commands—quickstart dry-run, discover, doctor, recommend, and three host-client exports—with no advanced command detours.
 
-**Promise:** “Inspect this AI-development environment, understand readiness, choose a suitable configuration, and produce reviewed Continue config without hidden mutation.”
+**Promise:** “Inspect this AI-development environment, understand readiness, choose a suitable configuration, and produce reviewed Codex, Copilot CLI, and Copilot-in-VS-Code configuration without hidden mutation.”
 
 **Prepared state:** `aiplane` is installed from a release wheel in a clean workspace. Use a sanitized, rehearsed local Ollama profile so output is useful and deterministic; preparing the runtime/model is part of trial setup, not this public cut.
 
@@ -125,21 +125,23 @@ Narration:
 
 > Recommendation combines reviewed profile policy with available hardware. This is a transparent compatibility recommendation, not a benchmark result or performance guarantee.
 
-#### 2:10-2:45 — Compile Continue configuration
+#### 2:10-2:50 — Compile host-client configuration
 
 On screen: scroll only enough to show the model alias and endpoint fields, then return to the command prompt without saving the output.
 
-Exact command:
+Exact commands:
 
 ```bash
-aiplane export continue
+aiplane export codex --model local_chat
+aiplane export copilot-cli --model local_chat --format json --offline
+aiplane export copilot-vscode --model local_chat
 ```
 
 Narration:
 
-> Export compiles deterministic Continue configuration for review. It prints text to the terminal; it does not install Continue, edit its files, start a model, or bypass authentication.
+> Export compiles the same reviewed alias into host-specific Codex, Copilot CLI, and Copilot-in-VS-Code configuration. The alias remains visible beside the provider-native model id, and secret values are never printed. These commands do not install, launch, or edit the clients.
 
-#### 2:45-2:55 — Close on the repeatable loop
+#### 2:50-3:00 — Close on the repeatable loop
 
 On screen: leave the deterministic export visible and add a small overlay reading `profile → discover → doctor → recommend → export`.
 
