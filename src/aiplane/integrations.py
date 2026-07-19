@@ -653,7 +653,7 @@ class IntegrationManager:
                 f"model {model_name!r} uses provider {provider_name!r}, preferred runtime {runtime!r}, "
                 f"and supported runtimes {supported}. "
                 "Use endpoint chat without --native-ollama, or select an alias with "
-                "`aiplane models list --runtime ollama --role chat --name-only`."
+                "`aiplane models list --runtime ollama --role chat --identity alias`."
             )
         return ["ollama", "run", ollama_model_id]
 

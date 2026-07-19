@@ -302,6 +302,28 @@ def test_public_demo_plan_is_bounded_reproducible_and_uses_current_commands() ->
     assert "mvp_0." not in text
 
 
+def test_readme_and_demo_plan_keep_end_to_end_local_evaluator_order() -> None:
+    commands = [
+        "uv tool install ./aiplane-0.1.0-py3-none-any.whl",
+        "aiplane profiles bootstrap-local --no-overwrite --no-discovery --no-hardware-discovery",
+        "aiplane hardware discover",
+        "aiplane models refresh --provider ollama --query chat --limit 25",
+        "aiplane models list --provider ollama --runtime ollama --role chat --current-machine",
+        "aiplane models promote DISCOVERED_ALIAS --as local_chat",
+        "aiplane integrations setup continue --chat local_chat --runtime ollama",
+        "aiplane runtimes status ollama",
+        "aiplane integrations export continue --chat local_chat --runtime ollama",
+        "aiplane chat --model local_chat",
+    ]
+    for path in (Path("README.md"), Path("docs/project/public-demo-plan.md")):
+        text = path.read_text(encoding="utf-8")
+        positions = [text.index(command) for command in commands]
+        assert positions == sorted(positions), path
+        assert "--identity alias" in text
+        assert "--identity model" in text
+        assert "--identity both" in text
+
+
 def test_install_verifier_is_portable_and_never_starts_supported_tunnels() -> None:
     verifier = Path("scripts/verify_install_channels.py").read_text(encoding="utf-8")
 

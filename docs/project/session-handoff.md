@@ -19,14 +19,21 @@ P0.7 Tier-1 deterministic exports are implemented: four v1 golden contracts defi
 
 P0.8 public profile schema v1 is complete: packaged JSON Schema, canonical read-only rendering, deterministic merge semantics, validation paths/remedies, and a no-silent-migration pre-1.0 policy.
 
+The end-to-end local evaluator path is now explicit in README and the public demo
+plan: install, profile bootstrap, hardware inspection, provider refresh, hardware-
+aware alias selection, promotion, runtime/model setup, Continue export, and
+interactive endpoint chat. `models list` defaults to adjacent alias/native-model
+identities and supports `--identity alias|model|both`; this replaces the ambiguous
+`--name-only` interface during the pre-1.0 preview. Validation: focused identity checks 4 passed; combined model/integration/documentation/governance suite 113 passed plus 10 subtests; full suite 512 passed plus 20 subtests; focused Ruff, profile validation, and required environment doctor passed.
+
 Must
 
 1. Completed: top-level `aiplane discover` coverage and execution for the public onboarding flow.
 2. Completed: `aiplane quickstart local-coding` now carries discovery provenance and prints the public core command sequence.
 3. Completed: discovery/bootstrap output now distinguishes detected, built-in, provider-discovered cache, profile-configured, and unresolved provenance records.
 4. Completed: blocking/advisory doctor findings now include structured remediation command metadata, impact, mutability, and dry-run support fields.
-5. Add deterministic, reproducible exports for Continue, Aider, Cline, Zed, OpenAI-compatible, and MCP clients.
-6. Implement recommendation test matrix and deterministic ranking.
+5. Completed: deterministic exports cover Continue, Aider, Cline, Zed, OpenAI-compatible, and MCP clients; Tier-1 formats have golden contracts.
+6. Completed for deterministic fixture coverage: recommendation ranking covers the planned hardware/policy cases; external calibration remains ongoing.
 7. Completed: public onboarding has top-level `discover`, `doctor`, `recommend`, and `export` commands with help text and tests.
 8. Validate clean onboarding on multiple environments and classify failures.
 

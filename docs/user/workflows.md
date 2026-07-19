@@ -155,7 +155,12 @@ aiplane models refresh --provider huggingface --query text-generation --limit 25
 
 aiplane models list --source huggingface --limit 10
 aiplane models list --runtime vllm --capability code_generation>=4 --enabled-only --sort-by avg --limit 10
+aiplane models list --runtime vllm --role chat --identity alias --limit 10
+aiplane models list --runtime vllm --role chat --identity model --limit 10
 ```
+
+The normal compact table shows both `ALIAS` and provider-native `MODEL`; pass
+`--identity alias` or `--identity model` for one value per line.
 
 Storage rules:
 

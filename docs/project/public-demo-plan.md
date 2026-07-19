@@ -6,6 +6,57 @@ The public story is deliberately narrow. `aiplane` turns environment facts and r
 
 Terminology used throughout: the editable profile YAML is the backup/replay source of truth; `profiles render` prints a consistently ordered JSON snapshot for validation, comparison, CI, or archival evidence and cannot restore the YAML; `export` compiles profile choices into another tool's configuration syntax and prints it without editing that tool. A replay restores reviewed YAML and evaluates the destination before producing fresh exports.
 
+## End-to-end local Ollama evaluator runbook
+
+The three-minute adoption cut below intentionally starts from a prepared runtime so
+it can demonstrate the read-only product promise. Before recording—or when an
+evaluator wants to prove the runnable path—use this complete sequence. It separates
+profile creation, live hardware inspection, online catalog discovery, alias
+curation, runtime/model preparation, configuration export, and endpoint execution.
+The example wheel version is illustrative.
+
+```bash
+# Install into an isolated application environment and enter a disposable workspace.
+uv tool install ./aiplane-0.1.0-py3-none-any.whl
+aiplane --version
+mkdir aiplane-demo
+cd aiplane-demo
+
+# Create editable profile YAML without hiding hardware or catalog discovery inside bootstrap.
+aiplane profiles bootstrap-local --no-overwrite --no-discovery --no-hardware-discovery
+aiplane profiles validate local-dev
+aiplane hardware discover
+
+# Preview and populate the ignored discovery cache, then compare aliases with native model ids.
+aiplane models refresh --provider ollama --query chat --limit 25 --dry-run
+aiplane models refresh --provider ollama --query chat --limit 25
+aiplane models list --provider ollama --runtime ollama --role chat --current-machine --sort-by role --limit 10 --format text
+aiplane models list --provider ollama --runtime ollama --role chat --current-machine --sort-by role --limit 10 --identity alias
+
+# Replace DISCOVERED_ALIAS with a reviewed ALIAS from the list and make it profile-owned.
+aiplane models show DISCOVERED_ALIAS
+aiplane models promote DISCOVERED_ALIAS --as local_chat --dry-run
+aiplane models promote DISCOVERED_ALIAS --as local_chat
+aiplane models use chat_model local_chat
+
+# Preview and perform supported Ollama/model preparation, then verify runtime inventory.
+aiplane integrations setup continue --chat local_chat --runtime ollama --dry-run
+aiplane integrations setup continue --chat local_chat --runtime ollama
+aiplane runtimes status ollama
+aiplane runtimes list-runtime-models ollama
+
+# Compile client configuration and run the small endpoint-backed chat smoke test.
+aiplane integrations export continue --chat local_chat --runtime ollama
+aiplane chat --model local_chat
+```
+
+The compact model table defaults to adjacent `ALIAS` and `MODEL` columns. Use
+`--identity alias`, `--identity model`, or `--identity both` when a rehearsal needs
+one identity or both explicitly. The final export still only prints Continue
+configuration, while `aiplane chat` talks to the prepared endpoint; neither command
+launches the Continue extension. This evaluator runbook is preparation evidence and
+does not add commands to the bounded primary adoption cut.
+
 ## Recording hierarchy
 
 ### Primary public adoption cut — one outcome in under three minutes

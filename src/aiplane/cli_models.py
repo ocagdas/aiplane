@@ -207,9 +207,13 @@ def add_models_parser(
     )
     profile_arg(models_list)
     models_list.add_argument(
-        "--name-only",
-        action="store_true",
-        help="Print only model aliases (one per line) instead of full JSON",
+        "--identity",
+        choices=["both", "alias", "model"],
+        default="both",
+        help=(
+            "Choose model identity output: both shows aliases and provider-native model ids; "
+            "alias or model prints one selected identity per line"
+        ),
     )
     models_list.add_argument(
         "--format",
@@ -695,10 +699,11 @@ def handle_models_command(
         )
         if args.limit is not None:
             rows = rows[: args.limit]
-        if args.name_only:
+        if args.identity != "both":
             if args.group_by != "none":
-                raise ValueError("--name-only cannot be combined with --group-by")
-            print("\n".join([str(row.get("name") or "") for row in rows]))
+                raise ValueError("--identity alias/model cannot be combined with --group-by")
+            identity_key = "name" if args.identity == "alias" else "model"
+            print("\n".join([str(row.get(identity_key) or "") for row in rows]))
             return 0
 
         resolved_verbosity = output_verbosity if output_verbosity is not None else 0
@@ -894,8 +899,8 @@ def _models_list_text(rows: list[dict[str, object]]) -> str:
 
     headers = {
         "name": "ALIAS",
-        "provider": "PROVIDER",
         "model": "MODEL",
+        "provider": "PROVIDER",
         "runtime": "RUNTIME",
         "enabled": "ENABLED",
     }

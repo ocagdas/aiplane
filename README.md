@@ -107,6 +107,21 @@ aiplane recommend
 aiplane export continue
 ```
 
+`discover` inspects the model catalog state already present in the selected
+profile; it does not contact provider catalogs. To populate or update the
+ignored `models.discovered.yaml` cache, explicitly preview and run a model
+catalog refresh, then review the discovered entries:
+
+```bash
+aiplane models refresh --dry-run
+aiplane models refresh
+aiplane models list --group-by runtime
+```
+
+Refresh does not add reviewed aliases or defaults to `models.yaml`. Promote a
+discovered entry when you want it to become part of the editable profile; see
+[Model Catalog Refresh](docs/user/providers.md#model-catalog-refresh).
+
 The single-command equivalent is offline-safe by default:
 
 ```bash
@@ -121,6 +136,53 @@ Quickstart preserves existing profile files on repeat runs and reports one exact
 
 This path is designed to detect local hardware, runtimes, model catalog state,
 endpoint setup status, and role mappings, report configuration sources (detected, built-in, provider-discovered cache, profile-configured, and unresolved records), and then report one exact next action. Doctor findings include severity, impact, remediation command metadata, mutability, and dry-run support where action is needed.
+
+## Quick local Ollama demo
+
+The core onboarding flow above is inspect-first. For an end-to-end evaluator demo
+that prepares and runs a local model, use this order after downloading the wheel.
+The wheel version below is illustrative. Catalog refresh contacts Ollama; promotion
+writes the editable profile; integration setup may install/start Ollama and download
+model weights.
+
+```bash
+# 1. Install and create a clean demo workspace.
+uv tool install ./aiplane-0.1.0-py3-none-any.whl
+aiplane --version
+mkdir aiplane-demo
+cd aiplane-demo
+
+# 2. Create the profile, then inspect this machine explicitly.
+aiplane profiles bootstrap-local --no-overwrite --no-discovery --no-hardware-discovery
+aiplane hardware discover
+
+# 3. Discover Ollama catalog entries and show alias/model pairs that fit this PC.
+aiplane models refresh --provider ollama --query chat --limit 25 --dry-run
+aiplane models refresh --provider ollama --query chat --limit 25
+aiplane models list --provider ollama --runtime ollama --role chat --current-machine --sort-by role --limit 10 --format text
+aiplane models list --provider ollama --runtime ollama --role chat --current-machine --sort-by role --limit 10 --identity alias
+
+# 4. Replace DISCOVERED_ALIAS with one alias from the ALIAS column, then review it.
+aiplane models show DISCOVERED_ALIAS
+aiplane models promote DISCOVERED_ALIAS --as local_chat --dry-run
+aiplane models promote DISCOVERED_ALIAS --as local_chat
+aiplane models use chat_model local_chat
+
+# 5. Preview and perform supported runtime/model preparation.
+aiplane integrations setup continue --chat local_chat --runtime ollama --dry-run
+aiplane integrations setup continue --chat local_chat --runtime ollama
+aiplane runtimes status ollama
+aiplane runtimes list-runtime-models ollama
+
+# 6. Print Continue configuration, then smoke-test the endpoint interactively.
+aiplane integrations export continue --chat local_chat --runtime ollama
+aiplane chat --model local_chat
+```
+
+`models list` shows the Aiplane `ALIAS` beside the provider-native `MODEL` by
+default. Use `--identity alias` or `--identity model` for one value per line, or
+`--identity both` explicitly for the normal full output. Continue export prints
+configuration; it does not install or launch Continue. Type `/exit` to leave chat.
 
 ## Profiles, render, export, and replay
 

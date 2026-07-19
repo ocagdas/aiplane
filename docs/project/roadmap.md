@@ -664,3 +664,13 @@ Post-merge no-clone candidates are now automated: a successful protected `main` 
 CI-owned versioning now uses the narrowly scoped `aiplane-versioning` GitHub App token, trusts loop suppression only for that event actor, rejects PR edits and non-increasing direct versions, serializes patch mutation, and retries from latest `main`. Patch tags retain validated Actions artifacts without automatic public publication; intentional minor/major tags publish complete wheel/source/checksum releases, and successful publication dispatches the nine-job public verification matrix. App installation, secret storage, hosted app proof, and main/tag ruleset activation remain maintainer actions documented in `repository-protection.md`.
 
 Release-path hardening now serializes and retries CI-owned version mutation from latest `main`, rejects version changes in PRs while preserving authorized direct-main minor/major values, fails closed when PR association cannot be queried, and suppresses redundant bot-commit matrices. Publication requires and post-verifies complete assets; a nine-job published-release workflow produces sanitized Linux/macOS/Windows × pip/pipx/uv evidence. Exact hosted branch/tag ruleset steps are documented but must be enabled by a maintainer.
+
+The local evaluator workflow now has one explicit install-to-execution runbook in
+README and the public demo plan. It covers profile creation, current-machine
+hardware discovery, provider refresh, alias/native-id review, promotion, runtime
+and model preparation, Continue export, and endpoint-backed chat. Model listing
+now defaults to adjacent `ALIAS` and provider-native `MODEL` columns and supports
+`--identity alias|model|both`, reducing the risk of passing a native model id to
+commands that require a profile alias. This improves demo usability but does not
+close the remaining P0 external gates: verified public release assets, hosted
+ruleset activation, independent-user trials, and the final post-trial docs sweep.
