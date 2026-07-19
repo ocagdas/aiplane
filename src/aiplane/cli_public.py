@@ -202,7 +202,7 @@ def _quickstart_progress() -> Callable[[str], None]:
         nonlocal started, width
         rendered = f"[quickstart] {message}"
         width = max(width, len(rendered))
-        finished = message.endswith("complete")
+        finished = message.endswith(" complete")
         sys.stderr.write(("\r" if started else "") + rendered.ljust(width) + ("\n" if finished else ""))
         sys.stderr.flush()
         started = not finished

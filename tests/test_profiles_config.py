@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from aiplane.cli_public import _quickstart_progress
+
 from .support import (
     ModelCatalog,
     Path,
@@ -27,6 +29,19 @@ from .support import (
 
 
 class ProfileConfigTests(unittest.TestCase):
+    def test_quickstart_progress_only_finishes_explicit_completion_messages(self) -> None:
+        stderr = StringIO()
+        progress = _quickstart_progress()
+
+        with redirect_stderr(stderr):
+            progress("Profile incomplete")
+            progress("Quickstart complete")
+
+        self.assertEqual(
+            stderr.getvalue(),
+            "[quickstart] Profile incomplete\r[quickstart] Quickstart complete\n",
+        )
+
     def test_profile_loads(self) -> None:
         profile = load_profile("local-dev", Path.cwd())
         self.assertEqual(profile.name, "local-dev")

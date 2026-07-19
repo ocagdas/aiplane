@@ -546,7 +546,7 @@ def test_profile_render_export_and_replay_terminology_is_consistent() -> None:
     schema = Path("docs/user/profile-schema.md").read_text(encoding="utf-8")
     demo = Path("docs/project/public-demo-plan.md").read_text(encoding="utf-8")
     roadmap = Path("docs/project/roadmap.md").read_text(encoding="utf-8")
-    backlog = Path("docs/project/product-adoption-backlog-2026-07.md").read_text(encoding="utf-8")
+    backlog = max(Path("docs/project").glob("product-adoption-backlog-*.md")).read_text(encoding="utf-8")
 
     for document in (readme, overview, schema, demo):
         assert "editable" in document.lower()
