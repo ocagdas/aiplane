@@ -17,6 +17,10 @@ models:
     enabled: true
     size: 398MB
     context: 32K
+    context_window_tokens: 32768
+    max_output_tokens: 4096
+    supports_tool_calling: true
+    supports_streaming: true
     pull_command: 'ollama pull provider-text-small:0.5b'
     min_ram_gb: 4
     recommended_ram_gb: 8
@@ -280,6 +284,10 @@ models:
     local: true
     enabled: true
     notes: General-purpose local model candidate
+    context_window_tokens: 131072
+    max_output_tokens: 8192
+    supports_tool_calling: true
+    supports_streaming: true
     pull_command: 'ollama pull provider-chat-small:8b'
     min_ram_gb: 16
     recommended_ram_gb: 32

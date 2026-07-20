@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import tomllib
 
 
 PACKAGE = "aiplane"
@@ -83,6 +84,71 @@ def verify_tier1_exports(
     if mcp_config.get("mcpServers", {}).get("aiplane", {}).get("args") != ["mcp", "serve"]:
         raise RuntimeError("installed generic MCP Tier-1 export is incomplete")
 
+    codex_config = tomllib.loads(
+        content(
+            "codex",
+            "--model",
+            "portable_smoke",
+            "--endpoint",
+            "http://127.0.0.1:8080/v1",
+            "--api-type",
+            "responses",
+        )
+    )
+    if codex_config.get("profiles", {}).get("aiplane-portable_smoke", {}).get("model") != "portable-smoke.gguf":
+        raise RuntimeError("installed Codex Tier-1 export is incomplete")
+    copilot_config = json.loads(
+        content(
+            "copilot-cli",
+            "--model",
+            "portable_smoke",
+            "--endpoint",
+            "http://127.0.0.1:8080/v1",
+            "--api-type",
+            "chat-completions",
+            "--format",
+            "json",
+        )
+    )
+    if copilot_config.get("alias") != "portable_smoke" or copilot_config.get("command") != ["copilot"]:
+        raise RuntimeError("installed Copilot CLI Tier-1 export is incomplete")
+    vscode_config = json.loads(
+        content(
+            "copilot-vscode",
+            "--model",
+            "portable_smoke",
+            "--endpoint",
+            "http://127.0.0.1:8080/v1",
+            "--api-type",
+            "chat-completions",
+        )
+    )
+    if vscode_config[0].get("models", [{}])[0].get("id") != "portable-smoke.gguf":
+        raise RuntimeError("installed Copilot-in-VS-Code Tier-1 export is incomplete")
+    posix_config = content(
+        "copilot-cli",
+        "--model",
+        "portable_smoke",
+        "--endpoint",
+        "http://127.0.0.1:8080/v1",
+        "--api-type",
+        "chat-completions",
+        "--format",
+        "posix",
+    )
+    powershell_config = content(
+        "copilot-cli",
+        "--model",
+        "portable_smoke",
+        "--endpoint",
+        "http://127.0.0.1:8080/v1",
+        "--api-type",
+        "chat-completions",
+        "--format",
+        "powershell",
+    )
+    if "export COPILOT_MODEL=" not in posix_config or "$env:COPILOT_MODEL =" not in powershell_config:
+        raise RuntimeError("installed Copilot CLI shell renderers are incomplete")
     process = subprocess.Popen(
         [str(command), "mcp", "serve"],
         env=env,

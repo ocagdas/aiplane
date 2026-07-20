@@ -307,6 +307,18 @@ aiplane models list --source huggingface --role embedding --sort-by downloads --
 aiplane models list --provider huggingface --runtime vllm --sort-by popularity --limit 10
 ```
 
+Compact text output places the Aiplane `ALIAS` beside the provider-native
+`MODEL`, so commands such as `models show`, `models promote`, `models pull`, and
+`chat --model` can use the correct alias. The default identity mode is `both`.
+Use one-value-per-line output when scripting or copying a particular identity:
+
+```bash
+aiplane models list --provider ollama --runtime ollama --role chat --format text
+aiplane models list --provider ollama --runtime ollama --role chat --identity alias
+aiplane models list --provider ollama --runtime ollama --role chat --identity model
+aiplane models list --provider ollama --runtime ollama --role chat --identity both
+```
+
 Discovered entries are stored per model entry name under `models.discovered.yaml`. A refresh can create an entry like this:
 
 ```yaml

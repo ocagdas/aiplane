@@ -239,7 +239,8 @@ python -m aiplane integrations plan continue --select-best --runtime ollama
 - `docs/user/setup.md`: end-user setup helper details.
 - `docs/user/providers.md`: provider setup/discovery helpers.
 - `docs/project/development.md`: dependency, test, and contributor workflows.
-- `docs/project/strategy.md`: product strategy and roadmap.
+- `docs/project/strategy.md`: product strategy and architecture boundary.
+- `docs/project/project-plan.md`: status, roadmap, backlog, command coverage, gates, demo plan, and handoff.
 
 ## CLI Architecture
 

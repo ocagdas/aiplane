@@ -1444,6 +1444,10 @@ def _refresh_model_row(
         "recommended_ram_gb",
         "min_vram_gb",
         "recommended_vram_gb",
+        "context_window_tokens",
+        "max_output_tokens",
+        "supports_tool_calling",
+        "supports_streaming",
         "notes",
     ]:
         if key in model and key not in row:

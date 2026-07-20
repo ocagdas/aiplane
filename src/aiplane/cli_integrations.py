@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 from typing import Any, Callable
 
@@ -26,7 +27,7 @@ def add_integrations_parser(
         subparsers,
         "integrations",
         "Plan, prepare, and export IDE/CLI configuration snippets",
-        "Plan model selection, prepare runtimes/models, and generate config snippets for tools such as Continue, Cline, Zed, Aider, or generic OpenAI-compatible clients.",
+        "Plan model selection, prepare runtimes/models, and generate config snippets for Continue, Codex, Copilot CLI, Copilot in VS Code, and other supported clients.",
         "Examples:\n"
         "  aiplane integrations list\n"
         "  aiplane integrations plan continue --select-best --runtime ollama\n"
@@ -73,6 +74,7 @@ def add_integrations_parser(
     )
     integrations_plan.add_argument("--endpoint", help="Endpoint override passed through to the plan")
     integrations_plan.add_argument("--api-key-env", help="API key env var override passed through to the plan")
+    _target_export_args(integrations_plan)
     integrations_plan.add_argument("tool", choices=ALL_INTEGRATION_TOOLS, help="Integration target to plan")
 
     integrations_setup = integrations_sub.add_parser(
@@ -90,6 +92,7 @@ def add_integrations_parser(
     )
     integrations_setup.add_argument("--endpoint", help="Endpoint override passed through to the plan")
     integrations_setup.add_argument("--api-key-env", help="API key env var override passed through to the plan")
+    _target_export_args(integrations_setup)
     integrations_setup.add_argument(
         "--dry-run",
         action="store_true",
@@ -122,7 +125,27 @@ def add_integrations_parser(
         "--api-key-env",
         help="Environment variable name the target tool should read for an API key",
     )
+    _target_export_args(integrations_export)
     integrations_export.add_argument("tool", choices=ALL_INTEGRATION_TOOLS, help="Export format to print")
+
+
+def _target_export_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--format",
+        dest="integration_format",
+        choices=["native", "json", "toml", "posix", "powershell"],
+        help="Target rendering format; copilot-cli supports json, posix, and powershell",
+    )
+    parser.add_argument(
+        "--api-type",
+        choices=["responses", "chat-completions", "messages"],
+        help="Endpoint API override when provider metadata is incomplete",
+    )
+    parser.add_argument(
+        "--offline",
+        action="store_true",
+        help="For copilot-cli, disable GitHub network features for this BYOK configuration",
+    )
 
 
 def handle_integrations_command(args: argparse.Namespace, profile: Profile, json_dumps: JsonDumps) -> int:
@@ -161,6 +184,9 @@ def handle_integrations_command(args: argparse.Namespace, profile: Profile, json
                     embedding=args.embedding,
                     endpoint=args.endpoint,
                     api_key_env=args.api_key_env,
+                    output_format=args.integration_format,
+                    api_type=args.api_type,
+                    offline=args.offline,
                     dry_run=args.dry_run,
                     yes=not args.dry_run,
                 ),
@@ -185,12 +211,16 @@ def handle_integrations_command(args: argparse.Namespace, profile: Profile, json
                 chat=args.chat,
                 autocomplete=args.autocomplete,
                 embedding=args.embedding,
+                output_format=args.integration_format,
+                api_type=args.api_type,
+                offline=args.offline,
             )
         print(exported.content)
         if exported.notes:
-            print("\n# Notes")
+            destination = sys.stderr if exported.content_format == "json" else sys.stdout
+            print("\n# Notes", file=destination)
             for note in exported.notes:
-                print(f"# - {note}")
+                print(f"# - {note}", file=destination)
         return 0
     raise ValueError(f"unknown integrations command: {args.integrations_command}")
 
@@ -208,4 +238,7 @@ def _plan(manager: IntegrationManager, args: argparse.Namespace) -> dict[str, An
         embedding=args.embedding,
         endpoint=args.endpoint,
         api_key_env=args.api_key_env,
+        output_format=args.integration_format,
+        api_type=args.api_type,
+        offline=args.offline,
     )

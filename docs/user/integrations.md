@@ -5,11 +5,7 @@ does not try to replace IDE assistants or CLI agents.
 
 ## What Export Means
 
-`aiplane integrations export ...` prints configuration to stdout. It does not
-install an IDE extension, edit your IDE settings, start a server, or create an
-account. The intent is to make model/provider selection repeatable and then let
-you paste or commit the generated snippet in the target tool's normal config
-location.
+`aiplane integrations export ...` compiles the selected Aiplane profile into configuration syntax understood by the target tool and prints it to stdout. For example, a Continue export translates reviewed model-role aliases, providers, runtimes, endpoints, and credential environment-variable references into Continue YAML. It does not install an IDE extension, edit IDE settings, start a server, copy credentials, or create an account. Redirect or paste the generated text into the target tool only after review.
 
 The exported values come from the selected `aiplane` profile: provider, model
 name, endpoint/base URL, and API key environment variable where applicable. Use
@@ -224,6 +220,31 @@ ollama serve
 ollama pull text-generation:0.5b
 ```
 
+## Codex and GitHub Copilot host clients
+
+These targets configure the host session. Plugins, sub-agents, skills, and MCP tools run under the provider/model chosen by that host; they do not independently select an Aiplane model.
+
+Choose one reviewed alias, then plan, prepare, and export it:
+
+```bash
+aiplane models list --provider ollama --runtime ollama --role chat --current-machine --capability tool_use>=1 --format text
+aiplane integrations plan codex --model MODEL_ALIAS
+aiplane integrations setup codex --model MODEL_ALIAS --runtime ollama --dry-run
+aiplane integrations export codex --model MODEL_ALIAS
+aiplane integrations export copilot-cli --model MODEL_ALIAS --format json --offline
+aiplane integrations export copilot-vscode --model MODEL_ALIAS
+```
+
+The Codex target prints a named profile for the user-level `~/.codex/config.toml`. Local loopback Ollama uses Codex.s built-in provider; remote Ollama URLs require a Responses-compatible gateway instead of silently falling back to localhost. Custom providers must implement the Responses API; direct Anthropic Messages and Chat-Completions-only endpoints are rejected with a gateway/LiteLLM remedy. The exporter does not change Codex's active default, and ChatGPT login is not converted into an API credential.
+
+Copilot CLI JSON is the canonical cross-platform contract. Literal values are under `environment`; secret mappings such as `COPILOT_PROVIDER_API_KEY` to `AIPLANE_GATEWAY_KEY` are under `environment_refs`. Use `--format posix` or `--format powershell` for a directly usable shell rendering. `--offline` disables GitHub network features, but a remote provider still receives prompts and code context.
+
+The `copilot-vscode` target prints a Custom Endpoint provider object for `chatLanguageModels.json`. It supports reviewed Chat Completions, Responses, and Messages endpoints. Managed keys are not printed; enter them through VS Code's Manage Language Models flow. BYOK applies to chat, agents, and utility models, not inline completions, semantic search, or embedding-backed features. VS Code recommends its official Ollama provider extension for the maintained local Ollama path.
+
+Model entries may declare `context_window_tokens`, `max_output_tokens`, `supports_tool_calling`, and `supports_streaming`; providers may declare `supported_apis`. A known incompatible requirement blocks export. Missing metadata produces a warning instead of inventing support. Copilot CLI warns when context is below its recommended 128k tokens.
+
+Managed-provider aliases work when their endpoint API matches the target. OpenAI, Azure OpenAI, Anthropic, and shared LiteLLM/vLLM gateways retain separate authentication and billing. A GitHub Copilot subscription cannot be used as a Codex provider credential, and a ChatGPT subscription is not transferred into Copilot.
+
 ## Managed Provider Exports
 
 Managed providers use the same profile alias flow as local runtimes. The difference is that the endpoint and API key usually point to a hosted service instead of `localhost`.
@@ -252,7 +273,7 @@ aiplane providers models azure_openai --online --limit 20
 aiplane integrations export openai-compatible --model managed-azure-chat --endpoint https://YOUR-RESOURCE.openai.azure.com
 ```
 
-For Anthropic, keep the alias in `models.yaml` for planning and catalog visibility. Dedicated target-tool exporters are intentionally conservative; use the target tool's native Anthropic provider settings when it supports them, or keep using local/OpenAI-compatible exports where that is the supported shape.
+For Anthropic, Copilot CLI and Copilot in VS Code can export the direct Messages endpoint. Codex rejects that direct route because its custom-provider contract requires Responses; select a reviewed OpenAI-compatible Responses gateway such as LiteLLM instead.
 
 Continue can mix local and managed roles. For example, use OpenAI for chat, local Ollama for autocomplete, and local Ollama embeddings by passing role overrides to `integrations plan/export continue`.
 
@@ -306,6 +327,9 @@ Release-blocking Tier-1 exports use contract version `1.0` and exact golden file
 | Aider | Shell environment and launch command | Golden file plus installed-wheel command checks |
 | Generic OpenAI-compatible | Neutral JSON endpoint/model payload | Golden file plus JSON parsing from the installed wheel |
 | Generic MCP | Common `mcpServers` JSON | Golden file plus a real initialize and `tools/list` stdio exchange |
+| Codex | User-level TOML with a named provider profile | Golden TOML plus compatibility rejection tests |
+| Copilot CLI | Canonical JSON plus POSIX and PowerShell renderings | Golden JSON plus cross-platform and secret-reference tests |
+| Copilot in VS Code | `chatLanguageModels.json` Custom Endpoint object | Golden JSON plus API/capability validation |
 
 The installed-wheel verifier runs on Linux, macOS, and Windows CI. Cline, Zed, VS Code MCP, Continue MCP, and Cline MCP exporters remain available as advanced, unversioned conveniences; they do not block a developer-preview release. `aiplane integrations list` reports `support_tier` and `contract_version` explicitly.
 
@@ -334,7 +358,7 @@ aiplane integrations export continue-mcp
 - `openai-compatible` prints a neutral JSON payload with `base_url`, `model`, and `api_key_env` for tools without a dedicated exporter yet.
 - `vscode-mcp`, `continue-mcp`, `cline-mcp`, and `generic-mcp` print MCP client config snippets that launch `aiplane mcp serve`. These are for querying `aiplane`; they are not model endpoint configs and do not select an inference model.
 
-`setup` is available for Continue and single-model endpoint tools (`cline`, `zed`, `aider`, and `openai-compatible`). It prepares the selected runtime/model where helpers exist, but it still does not edit the target tool's configuration file.
+`setup` is available for Continue and single-model endpoint tools (`cline`, `zed`, `aider`, `openai-compatible`, `codex`, `copilot-cli`, and `copilot-vscode`). It prepares the selected runtime/model where helpers exist, but it still does not edit the target tool's configuration file.
 
 ## Agent Applications
 

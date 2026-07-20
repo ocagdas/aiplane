@@ -1,6 +1,6 @@
 # User Documentation
 
-`aiplane` is an environment doctor and configuration compiler for reproducible local and hybrid AI development environments.
+AI development setups are difficult to reproduce because model capabilities must fit the intended task, available hardware, runtimes, endpoints, and development tools. `aiplane` is an environment doctor and configuration compiler: it inventories those facts, diagnoses what is ready or missing (the read-only doctor role), and compiles reviewed profiles into hardware-aware recommendations and deterministic tool configuration.
 
 These docs are split by user maturity. Start with the first workflow, then move into common recipes, then advanced concepts only when you need to customize providers, runtimes, machines, stacks, policy, or MCP.
 

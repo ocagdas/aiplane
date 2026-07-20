@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from aiplane.cli_public import _quickstart_progress
+
 from .support import (
     ModelCatalog,
     Path,
@@ -16,6 +18,7 @@ from .support import (
     load_profile,
     os,
     patch,
+    redirect_stderr,
     redirect_stdout,
     remove_profile,
     repair_profile,
@@ -26,6 +29,19 @@ from .support import (
 
 
 class ProfileConfigTests(unittest.TestCase):
+    def test_quickstart_progress_only_finishes_explicit_completion_messages(self) -> None:
+        stderr = StringIO()
+        progress = _quickstart_progress()
+
+        with redirect_stderr(stderr):
+            progress("Profile incomplete")
+            progress("Quickstart complete")
+
+        self.assertEqual(
+            stderr.getvalue(),
+            "[quickstart] Profile incomplete\r[quickstart] Quickstart complete\n",
+        )
+
     def test_profile_loads(self) -> None:
         profile = load_profile("local-dev", Path.cwd())
         self.assertEqual(profile.name, "local-dev")
@@ -118,7 +134,8 @@ class ProfileConfigTests(unittest.TestCase):
             profile_path = profiles_dir / "local-dev"
 
             stdout = StringIO()
-            with redirect_stdout(stdout):
+            stderr = StringIO()
+            with redirect_stdout(stdout), redirect_stderr(stderr):
                 code = cli_main(
                     [
                         "--profiles-dir",
@@ -230,7 +247,8 @@ class ProfileConfigTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             profiles_dir = Path(tmp) / "profiles"
             stdout = StringIO()
-            with redirect_stdout(stdout):
+            stderr = StringIO()
+            with redirect_stdout(stdout), redirect_stderr(stderr):
                 code = cli_main(
                     [
                         "--profiles-dir",
@@ -255,6 +273,18 @@ class ProfileConfigTests(unittest.TestCase):
             self.assertFalse(payload["readiness"]["ready_to_export"])
             self.assertEqual(payload["readiness"]["setup_choices"], [])
             self.assertIsNone(payload["doctor"])
+            progress_output = stderr.getvalue()
+            self.assertEqual(progress_output.count("\n"), 1)
+            self.assertEqual(
+                [phase.rstrip() for phase in progress_output.rstrip("\n").split("\r")],
+                [
+                    "[quickstart] Starting a read-only quickstart preview",
+                    "[quickstart] Preparing the editable profile preview",
+                    "[quickstart] Selecting one safe next action",
+                    "[quickstart] Quickstart preview complete",
+                ],
+            )
+            self.assertNotIn("provider catalogs", progress_output)
 
     def test_quickstart_skips_provider_network_discovery_by_default(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -281,7 +311,8 @@ class ProfileConfigTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             profiles_dir = Path(tmp) / "profiles"
             stdout = StringIO()
-            with redirect_stdout(stdout):
+            stderr = StringIO()
+            with redirect_stdout(stdout), redirect_stderr(stderr):
                 code = cli_main(
                     [
                         "--profiles-dir",
@@ -304,6 +335,18 @@ class ProfileConfigTests(unittest.TestCase):
             self.assertIn("next action:", output)
             self.assertIn("no manual YAML editing is required", output)
             self.assertTrue((profiles_dir / "local-dev" / "models.yaml").exists())
+            progress = stderr.getvalue()
+            for phase in (
+                "Preparing the editable profile",
+                "Loading and validating the profile",
+                "Summarizing configuration provenance",
+                "Diagnosing environment and model readiness",
+                "Matching configured models to available hardware",
+                "Selecting one safe next action",
+                "Quickstart complete",
+            ):
+                self.assertIn(f"[quickstart] {phase}", progress)
+            self.assertNotIn("Contacting configured provider catalogs", progress)
 
     def test_quickstart_is_idempotent_and_preserves_manual_profile_edits(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

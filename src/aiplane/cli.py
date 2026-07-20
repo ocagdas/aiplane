@@ -195,14 +195,14 @@ def _main(argv: list[str] | None = None) -> int:
         prog="aiplane",
         description=(
             "Diagnose and reproduce local and hybrid AI development environments.\n\n"
-            "aiplane is an environment doctor and configuration compiler: it turns profile and environment facts into readiness findings,\n"
-            "hardware-aware recommendations, and deterministic exports. Advanced commands remain subordinate to this workflow."
+            "aiplane is an environment doctor and configuration compiler. Its doctor is a read-only readiness diagnosis that turns\n"
+            "profile and environment facts into findings, hardware-aware recommendations, and deterministic exports."
         ),
         epilog=(
             "Outcome: a profile-aware readiness report with an exact next export step.\n\n"
             "Next command:\n"
             "  aiplane quickstart local-coding --dry-run\n\n"
-            "Command maturity and coverage are documented in docs/project/command-coverage.md.\n"
+            "Command maturity and coverage are documented in docs/project/project-plan.md#command-coverage.\n"
             "Docs: docs/user/index.md"
         ),
         formatter_class=HelpFormatter,

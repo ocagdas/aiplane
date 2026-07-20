@@ -553,7 +553,7 @@ class ModelListingTests(unittest.TestCase):
             self.assertEqual(code, 0)
             self.assertEqual([row["name"] for row in json.loads(stdout.getvalue())], ["fits_t4"])
 
-    def test_models_list_name_only_supports_cli_alias_selection(self) -> None:
+    def test_models_list_identity_alias_supports_cli_alias_selection(self) -> None:
         with _isolated_profiles_dir() as profiles_dir:
             stdout = StringIO()
             with redirect_stdout(stdout):
@@ -568,17 +568,45 @@ class ModelListingTests(unittest.TestCase):
                         "ollama",
                         "--role",
                         "chat",
-                        "--name-only",
+                        "--identity",
+                        "alias",
                         "--limit",
                         "2",
                     ]
                 )
             self.assertEqual(code, 0)
-            names = [line.strip() for line in stdout.getvalue().splitlines() if line.strip()]
-            self.assertGreaterEqual(len(names), 1)
-            self.assertTrue(all(line and "{" not in line and "}" not in line for line in names))
+            aliases = [line.strip() for line in stdout.getvalue().splitlines() if line.strip()]
+            self.assertGreaterEqual(len(aliases), 1)
+            self.assertTrue(all(alias and "{" not in alias and "}" not in alias for alias in aliases))
 
-    def test_models_list_name_only_cannot_use_group_by(self) -> None:
+    def test_models_list_identity_model_prints_provider_native_ids(self) -> None:
+        with _isolated_profiles_dir() as profiles_dir:
+            stdout = StringIO()
+            with redirect_stdout(stdout):
+                code = cli_main(
+                    [
+                        "--profiles-dir",
+                        str(profiles_dir),
+                        "models",
+                        "list",
+                        "--profile",
+                        "local-dev",
+                        "--runtime",
+                        "ollama",
+                        "--role",
+                        "chat",
+                        "--identity",
+                        "model",
+                        "--limit",
+                        "2",
+                    ]
+                )
+            self.assertEqual(code, 0)
+            model_ids = [line.strip() for line in stdout.getvalue().splitlines() if line.strip()]
+            self.assertGreaterEqual(len(model_ids), 1)
+            self.assertTrue(all(not model_id.startswith("ollama-") for model_id in model_ids))
+
+    def test_models_list_identity_selection_cannot_use_group_by(self) -> None:
         stdout = StringIO()
         with redirect_stdout(stdout):
             code = cli_main(
@@ -587,7 +615,8 @@ class ModelListingTests(unittest.TestCase):
                     "list",
                     "--profile",
                     "local-dev",
-                    "--name-only",
+                    "--identity",
+                    "alias",
                     "--group-by",
                     "runtime",
                     "--limit",
@@ -620,6 +649,8 @@ class ModelListingTests(unittest.TestCase):
         self.assertIn("ALIAS", rows[1])
         self.assertIn("PROVIDER", rows[1])
         self.assertIn("MODEL", rows[1])
+        self.assertLess(rows[1].index("ALIAS"), rows[1].index("MODEL"))
+        self.assertLess(rows[1].index("MODEL"), rows[1].index("PROVIDER"))
 
     def test_models_list_text_verbosity_one_falls_back_to_json_with_warning(self) -> None:
         stdout = StringIO()

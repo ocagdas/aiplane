@@ -1,0 +1,20 @@
+{
+  "model": "provider-chat-small:8b",
+  "provider": "ollama",
+  "notes": [
+    "Plugins, built-in sub-agents, skills, and MCP tools inherit this host-session provider and model.",
+    "GitHub authentication is still required for GitHub-backed delegation, code search, and the GitHub MCP server."
+  ],
+  "alias": "fixture-chat-small",
+  "environment": {
+    "COPILOT_PROVIDER_BASE_URL": "http://localhost:11434",
+    "COPILOT_PROVIDER_TYPE": "openai",
+    "COPILOT_MODEL": "provider-chat-small:8b",
+    "COPILOT_OFFLINE": "true"
+  },
+  "environment_refs": {},
+  "command": [
+    "copilot"
+  ],
+  "warnings": []
+}

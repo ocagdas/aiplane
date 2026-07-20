@@ -1,0 +1,19 @@
+[
+  {
+    "name": "Aiplane: fixture-chat-small",
+    "models": [
+      {
+        "name": "fixture-chat-small",
+        "id": "provider-chat-small:8b",
+        "url": "http://localhost:11434/v1/chat/completions",
+        "apiType": "chat-completions",
+        "toolCalling": true,
+        "streaming": true,
+        "maxInputTokens": 122880,
+        "maxOutputTokens": 8192
+      }
+    ],
+    "vendor": "customendpoint",
+    "apiType": "chat-completions"
+  }
+]

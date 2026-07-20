@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 from typing import Any, Callable
 
@@ -57,8 +58,8 @@ def add_public_parsers(
         subparsers,
         "export",
         "Export configuration for coding tools",
-        "Print configuration for Continue, Aider, Cline, Zed, OpenAI-compatible clients, or MCP clients. This does not edit target tool files.",
-        "Examples:\n  aiplane export continue\n  aiplane export aider --model MODEL_ALIAS\n  aiplane export vscode-mcp",
+        "Print reviewed configuration for Continue, Codex, Copilot CLI, Copilot in VS Code, OpenAI-compatible clients, or MCP clients. This does not edit target tool files.",
+        "Examples:\n  aiplane export codex --model MODEL_ALIAS\n  aiplane export copilot-cli --model MODEL_ALIAS --format json\n  aiplane export copilot-vscode --model MODEL_ALIAS",
     )
     profile_arg(export_cmd)
     integration_selection_args(export_cmd)
@@ -70,6 +71,22 @@ def add_public_parsers(
     export_cmd.add_argument("--endpoint", help="Override provider endpoint/base URL")
     export_cmd.add_argument(
         "--api-key-env", help="Environment variable name the target tool should read for an API key"
+    )
+    export_cmd.add_argument(
+        "--format",
+        dest="integration_format",
+        choices=["native", "json", "toml", "posix", "powershell"],
+        help="Target rendering format; copilot-cli supports json, posix, and powershell",
+    )
+    export_cmd.add_argument(
+        "--api-type",
+        choices=["responses", "chat-completions", "messages"],
+        help="Endpoint API override when provider metadata is incomplete",
+    )
+    export_cmd.add_argument(
+        "--offline",
+        action="store_true",
+        help="For copilot-cli, disable GitHub network features for this BYOK configuration",
     )
     export_cmd.add_argument("tool", choices=integration_tools, help="Export format to print")
 
@@ -97,7 +114,7 @@ def add_public_parsers(
         subparsers,
         "quickstart",
         "Start a guided local AI coding setup",
-        "Run a focused environment-doctor workflow that discovers, validates, and compiles reproducible local/hybrid AI coding profiles.",
+        "Inspect local capabilities, diagnose readiness gaps, and compile a reproducible local/hybrid AI coding profile.",
         "Examples:\n  aiplane quickstart local-coding\n  aiplane quickstart local-coding --dry-run\n  aiplane quickstart local-coding --discovery",
     )
     quickstart_sub = quickstart_cmd.add_subparsers(dest="quickstart_command", required=True, metavar="command")
@@ -193,6 +210,22 @@ def add_public_parsers(
     )
 
 
+def _quickstart_progress() -> Callable[[str], None]:
+    started = False
+    width = 0
+
+    def report(message: str) -> None:
+        nonlocal started, width
+        rendered = f"[quickstart] {message}"
+        width = max(width, len(rendered))
+        finished = message.endswith(" complete")
+        sys.stderr.write(("\r" if started else "") + rendered.ljust(width) + ("\n" if finished else ""))
+        sys.stderr.flush()
+        started = not finished
+
+    return report
+
+
 def handle_public_command(
     args: argparse.Namespace,
     *,
@@ -210,7 +243,7 @@ def handle_public_command(
 ) -> int | None:
     if args.command == "quickstart":
         if args.quickstart_command == "local-coding":
-            result = quickstart(args, workspace, profiles_dir)
+            result = quickstart(args, workspace, profiles_dir, progress=_quickstart_progress())
             output_format = resolve_output_format(
                 args.format,
                 profile=args.name,

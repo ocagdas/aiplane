@@ -31,9 +31,9 @@ Canonical profile document merges follow these rules:
 
 There is no implicit merge of editable profile directories today. These rules define deterministic behavior for comparison/import tooling and prevent surprising list concatenation or silent null deletion.
 
-## Backup and recovery
+## Backup, recovery, and cross-machine replay
 
-The editable YAML directory is the restorable source of truth; canonical JSON from `profiles render` is read-only evidence for comparison or archival. Aiplane is not a backup service, so use normal reviewed filesystem or version-control procedures for profile YAML that is safe to store. Keep credentials, discovered caches, audit logs, tunnel state, and runtime model data out of that bundle.
+The editable YAML directory is the restorable and transferable source of truth. `profiles render` only reads those YAML files and prints one consistently ordered JSON snapshot for validation, comparison, CI, or archival evidence; the rendered JSON is not currently accepted as restore input and is not configuration for an IDE or runtime. Aiplane is not a backup service, so use normal reviewed filesystem or version-control procedures for profile YAML that is safe to store. Keep credentials, discovered caches, audit logs, tunnel state, and runtime model data out of that bundle.
 
 ```bash
 mkdir -p demo-backup
@@ -47,6 +47,8 @@ AIPLANE_PROFILES_DIR=profiles aiplane profiles render local-dev-restored > demo-
 ```
 
 `profiles repair` copies missing structure from a shipped template. It does not reconstruct user model choices, endpoints, policies, or other customizations and therefore does not replace a backup. Review profile archives before sharing because paths, hostnames, endpoints, account aliases, and other operational metadata may be sensitive.
+
+To replay on another machine, copy the reviewed YAML directory, validate it, and then run `discover`, `doctor`, `recommend`, and the required exports on the destination. Identical machines with equivalent resolved inputs should reproduce byte-stable supported exports. Small hardware differences are acceptable when the destination remains capability-equivalent for the reviewed model/runtime/policy requirements; those differences should be reported, not silently erased. Material incompatibility may correctly change recommendations or block an export. Credentials, weights, caches, audit/tunnel state, and runtime data must be restored through their owning systems. First-class archive/restore, comparison, and provenance-aware drift workflows are planned after the P0 evidence gate.
 
 ## Pre-1.0 migration policy
 

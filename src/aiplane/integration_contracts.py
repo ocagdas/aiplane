@@ -5,11 +5,27 @@ from typing import Any
 from .model_catalog import ROLE_CAPABILITY_MAP
 
 EXPORT_CONTRACT_VERSION = "1.0"
-TIER1_EXPORT_TOOLS = ("continue", "aider", "openai-compatible", "generic-mcp")
+TIER1_EXPORT_TOOLS = (
+    "continue",
+    "aider",
+    "openai-compatible",
+    "generic-mcp",
+    "codex",
+    "copilot-cli",
+    "copilot-vscode",
+)
 TIER1_EXPORT_TOOL_SET = frozenset(TIER1_EXPORT_TOOLS)
 
 MCP_EXPORT_TOOLS = {"vscode-mcp", "continue-mcp", "cline-mcp", "generic-mcp"}
-ONE_MODEL_TOOLS = {"cline", "zed", "aider", "openai-compatible"}
+ONE_MODEL_TOOLS = {
+    "cline",
+    "zed",
+    "aider",
+    "openai-compatible",
+    "codex",
+    "copilot-cli",
+    "copilot-vscode",
+}
 MODEL_SELECTING_TOOLS = {"continue", *ONE_MODEL_TOOLS}
 ALL_INTEGRATION_TOOLS = [
     "continue",
@@ -17,12 +33,24 @@ ALL_INTEGRATION_TOOLS = [
     "zed",
     "aider",
     "openai-compatible",
+    "codex",
+    "copilot-cli",
+    "copilot-vscode",
     "vscode-mcp",
     "continue-mcp",
     "cline-mcp",
     "generic-mcp",
 ]
-SETUP_INTEGRATION_TOOLS = ["continue", "cline", "zed", "aider", "openai-compatible"]
+SETUP_INTEGRATION_TOOLS = [
+    "continue",
+    "cline",
+    "zed",
+    "aider",
+    "openai-compatible",
+    "codex",
+    "copilot-cli",
+    "copilot-vscode",
+]
 
 INTEGRATION_DESCRIPTIONS: dict[str, str] = {
     "continue": "Print a Continue IDE/CLI config snippet for a configured model endpoint; does not install Continue",
@@ -30,6 +58,9 @@ INTEGRATION_DESCRIPTIONS: dict[str, str] = {
     "zed": "Print a Zed assistant provider snippet using an OpenAI-compatible endpoint",
     "aider": "Print shell environment and command hints for Aider with an OpenAI-compatible endpoint",
     "openai-compatible": "Print a generic base_url/model/api_key_env payload for tools that accept OpenAI-compatible endpoints",
+    "codex": "Print user-level Codex TOML for a named Aiplane model/provider profile",
+    "copilot-cli": "Print cross-platform GitHub Copilot CLI BYOK configuration",
+    "copilot-vscode": "Print VS Code chatLanguageModels.json configuration for Copilot chat and agents",
     "vscode-mcp": "Print a VS Code MCP server config that launches aiplane over stdio",
     "continue-mcp": "Print a Continue MCP server config that launches aiplane over stdio",
     "cline-mcp": "Print a Cline-style MCP server config that launches aiplane over stdio",
@@ -42,6 +73,9 @@ INTEGRATION_ROLE_NAMES: dict[str, list[str]] = {
     "zed": ["chat"],
     "aider": ["chat"],
     "openai-compatible": ["chat"],
+    "codex": ["chat"],
+    "copilot-cli": ["chat"],
+    "copilot-vscode": ["chat"],
     "vscode-mcp": [],
     "continue-mcp": [],
     "cline-mcp": [],

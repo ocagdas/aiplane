@@ -4,7 +4,7 @@ This page shows common ways to combine profiles, model sources, runtimes, setup,
 
 ## Terminology Used Here
 
-- **Profile**: the editable configuration set under `profiles/<name>/`. It owns defaults, model aliases, local overrides, machines, targets, tools, and approvals. Runtime endpoint values are built-in conventional defaults unless the profile or local ignored config overrides them.
+- **Profile**: the editable YAML source of truth under `profiles/<name>/`. It owns reviewed defaults, model aliases, runtime/endpoint choices, hardware expectations, machines, targets, tools, and approvals. Secrets and runtime-owned data remain outside it.
 - **Model source** or **model provider**: where model ids or files come from, such as Ollama Library, Hugging Face Hub, GGUF repos, Azure Speech voices, managed-provider catalogs, or local files.
 - **Runtime**: software that serves or loads the model, such as Ollama, vLLM, TGI, llama.cpp, Transformers, LocalAI, or LM Studio.
 - **Runtime endpoint**: the configured service a client calls, usually an OpenAI-compatible `/v1` URL.
@@ -12,7 +12,9 @@ This page shows common ways to combine profiles, model sources, runtimes, setup,
 - **Discovered model entry**: a temporary discovery entry imported by `models refresh` into ignored `models.discovered.yaml`.
 - **Plan**: explain a selection or action without changing runtime or IDE config.
 - **Setup**: prepare the selected runtime/model where helpers support it.
-- **Export**: print configuration text for another tool. Export does not install extensions or edit settings files.
+- **Profile render**: combine all profile YAML files into one consistently ordered JSON snapshot for validation, comparison, CI, or archival evidence. It is not a restorable profile or client configuration.
+- **Export**: compile the selected profile into configuration text understood by another tool and print it to stdout. Export does not install the tool, edit settings, start a runtime, or copy credentials.
+- **Replay**: copy reviewed profile YAML to another workspace or machine, validate it, inspect destination capabilities, and compile fresh exports.
 - **Doctor**: readiness check for profiles, tools, providers, runtimes, or models.
 
 ## Workflow 1: First Local Ollama Setup
@@ -153,7 +155,12 @@ aiplane models refresh --provider huggingface --query text-generation --limit 25
 
 aiplane models list --source huggingface --limit 10
 aiplane models list --runtime vllm --capability code_generation>=4 --enabled-only --sort-by avg --limit 10
+aiplane models list --runtime vllm --role chat --identity alias --limit 10
+aiplane models list --runtime vllm --role chat --identity model --limit 10
 ```
+
+The normal compact table shows both `ALIAS` and provider-native `MODEL`; pass
+`--identity alias` or `--identity model` for one value per line.
 
 Storage rules:
 

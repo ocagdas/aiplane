@@ -70,7 +70,7 @@ class GovernanceCliTests(unittest.TestCase):
         self.assertIn("Outcome: a profile-aware readiness report", output)
         self.assertIn("Next command:", output)
         self.assertIn("aiplane quickstart local-coding --dry-run", output)
-        self.assertIn("docs/project/command-coverage.md", output)
+        self.assertIn("docs/project/project-plan.md#command-coverage", output)
         self.assertNotIn("aiplane launch --tool continue", output)
         self.assertNotIn("aiplane session start --tool ollama", output)
         self.assertIn("hardware", output)

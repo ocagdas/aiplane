@@ -39,6 +39,8 @@ aiplane profiles bootstrap-local --no-overwrite --no-discovery
 aiplane quickstart local-coding --dry-run
 ```
 
+Quickstart updates one in-place status line on stderr with its current phase so an interactive run does not appear stalled; its result remains on stdout, including clean JSON when `--format json` is selected. Provider catalog access is skipped unless `--discovery` is explicit.
+
 Upgrade from a newer downloaded wheel:
 
 ```bash
