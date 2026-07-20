@@ -10,7 +10,7 @@ It must not become a coding agent, model runtime, model proxy, IDE extension, or
 
 ## Open Source Quality Bar
 
-Treat `aiplane` as a public open-source project that should be worthy of trust, adoption, and contribution. Code quality, practical tests, CLI help, user docs, roadmap/status notes, command coverage, and handoff updates are part of every implementation task unless there is a concrete engineering reason they do not apply. Keep code, documentation, roadmap, implemented features, command coverage, handoff notes, examples, and tests aligned and held to a high standard. Do not let the project drift into a collection of impressive but undocumented, untested, or overstated capabilities.
+Treat `aiplane` as a public open-source project that should be worthy of trust, adoption, and contribution. Code quality, practical tests, CLI help, user docs, and the status, roadmap, backlog, command-coverage, and handoff sections of `docs/project/project-plan.md` are part of every implementation task unless there is a concrete engineering reason they do not apply. Keep code, documentation, the unified project plan, implemented features, examples, and tests aligned and held to a high standard. Do not let the project drift into a collection of impressive but undocumented, untested, or overstated capabilities.
 
 ## Local Direction Notes
 
@@ -22,16 +22,14 @@ When changing behavior, update these together in the same change whenever releva
 
 - user docs under `docs/user/`;
 - project docs under `docs/project/`;
-- `docs/project/roadmap.md` for implemented/planned status;
-- `docs/project/session-handoff.md` for current handoff state;
-- `docs/project/command-coverage.md` for public CLI coverage;
+- `docs/project/project-plan.md` for current status, roadmap, backlog, public CLI coverage, gates, and handoff state;
 - focused tests under `tests/` using the domain-specific modules and shared `tests/support.py` helpers.
 
-Behavior changes should normally land with matching test updates in the same change. Tests should cover the behavior contract, failure mode, or regression risk that matters; do not add tests just to increase counts. If a behavior change genuinely does not need a new or changed test, make that an explicit engineering decision and still run the relevant focused tests. Do not leave roadmap, handoff, command coverage, or tests stale after adding commands, changing defaults, or moving a feature between planned/in-progress/implemented.
+Behavior changes should normally land with matching test updates in the same change. Tests should cover the behavior contract, failure mode, or regression risk that matters; do not add tests just to increase counts. If a behavior change genuinely does not need a new or changed test, make that an explicit engineering decision and still run the relevant focused tests. Do not leave the corresponding project-plan sections or tests stale after adding commands, changing defaults, or moving a feature between planned/in-progress/implemented.
 
 ## Compatibility Policy
 
-`aiplane` has not been deployed or released as a stable public interface yet. Until the human owner says otherwise, do not add backward-compatibility shims, deprecated aliases, or legacy behavior solely to preserve older local commands. Prefer the clean current interface, and keep README, user docs, command coverage, roadmap/handoff notes, and tests aligned with that interface. If an option, command shape, field name, or workflow is inconsistent or does not make sense, replace it with the coherent interface instead of preserving it. During this developer-preview, pre-1.0 alpha phase, consistency, clarity, and maintainability take precedence over backwards compatibility.
+`aiplane` has not been deployed or released as a stable public interface yet. Until the human owner says otherwise, do not add backward-compatibility shims, deprecated aliases, or legacy behavior solely to preserve older local commands. Prefer the clean current interface, and keep README, user docs, the unified project plan, and tests aligned with that interface. If an option, command shape, field name, or workflow is inconsistent or does not make sense, replace it with the coherent interface instead of preserving it. During this developer-preview, pre-1.0 alpha phase, consistency, clarity, and maintainability take precedence over backwards compatibility.
 
 ## Implementation Rules
 
@@ -42,7 +40,7 @@ Behavior changes should normally land with matching test updates in the same cha
 - Keep generated/cache/local files out of git: `.aiplane/`, generated model caches, PID/log files, and runtime state must remain ignored.
 - Test thoroughly but realistically. Add tests for behavior, contracts, regressions, and realistic failure modes; do not add tests merely to increase counts. Prefer synthetic fixture profiles, temp directories, mocked subprocess/network boundaries, and controlled generated cache files over real local profile data. Tests that intentionally depend on disk data, generated caches, Conda, venvs, or external tools must make that dependency explicit and keep it isolated in the dev setup. Keep tests deterministic, isolated from the developer machine where possible, and mindful of suite runtime.
 - Preserve the distinction between provider/model source, runtime, runtime endpoint, profile model alias, machine, stack, integration export, MCP tool surface, and agent skill guidance.
-- During pre-PR merge cleanup, tidy-up, release review, or a recurring MCP/skills synchronization checkpoint, audit the public CLI/options against docs, command coverage, MCP tools, planned/implemented agent skills, and tests. These checkpoints should happen periodically, not continuously after every feature and not at every regular milestone. Bring MCP and skills into sync where appropriate, explicitly leave risky operations out of MCP/skills when guardrails are not ready, and run or add focused tests for the synced surface.
+- During pre-PR merge cleanup, tidy-up, release review, or a recurring MCP/skills synchronization checkpoint, audit the public CLI/options against docs, the project plan, MCP tools, planned/implemented agent skills, and tests. These checkpoints should happen periodically, not continuously after every feature and not at every regular milestone. Bring MCP and skills into sync where appropriate, explicitly leave risky operations out of MCP/skills when guardrails are not ready, and run or add focused tests for the synced surface.
 - Managed providers such as OpenAI, Anthropic, Azure OpenAI, and Ollama Cloud are sources/endpoints; they become useful to tools through profile-owned model entries in `models.yaml`.
 - Do not make broad cloud apply, arbitrary shell execution through MCP, secret writes, or IDE file edits implicit.
 - Use official external tools instead of reimplementing their domain: Docker/Compose, OpenSSH, Azure CLI, OpenTofu/Terraform/Pulumi, Vagrant, Packer, Dev Container CLI, Ansible, kubectl, and Helm.
@@ -75,7 +73,7 @@ python -m aiplane environment doctor --required-only --format json
 python -m pytest
 ```
 
-For tool, provider, integration, or stack work, also run representative CLI commands and update the handoff with the latest successful validation summary.
+For tool, provider, integration, or stack work, also run representative CLI commands and update the project plan handoff section with the latest successful validation summary.
 
 ## Documentation Tone
 

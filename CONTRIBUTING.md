@@ -12,7 +12,7 @@ Please read:
 - [Security Policy](SECURITY.md)
 - [Code of Conduct](CODE_OF_CONDUCT.md)
 - [Agent Guidance](docs/project/agent-guidance.md)
-- [Roadmap](docs/project/roadmap.md)
+- [Roadmap](docs/project/project-plan.md#roadmap)
 
 ## Development Setup
 
@@ -54,9 +54,7 @@ Tests should cover real behavior, contracts, and regressions. Do not add tests o
 When behavior changes, update relevant docs in the same change:
 
 - `docs/user/`
-- `docs/project/roadmap.md`
-- `docs/project/session-handoff.md`
-- `docs/project/command-coverage.md`
+- `docs/project/project-plan.md`
 - tests in `tests/test_mvp.py` or a focused test file
 
 Keep CLI help, docs, MCP surfaces, and tests aligned.

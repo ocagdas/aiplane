@@ -23,6 +23,47 @@ from aiplane.runtime_catalog import (
 from aiplane.runtime_pull import runtime_pull_support
 
 
+PROJECT_PLAN = Path("docs/project/project-plan.md")
+
+
+def _project_plan_section(title: str) -> str:
+    text = PROJECT_PLAN.read_text(encoding="utf-8")
+    marker = f"## {title}\n"
+    assert marker in text, title
+    return text.split(marker, 1)[1].split("\n## ", 1)[0]
+
+
+def test_project_planning_documents_are_unified() -> None:
+    text = PROJECT_PLAN.read_text(encoding="utf-8")
+    for heading in (
+        "Current Status and Session Handoff",
+        "Command Coverage",
+        "Roadmap",
+        "Integration Roadmap",
+        "Product Adoption Backlog",
+        "Developer-Preview Scope Freeze",
+        "P0 Maintainer Checklist",
+        "External Trial Evidence",
+        "Public Launch Review",
+        "Public Demo Plan",
+    ):
+        assert text.count(f"## {heading}\n") == 1
+    assert not any(character.isdigit() for character in PROJECT_PLAN.name)
+    for obsolete in (
+        "roadmap.md",
+        "session-handoff.md",
+        "command-coverage.md",
+        "integrations-roadmap.md",
+        "product-adoption-backlog-2026-07.md",
+        "public-demo-plan.md",
+        "public-launch-review.md",
+        "preview-scope-freeze.md",
+        "p0-maintainer-checklist.md",
+        "external-trial-evidence.md",
+    ):
+        assert not (PROJECT_PLAN.parent / obsolete).exists()
+
+
 def test_integration_contracts_define_tools_and_roles_once() -> None:
     assert "continue" in ALL_INTEGRATION_TOOLS
     assert "generic-mcp" in ALL_INTEGRATION_TOOLS
@@ -183,10 +224,15 @@ def test_public_positioning_agrees_across_metadata_and_launch_docs() -> None:
     assert "environment doctor" in description
     assert "configuration compiler" in description
 
-    for path in (Path("README.md"), Path("docs/project/strategy.md"), Path("docs/project/public-launch-review.md")):
-        opening = path.read_text(encoding="utf-8")[:2000].lower()
-        assert "environment doctor" in opening, path
-        assert "configuration compiler" in opening, path
+    launch_review = _project_plan_section("Public Launch Review")
+    for name, document in (
+        ("README.md", Path("README.md").read_text(encoding="utf-8")),
+        ("docs/project/strategy.md", Path("docs/project/strategy.md").read_text(encoding="utf-8")),
+        ("project plan: public launch review", launch_review),
+    ):
+        opening = document[:2000].lower()
+        assert "environment doctor" in opening, name
+        assert "configuration compiler" in opening, name
 
     readme_opening = Path("README.md").read_text(encoding="utf-8")[:2000]
     assert "aiplane quickstart local-coding --dry-run" in readme_opening
@@ -252,16 +298,13 @@ def test_public_workflow_and_terminology_do_not_regress_to_stale_promises() -> N
         assert "one exact next action" in text, path
         assert "prints the next" not in text, path
 
-    for path in (
-        Path("SECURITY.md"),
-        Path("docs/project/integrations-roadmap.md"),
-        Path("docs/user/machines-and-stacks.md"),
-    ):
+    assert "control-plane" not in _project_plan_section("Integration Roadmap").lower()
+    for path in (Path("SECURITY.md"), Path("docs/user/machines-and-stacks.md")):
         assert "control-plane" not in path.read_text(encoding="utf-8").lower(), path
 
 
 def test_p0_documentation_sweep_stays_open_until_user_demonstrations() -> None:
-    backlog = Path("docs/project/product-adoption-backlog-2026-07.md").read_text(encoding="utf-8")
+    backlog = _project_plan_section("Product Adoption Backlog")
 
     assert "**P0 completion gate.**" in backlog
     assert "after all numbered P0 work is complete" in backlog
@@ -270,13 +313,13 @@ def test_p0_documentation_sweep_stays_open_until_user_demonstrations() -> None:
 
 
 def test_post_gate_backlog_numbers_are_sequential() -> None:
-    backlog = Path("docs/project/product-adoption-backlog-2026-07.md").read_text(encoding="utf-8")
+    backlog = _project_plan_section("Product Adoption Backlog")
     numbered = [int(value) for value in re.findall(r"(?m)^(\d+)\. ", backlog)]
     assert numbered == list(range(1, 24))
 
 
 def test_public_demo_plan_is_bounded_reproducible_and_uses_current_commands() -> None:
-    text = Path("docs/project/public-demo-plan.md").read_text(encoding="utf-8")
+    text = _project_plan_section("Public Demo Plan")
 
     assert text.count("### Primary public adoption cut") == 1
     assert text.count("## P0 validation recording") == 2
@@ -318,13 +361,16 @@ def test_readme_and_demo_plan_keep_end_to_end_local_evaluator_order() -> None:
         "aiplane export copilot-vscode --model local_chat",
         "aiplane chat --model local_chat",
     ]
-    for path in (Path("README.md"), Path("docs/project/public-demo-plan.md")):
-        text = path.read_text(encoding="utf-8")
-        positions = [text.index(command) for command in commands]
-        assert positions == sorted(positions), path
-        assert "--identity alias" in text
-        assert "--identity model" in text
-        assert "--identity both" in text
+    documents = (
+        ("README.md", Path("README.md").read_text(encoding="utf-8")),
+        ("project plan: public demo", _project_plan_section("Public Demo Plan")),
+    )
+    for name, document in documents:
+        positions = [document.index(command) for command in commands]
+        assert positions == sorted(positions), name
+        assert "--identity alias" in document
+        assert "--identity model" in document
+        assert "--identity both" in document
 
 
 def test_install_verifier_is_portable_and_never_starts_supported_tunnels() -> None:
@@ -341,7 +387,7 @@ def test_install_verifier_is_portable_and_never_starts_supported_tunnels() -> No
 
 
 def test_backlog_review_reference_is_portable_and_gates_remain_open() -> None:
-    backlog = Path("docs/project/product-adoption-backlog-2026-07.md").read_text(encoding="utf-8")
+    backlog = _project_plan_section("Product Adoption Backlog")
 
     assert "/home/" not in backlog
     assert Path("docs/project/reviews/dev-mvp-0.5-latest-review-evaluation.md").is_file()
@@ -351,7 +397,7 @@ def test_backlog_review_reference_is_portable_and_gates_remain_open() -> None:
 
 
 def test_primary_adoption_cut_contains_only_the_core_command_story() -> None:
-    text = Path("docs/project/public-demo-plan.md").read_text(encoding="utf-8")
+    text = _project_plan_section("Public Demo Plan")
     primary = text.split("### Primary public adoption cut", 1)[1].split("### P0 workflow-validation recordings", 1)[0]
 
     commands = re.findall(r"(?m)^aiplane .+$", primary)
@@ -433,8 +479,8 @@ def test_ci_exposes_one_stable_release_gate_and_documents_hosted_protection() ->
 
 
 def test_preview_scope_freeze_keeps_advanced_surface_out_of_public_promise() -> None:
-    freeze = Path("docs/project/preview-scope-freeze.md").read_text(encoding="utf-8")
-    coverage = Path("docs/project/command-coverage.md").read_text(encoding="utf-8")
+    freeze = _project_plan_section("Developer-Preview Scope Freeze")
+    coverage = _project_plan_section("Command Coverage")
 
     assert "Until the P0 gates close" in freeze
     assert "No new integration, runner, orchestrator, stack, benchmark, deployment, MCP-write capability" in freeze
@@ -444,8 +490,8 @@ def test_preview_scope_freeze_keeps_advanced_surface_out_of_public_promise() -> 
 
 
 def test_every_demo_timeline_step_has_exact_commands_and_spoken_narration() -> None:
-    text = Path("docs/project/public-demo-plan.md").read_text(encoding="utf-8")
-    matches = list(re.finditer(r"(?m)^#{3,4} (\d):(\d{2})-(\d):(\d{2}) — .+$", text))
+    text = _project_plan_section("Public Demo Plan")
+    matches = list(re.finditer(r"(?m)^#{4,5} (\d):(\d{2})-(\d):(\d{2}) — .+$", text))
 
     assert len(matches) == 16
     for index, match in enumerate(matches):
@@ -571,9 +617,9 @@ def test_profile_render_export_and_replay_terminology_is_consistent() -> None:
     readme = Path("README.md").read_text(encoding="utf-8")
     overview = Path("docs/user/overview.md").read_text(encoding="utf-8")
     schema = Path("docs/user/profile-schema.md").read_text(encoding="utf-8")
-    demo = Path("docs/project/public-demo-plan.md").read_text(encoding="utf-8")
-    roadmap = Path("docs/project/roadmap.md").read_text(encoding="utf-8")
-    backlog = max(Path("docs/project").glob("product-adoption-backlog-*.md")).read_text(encoding="utf-8")
+    demo = _project_plan_section("Public Demo Plan")
+    roadmap = _project_plan_section("Roadmap")
+    backlog = _project_plan_section("Product Adoption Backlog")
 
     for document in (readme, overview, schema, demo):
         assert "editable" in document.lower()

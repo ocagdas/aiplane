@@ -36,7 +36,7 @@ Current maturity: **developer preview / pre-1.0 alpha**. The supported public wo
 
 The result is an explicit environment contract that can be inspected, compared, and reproduced instead of a collection of machine-specific setup notes.
 
-`aiplane` also retains tested supporting and experimental commands for specialised troubleshooting and planning. They are available to advanced users, but they do not expand the public product promise or block the core workflow. See [command coverage](docs/project/command-coverage.md) for their maturity and limitations.
+`aiplane` also retains tested supporting and experimental commands for specialised troubleshooting and planning. They are available to advanced users, but they do not expand the public product promise or block the core workflow. See [command coverage](docs/project/project-plan.md#command-coverage) for their maturity and limitations.
 
 ## Install
 
@@ -213,11 +213,11 @@ aiplane export continue > continue.actual.yaml
 
 Identical machines with equivalent resolved inputs should reproduce the same export. Machines with small hardware differences may still be **capability-equivalent** when the reviewed models, runtimes, endpoints, and policy remain suitable; discovery and doctor should expose the variance without forcing a different result. Material differences must remain visible and may legitimately change recommendations or exports. Credentials, model weights, discovery caches, audit logs, tunnel state, and runtime-owned data are machine-local and are not part of the portable profile. See [Profile backup, recovery, and replay](docs/user/profile-schema.md#backup-recovery-and-cross-machine-replay).
 
-Command categories are explicit in [command coverage](docs/project/command-coverage.md): core commands lead onboarding, supporting commands troubleshoot specific subsystems, and experimental commands remain outside the developer-preview path.
+Command categories are explicit in [command coverage](docs/project/project-plan.md#command-coverage): core commands lead onboarding, supporting commands troubleshoot specific subsystems, and experimental commands remain outside the developer-preview path.
 
 ## Advanced and experimental commands
 
-The repository contains additional tested commands for specialised environment troubleshooting, integration planning, and guarded operations. They remain subordinate to the profile → discover → doctor → recommend → export workflow. They remain implementation details rather than additional product promises. See [command coverage](docs/project/command-coverage.md) for the exact maturity boundary and [Roadmap](docs/project/roadmap.md) for future decisions.
+The repository contains additional tested commands for specialised environment troubleshooting, integration planning, and guarded operations. They remain subordinate to the profile → discover → doctor → recommend → export workflow. They remain implementation details rather than additional product promises. See [command coverage](docs/project/project-plan.md#command-coverage) for the exact maturity boundary and [Roadmap](docs/project/project-plan.md#roadmap) for future decisions.
 
 ## Safety, governance, and trust model
 
@@ -242,7 +242,7 @@ More detail:
 - [core user workflow](docs/user/index.md)
 - [doctor output contract](docs/user/doctor-contract.md)
 - [platform support](docs/user/platform-support.md)
-- [advanced command maturity](docs/project/command-coverage.md)
+- [advanced command maturity](docs/project/project-plan.md#command-coverage)
 
 ## Validation expectations
 
@@ -264,7 +264,7 @@ Conda environment first, you can select it explicitly with
 `scripts/format.sh check` to check formatting only, or `scripts/format.sh fix`
 to apply formatting fixes.
 
-Use [command coverage](docs/project/command-coverage.md) and [strategy](docs/project/strategy.md) to keep behavior, docs, and tests synchronized.
+Use [command coverage](docs/project/project-plan.md#command-coverage) and [strategy](docs/project/strategy.md) to keep behavior, docs, and tests synchronized.
 
 ## Documentation
 
@@ -272,7 +272,7 @@ Use [command coverage](docs/project/command-coverage.md) and [strategy](docs/pro
 - [Installation and setup](docs/user/setup.md)
 - [Platform support](docs/user/platform-support.md)
 - [Security policy](SECURITY.md) and [practical threat model](docs/project/threat-model.md)
-- [Advanced command maturity](docs/project/command-coverage.md)
+- [Advanced command maturity](docs/project/project-plan.md#command-coverage)
 - [Contributor guide](CONTRIBUTING.md)
 
 ## Contributing

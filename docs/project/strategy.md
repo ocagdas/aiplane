@@ -1,6 +1,6 @@
 # Strategy
 
-For status tracking and future milestones, see [Project Roadmap](roadmap.md). This document explains the product boundary and architecture direction; `roadmap.md` is the source of truth for implemented vs planned status.
+For status tracking and future milestones, see the [Project Plan](project-plan.md). This document explains the product boundary and architecture direction; `project-plan.md` is the source of truth for implemented vs planned status.
 
 ## Project Quality Principles
 
