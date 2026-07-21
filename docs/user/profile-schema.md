@@ -19,6 +19,18 @@ The repository schema is [`schemas/aiplane-profile-v1.schema.json`](../../schema
 aiplane profiles validate local-dev
 ```
 
+## Recommendation-critical model contracts
+
+Schema v1 validates the model fields already consumed by fit checks, runtime selection, and recommendations. Every configured model alias must have a non-empty provider and provider-native model ID. When present, `enabled` and `local` must be booleans; RAM, VRAM, and parameter values must be finite non-negative numbers; role/runtime/accelerator lists must contain unique non-empty strings; and recommended RAM/VRAM cannot be lower than the corresponding minimum.
+
+A default role may be explicitly set to `null` to mean “not selected.” A non-null default must resolve to a configured alias. These checks prevent strings such as `"yes"` from silently behaving as true and prevent contradictory thresholds from influencing fit or ranking.
+
+Validation findings identify the canonical JSON path, observed value, and remediation:
+
+```bash
+aiplane profiles validate local-dev
+```
+
 ## Merge semantics
 
 Canonical profile document merges follow these rules:
@@ -33,22 +45,44 @@ There is no implicit merge of editable profile directories today. These rules de
 
 ## Backup, recovery, and cross-machine replay
 
-The editable YAML directory is the restorable and transferable source of truth. `profiles render` only reads those YAML files and prints one consistently ordered JSON snapshot for validation, comparison, CI, or archival evidence; the rendered JSON is not currently accepted as restore input and is not configuration for an IDE or runtime. Aiplane is not a backup service, so use normal reviewed filesystem or version-control procedures for profile YAML that is safe to store. Keep credentials, discovered caches, audit logs, tunnel state, and runtime model data out of that bundle.
+The editable YAML directory remains the restorable and transferable source of truth. `profiles render` only reads the nine canonical YAML files and prints one consistently ordered JSON snapshot for validation, comparison, CI, or archival evidence; the rendered JSON is not currently accepted as restore input and is not configuration for an IDE or runtime.
+
+`profiles archive` creates a separate deterministic JSON transfer artifact. It includes the nine canonical YAML files plus profile-owned `model-providers.yaml` when present, records byte sizes and SHA-256 checksums, and carries a versioned inclusion/exclusion manifest. It rejects raw credential values and symlinked portable files. It excludes ignored discovery caches and provider overrides, local CLI/credential/audit/session/tunnel state, model weights, runtime caches, and generated exports.
 
 ```bash
-mkdir -p demo-backup
-cp -a profiles/local-dev demo-backup/local-dev
-aiplane profiles render local-dev > demo-backup/local-dev.profile.json
+# Validate and inspect what would be included without writing.
+aiplane profiles archive local-dev --output local-dev.aiplane-profile.json --dry-run
 
-# Restore the reviewed YAML, then prove it is coherent and equivalent.
-cp -a demo-backup/local-dev profiles/local-dev-restored
-AIPLANE_PROFILES_DIR=profiles aiplane profiles validate local-dev-restored
-AIPLANE_PROFILES_DIR=profiles aiplane profiles render local-dev-restored > demo-backup/local-dev-restored.profile.json
+# Write the archive. Existing archive files require explicit --overwrite.
+aiplane profiles archive local-dev --output local-dev.aiplane-profile.json
+
+# Compare the editable source with the validated archive without restoring it.
+aiplane profiles compare local-dev local-dev.aiplane-profile.json --right-source archive
+
+# On the destination, preview first; preview is the default.
+aiplane profiles restore local-dev.aiplane-profile.json --as restored-local
+
+# Create a new profile only after review.
+aiplane profiles restore local-dev.aiplane-profile.json --as restored-local --yes
+aiplane profiles validate restored-local
+aiplane profiles compare local-dev restored-local
+aiplane profiles drift restored-local
+aiplane doctor --profile restored-local
+
+# After at least two clients replay and re-archive the profile:
+aiplane profiles replay-check local-dev.aiplane-profile.json \
+  --source archive \
+  --client-archive laptop-replayed.json \
+  --client-archive desktop-replayed.json
 ```
 
-`profiles repair` copies missing structure from a shipped template. It does not reconstruct user model choices, endpoints, policies, or other customizations and therefore does not replace a backup. Review profile archives before sharing because paths, hostnames, endpoints, account aliases, and other operational metadata may be sensitive.
+Restore revalidates the archive kind/version, duplicate JSON keys, supported filenames, required files, YAML mappings, size limits, checksums, and credential safety before writing. It materializes a complete temporary profile directory and renames it into place; existing profile directories are never overwritten, even with `--yes`. Choose a new name with `--as` when a destination already exists.
 
-To replay on another machine, copy the reviewed YAML directory, validate it, and then run `discover`, `doctor`, `recommend`, and the required exports on the destination. Identical machines with equivalent resolved inputs should reproduce byte-stable supported exports. Small hardware differences are acceptable when the destination remains capability-equivalent for the reviewed model/runtime/policy requirements; those differences should be reported, not silently erased. Material incompatibility may correctly change recommendations or block an export. Credentials, weights, caches, audit/tunnel state, and runtime data must be restored through their owning systems. First-class archive/restore, comparison, and provenance-aware drift workflows are planned after the P0 evidence gate.
+`profiles repair` copies missing structure from a shipped template. It does not reconstruct user model choices, endpoints, policies, or other customizations and therefore does not replace an archive. Aiplane creates and validates the transfer artifact but does not store, synchronize, encrypt, or publish it. Review archives before sharing because paths, hostnames, endpoints, account aliases, and other operational metadata may be sensitive.
+
+After restoration, run `profiles compare`, `profiles drift`, `doctor`, `recommend`, and the required exports on the destination. `compare` accepts profile operands by default and explicit archive operands with `--left-source archive` or `--right-source archive`; `drift` accepts an archive with `--source archive`. Canonically identical portable evidence is `exact`. Hardware-only variance is `capability_equivalent` only when every selected local model meets its configured minimum RAM, VRAM, GPU-vendor, and accelerator-API requirements on both sides. A minimum failure is `materially_incompatible`; missing selected-model or machine evidence is `unresolved`; other portable configuration changes are conservatively material. Results identify every evidence source. These commands are read-only, and tested archive/restore replay preserves byte-stable supported Continue exports. Credentials, weights, caches, audit/tunnel state, and runtime data must be restored through their owning systems.
+
+For multi-client replay, each destination re-archives its restored profile and returns that artifact through an approved transfer channel. `profiles replay-check` compares one approved source with at least two distinct client archives in a single read-only result. It summarizes classifications and exits nonzero when any client is unresolved or materially incompatible. This is portable configuration evidence, not proof of live endpoint reachability; run `doctor`, `profiles drift`, and the relevant endpoint/runtime checks on every actual client.
 
 ## Pre-1.0 migration policy
 

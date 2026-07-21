@@ -53,7 +53,10 @@ aiplane hardware export-machine --name local_box > local_box.machine.yaml
 - `recommend`: groups configured models into `recommended`, `usable`, and
   `remote_or_cloud` for the current hardware. Models that do not meet local
   minimums are hidden by default; use `--include-not-recommended` for the full
-  diagnostic list.
+  diagnostic list. JSON output includes versioned provenance for configured
+  model metadata, selected and detected hardware, runtime availability, policy,
+  benchmark sample count, and unresolved evidence. Benchmark results are
+  contextual and do not affect the current deterministic ranking.
 - `export-machine`: writes the normalized active machine as a portable machine
   profile that can be imported elsewhere with `aiplane machines import`.
 

@@ -91,12 +91,12 @@ def _validate_profile(profile) -> dict[str, object]:
     models = _dict_value(profile.models.get("models", {})) if isinstance(profile.models, dict) else {}
     defaults = _dict_value(profile.models.get("defaults", {})) if isinstance(profile.models, dict) else {}
     for role, name in defaults.items():
-        model = models.get(str(name))
+        model = models.get(str(name)) if name is not None else None
         checks.append(
             {
                 "name": f"model_default:{role}",
-                "ok": isinstance(model, dict),
-                "detail": name,
+                "ok": name is None or isinstance(model, dict),
+                "detail": "unset" if name is None else name,
             }
         )
         if isinstance(model, dict) and not bool(model.get("enabled", True)):

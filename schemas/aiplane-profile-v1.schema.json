@@ -6,6 +6,39 @@
   "type": "object",
   "required": ["$schema", "schema_version", "name", "hardware", "backends", "repository", "tools", "approvals", "environment", "models", "targets", "orchestrators"],
   "additionalProperties": false,
+  "$defs": {
+    "modelAlias": {
+      "type": "object",
+      "required": ["model", "provider"],
+      "properties": {
+        "model": {"type": "string", "minLength": 1},
+        "provider": {"type": "string", "minLength": 1},
+        "enabled": {"type": "boolean"},
+        "local": {"type": "boolean"},
+        "min_ram_gb": {"type": "number", "minimum": 0},
+        "recommended_ram_gb": {"type": "number", "minimum": 0},
+        "min_vram_gb": {"type": "number", "minimum": 0},
+        "recommended_vram_gb": {"type": "number", "minimum": 0},
+        "parameters_b": {"type": "number", "minimum": 0},
+        "roles": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        },
+        "supported_runtimes": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        },
+        "required_accelerator_apis": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1},
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": true
+    }
+  },
   "properties": {
     "$schema": {"const": "https://aiplane.dev/schemas/profile/v1"},
     "schema_version": {"const": "1.0"},
@@ -29,7 +62,7 @@
       "required": ["defaults", "models"],
       "properties": {
         "defaults": {"type": "object", "additionalProperties": {"type": ["string", "null"]}},
-        "models": {"type": "object", "additionalProperties": {"type": "object"}},
+        "models": {"type": "object", "additionalProperties": {"$ref": "#/$defs/modelAlias"}},
         "providers": {"type": "object", "additionalProperties": {"type": "object"}}
       },
       "additionalProperties": true

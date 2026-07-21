@@ -101,6 +101,41 @@ aiplane machines profile-remote-plan \
 
 The same pattern applies to a self-managed Azure VM or any Linux machine where `aiplane` can be installed and run once. Hosts must be DNS names or IPv4/IPv6 addresses, users use normal SSH account syntax, and ports must be 1-65535. Option-like destinations (for example, values beginning with `-`), combined `user` host values, whitespace, and shell separators are rejected. The rendered remote `aiplane` command shell-quotes profile and machine names; the command remains a plan and is not executed by this operation.
 
+## Replay one remote-workstation setup from multiple clients
+
+Use a portable profile archive when a laptop, desktop, or another client must reproduce the same reviewed model aliases, remote endpoint, policy, and integration configuration. The clients do not need identical local hardware when inference belongs to the configured remote workstation or managed endpoint, but each client must restore and validate the same portable evidence.
+
+On the source/control machine:
+
+```bash
+aiplane profiles archive team-remote \
+  --output team-remote.approved.json
+```
+
+Copy that archive to each client through your normal approved transfer channel. On each client, use a distinct profiles directory or normal local profile root:
+
+```bash
+aiplane profiles restore team-remote.approved.json --as team-remote --yes
+aiplane profiles validate team-remote
+aiplane profiles drift team-remote
+aiplane doctor --profile team-remote
+aiplane export continue --profile team-remote > continue.replayed.yaml
+aiplane profiles archive team-remote --output client-replayed.json
+```
+
+`restore`, `validate`, `drift`, `doctor`, and the required client exports prove different parts of the setup. Restore proves portable configuration materialization; validation proves schema and cross-references; drift reports local hardware variance; doctor reports missing tools/endpoints; export proves deterministic target-tool configuration. Credentials, model weights, runtime installation, tunnel state, and endpoint reachability remain owned by their respective systems.
+
+Bring the replay archives from at least two clients back to the control machine and verify them together:
+
+```bash
+aiplane profiles replay-check team-remote.approved.json \
+  --source archive \
+  --client-archive laptop-replayed.json \
+  --client-archive desktop-replayed.json
+```
+
+`profiles replay-check` is deterministic and read-only. It requires at least two distinct validated client archives, reports each client as `exact`, `capability_equivalent`, `materially_incompatible`, or `unresolved`, and exits successfully only when every client is exact or capability-equivalent. It does not connect to either client, apply configuration, copy credentials, start a runtime, or test the remote endpoint. Run the profile doctor and integration/runtime-specific health checks on each actual client for those live facts.
+
 ## Recommend Machines
 
 Rank imported machines for a model/runtime/workload:

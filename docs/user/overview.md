@@ -35,7 +35,7 @@ These are the public-first, inspect-first commands for onboarding before advance
 - List model providers and show which profile catalog entries come from each source.
 - Maintain profile-owned model entries in `models.yaml` and discovery refresh/import entries in `models.discovered.yaml`, with task capability scores, hardware fit metadata, source/runtime mappings, and preferred runtimes.
 - Discover local hardware and compare it with configured hardware templates.
-- Recommend models by capability, model provider, runtime compatibility, ownership, RAM, and VRAM constraints.
+- Recommend models by capability, model provider, runtime compatibility, ownership, RAM, and VRAM constraints, with versioned source, sample-count, and uncertainty provenance in JSON output.
 - Export IDE/CLI model endpoint snippets for Continue, Cline, Zed, Aider, and generic OpenAI-compatible clients.
 - Export MCP client config snippets for VS Code MCP clients, Continue, Cline-style MCP clients, and generic `mcpServers` clients.
 - Serve an MCP adapter so tools can query `aiplane` for profiles, providers, models, recommendations, hardware, integrations, and guarded profile changes.
@@ -45,8 +45,12 @@ These are the public-first, inspect-first commands for onboarding before advance
 ## Common Terms
 
 - **Profile**: The editable YAML source of truth for an intended setup. It records reviewed model aliases, runtimes, endpoints, hardware expectations, tool roles, and policy; machine-local secrets and runtime data stay outside it.
-- **Profile render**: `aiplane profiles render PROFILE` assembles one consistently ordered JSON snapshot from all YAML files in a profile. It is comparison, validation, CI, and archival evidence—not restorable source YAML or target-tool configuration.
-- **Replay**: Copy reviewed profile YAML to another workspace or machine, validate it, inspect the destination, and compile fresh integration configuration there.
+- **Profile render**: `aiplane profiles render PROFILE` assembles one consistently ordered JSON snapshot from the nine canonical profile YAML files. It is comparison, validation, CI, and archival evidence—not restorable source YAML or target-tool configuration.
+- **Profile archive**: `aiplane profiles archive PROFILE --output PATH` validates and packages reviewed profile YAML with SHA-256 checksums and an explicit exclusion manifest. It rejects raw credential material and excludes generated or runtime-owned state.
+- **Replay**: Preview and restore a portable archive into a new profile with `aiplane profiles restore ARCHIVE --as PROFILE --yes`, validate it, inspect the destination, and compile fresh integration configuration there. Existing profiles are never overwritten.
+- **Profile comparison**: `aiplane profiles compare LEFT RIGHT` classifies canonical portable evidence as exact, capability-equivalent, materially incompatible, or unresolved; archive operands are explicit with `--left-source archive` or `--right-source archive`.
+- **Machine drift**: `aiplane profiles drift PROFILE` compares explicit active hardware evidence with live discovery and explains selected-model fit using provenance-aware facts. It is read-only; `--source archive` assesses an archive directly.
+- **Multi-client replay proof**: `aiplane profiles replay-check APPROVED --source archive --client-archive A --client-archive B` verifies at least two independently returned replay archives in one deterministic, read-only result.
 - **Provider / Model Source / Catalog**: Where model identifiers or weights come from, such as the Ollama library, Hugging Face Hub, GGUF files, Azure Speech voices, or a local file path.
 - **Runtime**: The software that loads model weights and serves inference, such as Ollama, vLLM, llama.cpp server, TGI, Transformers, LocalAI, faster-whisper, Diffusers, or ComfyUI.
 - **Runtime Endpoint**: A configured service URL exposed by a runtime, such as local Ollama, vLLM on a shared workstation, or llama.cpp behind an SSH tunnel.
