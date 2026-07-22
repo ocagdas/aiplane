@@ -46,6 +46,7 @@ from .cli_public_workflows import (
 )
 from .cli_stacks import add_stack_parsers, handle_stack_command
 from .cli_setup import add_setup_parsers, handle_setup_command
+from .cli_support_catalog import add_support_parser, handle_support_command
 from .cli_providers import add_providers_parser, handle_providers_command
 from .cli_runtimes import (
     add_runtimes_parser,
@@ -316,6 +317,7 @@ def _main(argv: list[str] | None = None) -> int:
         profile_arg=_profile_arg,
         formatter_class=HelpFormatter,
     )
+    add_support_parser(subparsers, command_factory=_command, formatter_class=HelpFormatter)
     args = parser.parse_args(argv)
     version_result = handle_version_argument(args)
     if version_result is not None:
@@ -351,6 +353,15 @@ def _main(argv: list[str] | None = None) -> int:
     )
     if profile_result is not None:
         return profile_result
+
+    support_result = handle_support_command(args, _json)
+    if support_result is not None:
+        return support_result
+
+    if args.command == "integrations" and args.integrations_command == "import":
+        from .cli_integrations import handle_integrations_import
+
+        return handle_integrations_import(args, profiles_dir=profiles_dir, json_dumps=_json)
 
     public_result = handle_public_command(
         args,

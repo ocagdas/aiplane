@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aiplane.dev/schemas/aiplane-adapter-v1.schema.json",
+  "title": "Aiplane catalog adapter result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract_version", "adapter", "source_contacted", "models", "provenance"],
+  "properties": {
+    "contract_version": {"const": "1.0"},
+    "adapter": {"type": "string", "pattern": "^[a-z][a-z0-9_]{1,63}$"},
+    "source_contacted": {"type": "boolean"},
+    "models": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "provider"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "provider": {"type": "string", "minLength": 1},
+          "metadata": {"type": "object"}
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "required": ["source"],
+      "properties": {"source": {"type": "string", "minLength": 1}}
+    },
+    "warnings": {"type": "array", "items": {"type": "string"}}
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "contract_version": "1.0",
+  "adapter": "example_catalog",
+  "source_contacted": true,
+  "models": [
+    {
+      "id": "example/model-7b",
+      "provider": "example",
+      "metadata": {"format": "safetensors", "roles": ["chat"]}
+    }
+  ],
+  "provenance": {"source": "fixture", "retrieved_by": "contract_test"},
+  "warnings": []
+}

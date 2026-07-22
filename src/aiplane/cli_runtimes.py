@@ -13,6 +13,7 @@ from .config import load_profile, local_config_path, provider_helper_path, resol
 from .model_catalog import ModelCatalog
 from .platform_support import detect_host_platform
 from .runtime_catalog import RuntimeCatalog
+from .docker_model_runner import DockerModelRunner
 
 _COMMAND_RUNNER: CommandRunner = SubprocessCommandRunner()
 
@@ -188,6 +189,8 @@ def add_runtimes_parser(
         "remove",
         "clear",
         "runtime-list",
+        "benchmark",
+        "inspect",
     ]:
         command_name = "list-runtime-models" if lifecycle_action == "runtime-list" else lifecycle_action
         lifecycle = runtimes_sub.add_parser(
@@ -302,8 +305,16 @@ def handle_runtimes_command(
             "remove",
             "clear",
             "list-runtime-models",
+            "benchmark",
+            "inspect",
         }
         if args.runtimes_command in lifecycle_actions:
+            if args.runtime == "docker_model_runner":
+                payload, returncode = DockerModelRunner(_COMMAND_RUNNER).run(
+                    args.runtimes_command, model=args.model, yes=args.yes, dry_run=args.dry_run
+                )
+                print(json_dumps(payload, indent=2))
+                return 0 if returncode == 0 else 2
             helper_runtimes = {
                 "ollama",
                 "ollama_cloud",

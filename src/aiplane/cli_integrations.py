@@ -8,6 +8,7 @@ from typing import Any, Callable
 
 from .integration_contracts import ALL_INTEGRATION_TOOLS, SETUP_INTEGRATION_TOOLS
 from .integrations import IntegrationManager
+from .integration_imports import import_client_config
 from .models import Profile
 
 JsonDumps = Callable[..., str]
@@ -100,6 +101,18 @@ def add_integrations_parser(
     )
     integrations_setup.add_argument("tool", choices=SETUP_INTEGRATION_TOOLS, help="Integration target to prepare")
 
+    integrations_import = integrations_sub.add_parser(
+        "import",
+        help="Import a secret-free draft profile from client config",
+        description="Preview or create an unapproved draft profile from Continue or Aider JSON/YAML. Literal credentials are omitted.",
+        formatter_class=formatter_class,
+    )
+    integrations_import.add_argument("tool", choices=["continue", "aider"])
+    integrations_import.add_argument("path", type=Path)
+    integrations_import.add_argument("--as", dest="profile_name", required=True, help="New draft profile name")
+    integrations_import.add_argument("--template", default="local-dev")
+    integrations_import.add_argument("--yes", action="store_true", help="Create the draft profile after previewing")
+
     integrations_export = integrations_sub.add_parser(
         "export",
         help="Print a config snippet",
@@ -146,6 +159,19 @@ def _target_export_args(parser: argparse.ArgumentParser) -> None:
         action="store_true",
         help="For copilot-cli, disable GitHub network features for this BYOK configuration",
     )
+
+
+def handle_integrations_import(args: argparse.Namespace, *, profiles_dir: Path | None, json_dumps: JsonDumps) -> int:
+    payload = import_client_config(
+        args.tool,
+        args.path,
+        profile_name=args.profile_name,
+        template=args.template,
+        profiles_dir=profiles_dir,
+        yes=args.yes,
+    )
+    print(json_dumps(payload, indent=2, sort_keys=True))
+    return 0
 
 
 def handle_integrations_command(args: argparse.Namespace, profile: Profile, json_dumps: JsonDumps) -> int:

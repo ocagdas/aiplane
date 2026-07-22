@@ -459,3 +459,16 @@ Online catalog discovery is implemented provider by provider because each source
 - Azure Speech voices, local files, and other specialist catalogs can be added through user provider config once their API/metadata path is stable enough. Open-weight media models from Hugging Face should normally flow through online refresh into `models.discovered.yaml` first.
 
 Runtime lifecycle support is documented in [Model Sources and Runtimes](runtime-model-map.md).
+
+## Support declarations and contributor adapter fixtures
+
+~~~bash
+aiplane support list
+aiplane support list --kind runtime
+aiplane support list --full
+aiplane support show provider huggingface
+aiplane providers adapter-schema
+aiplane providers adapter-validate tests/fixtures/adapter-v1.json
+~~~
+
+An empty upstream_versions list means no exact upstream version has been verified. The 1.0 adapter contract requires stable IDs, provider identity, provenance, unique entries, and secret-free fields. Its schema is schemas/aiplane-adapter-v1.schema.json. Aiplane does not dynamically execute arbitrary adapter files.

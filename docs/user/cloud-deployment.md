@@ -256,3 +256,12 @@ aiplane remote tunnel plan --target gpu_workstation_ssh
 ```
 
 This prints an `ssh -N -L ...` command and the local endpoint to use in IDE config exports. It does not start the tunnel yet.
+
+## Render-only Kubernetes artifact family
+
+~~~bash
+aiplane stacks render-kubernetes STACK --image registry.example/runtime:reviewed --device-class gpu.example.com
+aiplane stacks render-kubernetes STACK --image IMAGE --device-class DEVICE_CLASS --file deployment.yaml
+~~~
+
+The deterministic family contains ResourceClaim, Deployment, Service, and Helm values. Image and DRA device class are mandatory. The renderer carries model/runtime identity but no credentials, writes no files, and never invokes kubectl or Helm. Kubernetes apply remains deferred behind explicit review and approval.

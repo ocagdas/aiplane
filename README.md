@@ -64,6 +64,19 @@ notes.
 > commands are tested, but their maturity varies and is documented in
 > [command coverage](docs/project/project-plan.md#command-coverage).
 
+
+Advanced, review-first workflows are available without turning Aiplane into a model server or cluster controller:
+
+~~~bash
+aiplane integrations import continue ~/.continue/config.yaml --as imported-draft
+aiplane support list --kind runtime
+aiplane providers adapter-validate tests/fixtures/adapter-v1.json
+aiplane runtimes pull docker_model_runner --model ai/model-id --dry-run
+aiplane stacks render-kubernetes STACK --image IMAGE --device-class DEVICE_CLASS
+~~~
+
+Literal credentials are never imported, lifecycle mutations require confirmation, support records do not claim unverified upstream versions, and Kubernetes application remains outside this command surface.
+
 Aiplane does not replace your coding assistant, model runtime, chat interface,
 inference server, model registry, gateway, or cloud platform. It makes the
 configuration around those systems explicit and reproducible.

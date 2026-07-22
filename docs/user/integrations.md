@@ -467,3 +467,13 @@ Cursor, Cline, Aider, and OpenHands sit above `aiplane`. They provide the
 interactive agent experience. `aiplane` should provide the boring but important
 parts around them: selected model, endpoint, API key environment variable, local
 or remote target, hardware assumptions, and policy checks.
+
+## Import client configuration into a draft profile
+
+~~~bash
+aiplane integrations import continue ~/.continue/config.yaml --as continue-draft
+aiplane integrations import aider ~/.aider.conf.yml --as aider-draft
+aiplane integrations import continue ~/.continue/config.yaml --as continue-draft --yes
+~~~
+
+The command previews unless --yes is present and refuses an existing destination. It imports the supported identity/provider/endpoint/role subset and environment-variable credential references. Literal credentials are omitted. The resulting repository.yaml records an unapproved import review; validate it before team use.

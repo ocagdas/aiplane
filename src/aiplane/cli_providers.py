@@ -6,6 +6,7 @@ from typing import Any, Callable
 
 from .config import load_profile
 from .providers import ProviderRegistry, SUPPORTED_CATALOG_ADAPTERS, SUPPORTED_ENDPOINT_FAMILIES
+from .adapter_protocol import validate_result_file
 
 
 def add_providers_parser(
@@ -68,6 +69,20 @@ def add_providers_parser(
         ),
     )
     profile_arg(providers_endpoint_types)
+    providers_adapter_schema = providers_sub.add_parser(
+        "adapter-schema",
+        help="Show the contributor adapter contract",
+        description="Print the versioned, secret-free catalog adapter result contract and schema location.",
+        formatter_class=formatter_class,
+    )
+    profile_arg(providers_adapter_schema)
+    providers_adapter_validate = providers_sub.add_parser(
+        "adapter-validate",
+        help="Validate a catalog adapter result fixture",
+        formatter_class=formatter_class,
+    )
+    profile_arg(providers_adapter_validate)
+    providers_adapter_validate.add_argument("path", type=Path)
     providers_models = providers_sub.add_parser(
         "models",
         help="List catalog provider models",
@@ -244,6 +259,23 @@ def handle_providers_command(
             return 0
         if args.providers_command == "endpoint-types":
             print(json_dumps(registry.endpoint_families(), indent=2, sort_keys=True))
+            return 0
+        if args.providers_command == "adapter-schema":
+            print(
+                json_dumps(
+                    {
+                        "contract_version": "1.0",
+                        "schema": "schemas/aiplane-adapter-v1.schema.json",
+                        "fixture": "tests/fixtures/adapter-v1.json",
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+            )
+            return 0
+        if args.providers_command == "adapter-validate":
+            result = validate_result_file(args.path)
+            print(json_dumps({"valid": True, "result": result.to_dict()}, indent=2, sort_keys=True))
             return 0
         if args.providers_command == "models":
             result = registry.models(args.name, query=args.query, limit=args.limit, online=args.online)
