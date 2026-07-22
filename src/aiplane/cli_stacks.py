@@ -161,6 +161,11 @@ def add_stack_parsers(
         help="Optional orchestrator name, such as langgraph, crewai, autogen, or openhands",
     )
     stacks_setup.add_argument("--runtime", required=True, help="Runtime name")
+    stacks_setup.add_argument(
+        "--runtime-substrate",
+        choices=["native", "docker"],
+        help="Override the runtime helper substrate stored with this stack",
+    )
     stacks_setup.add_argument("--model", required=True, help="Configured model alias")
     stacks_setup.add_argument(
         "--machine",
@@ -412,6 +417,7 @@ def handle_stack_command(
                         args.name,
                         orchestrator=args.orchestrator,
                         runtime=args.runtime,
+                        runtime_substrate=args.runtime_substrate,
                         model=args.model,
                         machine=args.machine,
                         access=args.access,

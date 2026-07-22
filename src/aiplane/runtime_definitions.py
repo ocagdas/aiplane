@@ -231,7 +231,7 @@ SOURCE_DEFINITIONS: dict[str, dict[str, Any]] = {
         "api_key_env": "ANTHROPIC_API_KEY",
         "auth": {"required": True, "method": "api_key"},
         "typical_runtimes": [],
-        "catalog_adapter": "profile_catalog",
+        "catalog_adapter": "anthropic",
     },
     "azure_openai": {
         "ownership": "managed_service",

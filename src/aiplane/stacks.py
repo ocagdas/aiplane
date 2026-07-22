@@ -45,6 +45,7 @@ class StackManager:
                         "name": name,
                         "orchestrator": stack.get("orchestrator"),
                         "runtime": stack.get("runtime"),
+                        "runtime_substrate": stack.get("runtime_substrate"),
                         "model": stack.get("model"),
                         "machine": stack.get("machine"),
                         "target": stack.get("target"),
@@ -69,6 +70,7 @@ class StackManager:
         model: str,
         runtime: str,
         machine: str,
+        runtime_substrate: str | None = None,
         target: str | None = None,
         access: str = "ssh_tunnel",
         endpoint_policy: str = "private",
@@ -81,6 +83,7 @@ class StackManager:
             name,
             orchestrator=orchestrator,
             runtime=runtime,
+            runtime_substrate=runtime_substrate,
             model=model,
             machine=machine,
             target=target,
@@ -100,6 +103,7 @@ class StackManager:
         runtime: str,
         model: str,
         machine: str,
+        runtime_substrate: str | None = None,
         target: str | None = None,
         access: str = "ssh_tunnel",
         endpoint_policy: str = "private",
@@ -122,8 +126,10 @@ class StackManager:
         machines = {row["name"] for row in MachineManager(self.profile).list()}
         if machine not in machines:
             raise ValueError(f"unknown machine: {machine}")
-        if runtime not in {row["name"] for row in RuntimeCatalog(self.profile).list(include_gui=True)}:
+        runtime_catalog = RuntimeCatalog(self.profile)
+        if runtime not in {row["name"] for row in runtime_catalog.list(include_gui=True)}:
             raise ValueError(f"unknown runtime: {runtime}")
+        resolved_substrate = runtime_catalog.helper_substrate(runtime, runtime_substrate)
         normalized_roles = self._normalize_roles(
             roles or {},
             primary_model=model,
@@ -137,6 +143,7 @@ class StackManager:
         stack = {
             "orchestrator": orchestrator,
             "runtime": runtime,
+            "runtime_substrate": resolved_substrate,
             "model": model,
             "machine": machine,
             "access": access,
@@ -181,6 +188,7 @@ class StackManager:
         model = ModelCatalog(self.profile).show(model_name)
         machine = MachineManager(self.profile).show(machine_name)["machine"]
         runtime_catalog = RuntimeCatalog(self.profile)
+        runtime_substrate = runtime_catalog.helper_substrate(runtime, str(stack.get("runtime_substrate") or "") or None)
         runtime_status = runtime_catalog.runtime_available(runtime)
         endpoint = stack.get("endpoint") or _default_endpoint(runtime)
         preflight = self._preflight(stack, runtime, model_name, endpoint, runtime_catalog)
@@ -207,6 +215,8 @@ class StackManager:
                     self.profile.name,
                     "--model",
                     model_name,
+                    "--substrate",
+                    runtime_substrate,
                 ],
                 "mutates": True,
             },
@@ -222,6 +232,8 @@ class StackManager:
                     self.profile.name,
                     "--model",
                     model_name,
+                    "--substrate",
+                    runtime_substrate,
                 ],
                 "mutates": True,
             },
@@ -237,6 +249,8 @@ class StackManager:
                     self.profile.name,
                     "--model",
                     model_name,
+                    "--substrate",
+                    runtime_substrate,
                 ],
                 "mutates": True,
             },
@@ -275,6 +289,7 @@ class StackManager:
             "name": name,
             "orchestrator": orchestrator or None,
             "runtime": runtime,
+            "runtime_substrate": runtime_substrate,
             "model": model_name,
             "machine": machine_name,
             "access": stack.get("access"),

@@ -43,6 +43,9 @@ class McpTests(unittest.TestCase):
         self.assertIn("aiplane.models.refresh", names)
         self.assertIn("aiplane.models.use", names)
         self.assertIn("aiplane.runtimes.status", names)
+        self.assertIn("aiplane.runtimes.bundle", names)
+        self.assertIn("aiplane.agents.manifest", names)
+        self.assertIn("aiplane.providers.diagnose", names)
         self.assertIn("aiplane.hardware.assess", names)
         self.assertTrue(any(tool["mutates"] for tool in manifest["tools"]))
         self.assertTrue(
@@ -656,3 +659,47 @@ class McpTests(unittest.TestCase):
         _write_message(stream, message)
         stream.seek(0)
         self.assertEqual(_read_message(stream), message)
+
+    def test_mcp_safe_render_contracts_match_cli_services(self) -> None:
+        server = AiplaneMcpServer(Path.cwd())
+        diagnosed = server.handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 81,
+                "method": "tools/call",
+                "params": {"name": "aiplane.providers.diagnose", "arguments": {"provider": "openai"}},
+            }
+        )
+        self.assertFalse(diagnosed["result"]["structuredContent"]["network_contacted"])
+
+        bundle = server.handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 82,
+                "method": "tools/call",
+                "params": {
+                    "name": "aiplane.runtimes.bundle",
+                    "arguments": {
+                        "runtime": "ollama",
+                        "model": "fixture-analysis-small",
+                        "cache_volume": "ollama-cache",
+                        "gpu_devices": ["all"],
+                    },
+                },
+            }
+        )
+        self.assertEqual(bundle["result"]["structuredContent"]["record_type"], "runtime_bundle")
+
+        manifest = server.handle_message(
+            {
+                "jsonrpc": "2.0",
+                "id": 83,
+                "method": "tools/call",
+                "params": {
+                    "name": "aiplane.agents.manifest",
+                    "arguments": {"name": "demo", "model": "fixture-analysis-small"},
+                },
+            }
+        )
+        self.assertEqual(manifest["result"]["structuredContent"]["record_type"], "agent_environment")
+        self.assertFalse(manifest["result"]["structuredContent"]["execution_boundary"]["runs_agents"])

@@ -57,6 +57,11 @@ def add_providers_parser(
     )
     profile_arg(providers_show)
     providers_show.add_argument("name", help="Provider name, such as ollama, huggingface, or huggingface_gguf")
+    providers_diagnose = providers_sub.add_parser(
+        "diagnose", help="Explain provider discovery readiness without network access", formatter_class=formatter_class
+    )
+    profile_arg(providers_diagnose)
+    providers_diagnose.add_argument("name", nargs="?", help="Optional provider name")
     providers_endpoint_types = providers_sub.add_parser(
         "endpoint-types",
         help="List supported provider API families and catalog adapters",
@@ -256,6 +261,9 @@ def handle_providers_command(
             return 0
         if args.providers_command == "show":
             print(json_dumps(registry.show(args.name), indent=2, sort_keys=True))
+            return 0
+        if args.providers_command == "diagnose":
+            print(json_dumps(registry.diagnose(args.name), indent=2, sort_keys=True))
             return 0
         if args.providers_command == "endpoint-types":
             print(json_dumps(registry.endpoint_families(), indent=2, sort_keys=True))

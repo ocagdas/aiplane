@@ -598,3 +598,90 @@ class ProviderRegistryTests(unittest.TestCase):
             "local": False,
         }
         self.assertEqual(RuntimeCatalog(profile).compatible_runtimes_for_entry(direct_entry), [])
+
+    def test_provider_diagnose_is_secret_free_and_non_networked(self) -> None:
+        profile = load_profile("local-dev", Path.cwd())
+        with patch("aiplane.boundaries.urlopen") as opened:
+            payload = ProviderRegistry(profile).diagnose("openai")
+        self.assertFalse(payload["network_contacted"])
+        self.assertEqual(payload["contract_version"], "1.0")
+        self.assertEqual(payload["providers"][0]["catalog_adapter"], "openai")
+        self.assertFalse(payload["providers"][0]["ready"])
+        opened.assert_not_called()
+
+    def test_provider_diagnose_reports_missing_credential_reference(self) -> None:
+        profile = load_profile("local-dev", Path.cwd())
+        profile.models.setdefault("providers", {})["openai"]["credential_ref"] = "openai.missing"
+        payload = ProviderRegistry(profile).diagnose("openai")
+        credential = next(check for check in payload["providers"][0]["checks"] if check["name"] == "credential")
+        self.assertFalse(credential["ok"])
+        self.assertEqual(credential["detail"], "reference not found")
+
+    def test_anthropic_catalog_discovery_uses_models_api(self) -> None:
+        profile = load_profile("local-dev", Path.cwd())
+        payload = {
+            "data": [
+                {
+                    "id": "claude-test",
+                    "display_name": "Claude Test",
+                    "type": "model",
+                    "created_at": "2026-01-01T00:00:00Z",
+                }
+            ]
+        }
+
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def read(self):
+                return json.dumps(payload).encode("utf-8")
+
+        with (
+            patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}),
+            patch("aiplane.boundaries.urlopen", return_value=FakeResponse()) as opened,
+        ):
+            result = ProviderRegistry(profile).models("anthropic", online=True, query="test", limit=5)
+        self.assertEqual(result.models, ["claude-test"])
+        self.assertEqual(result.model_metadata["claude-test"]["display_name"], "Claude Test")
+        request = opened.call_args.args[0]
+        self.assertEqual(request.full_url, "https://api.anthropic.com/v1/models")
+        self.assertEqual(request.headers.get("X-api-key"), "test-key")
+        self.assertEqual(request.headers.get("Anthropic-version"), "2023-06-01")
+
+    def test_custom_openai_discovery_can_be_unauthenticated(self) -> None:
+        profile = load_profile("local-dev", Path.cwd())
+        profile.models.setdefault("providers", {})["local_gateway"] = {
+            "ownership": "managed_service",
+            "endpoint_family": "custom_openai_compatible",
+            "catalog_adapter": "openai",
+            "endpoint": "http://127.0.0.1:4000/v1",
+            "auth": {"required": False, "method": "none"},
+            "enabled": True,
+        }
+        payload = {"data": [{"id": "local-chat"}]}
+
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def read(self):
+                return json.dumps(payload).encode("utf-8")
+
+        with (
+            patch.object(
+                ProviderRegistry,
+                "model_providers",
+                return_value={"local_gateway": profile.models["providers"]["local_gateway"]},
+            ),
+            patch("aiplane.boundaries.urlopen", return_value=FakeResponse()) as opened,
+        ):
+            result = ProviderRegistry(profile).models("local_gateway", online=True)
+        self.assertEqual(result.models, ["local-chat"])
+        self.assertIsNone(opened.call_args.args[0].headers.get("Authorization"))

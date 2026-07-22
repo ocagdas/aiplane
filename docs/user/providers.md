@@ -138,9 +138,19 @@ aiplane providers test azure_openai --credential-ref azure_openai.business_a
 aiplane providers test elevenlabs
 ```
 
-The test command currently has live adapters for Azure OpenAI deployment listing, ElevenLabs voice listing, and OpenAI-compatible `/v1/models` endpoints. Other providers still rely on doctor checks until a provider-specific safe test is added.
+The test command has live adapters for Azure OpenAI deployment listing, ElevenLabs voice listing, Anthropic model listing, and OpenAI-compatible `/v1/models` endpoints. Custom OpenAI-compatible endpoints can explicitly declare that authentication is not required; hosted defaults still fail closed when credentials are missing.
 
 ## Provider Commands
+
+Inspect discovery readiness without making a network request or revealing credential values:
+
+```bash
+aiplane providers diagnose
+aiplane providers diagnose openai
+aiplane providers diagnose anthropic
+```
+
+The versioned result separates adapter, endpoint, and credential-reference checks and gives the next online query command. Use `providers test` afterward when you intend to contact the endpoint.
 
 List known model providers. The list includes `ownership` so you can distinguish `self_managed` model sources from `managed_service` providers:
 

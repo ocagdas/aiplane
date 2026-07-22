@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 from typing import Any
 
-from .config import agent_artifacts_root
+from .config import agent_artifacts_root, dump_yaml
 from .integrations import IntegrationManager
+from .model_catalog import ModelCatalog
+from .stacks import StackManager
 from .models import Profile
 
 
@@ -102,6 +105,98 @@ class AgentManager:
             ],
         }
 
+    def manifest(
+        self,
+        name: str,
+        *,
+        stack: str | None = None,
+        framework: str = "langgraph",
+        model: str | None = None,
+        runtime: str | None = None,
+        provider: str | None = None,
+        endpoint: str | None = None,
+        api_key_env: str | None = None,
+    ) -> dict[str, Any]:
+        """Compile profile or stack configuration into a secret-free agent contract."""
+        if stack:
+            stack_plan = StackManager(self.profile).plan(stack)
+            orchestrator = stack_plan.get("orchestrator") or framework
+            source_roles = stack_plan.get("roles") if isinstance(stack_plan.get("roles"), dict) else {}
+            tools = stack_plan.get("tools") if isinstance(stack_plan.get("tools"), dict) else {}
+            limits = stack_plan.get("limits") if isinstance(stack_plan.get("limits"), dict) else {}
+            approval_mode = stack_plan.get("approval_mode") or "ask"
+            audit_label = stack_plan.get("audit_label") or stack
+        else:
+            selection = self._selection(name, framework, model, runtime, provider, endpoint, api_key_env)
+            orchestrator = framework
+            source_roles = {
+                "primary": {
+                    "model": selection.model_alias,
+                    "provider": selection.provider,
+                    "runtime": selection.runtime,
+                    "endpoint": selection.endpoint,
+                    "approval_mode": "ask",
+                    "audit_label": f"{name}.primary",
+                    "limits": {},
+                    "tools": {},
+                }
+            }
+            tools, limits, approval_mode, audit_label = {}, {}, "ask", name
+        catalog = ModelCatalog(self.profile)
+        roles = {}
+        for role_name, binding in sorted(source_roles.items()):
+            if not isinstance(binding, dict):
+                raise ValueError(f"agent role {role_name!r} must be a mapping")
+            alias = str(binding.get("model") or "")
+            model_config = catalog.show(alias)
+            provider_config = (
+                model_config.get("provider_config") if isinstance(model_config.get("provider_config"), dict) else {}
+            )
+            credential_ref = provider_config.get("credential_ref")
+            key_env = provider_config.get("api_key_env")
+            roles[str(role_name)] = {
+                "model_alias": alias,
+                "model_id": model_config.get("model"),
+                "provider": binding.get("provider") or model_config.get("provider"),
+                "ownership": binding.get("ownership") or model_config.get("ownership"),
+                "runtime": binding.get("runtime"),
+                "endpoint": binding.get("endpoint"),
+                "capabilities": model_config.get("capabilities", []),
+                "tools": binding.get("tools") if isinstance(binding.get("tools"), dict) else tools,
+                "limits": binding.get("limits") if isinstance(binding.get("limits"), dict) else limits,
+                "approval_mode": binding.get("approval_mode") or approval_mode,
+                "audit_label": binding.get("audit_label") or f"{audit_label}.{role_name}",
+                "credential": {
+                    "required": bool(credential_ref or key_env),
+                    "credential_ref": credential_ref,
+                    "api_key_env": key_env,
+                },
+            }
+        return {
+            "$schema": "schemas/aiplane-agent-environment-v1.schema.json",
+            "schema_version": "1.0",
+            "record_type": "agent_environment",
+            "render_only": True,
+            "name": name,
+            "profile": self.profile.name,
+            "source_stack": stack,
+            "orchestrator": orchestrator,
+            "roles": roles,
+            "tools": tools,
+            "limits": limits,
+            "approval_mode": approval_mode,
+            "audit_label": audit_label,
+            "execution_boundary": {
+                "runs_agents": False,
+                "writes_credentials": False,
+                "applies_configuration": False,
+            },
+            "notes": [
+                "Review this manifest and generated framework configuration before use.",
+                "Credential references contain names only; secret values are never rendered.",
+            ],
+        }
+
     def export(
         self,
         name: str,
@@ -142,8 +237,23 @@ class AgentManager:
             content = _env_example(selection)
         elif file == "README.md":
             content = _readme(name, framework, selection)
+        elif file in {"agent-environment.json", "agent-environment.yaml"}:
+            manifest = self.manifest(
+                name,
+                framework=framework,
+                model=model,
+                runtime=runtime,
+                provider=provider,
+                endpoint=endpoint,
+                api_key_env=api_key_env,
+            )
+            content = (
+                json.dumps(manifest, indent=2, sort_keys=True) + "\n" if file.endswith(".json") else dump_yaml(manifest)
+            )
         else:
-            raise ValueError("file must be agent.py, requirements.txt, .env.example, or README.md")
+            raise ValueError(
+                "file must be agent.py, requirements.txt, .env.example, README.md, agent-environment.json, or agent-environment.yaml"
+            )
         return {
             "name": "agent_export",
             "agent": name,

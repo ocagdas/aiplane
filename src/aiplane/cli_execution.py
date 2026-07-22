@@ -186,6 +186,22 @@ def add_execution_parsers(
         "--output-dir",
         help="Agent artifact root. Defaults to AIPLANE_AGENT_ARTIFACTS_DIR, local config agent_artifacts_dir, or .aiplane/agents",
     )
+    agents_manifest = agents_sub.add_parser(
+        "manifest",
+        help="Render a versioned agent-environment manifest",
+        description="Compile profile or stack role configuration without writing files, starting agents, or embedding secrets.",
+        formatter_class=formatter_class,
+    )
+    profile_arg(agents_manifest)
+    agents_manifest.add_argument("name", help="Agent environment name")
+    agents_manifest.add_argument("--stack", help="Compile roles, tools, limits, and approvals from a configured stack")
+    agents_manifest.add_argument("--framework", choices=["langgraph", "simple-openai"], default="langgraph")
+    agents_manifest.add_argument("--model", help="Direct model alias when --stack is omitted")
+    agents_manifest.add_argument("--runtime")
+    agents_manifest.add_argument("--provider")
+    agents_manifest.add_argument("--endpoint")
+    agents_manifest.add_argument("--api-key-env")
+
     agents_export = agents_sub.add_parser(
         "export",
         help="Print one starter agent file",
@@ -215,7 +231,14 @@ def add_execution_parsers(
     )
     agents_export.add_argument(
         "--file",
-        choices=["agent.py", "requirements.txt", ".env.example", "README.md"],
+        choices=[
+            "agent.py",
+            "requirements.txt",
+            ".env.example",
+            "README.md",
+            "agent-environment.json",
+            "agent-environment.yaml",
+        ],
         default="agent.py",
         help="Scaffold file to print",
     )
@@ -449,48 +472,22 @@ def handle_execution_command(
         if args.agents_command == "templates":
             print(json_dumps(manager.templates(), indent=2))
             return 0
-        if args.agents_command == "plan":
+        if args.agents_command == "manifest":
             print(
                 json_dumps(
-                    manager.plan(
+                    manager.manifest(
                         args.name,
+                        stack=args.stack,
                         framework=args.framework,
                         model=args.model,
                         runtime=args.runtime,
                         provider=args.provider,
                         endpoint=args.endpoint,
                         api_key_env=args.api_key_env,
-                        instruction=args.instruction,
-                        output_dir=args.output_dir,
                     ),
                     indent=2,
                 )
             )
-            return 0
-        exported = manager.export(
-            args.name,
-            framework=args.framework,
-            model=args.model,
-            runtime=args.runtime,
-            provider=args.provider,
-            endpoint=args.endpoint,
-            api_key_env=args.api_key_env,
-            instruction=args.instruction,
-            file=args.file,
-            output_dir=args.output_dir,
-        )
-        print(exported["content"])
-        if exported.get("notes"):
-            print("\n# Notes")
-            for note in exported["notes"]:
-                print(f"# - {note}")
-        return 0
-
-    if args.command == "agents":
-        profile = load_profile(effective_profile, workspace, profiles_dir=profiles_dir)
-        manager = AgentManager(profile)
-        if args.agents_command == "templates":
-            print(json_dumps(manager.templates(), indent=2))
             return 0
         if args.agents_command == "plan":
             print(

@@ -485,7 +485,7 @@ class RuntimeExecutionTests(unittest.TestCase):
         plan = RuntimeCatalog(profile).bundle_plan("vllm", model_name="provider-code-large-vllm", mode="docker")
         self.assertEqual(plan["name"], "vllm-provider-code-large-vllm-docker")
         self.assertEqual(plan["selected_file"], "Dockerfile")
-        self.assertIn("FROM python:3.13-slim", plan["files"]["Dockerfile"])
+        self.assertIn("FROM vllm/vllm-openai:latest", plan["files"]["Dockerfile"])
         self.assertIn("Provider/Code-Large-Instruct", plan["files"]["Dockerfile"])
         self.assertIn("name: aiplane-vllm", plan["files"]["environment.yaml"])
 
@@ -1085,7 +1085,7 @@ exit 0
             )
         self.assertEqual(code, 0)
         output = stdout.getvalue()
-        self.assertIn("FROM python:3.13-slim", output)
+        self.assertIn("FROM vllm/vllm-openai:latest", output)
         self.assertIn("Provider/Code-Large-Instruct", output)
 
     def test_runtime_list_cli_text_format_is_lean(self) -> None:
@@ -1170,3 +1170,35 @@ exit 0
             )
         self.assertEqual(code, 0)
         self.assertEqual(json.loads(stdout.getvalue())["record_type"], "runtime_launch_manifest")
+
+    def test_runtime_bundle_renders_gpu_cache_and_env_references(self) -> None:
+        profile = load_profile("local-dev", Path.cwd())
+        plan = RuntimeCatalog(profile).bundle_plan(
+            "vllm",
+            "provider-code-large-vllm",
+            cache_volume="hf-cache",
+            gpu_devices=["0", "1"],
+            environment=["HF_HOME"],
+            auth_env="HF_TOKEN",
+            context_tokens=32768,
+            tensor_parallel=2,
+        )
+        command = plan["commands"][1]
+        self.assertEqual(plan["record_type"], "runtime_bundle")
+        self.assertTrue(plan["render_only"])
+        self.assertIn("--gpus device=0,1", command)
+        self.assertIn("src=hf-cache", command)
+        self.assertIn("--env HF_HOME", command)
+        self.assertIn("--env HF_TOKEN", command)
+        self.assertIn("--max-model-len 32768", command)
+        self.assertIn("--tensor-parallel-size 2", command)
+        self.assertNotIn("HF_TOKEN=", command)
+
+    def test_runtime_bundle_rejects_embedded_env_values(self) -> None:
+        profile = load_profile("local-dev", Path.cwd())
+        with self.assertRaisesRegex(ValueError, "variable names"):
+            RuntimeCatalog(profile).bundle_plan(
+                "vllm",
+                "provider-code-large-vllm",
+                environment=["HF_TOKEN=secret"],
+            )

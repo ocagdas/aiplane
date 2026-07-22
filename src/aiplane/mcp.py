@@ -5,6 +5,7 @@ import sys
 from pathlib import Path as FsPath
 from typing import Any
 
+from .agents import AgentManager
 from .audit import AuditLogger
 from .config import list_profiles, load_profile, resolve_profile_name
 from .hardware import HardwareManager
@@ -46,6 +47,11 @@ READ_ONLY_TOOLS: list[dict[str, Any]] = [
     {
         "name": "aiplane.providers.list",
         "description": "List configured providers and endpoints without secrets.",
+        "mutates": False,
+    },
+    {
+        "name": "aiplane.providers.diagnose",
+        "description": "Explain provider discovery and credential-reference readiness without network access.",
         "mutates": False,
     },
     {
@@ -149,6 +155,16 @@ READ_ONLY_TOOLS: list[dict[str, Any]] = [
         "mutates": False,
     },
     {
+        "name": "aiplane.runtimes.bundle",
+        "description": "Render a secret-free runtime packaging plan without building or starting it.",
+        "mutates": False,
+    },
+    {
+        "name": "aiplane.agents.manifest",
+        "description": "Compile a versioned agent-environment manifest from profile or stack configuration.",
+        "mutates": False,
+    },
+    {
         "name": "aiplane.runtimes.status",
         "description": "Show runtime/provider availability for one runtime or all configured runtimes.",
         "mutates": False,
@@ -246,6 +262,11 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
                 "items": {"type": "string"},
             },
         },
+        "additionalProperties": False,
+    },
+    "aiplane.providers.diagnose": {
+        "type": "object",
+        "properties": {"profile": {"type": "string"}, "provider": {"type": "string"}},
         "additionalProperties": False,
     },
     "aiplane.providers.models": {
@@ -457,6 +478,39 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
         "required": ["name"],
         "additionalProperties": False,
     },
+    "aiplane.runtimes.bundle": {
+        "type": "object",
+        "properties": {
+            "profile": {"type": "string"},
+            "runtime": {"type": "string"},
+            "model": {"type": "string"},
+            "mode": {"type": "string", "enum": ["docker", "conda"], "default": "docker"},
+            "cache_volume": {"type": "string"},
+            "gpu_devices": {"type": "array", "items": {"type": "string"}},
+            "environment": {"type": "array", "items": {"type": "string"}},
+            "auth_env": {"type": "string"},
+            "context_tokens": {"type": "integer", "minimum": 1},
+            "tensor_parallel": {"type": "integer", "minimum": 1},
+        },
+        "required": ["runtime", "model"],
+        "additionalProperties": False,
+    },
+    "aiplane.agents.manifest": {
+        "type": "object",
+        "properties": {
+            "profile": {"type": "string"},
+            "name": {"type": "string"},
+            "stack": {"type": "string"},
+            "framework": {"type": "string", "enum": ["langgraph", "simple-openai"], "default": "langgraph"},
+            "model": {"type": "string"},
+            "runtime": {"type": "string"},
+            "provider": {"type": "string"},
+            "endpoint": {"type": "string"},
+            "api_key_env": {"type": "string"},
+        },
+        "required": ["name"],
+        "additionalProperties": False,
+    },
     "aiplane.runtimes.status": {
         "type": "object",
         "properties": {
@@ -656,6 +710,8 @@ class AiplaneMcpServer:
                 group_by=str(arguments.get("group_by") or "") or None,
                 status=str(arguments.get("status") or "all"),
             )
+        if name == "aiplane.providers.diagnose":
+            return ProviderRegistry(profile).diagnose(str(arguments.get("provider") or "") or None)
         if name == "aiplane.providers.models":
             result = ProviderRegistry(profile).models(str(arguments.get("provider") or ""))
             return result.__dict__
@@ -767,6 +823,33 @@ class AiplaneMcpServer:
             )
         if name == "aiplane.orchestrators.show":
             return OrchestratorCatalog(profile).show(str(arguments.get("name") or ""))
+        if name == "aiplane.runtimes.bundle":
+            return RuntimeCatalog(profile).bundle_plan(
+                str(arguments.get("runtime") or ""),
+                str(arguments.get("model") or ""),
+                mode=str(arguments.get("mode") or "docker"),
+                cache_volume=str(arguments.get("cache_volume") or "") or None,
+                gpu_devices=_string_list(arguments.get("gpu_devices")),
+                environment=_string_list(arguments.get("environment")),
+                auth_env=str(arguments.get("auth_env") or "") or None,
+                context_tokens=int(arguments["context_tokens"])
+                if arguments.get("context_tokens") is not None
+                else None,
+                tensor_parallel=int(arguments["tensor_parallel"])
+                if arguments.get("tensor_parallel") is not None
+                else None,
+            )
+        if name == "aiplane.agents.manifest":
+            return AgentManager(profile).manifest(
+                str(arguments.get("name") or ""),
+                stack=str(arguments.get("stack") or "") or None,
+                framework=str(arguments.get("framework") or "langgraph"),
+                model=str(arguments.get("model") or "") or None,
+                runtime=str(arguments.get("runtime") or "") or None,
+                provider=str(arguments.get("provider") or "") or None,
+                endpoint=str(arguments.get("endpoint") or "") or None,
+                api_key_env=str(arguments.get("api_key_env") or "") or None,
+            )
         if name == "aiplane.runtimes.status":
             catalog = RuntimeCatalog(profile)
             runtime = arguments.get("runtime")

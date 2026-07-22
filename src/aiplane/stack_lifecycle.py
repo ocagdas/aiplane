@@ -34,7 +34,10 @@ class StackLifecycle:
         runtime = str(stack.get("runtime") or "")
         model = str(stack.get("model") or "")
         orchestrator = str(stack.get("orchestrator") or "")
-        commands = self._lifecycle_commands(name, action, runtime, model, orchestrator)
+        runtime_substrate = RuntimeCatalog(self.profile).helper_substrate(
+            runtime, str(stack.get("runtime_substrate") or "") or None
+        )
+        commands = self._lifecycle_commands(name, action, runtime, model, orchestrator, runtime_substrate)
         try:
             runtime_evidence = RuntimeCatalog(self.profile).evidence_bundle(runtime, model)
         except ValueError as exc:
@@ -48,6 +51,7 @@ class StackLifecycle:
                 "status": "planned" if dry_run else "planned_not_executed",
                 "reason": None if executable else reason,
                 "execution_mode": "same_host" if executable else "planned_remote",
+                "runtime_substrate": runtime_substrate,
                 "endpoint_security": self.endpoint_plan(name),
                 "runtime_evidence": runtime_evidence,
                 "commands": commands,
@@ -88,6 +92,7 @@ class StackLifecycle:
             "steps_executed": len(results),
             "failed_step": failed_step,
             "execution_mode": "same_host",
+            "runtime_substrate": runtime_substrate,
             "started_at": round(started_at, 3),
             "finished_at": round(finished_at, 3),
             "duration_seconds": round(max(0.0, finished_at - started_at), 3),
@@ -101,12 +106,18 @@ class StackLifecycle:
         }
 
     def _lifecycle_commands(
-        self, stack_name: str, action: str, runtime: str, model: str, orchestrator: str
+        self,
+        stack_name: str,
+        action: str,
+        runtime: str,
+        model: str,
+        orchestrator: str,
+        runtime_substrate: str,
     ) -> list[dict[str, Any]]:
         if action == "prepare":
             commands = [
-                self._runtime_helper_command("install runtime", runtime, "install", model),
-                self._runtime_helper_command("pull model", runtime, "pull", model),
+                self._runtime_helper_command("install runtime", runtime, "install", model, runtime_substrate),
+                self._runtime_helper_command("pull model", runtime, "pull", model, runtime_substrate),
             ]
             if orchestrator:
                 packages = OrchestratorCatalog(self.profile).show(orchestrator).get("packages", [])
@@ -130,10 +141,12 @@ class StackLifecycle:
                     )
             return commands
         if action in {"start", "stop", "restart"}:
-            return [self._runtime_helper_command(f"{action} runtime", runtime, action, model)]
+            return [self._runtime_helper_command(f"{action} runtime", runtime, action, model, runtime_substrate)]
         raise ValueError(f"unknown stack lifecycle action: {action}")
 
-    def _runtime_helper_command(self, name: str, runtime: str, action: str, model: str) -> dict[str, Any]:
+    def _runtime_helper_command(
+        self, name: str, runtime: str, action: str, model: str, runtime_substrate: str
+    ) -> dict[str, Any]:
         helper = provider_helper_path()
         return {
             "name": name,
@@ -147,6 +160,8 @@ class StackLifecycle:
                 self.profile.name,
                 "--model",
                 model,
+                "--substrate",
+                runtime_substrate,
             ],
             "cwd": str(project_root()),
         }

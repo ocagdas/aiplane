@@ -10,7 +10,6 @@ from typing import Any, Callable
 
 from .boundaries import CommandRunner, SubprocessCommandRunner
 from .config import load_profile, local_config_path, provider_helper_path, resolve_output_format
-from .model_catalog import ModelCatalog
 from .platform_support import detect_host_platform
 from .runtime_catalog import RuntimeCatalog
 from .docker_model_runner import DockerModelRunner
@@ -177,6 +176,16 @@ def add_runtimes_parser(
         default="docker",
         help="Bundle target mode to plan",
     )
+    runtimes_bundle.add_argument("--cache-volume", help="Named Docker volume for the runtime model cache")
+    runtimes_bundle.add_argument(
+        "--gpu-device", action="append", default=[], help="GPU device selector; repeat or use all"
+    )
+    runtimes_bundle.add_argument(
+        "--env", action="append", default=[], help="Environment variable name to pass through; values are not embedded"
+    )
+    runtimes_bundle.add_argument("--auth-env", help="Authentication environment variable name to pass through")
+    runtimes_bundle.add_argument("--context-tokens", type=int, help="Planned context limit")
+    runtimes_bundle.add_argument("--tensor-parallel", type=int, help="Planned tensor-parallel size")
     runtimes_bundle.add_argument(
         "--format",
         choices=["json", "dockerfile", "conda-yaml"],
@@ -318,7 +327,17 @@ def handle_runtimes_command(
             print(json_dumps(catalog.set_preferred_runtime(args.name, args.runtime), indent=2))
             return 0
         if args.runtimes_command == "bundle":
-            plan = catalog.bundle_plan(args.runtime, model_name=args.model, mode=args.mode)
+            plan = catalog.bundle_plan(
+                args.runtime,
+                model_name=args.model,
+                mode=args.mode,
+                cache_volume=args.cache_volume,
+                gpu_devices=args.gpu_device,
+                environment=args.env,
+                auth_env=args.auth_env,
+                context_tokens=args.context_tokens,
+                tensor_parallel=args.tensor_parallel,
+            )
             if args.format == "dockerfile":
                 print(plan["files"]["Dockerfile"], end="")
             elif args.format == "conda-yaml":
@@ -546,11 +565,7 @@ def handle_runtimes_command(
 
 
 def _runtime_helper_substrate(profile: object, runtime: str, override: str | None = None) -> str:
-    if override:
-        return override
-    provider = ModelCatalog(profile).providers().get(runtime, {}) if hasattr(profile, "models") else {}
-    substrate = str(provider.get("substrate") or "native") if isinstance(provider, dict) else "native"
-    return "docker" if substrate == "docker" else "native"
+    return RuntimeCatalog(profile).helper_substrate(runtime, override)
 
 
 def _run_provider_helper(

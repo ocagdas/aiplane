@@ -150,6 +150,8 @@ Start with a bounded preview. Network-backed providers are optional.
 
 ```bash
 aiplane providers list
+aiplane providers diagnose
+aiplane providers diagnose openai
 aiplane runtimes sources
 aiplane models refresh --provider ollama --limit 20 --dry-run --verbosity 2
 aiplane models refresh --provider huggingface --query text-generation --limit 20 --dry-run --verbosity 2
@@ -269,6 +271,7 @@ aiplane runtimes artifact-lock --model "$CHAT_ALIAS"
 aiplane runtimes launch-manifest "$RUNTIME" --model "$CHAT_ALIAS"
 aiplane runtimes launch-manifest vllm --model "$CHAT_ALIAS" --host 0.0.0.0 --port 8000 --context-tokens 8192 --gpu-device 0 --tensor-parallel 1
 aiplane runtimes bundle "$RUNTIME" --model "$CHAT_ALIAS" --mode docker --format json
+aiplane runtimes bundle "$RUNTIME" --model "$CHAT_ALIAS" --mode docker --cache-volume manual-model-cache --gpu-device all --env HF_HOME --auth-env HF_TOKEN
 ```
 
 - [ ] Artifact lock includes alias, native model id, source, revision/file, checksum/digest, format, quantization, and completeness.
@@ -411,7 +414,9 @@ Use `integrations <subcommand> --help` if a target needs role-specific flags in 
 ```bash
 aiplane agents templates
 aiplane agents plan manual-agent --framework langgraph --model "$CHAT_ALIAS"
+aiplane agents manifest manual-agent --framework langgraph --model "$CHAT_ALIAS"
 aiplane agents export manual-agent --framework langgraph --model "$CHAT_ALIAS" --file agent.py
+aiplane agents export manual-agent --framework langgraph --model "$CHAT_ALIAS" --file agent-environment.yaml
 aiplane orchestrators list
 aiplane orchestrators show langgraph
 aiplane orchestrators setup langgraph --runtime "$RUNTIME" --model "$CHAT_ALIAS" --dry-run
@@ -419,6 +424,7 @@ aiplane orchestrators doctor langgraph
 ```
 
 - [ ] Plans contain reviewed model alias, native id, endpoint, tool policy, approval mode, limits, and audit label where configured.
+- [ ] The manifest is schema version `1.0`, is marked `render_only`, and says Aiplane does not run agents.
 - [ ] Starter output contains no secret values.
 - [ ] Aiplane configures and validates the environment; it does not silently launch an autonomous workflow.
 
@@ -428,9 +434,11 @@ Use the imported `manual-host` machine and a compatible runtime/model:
 
 ```bash
 aiplane stacks setup manual-stack --runtime "$RUNTIME" --model "$CHAT_ALIAS" --machine manual-host --access same_host --dry-run
+# For a Docker-managed runtime path, add: --runtime-substrate docker
 aiplane stacks setup manual-stack --runtime "$RUNTIME" --model "$CHAT_ALIAS" --machine manual-host --access same_host
 aiplane stacks show manual-stack
 aiplane stacks plan manual-stack
+aiplane agents manifest manual-stack-agents --stack manual-stack
 aiplane stacks doctor manual-stack
 aiplane stacks endpoint-plan manual-stack
 aiplane stacks prepare manual-stack --dry-run

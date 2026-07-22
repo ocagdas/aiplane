@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aiplane.dev/schemas/runtime-bundle/v1",
+  "title": "aiplane runtime bundle",
+  "type": "object",
+  "required": [
+    "$schema",
+    "schema_version",
+    "record_type",
+    "render_only",
+    "runtime",
+    "model",
+    "mode",
+    "files",
+    "settings",
+    "commands"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "schemas/aiplane-runtime-bundle-v1.schema.json"
+    },
+    "schema_version": {
+      "const": "1.0"
+    },
+    "record_type": {
+      "const": "runtime_bundle"
+    },
+    "render_only": {
+      "const": true
+    },
+    "runtime": {
+      "type": "string"
+    },
+    "model": {
+      "type": "string"
+    },
+    "mode": {
+      "enum": [
+        "docker",
+        "conda"
+      ]
+    },
+    "files": {
+      "type": "object"
+    },
+    "settings": {
+      "type": "object"
+    },
+    "commands": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": true
+}

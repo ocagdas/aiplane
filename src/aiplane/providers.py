@@ -32,6 +32,7 @@ SUPPORTED_CATALOG_ADAPTERS = {
     "ollama",
     "civitai",
     "openai",
+    "anthropic",
     "azure_openai",
     "elevenlabs",
 }
@@ -163,6 +164,7 @@ class ProviderRegistry:
             "ollama": "Ollama model catalog adapter.",
             "civitai": "Civitai model catalog adapter.",
             "openai": "OpenAI-compatible /v1/models API; requires an endpoint and bearer/API key.",
+            "anthropic": "Anthropic /v1/models API; requires an endpoint and API key.",
             "azure_openai": "Azure OpenAI deployments API; requires endpoint and credentials.",
             "elevenlabs": "ElevenLabs voices API; requires credentials.",
         }
@@ -442,6 +444,88 @@ class ProviderRegistry:
         model_names = {alias for alias, model in self.catalog.models().items() if model_source(model) == name}
         return [status for status in self.catalog.doctor() if status.name in model_names]
 
+    def diagnose(self, name: str | None = None) -> dict[str, Any]:
+        """Explain live-discovery readiness without contacting a provider."""
+        providers = self.model_providers(include_removed=True)
+        if name and (name not in providers or providers[name].get("removed")):
+            raise ValueError(f"unknown catalog provider: {name}")
+        selected = {name: providers[name]} if name else providers
+        rows = []
+        for provider_name, source in sorted(selected.items()):
+            if source.get("removed"):
+                continue
+            merged = {**source, **self.catalog.providers().get(provider_name, {})}
+            adapter = str(_provider_catalog_adapter(merged) or "profile_catalog")
+            live = adapter in SUPPORTED_CATALOG_ADAPTERS and adapter != "profile_catalog"
+            endpoint = str(
+                merged.get("endpoint") or PROVIDER_ENDPOINT_DEFAULTS.get(provider_name, {}).get("endpoint") or ""
+            ).rstrip("/")
+            auth = merged.get("auth") if isinstance(merged.get("auth"), dict) else {}
+            auth_required = bool(auth.get("required", False))
+            credential_ref = str(merged.get("credential_ref") or "") or None
+            key_env = (
+                str(
+                    merged.get("api_key_env")
+                    or PROVIDER_ENDPOINT_DEFAULTS.get(provider_name, {}).get("api_key_env")
+                    or ""
+                )
+                or None
+            )
+            try:
+                credential_ready = (
+                    bool(CredentialStore().resolve(credential_ref))
+                    if credential_ref
+                    else bool(key_env and os.environ.get(key_env))
+                )
+                credential_detail = "configured" if credential_ready else "missing"
+            except ValueError:
+                credential_ready = False
+                credential_detail = "reference not found"
+            endpoint_ready = bool(endpoint) or adapter in {"huggingface", "huggingface_gguf", "ollama", "civitai"}
+            checks = [
+                {
+                    "name": "adapter",
+                    "ok": live,
+                    "detail": adapter,
+                    "remediation": "Choose a supported live catalog adapter or maintain profile catalog entries.",
+                },
+                {
+                    "name": "endpoint",
+                    "ok": endpoint_ready,
+                    "detail": endpoint or "adapter default",
+                    "remediation": "Configure the provider endpoint.",
+                },
+                {
+                    "name": "credential",
+                    "ok": not auth_required or credential_ready,
+                    "detail": "not required" if not auth_required else credential_detail,
+                    "remediation": f"Configure credential_ref or set {key_env or 'the provider API-key environment variable'}.",
+                },
+            ]
+            rows.append(
+                {
+                    "provider": provider_name,
+                    "enabled": bool(merged.get("enabled", True)),
+                    "ownership": _provider_ownership(merged),
+                    "catalog_adapter": adapter,
+                    "live_discovery_supported": live,
+                    "endpoint": endpoint or None,
+                    "auth": {"required": auth_required, "method": auth.get("method", "none")},
+                    "credential_ref": credential_ref,
+                    "api_key_env": key_env,
+                    "credential_configured": credential_ready if auth_required else None,
+                    "ready": bool(merged.get("enabled", True)) and all(check["ok"] for check in checks),
+                    "checks": checks,
+                    "next_command": f"aiplane providers models {provider_name} --online",
+                }
+            )
+        return {
+            "contract_version": "1.0",
+            "name": "provider_discovery_diagnostics",
+            "network_contacted": False,
+            "providers": rows,
+        }
+
     def test_connection(
         self, name: str, credential_ref: str | None = None, timeout: int | None = None
     ) -> dict[str, Any]:
@@ -475,7 +559,9 @@ class ProviderRegistry:
             "api_key_env": key_env or None,
             "has_api_key": bool(api_key),
         }
-        if not api_key:
+        auth = provider_config.get("auth") if isinstance(provider_config.get("auth"), dict) else {}
+        auth_required = bool(auth.get("required", True))
+        if auth_required and not api_key:
             result["reason"] = (
                 f"missing credential {credential_ref}"
                 if credential_ref
@@ -530,6 +616,26 @@ class ProviderRegistry:
                     result["reason"] = "unexpected ElevenLabs voices response"
                 return result
 
+            if name == "anthropic" or str(provider_config.get("endpoint_family") or "") == "anthropic":
+                endpoint = endpoint or "https://api.anthropic.com"
+                url = f"{endpoint}/v1/models"
+                payload = self._json_get(
+                    url, timeout=timeout_seconds, headers={"x-api-key": api_key, "anthropic-version": "2023-06-01"}
+                )
+                items = payload.get("data") if isinstance(payload, dict) else None
+                result.update(
+                    {
+                        "ok": isinstance(items, list),
+                        "endpoint": endpoint,
+                        "method": "anthropic_models",
+                        "url": url,
+                        "items_seen": len(items) if isinstance(items, list) else None,
+                    }
+                )
+                if not result["ok"]:
+                    result["reason"] = "unexpected Anthropic models response"
+                return result
+
             endpoint_family = str(provider_config.get("endpoint_family") or "")
             protocol = str(provider_config.get("protocol") or providers.get(name, {}).get("protocol") or "")
             if (
@@ -543,7 +649,7 @@ class ProviderRegistry:
                 payload = self._json_get(
                     url,
                     timeout=timeout_seconds,
-                    headers={"Authorization": f"Bearer {api_key}"},
+                    headers={"Authorization": f"Bearer {api_key}"} if api_key else {},
                 )
                 items = payload.get("data") if isinstance(payload, dict) else None
                 result.update(
@@ -638,6 +744,8 @@ class ProviderRegistry:
             return self._ollama_library_models(query=query, limit=limit)
         if adapter == "openai" or name == "openai":
             return self._openai_compatible_models(name, query=query, limit=limit)
+        if adapter == "anthropic" or name == "anthropic":
+            return self._anthropic_models(name, query=query, limit=limit)
         if adapter == "azure_openai" or name == "azure_openai":
             return self._azure_openai_deployments(query=query, limit=limit)
         if adapter == "elevenlabs" or name == "elevenlabs":
@@ -665,14 +773,15 @@ class ProviderRegistry:
         credential_ref = str(provider_config.get("credential_ref") or "")
         key_env = str(provider_config.get("api_key_env") or defaults.get("api_key_env") or "")
         api_key = CredentialStore().api_key(credential_ref) if credential_ref else os.environ.get(key_env)
-        if not api_key:
+        auth = provider_config.get("auth") if isinstance(provider_config.get("auth"), dict) else {}
+        if bool(auth.get("required", True)) and not api_key:
             need = f"credential {credential_ref}" if credential_ref else f"env var {key_env or 'provider api_key_env'}"
             raise ValueError(f"{name} discovery needs {need}")
         url = f"{endpoint}/models"
         payload = self._json_get(
             url,
             timeout=int(provider_config.get("timeout_seconds") or defaults.get("timeout_seconds") or 20),
-            headers={"Authorization": f"Bearer {api_key}"},
+            headers={"Authorization": f"Bearer {api_key}"} if api_key else {},
         )
         items = payload.get("data") if isinstance(payload, dict) else None
         if not isinstance(items, list):
@@ -708,6 +817,40 @@ class ProviderRegistry:
             f"queried OpenAI-compatible models API: {url}",
             {model_id: metadata.get(model_id, {}) for model_id in unique_ids},
         )
+
+    def _anthropic_models(
+        self, name: str, query: str | None = None, limit: int = DEFAULT_PROVIDER_MODEL_LIMIT
+    ) -> ProviderModelsResult:
+        provider_config = {**self.model_providers().get(name, {}), **self.catalog.providers().get(name, {})}
+        endpoint = str(provider_config.get("endpoint") or "https://api.anthropic.com").rstrip("/")
+        credential_ref = str(provider_config.get("credential_ref") or "")
+        key_env = str(provider_config.get("api_key_env") or "ANTHROPIC_API_KEY")
+        api_key = CredentialStore().api_key(credential_ref) if credential_ref else os.environ.get(key_env)
+        if not api_key:
+            need = f"credential {credential_ref}" if credential_ref else f"env var {key_env}"
+            raise ValueError(f"Anthropic discovery needs {need}")
+        url = f"{endpoint}/v1/models"
+        payload = self._json_get(
+            url,
+            timeout=int(provider_config.get("timeout_seconds") or 20),
+            headers={"x-api-key": api_key, "anthropic-version": "2023-06-01"},
+        )
+        items = payload.get("data") if isinstance(payload, dict) else None
+        if not isinstance(items, list):
+            raise RuntimeError("Anthropic returned an unexpected models response")
+        ids, metadata = [], {}
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            model_id = str(item.get("id") or "").strip()
+            searchable = " ".join(str(item.get(key) or "") for key in ("id", "display_name", "type"))
+            if not model_id or (query and query.lower() not in searchable.lower()) or model_id in metadata:
+                continue
+            ids.append(model_id)
+            metadata[model_id] = {key: item[key] for key in ("id", "display_name", "type", "created_at") if key in item}
+            if len(ids) >= max(1, int(limit)):
+                break
+        return ProviderModelsResult(name, "provider_api", ids, f"queried Anthropic models API: {url}", metadata)
 
     def _azure_openai_deployments(
         self, query: str | None = None, limit: int = DEFAULT_PROVIDER_MODEL_LIMIT
