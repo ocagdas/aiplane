@@ -3,6 +3,7 @@ from __future__ import annotations
 from argparse import Namespace
 from typing import Any, Mapping
 
+from .materialized_catalog import parse_property_filter
 from .model_catalog import expand_capability_filters
 
 
@@ -48,6 +49,8 @@ MODEL_FILTER_SCHEMA_PROPERTIES: dict[str, dict[str, Any]] = {
         "items": {"type": "string"},
         "description": "Alternative string filters, for example code_generation>=4 or debugging>=3",
     },
+    "name": {"type": "string"},
+    "model": {"type": "string"},
     "provider": {"type": "string"},
     "runtime": {"type": "string"},
     "source": {"type": "string"},
@@ -71,6 +74,7 @@ MODEL_FILTER_SCHEMA_PROPERTIES: dict[str, dict[str, Any]] = {
     "require_benchmark": {"type": "boolean", "default": False},
     "min_likes": {"type": "number"},
     "min_downloads": {"type": "number"},
+    "property": {"type": "array", "items": {"type": "string"}},
 }
 
 
@@ -81,6 +85,11 @@ def model_filter_args(values: Namespace | Mapping[str, Any]) -> dict[str, object
     if _bool_value(values, "managed_service_only"):
         ownership = "managed_service"
 
+    property_filters: dict[str, Any] = {}
+    for item in _list_value(values, "property"):
+        path, expected = parse_property_filter(item)
+        property_filters[path] = expected
+
     capabilities = expand_capability_filters(_list_value(values, "capability"))
     for name, threshold in _dict_value(values, "capabilities").items():
         try:
@@ -89,6 +98,8 @@ def model_filter_args(values: Namespace | Mapping[str, Any]) -> dict[str, object
             continue
 
     return {
+        "name": _value(values, "alias"),
+        "model": _value(values, "model_id"),
         "provider": _value(values, "provider"),
         "runtime": _value(values, "runtime"),
         "source": _value(values, "source"),
@@ -108,6 +119,7 @@ def model_filter_args(values: Namespace | Mapping[str, Any]) -> dict[str, object
         "max_parameters_b": _value(values, "max_parameters_b"),
         "gpu_vendor": _value(values, "gpu_vendor"),
         "accelerator_api": _value(values, "accelerator_api"),
+        "properties": property_filters,
     }
 
 

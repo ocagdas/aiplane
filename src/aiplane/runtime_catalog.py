@@ -20,11 +20,18 @@ from .runtime_definitions import (
 
 
 class RuntimeCatalog:
-    def __init__(self, profile: Profile, http_transport: HttpTransport | None = None):
+    def __init__(
+        self,
+        profile: Profile,
+        http_transport: HttpTransport | None = None,
+        generated_models_config: dict[str, Any] | None = None,
+    ):
         self.profile = profile
         self.http_transport = http_transport or UrllibHttpTransport()
         self.models_config = profile.models or {}
-        self.generated_models_config = self._load_generated_models_config()
+        self.generated_models_config = (
+            generated_models_config if generated_models_config is not None else self._load_generated_models_config()
+        )
 
     def list(self, include_gui: bool = False) -> list[dict[str, Any]]:
         rows = []

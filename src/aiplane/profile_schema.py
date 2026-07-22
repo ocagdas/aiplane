@@ -8,6 +8,7 @@ from typing import Any
 
 from .config import CONFIG_FILES, resource_root
 from .models import Profile
+from .scoring import scoring_profiles
 
 PROFILE_SCHEMA_VERSION = "1.0"
 PROFILE_SCHEMA_ID = "https://aiplane.dev/schemas/profile/v1"
@@ -80,7 +81,38 @@ def structural_profile_findings(document: dict[str, Any]) -> list[dict[str, Any]
             }
         )
     findings.extend(_model_contract_findings(document))
+    findings.extend(_hardware_contract_findings(document))
     return findings
+
+
+def _hardware_contract_findings(document: dict[str, Any]) -> list[dict[str, Any]]:
+    config = document.get("hardware")
+    if not isinstance(config, dict):
+        return []
+    try:
+        resolved = scoring_profiles(config)
+        detail = (
+            f"default={resolved['default_profile']}; "
+            f"profiles={','.join(sorted(resolved['profiles']))}; "
+            f"extensions={len(resolved['extensions'])}"
+        )
+        ok = True
+    except (TypeError, ValueError) as exc:
+        detail = str(exc)
+        ok = False
+    return [
+        {
+            "name": "contract:hardware_placement_scoring",
+            "path": "$.hardware.placement_scoring",
+            "ok": ok,
+            "detail": detail,
+            "remediation": (
+                "Set placement_scoring.default_profile to an existing profile; use finite weights "
+                "between 0 and 1 with at least one positive value; give each data-only extension "
+                "a name, source_key, and weight greater than 0 and no more than 1."
+            ),
+        }
+    ]
 
 
 _MODEL_NUMBER_FIELDS = (

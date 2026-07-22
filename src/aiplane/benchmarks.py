@@ -237,6 +237,7 @@ class BenchmarkRunner:
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         path = root / f"{timestamp}-{model_name}.json"
         atomic_write_text(path, json.dumps(payload, indent=2))
+        self.catalog.rebuild_materialized()
         return path
 
 
@@ -254,24 +255,34 @@ def load_benchmark_spec(path: Path) -> dict[str, Any]:
     return payload
 
 
-def latest_benchmark_summary(profile: Profile, model_name: str) -> dict[str, Any] | None:
+def latest_benchmark_summaries(profile: Profile) -> dict[str, dict[str, Any]]:
     root = profile.workspace / ".aiplane" / "benchmarks"
     if not root.exists():
-        return None
+        return {}
     candidates = sorted(
-        root.glob(f"*-{model_name}.json"),
-        key=lambda path: path.stat().st_mtime,
+        root.glob("*.json"),
+        key=lambda path: (path.stat().st_mtime_ns, path.name),
         reverse=True,
     )
+    summaries: dict[str, dict[str, Any]] = {}
     for path in candidates:
         try:
             payload = json.loads(path.read_text(encoding="utf-8"))
-        except Exception:
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
             continue
-        summary = payload.get("summary") if isinstance(payload, dict) else None
-        if isinstance(summary, dict):
-            return {"path": str(path), **summary}
-    return None
+        if not isinstance(payload, dict):
+            continue
+        model_name = str(payload.get("model_name") or "")
+        if not model_name and "-" in path.stem:
+            model_name = path.stem.split("-", 1)[1]
+        summary = payload.get("summary")
+        if model_name and model_name not in summaries and isinstance(summary, dict):
+            summaries[model_name] = {"path": str(path), **summary}
+    return summaries
+
+
+def latest_benchmark_summary(profile: Profile, model_name: str) -> dict[str, Any] | None:
+    return latest_benchmark_summaries(profile).get(model_name)
 
 
 def _select_tasks(spec: dict[str, Any], task: str) -> list[tuple[str, dict[str, Any]]]:

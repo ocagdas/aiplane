@@ -8,14 +8,19 @@ from .boundaries import CommandRunner, HttpTransport, SubprocessCommandRunner, U
 from .backends import (
     BackendResult,
 )
+from .materialized_catalog import (
+    MaterializedCatalog,
+    materialized_metadata,
+    public_catalog_row,
+    safe_catalog_properties,
+)
 from .model_refresh import ModelRefreshCoordinator
+from .model_query import filter_catalog_rows
 from .model_store import ModelCatalogStore
 from .models import Profile
 from .model_resources import (
     accelerator_api_requirements as _accelerator_api_requirements,
     gpu_vendor_requirement as _gpu_vendor_requirement,
-    matches_accelerator_api_requirement as _matches_accelerator_api_requirement,
-    matches_gpu_vendor_requirement as _matches_gpu_vendor_requirement,
     number_or_none as _number_or_none,
     parameter_billions as _parameter_billions,
     resource_estimate_source as _resource_estimate_source,
@@ -53,7 +58,18 @@ class ModelCatalog:
         self.http_transport = http_transport or UrllibHttpTransport()
         self.config = profile.models or {}
         self.store = ModelCatalogStore(profile.root, DISCOVERED_MODELS_FILE, DISCOVERED_MODELS_BANNER)
-        self.generated_config = self.store.load_generated()
+        self.materialized = MaterializedCatalog(profile.root)
+        self._generated_config: dict[str, Any] | None = None
+
+    @property
+    def generated_config(self) -> dict[str, Any]:
+        if self._generated_config is None:
+            self._generated_config = self.store.load_generated()
+        return self._generated_config
+
+    @generated_config.setter
+    def generated_config(self, value: dict[str, Any]) -> None:
+        self._generated_config = value
 
     def providers(self) -> dict[str, dict[str, Any]]:
         from .runtime_catalog import PROVIDER_ENDPOINT_DEFAULTS
@@ -365,24 +381,97 @@ class ModelCatalog:
     def _write_curated_config(self) -> Path:
         return self.store.write_curated(self.config)
 
-    def list(self) -> list[dict[str, Any]]:
-        rows = []
+    def list(
+        self,
+        *,
+        use_materialized: bool = True,
+        force_rebuild: bool = False,
+    ) -> list[dict[str, Any]]:
+        if use_materialized:
+            payload, _metadata = self.ensure_materialized(force=force_rebuild)
+            rows = payload.get("rows", [])
+        else:
+            rows = self._build_enriched_rows()
+        return [public_catalog_row(row) for row in rows if isinstance(row, dict)]
+
+    def filter(
+        self,
+        filters: dict[str, Any],
+        *,
+        use_materialized: bool = True,
+        force_rebuild: bool = False,
+    ) -> list[dict[str, Any]]:
+        if use_materialized:
+            payload, _metadata = self.ensure_materialized(force=force_rebuild)
+            rows = self.materialized.candidate_rows(payload, filters)
+        else:
+            rows = self._build_enriched_rows()
+        return filter_catalog_rows(rows, filters)
+
+    def ensure_materialized(self, *, force: bool = False) -> tuple[dict[str, Any], dict[str, Any]]:
+        benchmark_root = self.profile.workspace / ".aiplane" / "benchmarks"
+        input_digest = self.materialized.input_digest(self.config, self.store.generated_path, benchmark_root)
+        if not force:
+            cached = self.materialized.load(input_digest)
+            if cached is not None:
+                return cached, materialized_metadata(self.materialized.path, cached, rebuilt=False, persisted=True)
+        from .benchmarks import latest_benchmark_summaries
+
+        rows = self._build_enriched_rows(latest_benchmark_summaries(self.profile))
+        persisted = True
+        error = None
+        try:
+            payload = self.materialized.write(rows, input_digest)
+        except OSError as exc:
+            persisted = False
+            error = str(exc)
+            payload = self.materialized.build_payload(rows, input_digest)
+        return payload, materialized_metadata(
+            self.materialized.path, payload, rebuilt=True, persisted=persisted, error=error
+        )
+
+    def rebuild_materialized(self) -> dict[str, Any]:
+        _payload, metadata = self.ensure_materialized(force=True)
+        return metadata
+
+    def materialized_status(self) -> dict[str, Any]:
+        benchmark_root = self.profile.workspace / ".aiplane" / "benchmarks"
+        input_digest = self.materialized.input_digest(self.config, self.store.generated_path, benchmark_root)
+        payload = self.materialized.load(input_digest)
+        if payload is None:
+            return {
+                "path": str(self.materialized.path),
+                "available": self.materialized.path.is_file(),
+                "current": False,
+                "schema_version": "1.0",
+            }
+        return materialized_metadata(self.materialized.path, payload, rebuilt=False, persisted=True)
+
+    def clear_materialized(self) -> dict[str, Any]:
+        removed = self.materialized.clear()
+        return {"path": str(self.materialized.path), "removed": removed}
+
+    def _build_enriched_rows(
+        self,
+        benchmark_summaries: dict[str, dict[str, Any]] | None = None,
+    ) -> list[dict[str, Any]]:
+        from .benchmarks import latest_benchmark_summaries
         from .runtime_catalog import RuntimeCatalog
 
-        runtime_catalog = RuntimeCatalog(self.profile)
-        from .benchmarks import latest_benchmark_summary
-
-        for name, model in self.models().items():
+        summaries = benchmark_summaries if benchmark_summaries is not None else latest_benchmark_summaries(self.profile)
+        models = self.models()
+        providers = self.providers()
+        runtime_catalog = RuntimeCatalog(self.profile, generated_models_config=self.generated_config)
+        rows = []
+        for name, model in models.items():
             serving_provider = str(model.get("provider") or "")
-            provider = self.providers().get(serving_provider, {})
+            provider = providers.get(serving_provider, {})
             source_provider = model_source(model)
             capabilities = capability_profile(model)
-
-            latest_benchmark = latest_benchmark_summary(self.profile, name)
             supported_runtimes = runtime_catalog.compatible_runtimes_for_entry(model, include_gui=True)
             ownership = ownership_for_model(model, provider)
             runtime_endpoint = None if ownership == "managed_service" else serving_provider
-            configured_runtime_endpoints = [runtime for runtime in supported_runtimes if runtime in self.providers()]
+            configured_runtime_endpoints = [runtime for runtime in supported_runtimes if runtime in providers]
             runtime_value = (
                 None
                 if ownership == "managed_service"
@@ -397,7 +486,7 @@ class ModelCatalog:
                     "model": model.get("model"),
                     "parameter_count_b": _parameter_billions(str(model.get("model") or "")),
                     "capability_avg_score": _capability_average(capabilities),
-                    "latest_benchmark": latest_benchmark,
+                    "latest_benchmark": summaries.get(name),
                     "ownership": ownership,
                     "runtime": runtime_value,
                     "supported_runtimes": supported_runtimes,
@@ -418,85 +507,10 @@ class ModelCatalog:
                     "capability_tags": capability_tags(capabilities),
                     "top_capabilities": top_capabilities(capabilities),
                     "capabilities": capabilities,
+                    "_properties": safe_catalog_properties(model),
                 }
             )
         return sorted(rows, key=lambda row: row["name"])
-
-    def filter(self, filters: dict[str, Any]) -> list[dict[str, Any]]:
-        rows = self.list()
-        capability_filters = filters.get("capabilities") or {}
-        result = []
-        from .runtime_catalog import RuntimeCatalog
-
-        runtime_catalog = RuntimeCatalog(self.profile)
-        for row in rows:
-            model = self.get(str(row["name"]))
-            if filters.get("provider") and row.get("provider") != filters["provider"]:
-                continue
-            if filters.get("source") and row.get("source") != filters["source"]:
-                continue
-            if filters.get("runtime") and filters["runtime"] not in runtime_catalog.supported_runtimes(
-                str(row["name"])
-            ):
-                continue
-            roles_filter = _string_list(filters.get("roles") or filters.get("role"))
-            if roles_filter and not any(role in row.get("roles", []) for role in roles_filter):
-                continue
-            if filters.get("enabled_only") and not row.get("enabled"):
-                continue
-            if filters.get("ownership") and row.get("ownership") != filters["ownership"]:
-                continue
-            score_source = filters.get("score_source")
-            if score_source and row.get("capabilities", {}).get("score_source") != score_source:
-                continue
-            min_capability_avg = filters.get("min_capability_avg_score")
-            if min_capability_avg is not None and float(row.get("capability_avg_score", 0)) < float(min_capability_avg):
-                continue
-            benchmark = row.get("latest_benchmark") if isinstance(row.get("latest_benchmark"), dict) else None
-            min_benchmark = filters.get("min_benchmark_score")
-            if min_benchmark is not None:
-                if not benchmark or float(benchmark.get("average_score", 0)) < float(min_benchmark):
-                    continue
-            if filters.get("require_benchmark") and not benchmark:
-                continue
-            min_likes = filters.get("min_likes")
-            if min_likes is not None and float(row.get("likes") or 0) < float(min_likes):
-                continue
-            min_downloads = filters.get("min_downloads")
-            if min_downloads is not None and float(row.get("downloads") or 0) < float(min_downloads):
-                continue
-            scores = row["capabilities"]["scores"]
-            if any(int(scores.get(name, 0)) < minimum for name, minimum in capability_filters.items()):
-                continue
-            min_ram = filters.get("max_min_ram_gb")
-            if (
-                min_ram is not None
-                and _number_or_none(model.get("min_ram_gb"))
-                and _number_or_none(model.get("min_ram_gb")) > float(min_ram)
-            ):
-                continue
-            min_vram = filters.get("max_min_vram_gb")
-            if (
-                min_vram is not None
-                and _number_or_none(model.get("min_vram_gb"))
-                and _number_or_none(model.get("min_vram_gb")) > float(min_vram)
-            ):
-                continue
-            min_parameters = filters.get("min_parameters_b")
-            parameters = _parameter_billions(str(model.get("model") or ""))
-            if min_parameters is not None and parameters < float(min_parameters):
-                continue
-            max_parameters = filters.get("max_parameters_b")
-            if max_parameters is not None and (parameters <= 0 or parameters > float(max_parameters)):
-                continue
-            gpu_vendor = filters.get("gpu_vendor")
-            if gpu_vendor and not _matches_gpu_vendor_requirement(model, str(gpu_vendor)):
-                continue
-            accelerator_api = filters.get("accelerator_api")
-            if accelerator_api and not _matches_accelerator_api_requirement(model, str(accelerator_api)):
-                continue
-            result.append(row)
-        return sorted(result, key=lambda row: str(row["name"]))
 
     def sort_rows(
         self,
@@ -611,6 +625,7 @@ class ModelCatalog:
         limit: int = 500,
         progress: Callable[[str, str, str], None] | None = None,
         verbose: bool = False,
+        materialize: bool = True,
     ) -> dict[str, Any]:
         from .providers import ProviderRegistry
 
@@ -658,7 +673,7 @@ class ModelCatalog:
             )
         if progress:
             progress("succeeded", provider_name, f"{len(discovered.models)} source model(s)")
-        return ModelRefreshCoordinator().run(
+        result = ModelRefreshCoordinator().run(
             self,
             discovered,
             provider_name,
@@ -669,6 +684,9 @@ class ModelCatalog:
             limit=limit,
             verbose=verbose,
         )
+        if write and materialize:
+            result["materialized_catalog"] = self.rebuild_materialized()
+        return result
 
     def _refresh_failure_result(
         self,
@@ -779,6 +797,7 @@ class ModelCatalog:
                     limit=provider_limit,
                     progress=progress,
                     verbose=verbose,
+                    materialize=False,
                 )
                 provider_result = result.get("results", {}).get(provider_name, {})
                 results[provider_name] = provider_result
@@ -833,7 +852,7 @@ class ModelCatalog:
             "removed": sum(int(row.get("changes", {}).get("removed", 0)) for row in rows),
             "would_remove": sum(int(row.get("changes", {}).get("would_remove", 0)) for row in rows),
         }
-        return {
+        result = {
             "name": "model_catalog_refresh_all",
             "write": write,
             "new_entries_enabled": enable,
@@ -852,6 +871,9 @@ class ModelCatalog:
             "skipped_providers": skipped_providers,
             "next_steps": _refresh_next_steps(write, changes),
         }
+        if write:
+            result["materialized_catalog"] = self.rebuild_materialized()
+        return result
 
     def promote_generated(
         self,

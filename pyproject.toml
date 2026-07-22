@@ -44,6 +44,7 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+markers = ["performance: opt-in scale and timing benchmarks"]
 
 [tool.setuptools]
 script-files = ["scripts/provider_helper.sh", "scripts/ollama_helper.sh"]

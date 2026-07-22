@@ -242,13 +242,17 @@ def add_models_parser(
         default="none",
         help="Group output by model provider, provider ownership/provider, model source/catalog, supported runtime, or provider-native model id",
     )
+    models_list.add_argument("--alias", help="Filter by exact profile/discovered model alias")
+    models_list.add_argument("--model-id", help="Filter by exact provider-native model id")
     models_list.add_argument(
         "--provider",
         help="Filter by model provider, such as ollama, huggingface, or huggingface_gguf",
     )
     models_list.add_argument(
         "--runtime",
-        help="Filter by supported runtime, such as ollama, vllm, tgi, transformers",
+        "--runner",
+        dest="runtime",
+        help="Filter by supported runtime/runner, such as ollama, vllm, tgi, transformers",
     )
     models_list.add_argument(
         "--source",
@@ -265,6 +269,19 @@ def add_models_parser(
         action="append",
         default=[],
         help="Require a capability threshold, e.g. code_generation>=4 or debugging>=3; can be repeated",
+    )
+    models_list.add_argument(
+        "--property",
+        action="append",
+        default=[],
+        metavar="FIELD=VALUE",
+        help="Filter by an exact raw model property; supports dotted paths and can be repeated, e.g. quantization=q4 or source_metadata.pipeline_tag=text-generation",
+    )
+    models_list.add_argument(
+        "--catalog-cache",
+        choices=["auto", "off", "rebuild"],
+        default="auto",
+        help="Use the generated enriched catalog, bypass it, or rebuild it before querying",
     )
     models_list.add_argument(
         "--min-capability-avg-score",
@@ -372,6 +389,14 @@ def add_models_parser(
         type=int,
         help="Maximum number of rows to print after filtering and sorting",
     )
+    models_catalog_cache = models_sub.add_parser(
+        "catalog-cache",
+        help="Inspect, rebuild, or clear the generated enriched model catalog",
+        description="Manage the disposable query-ready catalog generated from models.yaml, models.discovered.yaml, runtime metadata, and benchmark summaries.",
+        formatter_class=formatter_class,
+    )
+    profile_arg(models_catalog_cache)
+    models_catalog_cache.add_argument("action", choices=["status", "rebuild", "clear"])
     models_show = models_sub.add_parser(
         "show",
         help="Show one model alias",
@@ -681,6 +706,15 @@ def handle_models_command(
     if args.models_command == "disable":
         print(json_dumps(catalog.set_enabled(args.name, False), indent=2))
         return 0
+    if args.models_command == "catalog-cache":
+        if args.action == "status":
+            payload = catalog.materialized_status()
+        elif args.action == "rebuild":
+            payload = catalog.rebuild_materialized()
+        else:
+            payload = catalog.clear_materialized()
+        print(json_dumps(payload, indent=2))
+        return 0
     if args.models_command == "list":
         filters = model_filter_args(args)
         if args.fits_hardware:
@@ -693,7 +727,11 @@ def handle_models_command(
             current_machine=args.current_machine,
         )
         rows = catalog.sort_rows(
-            catalog.filter(filters),
+            catalog.filter(
+                filters,
+                use_materialized=args.catalog_cache != "off",
+                force_rebuild=args.catalog_cache == "rebuild",
+            ),
             sort_by=args.sort_by,
             roles=filters.get("roles", []),
         )

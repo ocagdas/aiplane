@@ -290,6 +290,17 @@ The normal full suite remains hermetic: cloud, runtime, SSH, and HTTP boundaries
 python -m pytest -q -n 4 --dist loadfile --durations=30
 ```
 
+Catalog scale measurements are opt-in and generate synthetic, secret-free rows:
+
+```bash
+python scripts/benchmark_catalog_queries.py --sizes 1000 10000 100000 --repeats 5
+AIPLANE_RUN_PERFORMANCE=1 python -m pytest -q tests/performance/test_catalog_query_performance.py
+```
+
+The normal suite skips these timing cases. Keep correctness assertions comparing
+indexed and full-scan results; treat elapsed times as local regression evidence,
+not portable performance guarantees.
+
 The packaging test builds and installs one wheel in an isolated venv and owns wheel-content, helper, schema, bootstrap, and preservation contracts. Upgrade/replacement/uninstall lifecycle verification is intentionally separate in `scripts/verify_install_channels.py`, the cross-platform CI matrix, and the release workflow; do not nest that complete lifecycle inside the packaging unit again.
 
 Four file-scheduled workers remain the portable default. On a suitably provisioned local machine, `AIPLANE_TEST_WORKERS=6 scripts/check.sh` is a measured optional speedup. Keep the default conservative for shared CI runners, and retain `AIPLANE_TEST_WORKERS=0` for serial diagnosis.

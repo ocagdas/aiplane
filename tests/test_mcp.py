@@ -43,6 +43,7 @@ class McpTests(unittest.TestCase):
         self.assertIn("aiplane.models.refresh", names)
         self.assertIn("aiplane.models.use", names)
         self.assertIn("aiplane.runtimes.status", names)
+        self.assertIn("aiplane.hardware.assess", names)
         self.assertTrue(any(tool["mutates"] for tool in manifest["tools"]))
         self.assertTrue(
             all(tool["mutates"] for tool in manifest["write_tools"] if tool["name"] != "aiplane.remote.tunnel.status")
@@ -71,6 +72,33 @@ class McpTests(unittest.TestCase):
         result = response["result"]
         self.assertIn("local-dev", result["structuredContent"]["profiles"])
         self.assertEqual(result["content"][0]["type"], "text")
+
+    def test_mcp_hardware_assess_forwards_explicit_assumptions(self) -> None:
+        expected = {"placement": {"eligible": True}, "score": {"selection_score": 80}}
+        with patch("aiplane.mcp.HardwareManager.assess", return_value=expected) as assess:
+            response = AiplaneMcpServer(Path.cwd()).handle_message(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 203,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "aiplane.hardware.assess",
+                        "arguments": {
+                            "model": "fixture-analysis-small",
+                            "runtime": "ollama",
+                            "context_tokens": 32768,
+                            "score_profile": "throughput",
+                        },
+                    },
+                }
+            )
+        self.assertEqual(response["result"]["structuredContent"], expected)
+        assess.assert_called_once_with(
+            "fixture-analysis-small",
+            runtime="ollama",
+            context_tokens=32768,
+            score_profile="throughput",
+        )
 
     def test_mcp_docs_tools_list_and_read_docs(self) -> None:
         server = AiplaneMcpServer(Path.cwd())

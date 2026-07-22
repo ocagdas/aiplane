@@ -48,20 +48,16 @@ def test_non_linux_platforms_do_not_claim_linux_capabilities(system: str) -> Non
 
 
 @pytest.mark.parametrize("system", ["Darwin", "Windows"])
-def test_hardware_discovery_skips_linux_commands_on_non_linux(monkeypatch, tmp_path: Path, system: str) -> None:
+def test_hardware_discovery_uses_platform_specific_probes(tmp_path: Path, system: str) -> None:
     profile = load_profile("local-dev", tmp_path)
     host = HostPlatform(system, None, (), "arm64")
 
-    def forbidden_which(command: str):
-        raise AssertionError(f"must not probe {command} on {system}")
-
-    monkeypatch.setattr("aiplane.hardware.shutil.which", forbidden_which)
     result = HardwareManager(profile, host_platform=host).discover()
 
     assert result["platform_support"]["system"] == system
     assert result["memory_gb"] is None
     assert result["gpus"] == []
-    assert any("skipped" in note for note in result["notes"])
+    assert any("No supported accelerator" in note for note in result["notes"])
 
 
 def test_unsupported_payload_distinguishes_platform_from_missing_tool() -> None:

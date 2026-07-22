@@ -79,6 +79,11 @@ READ_ONLY_TOOLS: list[dict[str, Any]] = [
         "mutates": False,
     },
     {
+        "name": "aiplane.hardware.assess",
+        "description": "Explain memory, runtime placement, and scoring for one model.",
+        "mutates": False,
+    },
+    {
         "name": "aiplane.machines.list",
         "description": "List configured machine profiles without contacting cloud APIs.",
         "mutates": False,
@@ -290,7 +295,22 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
         "properties": {
             "profile": {"type": "string"},
             "include_not_recommended": {"type": "boolean", "default": False},
+            "runtime": {"type": "string"},
+            "context_tokens": {"type": "integer", "minimum": 1},
+            "score_profile": {"type": "string"},
         },
+        "additionalProperties": False,
+    },
+    "aiplane.hardware.assess": {
+        "type": "object",
+        "properties": {
+            "profile": {"type": "string"},
+            "model": {"type": "string"},
+            "runtime": {"type": "string"},
+            "context_tokens": {"type": "integer", "minimum": 1},
+            "score_profile": {"type": "string"},
+        },
+        "required": ["model"],
         "additionalProperties": False,
     },
     "aiplane.machines.list": {
@@ -664,7 +684,21 @@ class AiplaneMcpServer:
             return HardwareManager(profile).discover()
         if name == "aiplane.hardware.recommend":
             return HardwareManager(profile).recommend(
-                include_not_recommended=bool(arguments.get("include_not_recommended", False))
+                include_not_recommended=bool(arguments.get("include_not_recommended", False)),
+                runtime=str(arguments.get("runtime") or "") or None,
+                context_tokens=(
+                    int(arguments["context_tokens"]) if arguments.get("context_tokens") is not None else None
+                ),
+                score_profile=str(arguments.get("score_profile") or "") or None,
+            )
+        if name == "aiplane.hardware.assess":
+            return HardwareManager(profile).assess(
+                str(arguments.get("model") or ""),
+                runtime=str(arguments.get("runtime") or "") or None,
+                context_tokens=(
+                    int(arguments["context_tokens"]) if arguments.get("context_tokens") is not None else None
+                ),
+                score_profile=str(arguments.get("score_profile") or "") or None,
             )
         if name == "aiplane.machines.list":
             return MachineManager(profile).list()

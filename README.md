@@ -214,6 +214,7 @@ aiplane models list --provider ollama --runtime ollama --role chat --current-mac
 
 # 4. Replace DISCOVERED_ALIAS with one alias from the ALIAS column, then review it.
 aiplane models show DISCOVERED_ALIAS
+aiplane hardware assess DISCOVERED_ALIAS --runtime ollama --context-tokens 32768
 aiplane models promote DISCOVERED_ALIAS --as local_chat --dry-run
 aiplane models promote DISCOVERED_ALIAS --as local_chat
 aiplane models use chat_model local_chat
@@ -238,6 +239,12 @@ default. Use `--identity alias` or `--identity model` for one value per line, or
 `--identity both` for the normal full output. Host-client exports print reviewed
 configuration; they do not install, launch, or edit Codex, Copilot CLI, or VS
 Code. Type `/exit` to leave chat.
+
+Catalog refresh also builds an ignored query cache, so filters over provider,
+runner, parameter size, benchmark score, and exact model properties remain fast
+without replacing the reviewable YAML source of truth. Inspect it with
+`aiplane models catalog-cache status`; bypass it for comparison with
+`aiplane models list --catalog-cache off`.
 
 ## Profiles, render, export, and replay
 

@@ -162,6 +162,28 @@ def add_hardware_machine_parsers(
         action="store_true",
         help="Also show models below minimum local RAM/VRAM targets",
     )
+    hardware_recommend.add_argument("--runtime", help="Evaluate placement for one runtime")
+    hardware_recommend.add_argument("--context-tokens", type=int, help="Requested inference context")
+    hardware_recommend.add_argument("--score-profile", help="Named placement-scoring profile")
+    hardware_assess = hardware_sub.add_parser(
+        "assess",
+        help="Explain placement and scoring for one model",
+        description="Estimate weights, KV cache, runtime placement modes, blockers, and the versioned placement-readiness score.",
+        formatter_class=formatter_class,
+        allow_abbrev=False,
+    )
+    profile_arg(hardware_assess)
+    hardware_assess.add_argument("model", help="Model alias from the active profile")
+    hardware_assess.add_argument("--runtime", help="Evaluate placement for one runtime")
+    hardware_assess.add_argument("--context-tokens", type=int, help="Requested inference context")
+    hardware_assess.add_argument("--score-profile", help="Named placement-scoring profile")
+    hardware_scoring = hardware_sub.add_parser(
+        "scoring",
+        help="Show scoring profiles and extension contract",
+        formatter_class=formatter_class,
+        allow_abbrev=False,
+    )
+    profile_arg(hardware_scoring)
     hardware_export = hardware_sub.add_parser(
         "export-machine",
         help="Export this machine profile",
@@ -429,10 +451,31 @@ def handle_hardware_machine_command(
         if args.hardware_command == "recommend":
             print(
                 json_dumps(
-                    manager.recommend(include_not_recommended=args.include_not_recommended),
+                    manager.recommend(
+                        include_not_recommended=args.include_not_recommended,
+                        runtime=args.runtime,
+                        context_tokens=args.context_tokens,
+                        score_profile=args.score_profile,
+                    ),
                     indent=2,
                 )
             )
+            return 0
+        if args.hardware_command == "assess":
+            print(
+                json_dumps(
+                    manager.assess(
+                        args.model,
+                        runtime=args.runtime,
+                        context_tokens=args.context_tokens,
+                        score_profile=args.score_profile,
+                    ),
+                    indent=2,
+                )
+            )
+            return 0
+        if args.hardware_command == "scoring":
+            print(json_dumps(manager.scoring(), indent=2))
             return 0
         if args.hardware_command == "export-machine":
             exported = MachineManager(profile).export_machine(

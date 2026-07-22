@@ -35,10 +35,44 @@ machine_schema:
   gpu_indices: optional list of physical GPU indices to use
   vram_gb: per-runtime usable discrete GPU VRAM; use max single GPU unless model parallelism is configured
   total_vram_gb: total visible VRAM across GPUs
+  free_vram_gb: currently free VRAM on the best single GPU when detected
+  total_free_vram_gb: currently free VRAM summed only as inventory evidence
+  gpu_devices: normalized per-device identity, vendor, backend, capacity, driver, and bus evidence
+  gpu_topology: detected interconnect evidence; does not imply that every runtime can shard a model
   unified_memory_gb: unified CPU/GPU memory pool when applicable
   accelerator_apis: cuda, rocm, metal, vulkan, openvino, cpu
   os: linux, windows, macos, or auto
   notes: free-form operator notes
+placement_scoring:
+  default_profile: balanced
+  profiles:
+    balanced:
+      weights:
+        resource_fit: 0.30
+        runtime_readiness: 0.25
+        context_fit: 0.15
+        task_suitability: 0.15
+        measured_performance: 0.10
+        evidence_confidence: 0.05
+    quality_evidence:
+      weights:
+        resource_fit: 0.20
+        runtime_readiness: 0.15
+        context_fit: 0.15
+        task_suitability: 0.20
+        measured_quality: 0.25
+        evidence_confidence: 0.05
+    throughput:
+      weights:
+        resource_fit: 0.25
+        runtime_readiness: 0.20
+        context_fit: 0.10
+        task_suitability: 0.10
+        measured_performance: 0.30
+        evidence_confidence: 0.05
+  extensions: []
+  # Extensions are data-only. Each entry declares name, source_key, weight,
+  # and optional description; model values live under score_contributions.
 hardware_profiles:
   local_auto:
     machine_tag: local_auto
