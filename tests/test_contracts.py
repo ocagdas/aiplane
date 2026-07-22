@@ -469,6 +469,11 @@ def test_release_workflow_is_checksummed_versioned_and_quality_gated() -> None:
     assert "python scripts/verify_release_manifest.py dist" in workflow
     assert "Verify published release assets" in workflow
     assert "published-assets.txt" in workflow
+    assert "uses: actions/attest@v4" in workflow
+    assert "subject-checksums: dist/SHA256SUMS" in workflow
+    assert "gh attestation verify dist/aiplane-*" in workflow
+    assert "python scripts/render_release_notes.py" in workflow
+    assert Path("CHANGELOG.md").is_file()
     for text in (setup, process):
         assert "SHA256SUMS" in text
         assert "rollback" in text.lower()
@@ -619,6 +624,8 @@ def test_published_release_workflow_verifies_every_os_and_install_owner() -> Non
     assert "channel: [pip, pipx, uv]" in workflow
     assert "gh release download" in workflow
     assert "python scripts/verify_release_manifest.py release" in workflow
+    assert "attestations: read" in workflow
+    assert "gh attestation verify release/aiplane-*" in workflow
     assert 'python scripts/verify_install_channels.py release --channel "$CHANNEL"' in workflow
     assert "python scripts/write_release_evidence.py" in workflow
     assert "python scripts/validate_trial_evidence.py" in workflow

@@ -12,6 +12,7 @@ from typing import Any
 from .boundaries import CommandRunner, SubprocessCommandRunner
 from .persistence import atomic_write_text
 from .config import dump_yaml
+from .evidence import evidence_provenance, evidence_source
 from .model_catalog import ModelCatalog, capability_profile
 from .runtime_catalog import RuntimeCatalog
 from .policy import PolicyEngine
@@ -743,28 +744,22 @@ def _recommendation_run_provenance(
         "gpu_count": len(discovered.get("gpus", []) or []),
     }
     unresolved = sorted(key for key, value in detected.items() if value is None)
-    return {
-        "schema_version": "1.0",
-        "method": "deterministic_fit_runtime_policy_capability_order",
-        "sources": [
-            {"state": "configured", "source": "models.yaml", "name": "model_catalog"},
-            {"state": "configured", "source": "hardware.yaml#/selected", "name": "active_machine"},
-            {"state": "detected", "source": "hardware.discover", "name": "current_machine", "facts": detected},
-            {"state": "generated", "source": "runtime_catalog", "name": "runtime_compatibility"},
-            {
-                "state": "configured",
-                "source": "repository.yaml + approvals.yaml",
-                "name": "policy",
-            },
-        ],
-        "machine": {
-            "name": machine.get("name"),
-            "origin": machine.get("origin"),
-        },
-        "benchmark_records": len(benchmark_summaries),
-        "benchmark_role": "context_only_not_used_for_ranking",
-        "unresolved_detected_facts": unresolved,
-    }
+    sources = [
+        evidence_source("model_catalog", "configured", "models.yaml"),
+        evidence_source("active_machine", "configured", "hardware.yaml#/selected", value=machine.get("name")),
+        evidence_source("current_machine", "detected", "hardware.discover", value=detected),
+        evidence_source("runtime_compatibility", "generated", "runtime_catalog"),
+        evidence_source("policy", "configured", "repository.yaml + approvals.yaml"),
+    ]
+    return evidence_provenance(
+        sources,
+        uncertainty=[f"live hardware fact is unavailable: {name}" for name in unresolved],
+        method="deterministic_fit_runtime_policy_capability_order",
+        machine={"name": machine.get("name"), "origin": machine.get("origin")},
+        benchmark_records=len(benchmark_summaries),
+        benchmark_role="context_only_not_used_for_ranking",
+        unresolved_detected_facts=unresolved,
+    )
 
 
 def _model_recommendation_provenance(
@@ -850,13 +845,12 @@ def _model_recommendation_provenance(
         uncertainty.append("no supported local runtime is known")
     if discovered.get("memory_gb") is None:
         uncertainty.append("live system memory discovery is unavailable; configured machine values may be used")
-    return {
-        "schema_version": "1.0",
-        "sources": sources,
-        "sample_count": sample_count,
-        "evidence_state": "partial" if uncertainty else "complete",
-        "uncertainty": uncertainty,
-    }
+    return evidence_provenance(
+        sources,
+        sample_count=sample_count,
+        uncertainty=uncertainty,
+        method="deterministic_model_fit_explanation",
+    )
 
 
 def _recommendation_runtime_compatibility(

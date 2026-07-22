@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from scripts.render_release_notes import ReleaseNotesError, render_notes, unreleased_notes
 from scripts.verify_release_manifest import ManifestError, parse_manifest, verify_directory
 from scripts.write_release_evidence import main as write_evidence
 
@@ -83,3 +84,20 @@ def test_release_evidence_writer_emits_a_canonical_sanitized_record(tmp_path: Pa
     assert record["artifact"]["version"] == "0.1.2"
     assert record["environment"]["install_channel"] == "pipx"
     assert record["outcome"]["completed"] is True
+
+
+def test_release_notes_are_rendered_from_tracked_unreleased_changes() -> None:
+    changelog = Path("CHANGELOG.md").read_text(encoding="utf-8")
+    checksums = f"{'a' * 64}  aiplane-0.2.0-py3-none-any.whl\n{'b' * 64}  aiplane-0.2.0.tar.gz\n"
+    notes = render_notes("v0.2.0", "minor", "c" * 40, changelog, checksums)
+    assert unreleased_notes(changelog) in notes
+    assert "pre-1.0" in notes
+    assert "gh attestation verify" in notes
+    assert "Upgrade and rollback" in notes
+
+
+def test_release_notes_reject_missing_changes_and_incomplete_manifests() -> None:
+    with pytest.raises(ReleaseNotesError, match="at least one change"):
+        unreleased_notes("# Changelog\n\n## Unreleased\n")
+    with pytest.raises(ReleaseNotesError, match="exactly one wheel"):
+        render_notes("v0.2.0", "minor", "c" * 40, "## Unreleased\n\n- change\n", "one row\n")

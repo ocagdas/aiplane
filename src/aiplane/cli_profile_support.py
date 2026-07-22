@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from .config import CONFIG_FILES
+from .evidence import evidence_provenance, evidence_source
 from .model_catalog import ModelCatalog
 from .profile_schema import PROFILE_SCHEMA_VERSION, canonical_profile, structural_profile_findings
 
@@ -9,6 +11,7 @@ def _profile_summary(profile, default_name: str | None = None) -> dict[str, obje
         "name": profile.name,
         "default": profile.name == default_name,
         "root": str(profile.root),
+        "provenance": _profile_evidence(profile),
         "workspace": str(profile.workspace),
         "selected": _profile_selected(profile, default_name),
         "environment": profile.environment,
@@ -31,6 +34,7 @@ def _profile_selected(profile, default_name: str | None = None) -> dict[str, obj
         "name": profile.name,
         "default": profile.name == default_name,
         "root": str(profile.root),
+        "provenance": _profile_evidence(profile),
         "environment": {
             "active": profile.environment.get("active"),
             "config": _dict_value(profile.environment.get("modes", {})).get(str(profile.environment.get("active")), {}),
@@ -59,6 +63,21 @@ def _profile_selected(profile, default_name: str | None = None) -> dict[str, obj
         },
         "repository": profile.repository,
     }
+
+
+def _profile_evidence(profile) -> dict[str, object]:
+    sources = [
+        evidence_source(name, "configured", str(profile.root / filename))
+        for name, filename in CONFIG_FILES.items()
+        if (profile.root / filename).exists()
+    ]
+    missing = [filename for filename in CONFIG_FILES.values() if not (profile.root / filename).exists()]
+    sources.extend(evidence_source(filename, "unresolved", str(profile.root / filename)) for filename in missing)
+    return evidence_provenance(
+        sources,
+        uncertainty=([f"missing profile files: {', '.join(missing)}"] if missing else []),
+        method="profile_file_inventory",
+    )
 
 
 def _validate_profile(profile) -> dict[str, object]:

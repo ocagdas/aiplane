@@ -11,6 +11,7 @@ from .cli_profile_support import _validate_profile
 from .cli_runtimes import _run_provider_helper, _runtime_helper_substrate
 from .cli_support import parse_provider_limits as _parse_provider_limits, refresh_progress as _refresh_progress
 from .config import create_profile, load_profile, profiles_root
+from .evidence import evidence_provenance, evidence_source
 from .hardware import HardwareManager
 from .integrations import IntegrationManager
 from .local_doctor import local_coding_doctor
@@ -121,10 +122,10 @@ def _profile_provenance(
     endpoints: list[dict[str, object]] | None = None,
     integrations: list[dict[str, object]] | None = None,
 ) -> dict[str, object]:
-    values: list[dict[str, object]] = []
+    sources: list[dict[str, object]] = []
 
-    def add(state: str, source: str, name: str, value: object) -> None:
-        values.append({"state": state, "source": source, "name": name, "value": value})
+    def add(state: str, source: str | None, name: str, value: object = None) -> None:
+        sources.append(evidence_source(name, state, source, value=value))
 
     hardware = hardware or {}
     if hardware.get("cpu_count") is not None:
@@ -142,32 +143,31 @@ def _profile_provenance(
             add("generated", "integration_contracts", f"integration.{tool.get('name')}", tool.get("description"))
     for model in local_models or []:
         if isinstance(model, dict):
-            if model.get("origin") == "discovered_cache":
-                add("discovered", "models.discovered.yaml", f"model.{model.get('name')}", model.get("model"))
-            else:
-                add("user_supplied", "profile.models", f"model.{model.get('name')}", model.get("model"))
+            discovered = model.get("origin") == "discovered_cache"
+            add(
+                "discovered" if discovered else "configured",
+                "models.discovered.yaml" if discovered else "profile.models",
+                f"model.{model.get('name')}",
+                model.get("model"),
+            )
     for endpoint in endpoints or []:
         if isinstance(endpoint, dict):
-            state = "user_supplied" if endpoint.get("origin") == "profile" else "generated"
-            source = "profile.providers" if state == "user_supplied" else "provider_defaults"
-            add(state, source, f"endpoint.{endpoint.get('provider')}", endpoint.get("endpoint"))
+            configured = endpoint.get("origin") == "profile"
+            add(
+                "configured" if configured else "generated",
+                "profile.providers" if configured else "provider_defaults",
+                f"endpoint.{endpoint.get('provider')}",
+                endpoint.get("endpoint"),
+            )
     defaults = profile.models.get("defaults", {}) if isinstance(profile.models, dict) else {}
     if isinstance(defaults, dict):
         for key, value in sorted(defaults.items()):
-            if value:
-                add("user_supplied", "profile.defaults", f"defaults.{key}", value)
-            else:
-                add("unresolved", "profile.defaults", f"defaults.{key}", value)
+            add("configured" if value else "unresolved", "profile.defaults", f"defaults.{key}", value)
+    uncertainty: list[str] = []
     if not local_models:
         add("unresolved", "profile.models", "local_models", "no local model aliases discovered or configured")
-    summary = {
-        "detected_values": sum(1 for row in values if row["state"] == "detected"),
-        "generated_values": sum(1 for row in values if row["state"] == "generated"),
-        "discovered_values": sum(1 for row in values if row["state"] == "discovered"),
-        "user_supplied_values": sum(1 for row in values if row["state"] == "user_supplied"),
-        "unresolved_values": sum(1 for row in values if row["state"] == "unresolved"),
-    }
-    return {"summary": summary, "values": values}
+        uncertainty.append("no local model aliases were discovered or configured")
+    return evidence_provenance(sources, uncertainty=uncertainty, method="environment_inventory")
 
 
 def _bootstrap_local_profile(

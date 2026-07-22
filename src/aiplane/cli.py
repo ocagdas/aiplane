@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-import argparse
 import os
 import sys
 import traceback
@@ -15,12 +14,11 @@ from .config import (
     resolve_output_format,
     resolve_output_verbosity,
 )
-from .cli_config import add_config_parser, handle_config_command
-from .cli_deploy_remote import add_deploy_remote_parsers, handle_deploy_remote_command
-from .cli_help import HelpFormatter
-from .cli_hardware import add_hardware_machine_parsers, handle_hardware_machine_command
-from .cli_governance import add_governance_parsers, handle_governance_command
-from .cli_integrations import add_integrations_parser, handle_integrations_command
+from .cli_config import handle_config_command
+from .cli_deploy_remote import handle_deploy_remote_command
+from .cli_hardware import handle_hardware_machine_command
+from .cli_governance import handle_governance_command
+from .cli_integrations import handle_integrations_command, handle_integrations_import
 from .cli_launch_support import (
     _default_session_transcript,
     _launch_plan,
@@ -44,46 +42,25 @@ from .cli_public_workflows import (
     _public_discover,
     _quickstart_local_coding,
 )
-from .cli_stacks import add_stack_parsers, handle_stack_command
-from .cli_setup import add_setup_parsers, handle_setup_command
-from .cli_support_catalog import add_support_parser, handle_support_command
-from .cli_providers import add_providers_parser, handle_providers_command
-from .cli_runtimes import (
-    add_runtimes_parser,
-    handle_runtimes_command,
-)
-from .cli_execution import add_execution_parsers, handle_execution_command
-from .cli_public import add_public_parsers, handle_public_command
-from .cli_profiles import add_profiles_parser, handle_profiles_command
-from .cli_models import add_models_parser, handle_models_command
+from .cli_stacks import handle_stack_command
+from .cli_setup import handle_setup_command
+from .cli_support_catalog import handle_support_command
+from .cli_providers import handle_providers_command
+from .cli_runtimes import handle_runtimes_command
+from .cli_execution import handle_execution_command
+from .cli_public import handle_public_command
+from .cli_profiles import handle_profiles_command
+from .cli_models import handle_models_command
 from .cli_support import (
     parse_setting_value as _parse_setting_value,
     parse_settings as _parse_settings,
 )
-from .integration_contracts import ALL_INTEGRATION_TOOLS
+from .cli_parser import BRIDGE_ACTIONS, build_parser
 from .output import json_dumps as _json
-from .cli_version import add_version_argument, handle_version_argument
+from .cli_version import handle_version_argument
 
 
 _COMMAND_RUNNER: CommandRunner = SubprocessCommandRunner()
-
-
-def _command(subparsers, name: str, help_text: str, description: str, epilog: str | None = None):
-    return subparsers.add_parser(
-        name,
-        help=help_text,
-        description=description,
-        epilog=epilog,
-        formatter_class=HelpFormatter,
-        allow_abbrev=False,
-    )
-
-
-def _profile_arg(parser) -> None:
-    parser.add_argument(
-        "--profile",
-        help="Profile name. Optional: defaults to AIPLANE_PROFILE, local config default_profile, or the only available profile",
-    )
 
 
 def _profiles_dir_from_env() -> Path | None:
@@ -91,61 +68,6 @@ def _profiles_dir_from_env() -> Path | None:
     if env_path:
         return Path(env_path).expanduser().resolve()
     return None
-
-
-_BRIDGE_ACTIONS: dict[str, dict[str, object]] = {
-    "ollama-launch": {
-        "description": "Launch Ollama native app flow",
-        "base_command": ["ollama", "launch"],
-        "requires_model": False,
-        "supports_prompt": False,
-    },
-    "ollama-list": {
-        "description": "List local Ollama models",
-        "base_command": ["ollama", "list"],
-        "requires_model": False,
-        "supports_prompt": False,
-    },
-    "ollama-ps": {
-        "description": "List running Ollama models",
-        "base_command": ["ollama", "ps"],
-        "requires_model": False,
-        "supports_prompt": False,
-    },
-    "ollama-run": {
-        "description": "Run Ollama model by id/alias",
-        "base_command": ["ollama", "run"],
-        "requires_model": True,
-        "supports_prompt": True,
-    },
-}
-
-_LAUNCH_TOOLS = ("aider", "continue", "ollama")
-
-
-def _integration_selection_args(parser) -> None:
-    parser.add_argument(
-        "--provider",
-        help="Constrain model selection to a provider/source, such as ollama or vllm",
-    )
-    parser.add_argument(
-        "--runtime",
-        help="Constrain model selection to a compatible runtime, such as ollama, vllm, or tgi",
-    )
-    parser.add_argument(
-        "--capability",
-        action="append",
-        default=[],
-        help="Capability threshold used for selection, e.g. code_analysis>=3 or tool_use>=2; can be repeated",
-    )
-    parser.add_argument(
-        "--select-best",
-        action="store_true",
-        help="Select best-fit catalog models instead of using profile defaults",
-    )
-    parser.add_argument("--chat", help="Force a model alias for Continue chat/edit/apply")
-    parser.add_argument("--autocomplete", help="Force a model alias for Continue autocomplete")
-    parser.add_argument("--embedding", help="Force a model alias for Continue embeddings/retrieval")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -192,132 +114,7 @@ def _silence_stdout() -> None:
 
 
 def _main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        prog="aiplane",
-        description=(
-            "Diagnose and reproduce local and hybrid AI development environments.\n\n"
-            "aiplane is an environment doctor and configuration compiler. Its doctor is a read-only readiness diagnosis that turns\n"
-            "profile and environment facts into findings, hardware-aware recommendations, and deterministic exports."
-        ),
-        epilog=(
-            "Outcome: a profile-aware readiness report with an exact next export step.\n\n"
-            "Next command:\n"
-            "  aiplane quickstart local-coding --dry-run\n\n"
-            "Command maturity and coverage are documented in docs/project/project-plan.md#command-coverage.\n"
-            "Docs: docs/user/index.md"
-        ),
-        formatter_class=HelpFormatter,
-        allow_abbrev=False,
-    )
-    parser.add_argument(
-        "--debug",
-        action="store_true",
-        help="Show tracebacks for unexpected internal errors; may expose sensitive local context",
-    )
-    add_version_argument(parser)
-    parser.add_argument(
-        "--workspace",
-        default=".",
-        help="Workspace root for path checks, audit logs, benchmarks, and tool execution",
-    )
-    parser.add_argument(
-        "--profiles-dir",
-        help="Directory containing editable profiles. Defaults to AIPLANE_PROFILES_DIR when set, otherwise the repo-local profiles/ directory",
-    )
-    subparsers = parser.add_subparsers(dest="command", metavar="command")
-
-    add_public_parsers(
-        subparsers,
-        command_factory=_command,
-        profile_arg=_profile_arg,
-        integration_selection_args=_integration_selection_args,
-        formatter_class=HelpFormatter,
-        integration_tools=ALL_INTEGRATION_TOOLS,
-    )
-
-    add_config_parser(
-        subparsers,
-        command_factory=_command,
-        formatter_class=HelpFormatter,
-    )
-
-    add_profiles_parser(
-        subparsers,
-        command_factory=_command,
-        profile_arg=_profile_arg,
-        formatter_class=HelpFormatter,
-    )
-
-    add_execution_parsers(
-        subparsers,
-        command_factory=_command,
-        profile_arg=_profile_arg,
-        formatter_class=HelpFormatter,
-        launch_tools=_LAUNCH_TOOLS,
-        bridge_actions=_BRIDGE_ACTIONS,
-    )
-
-    add_hardware_machine_parsers(
-        subparsers,
-        command_factory=_command,
-        profile_arg=_profile_arg,
-        formatter_class=HelpFormatter,
-    )
-    add_stack_parsers(
-        subparsers,
-        command_factory=_command,
-        profile_arg=_profile_arg,
-        formatter_class=HelpFormatter,
-    )
-    add_models_parser(
-        subparsers,
-        command_factory=_command,
-        profile_arg=_profile_arg,
-        formatter_class=HelpFormatter,
-    )
-
-    add_integrations_parser(
-        subparsers,
-        command_factory=_command,
-        profile_arg=_profile_arg,
-        selection_args=_integration_selection_args,
-        formatter_class=HelpFormatter,
-    )
-
-    add_deploy_remote_parsers(
-        subparsers,
-        command_factory=_command,
-        profile_arg=_profile_arg,
-        formatter_class=HelpFormatter,
-    )
-
-    add_runtimes_parser(
-        subparsers,
-        command_factory=_command,
-        profile_arg=_profile_arg,
-        formatter_class=HelpFormatter,
-    )
-
-    add_providers_parser(
-        subparsers,
-        command_factory=_command,
-        profile_arg=_profile_arg,
-        formatter_class=HelpFormatter,
-    )
-
-    add_setup_parsers(
-        subparsers,
-        command_factory=_command,
-        profile_arg=_profile_arg,
-        formatter_class=HelpFormatter,
-    )
-    add_governance_parsers(
-        subparsers,
-        command_factory=_command,
-        profile_arg=_profile_arg,
-        formatter_class=HelpFormatter,
-    )
-    add_support_parser(subparsers, command_factory=_command, formatter_class=HelpFormatter)
+    parser = build_parser()
     args = parser.parse_args(argv)
     version_result = handle_version_argument(args)
     if version_result is not None:
@@ -359,8 +156,6 @@ def _main(argv: list[str] | None = None) -> int:
         return support_result
 
     if args.command == "integrations" and args.integrations_command == "import":
-        from .cli_integrations import handle_integrations_import
-
         return handle_integrations_import(args, profiles_dir=profiles_dir, json_dumps=_json)
 
     public_result = handle_public_command(
@@ -398,7 +193,7 @@ def _main(argv: list[str] | None = None) -> int:
         profiles_dir=profiles_dir,
         effective_profile=effective_profile,
         json_dumps=_json,
-        bridge_actions=_BRIDGE_ACTIONS,
+        bridge_actions=BRIDGE_ACTIONS,
         launch_plan=_launch_plan,
         new_session_id=_new_session_id,
         default_transcript=_default_session_transcript,

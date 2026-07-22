@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: read
+  attestations: read
 
 jobs:
   verify-release:
@@ -55,6 +56,12 @@ jobs:
 
       - name: Verify release checksums and artifact shape
         run: python scripts/verify_release_manifest.py release
+
+      - name: Verify release build provenance
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh attestation verify release/aiplane-* --repo "$GITHUB_REPOSITORY"
 
       - name: Exercise the selected no-clone install owner
         id: lifecycle
