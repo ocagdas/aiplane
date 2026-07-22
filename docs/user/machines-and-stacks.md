@@ -467,3 +467,15 @@ Limits, role bindings, approval labels, audit labels, and tool policies for orch
 - Same-host/local stack lifecycle is the first supported execution path. It calls `scripts/provider_helper.sh` directly for runtime install/pull/start/stop/restart actions.
 - SSH, Azure VM, and AKS stack lifecycle automation returns planned commands instead of executing until remote execution and audit controls are hardened.
 - Stack export artifacts are starter files, not guaranteed production-ready deployment manifests.
+
+
+## Render-only Kubernetes artifacts
+
+A configured stack can compile a deterministic Kubernetes review bundle without contacting a cluster:
+
+```bash
+aiplane stacks render-kubernetes STACK --image registry.example/runtime@sha256:REVIEWED --device-class gpu.example.com --cpu 4 --memory 32Gi --cache-size 100Gi
+aiplane stacks render-kubernetes STACK --image registry.example/runtime@sha256:REVIEWED --device-class gpu.example.com --file deployment.yaml
+```
+
+The family contains `ResourceClaim`, `Deployment`, `Service`, and Helm values. It consumes the stack launch manifest for the command and health path, and renders DRA claim count, resource quantities, probes, model cache, non-root security context, dropped capabilities, service type, and image pull policy. Output is secret-free, declares `render_only: true`, `apply_supported: false`, and `review_required: true`, and never invokes `kubectl` or Helm. Review the image, entrypoint, device class, quantities, storage strategy, networking, and runtime security before using the files elsewhere.

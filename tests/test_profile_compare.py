@@ -234,6 +234,8 @@ def test_multi_client_replay_check_proves_two_restores_and_exports_are_identical
     assert result["counts"]["exact"] == 2
     assert result["replay_ready"] is True
     assert {row["classification"] for row in result["clients"]} == {"exact"}
+    assert all(row["evidence"]["artifact_locks"]["left"] for row in result["clients"])
+    assert all(row["evidence"]["artifact_locks"]["right"] for row in result["clients"])
     assert client_exports == [approved_export, approved_export]
     assert before == {path: path.read_bytes() for path in (approved_archive, *client_archives)}
 

@@ -161,6 +161,11 @@ def add_stack_parsers(
         help="Optional orchestrator name, such as langgraph, crewai, autogen, or openhands",
     )
     stacks_setup.add_argument("--runtime", required=True, help="Runtime name")
+    stacks_setup.add_argument(
+        "--runtime-substrate",
+        choices=["native", "docker"],
+        help="Override the runtime helper substrate stored with this stack",
+    )
     stacks_setup.add_argument("--model", required=True, help="Configured model alias")
     stacks_setup.add_argument(
         "--machine",
@@ -307,6 +312,16 @@ def add_stack_parsers(
     stacks_kubernetes.add_argument("--device-class", required=True, help="Kubernetes DRA device class name")
     stacks_kubernetes.add_argument("--namespace", default="default")
     stacks_kubernetes.add_argument("--replicas", type=int, default=1)
+    stacks_kubernetes.add_argument("--claim-count", type=int, default=1, help="Accelerator devices requested per pod")
+    stacks_kubernetes.add_argument("--cpu", default="1", help="CPU request")
+    stacks_kubernetes.add_argument("--memory", default="4Gi", help="Memory request and limit")
+    stacks_kubernetes.add_argument("--cache-size", default="20Gi", help="Ephemeral model-cache size limit")
+    stacks_kubernetes.add_argument(
+        "--image-pull-policy", choices=["Always", "IfNotPresent", "Never"], default="IfNotPresent"
+    )
+    stacks_kubernetes.add_argument(
+        "--service-type", choices=["ClusterIP", "NodePort", "LoadBalancer"], default="ClusterIP"
+    )
     stacks_kubernetes.add_argument(
         "--file", choices=["resourceclaim.yaml", "deployment.yaml", "service.yaml", "values.yaml"]
     )
@@ -402,6 +417,7 @@ def handle_stack_command(
                         args.name,
                         orchestrator=args.orchestrator,
                         runtime=args.runtime,
+                        runtime_substrate=args.runtime_substrate,
                         model=args.model,
                         machine=args.machine,
                         access=args.access,
@@ -453,6 +469,12 @@ def handle_stack_command(
                 device_class=args.device_class,
                 namespace=args.namespace,
                 replicas=args.replicas,
+                claim_count=args.claim_count,
+                cpu=args.cpu,
+                memory=args.memory,
+                cache_size=args.cache_size,
+                image_pull_policy=args.image_pull_policy,
+                service_type=args.service_type,
             )
             if args.file:
                 print(payload["files"][args.file], end="")

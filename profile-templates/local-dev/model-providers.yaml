@@ -85,7 +85,7 @@ anthropic:
     required: true
     method: api_key
   typical_runtimes: []
-  catalog_adapter: profile_catalog
+  catalog_adapter: anthropic
   enabled: true
   origin: default
 azure_openai:

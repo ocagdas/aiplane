@@ -24,7 +24,10 @@ aiplane hardware set memory_gb=64 gpu_index=0
 aiplane hardware doctor
 aiplane hardware doctor --model MODEL_ALIAS
 aiplane hardware recommend
-aiplane hardware recommend --include-not-recommended
+aiplane hardware recommend --runtime ollama --context-tokens 32768
+aiplane hardware recommend --score-profile throughput --include-not-recommended
+aiplane hardware assess MODEL_ALIAS --runtime ollama --context-tokens 32768
+aiplane hardware scoring
 aiplane hardware export-machine --name local_box > local_box.machine.yaml
 ```
 
@@ -51,12 +54,19 @@ aiplane hardware export-machine --name local_box > local_box.machine.yaml
 - `doctor`: compares discovered hardware against model fit metadata such as
   minimum RAM and VRAM.
 - `recommend`: groups configured models into `recommended`, `usable`, and
-  `remote_or_cloud` for the current hardware. Models that do not meet local
-  minimums are hidden by default; use `--include-not-recommended` for the full
-  diagnostic list. JSON output includes versioned provenance for configured
-  model metadata, selected and detected hardware, runtime availability, policy,
-  benchmark sample count, and unresolved evidence. Benchmark results are
-  contextual and do not affect the current deterministic ranking.
+  `remote_or_cloud` for the current hardware. Local rows include resource
+  estimates, feasible placement modes, blockers, and a versioned placement-
+  readiness score. Use `--runtime`, `--context-tokens`, and
+  `--score-profile` to make those assumptions explicit. Models that fail a
+  hard policy, runtime, or placement gate are hidden by default; use
+  `--include-not-recommended` for the full diagnostic list.
+  JSON output retains versioned provenance for model, machine, discovery,
+  runtime, policy, benchmark sample count, and unresolved evidence.
+- `assess`: explains one model's weight, KV-cache and workspace estimates,
+  per-mode device capacity, runtime constraints, score components, normalized
+  weights, evidence coverage, and assumptions.
+- `scoring`: prints the available scoring profiles and the safe data-only
+  extension contract. It does not load plugins or execute hook commands.
 - `export-machine`: writes the normalized active machine as a portable machine
   profile that can be imported elsewhere with `aiplane machines import`.
 
@@ -125,6 +135,33 @@ Core fields:
   `vulkan`, `openvino`, or `cpu`.
 - `os`: operating system expected by the runtime.
 
+The schema can record several GPUs, their selected indices, and total VRAM, but
+the current recommendation engine deliberately compares a model with the largest
+single visible GPU. It does not add VRAM across devices unless a future placement
+assessment can prove that the selected runtime, model format, and parallelism
+mode support that layout. This avoids presenting an eight-GPU inventory as one
+large interchangeable memory pool.
+
+Live discovery is normalized into individual devices and homogeneous groups:
+
+| Capability | Current status |
+| --- | --- |
+| NVIDIA on Linux | Per-device index, name, total/free VRAM, UUID, PCI bus, compute capability and driver through `nvidia-smi`; multi-device topology is captured when available |
+| AMD on Linux | Per-device ROCm JSON evidence where available, with PCI identity fallback |
+| Intel on Linux | Per-device PCI identity and OpenVINO backend evidence; memory may remain unresolved |
+| Apple Silicon | Unified memory through `sysctl` and Metal GPU identity through `system_profiler` |
+| Windows | System/free memory and display-adapter identity, capacity and driver through PowerShell CIM |
+| Several visible GPUs | Preserved individually and grouped only when vendor, model and backend match; topology is evidence, not an automatic sharding claim |
+| MIG/partitions and full NUMA fabrics | Still partial; unresolved fields remain visible instead of being guessed |
+
+Placement estimation uses configured artifact size when available, otherwise
+parameter count and quantization with a documented overhead. KV cache is exact
+only when layer, attention-head, KV-head and head-dimension metadata are known.
+Without those fields it is marked unresolved. Runtime rules distinguish
+single-GPU, homogeneous tensor parallel/split, CPU offload and CPU-only modes.
+Total VRAM is never treated as one interchangeable pool merely because several
+devices are visible.
+
 Example Azure GPU VM selection:
 
 ```bash
@@ -182,26 +219,45 @@ unified-memory workstation, cloud GPU VM, or AKS GPU pool.
 
 ## Model Recommendation Criteria
 
-`aiplane hardware recommend` uses the normalized active machine plus profile
-metadata, not benchmark claims. The current criteria are deliberately simple and
-explainable:
+`aiplane hardware recommend` first applies hard policy, runtime and placement
+eligibility. Scoring cannot override a blocker. Eligible local models are then
+ordered by a versioned placement-readiness score whose components remain
+separate:
 
-- `recommended`: active machine RAM/VRAM meets the model's recommended RAM and
-  VRAM values. This is the target for reasonable local use.
-- `usable`: active machine RAM/VRAM meets minimum values but misses one or more
-  recommended values. The model may load, but latency or context size may be
-  painful.
-- `not_recommended`: active machine RAM/VRAM misses the configured minimums. These
-  are hidden by default because they are usually noise; use
-  `--include-not-recommended` when diagnosing why a model was excluded.
-- `remote_or_cloud`: local RAM/VRAM is not the deciding factor. Provider keys,
-  quota, endpoint health, and policy matter instead.
+- resource headroom for the selected feasible execution mode;
+- runtime readiness;
+- requested versus native context fit;
+- configured task-suitability metadata;
+- measured performance or quality only when a benchmark explicitly declares a
+  comparable evidence kind;
+- resource-estimate confidence.
 
-These thresholds are conservative estimates for loading and running small coding
-tasks. Recommendations include model capability scores; see
-[Model Capabilities](model-capabilities.md). Hardware thresholds and capability
-scores should later be refined with measured smoke tests such as load time, time
-to first token, tokens/sec, and completion latency on a standard prompt.
+Missing components are excluded by renormalizing the available weights, and
+`coverage` reports how much of the configured evidence was present. Ordinary
+smoke-test pass counts and catalog capability metadata are never relabeled as
+measured quality. The shipped `balanced`, `quality_evidence`, and
+`throughput` profiles live under `placement_scoring` in `hardware.yaml`.
+
+Teams can add reviewed external results without executable plugins:
+
+```yaml
+placement_scoring:
+  extensions:
+    - name: team_validation
+      source_key: team_validation
+      weight: 0.20
+      description: fixed internal evaluation
+
+# In one model entry in models.yaml:
+score_contributions:
+  team_validation:
+    value: 92
+    source: reviewed_eval_v2
+    basis: fixed internal suite
+```
+
+Extension values must be between 0 and 100. They are explicit model data, are
+shown in the component breakdown, and cannot run shell commands or import code.
 
 ## Resource Controls
 

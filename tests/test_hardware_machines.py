@@ -233,7 +233,7 @@ class HardwareMachineTests(unittest.TestCase):
                 "recommended_vram_gb",
             ],
         )
-        scores = [row["capability_avg_score"] for row in result["models"]["recommended"]]
+        scores = [row["selection_score"] for row in result["models"]["recommended"]]
         self.assertEqual(scores, sorted(scores, reverse=True))
 
     def test_hardware_recommend_includes_runtime_and_policy_metadata(self) -> None:
@@ -252,6 +252,39 @@ class HardwareMachineTests(unittest.TestCase):
         self.assertIn("runtime_recommendation", sample)
         self.assertIn("policy_decision", sample)
         self.assertIn("allowed", sample["policy_decision"])
+
+    def test_hardware_assess_and_scoring_cli_expose_versioned_evidence(self) -> None:
+        stdout = StringIO()
+        with redirect_stdout(stdout):
+            code = cli_main(
+                [
+                    "hardware",
+                    "assess",
+                    "fixture-analysis-small",
+                    "--runtime",
+                    "ollama",
+                    "--context-tokens",
+                    "32768",
+                    "--score-profile",
+                    "balanced",
+                    "--profile",
+                    "local-dev",
+                ]
+            )
+        self.assertEqual(code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["placement"]["schema_version"], "1.0")
+        self.assertEqual(payload["placement"]["context_tokens"], 32768)
+        self.assertEqual(payload["score"]["schema_version"], "1.0")
+        self.assertEqual(payload["score"]["profile"], "balanced")
+        self.assertIn("coverage", payload["score"])
+
+        stdout = StringIO()
+        with redirect_stdout(stdout):
+            self.assertEqual(cli_main(["hardware", "scoring", "--profile", "local-dev"]), 0)
+        scoring = json.loads(stdout.getvalue())
+        self.assertEqual(scoring["default_profile"], "balanced")
+        self.assertIn("throughput", scoring["profiles"])
 
     def test_hardware_recommend_can_include_not_recommended(self) -> None:
         profile = load_profile("local-dev", Path.cwd())

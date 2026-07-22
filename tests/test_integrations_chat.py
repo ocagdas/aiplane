@@ -1062,3 +1062,40 @@ class IntegrationChatTests(unittest.TestCase):
         self.assertIn("provider: openai", output)
         self.assertIn("model: managed-chat-model", output)
         self.assertIn("apiKey: ${OPENAI_API_KEY}", output)
+
+    def test_agents_manifest_and_export_are_versioned_and_render_only(self) -> None:
+        stdout = StringIO()
+        with redirect_stdout(stdout):
+            code = cli_main(
+                [
+                    "agents",
+                    "manifest",
+                    "repo-helper",
+                    "--model",
+                    "fixture-analysis-small",
+                    "--framework",
+                    "langgraph",
+                ]
+            )
+        self.assertEqual(code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["record_type"], "agent_environment")
+        self.assertTrue(payload["render_only"])
+        self.assertFalse(payload["execution_boundary"]["runs_agents"])
+        self.assertEqual(payload["roles"]["primary"]["model_alias"], "fixture-analysis-small")
+
+        stdout = StringIO()
+        with redirect_stdout(stdout):
+            code = cli_main(
+                [
+                    "agents",
+                    "export",
+                    "repo-helper",
+                    "--model",
+                    "fixture-analysis-small",
+                    "--file",
+                    "agent-environment.json",
+                ]
+            )
+        self.assertEqual(code, 0)
+        self.assertIn('"record_type": "agent_environment"', stdout.getvalue())

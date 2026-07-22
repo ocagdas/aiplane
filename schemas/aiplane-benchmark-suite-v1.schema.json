@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aiplane.dev/schemas/aiplane-benchmark-suite-v1.schema.json",
+  "title": "Aiplane benchmark suite v1",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "name",
+    "version",
+    "kind",
+    "tasks"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "kind": {
+      "enum": [
+        "smoke",
+        "quality",
+        "performance",
+        "mixed"
+      ]
+    },
+    "repeats": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100
+    },
+    "allow_command_evaluators": {
+      "type": "boolean"
+    },
+    "decoding": {
+      "type": "object"
+    },
+    "metrics": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "quality_score",
+          "performance_score",
+          "elapsed_ms",
+          "ttft_ms",
+          "prompt_tokens",
+          "output_tokens",
+          "tokens_per_second"
+        ]
+      }
+    },
+    "comparability": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "tasks": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "prompt"
+        ],
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expected_terms": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "timeout_seconds": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3600
+          },
+          "evaluator": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "enum": [
+                  "expected_terms",
+                  "exact_match",
+                  "regex",
+                  "json",
+                  "command"
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}

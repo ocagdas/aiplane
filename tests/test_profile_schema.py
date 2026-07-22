@@ -124,3 +124,23 @@ def test_profile_validation_reports_schema_version_paths_and_remedies(tmp_path, 
     assert any(check["name"] == "schema:version" for check in payload["checks"])
     assert all(check["path"] for check in payload["checks"])
     assert all(check["remediation"] for check in payload["checks"])
+
+
+def test_profile_validation_rejects_invalid_placement_scoring(tmp_path, capsys) -> None:
+    profiles = tmp_path / "profiles"
+    create_profile("invalid-scoring", profiles_dir=profiles)
+    hardware_path = profiles / "invalid-scoring" / "hardware.yaml"
+    hardware = parse_yaml(hardware_path.read_text(encoding="utf-8"))
+    hardware["placement_scoring"] = {
+        "default_profile": "bad",
+        "profiles": {"bad": {"weights": {"resource_fit": -0.1}}},
+        "extensions": [{"name": "unsafe", "source_key": "unsafe", "weight": 2}],
+    }
+    hardware_path.write_text(dump_yaml(hardware), encoding="utf-8")
+
+    assert cli_main(["--profiles-dir", str(profiles), "profiles", "validate", "invalid-scoring"]) == 1
+    payload = json.loads(capsys.readouterr().out)
+    failed = {check["path"]: check for check in payload["checks"] if not check["ok"]}
+
+    assert "$.hardware.placement_scoring" in failed
+    assert "between 0 and 1" in failed["$.hardware.placement_scoring"]["detail"]

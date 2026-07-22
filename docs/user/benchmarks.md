@@ -57,7 +57,7 @@ Preview the built-in benchmark without calling a model:
 aiplane models benchmark MODEL_ALIAS --dry-run
 ```
 
-Run all built-in benchmark tasks and save the result under `.aiplane/benchmarks/`:
+Run all built-in benchmark tasks and save the versioned result under `.aiplane/benchmarks/`:
 
 ```bash
 aiplane models benchmark MODEL_ALIAS
@@ -78,62 +78,73 @@ Skip saving:
 aiplane models benchmark --no-save MODEL_ALIAS
 ```
 
-## Custom Benchmark Specs
+## Versioned Benchmark Suites
 
-You can define your own benchmark spec as JSON or the small YAML subset used by `aiplane` profiles.
+Custom suites use a versioned JSON/YAML contract. Validate and normalize a suite before running it:
+
+```bash
+aiplane benchmarks suite-validate benchmarks/simple-python.json
+aiplane models benchmark MODEL_ALIAS --spec benchmarks/simple-python.json --task clamp_unit --dry-run
+aiplane models benchmark MODEL_ALIAS --spec benchmarks/simple-python.json --repeats 5
+```
 
 Example JSON:
 
 ```json
 {
+  "schema_version": "1.0",
   "name": "simple-python-codegen",
+  "version": "1.0",
+  "kind": "quality",
+  "repeats": 5,
+  "decoding": {"temperature": 0.0, "seed": 7},
+  "comparability": {
+    "group": "team-python-v1",
+    "protocol": "fixed-prompts-and-settings"
+  },
+  "metrics": ["quality_score", "elapsed_ms"],
   "tasks": {
     "clamp_unit": {
       "prompt": "Write a Python function clamp(value, low, high). Return only code.",
-      "expected_terms": ["def", "clamp", "return"],
-      "timeout_seconds": 20,
       "evaluator": {
-        "command": ["python", "tests/evaluate_clamp.py", "{output_file}"]
+        "type": "regex",
+        "pattern": "def\\s+clamp"
       }
     }
   }
 }
 ```
 
-Preview it:
+Safe built-in evaluator types are `expected_terms`, `exact_match`, `regex`, and `json`. A command evaluator is also available for trusted local suites, but the suite must explicitly set `allow_command_evaluators: true`. Command evaluators are not a sandbox: review the command and use `--dry-run` before execution. They receive `{output_file}` and `{prompt_file}` placeholders and may print `{"score": 82, "passed": true}`.
+
+Suite results record the suite version, repeat index, decoding settings, runtime/environment context, pass rate, means, medians, standard deviation, and standard error when enough samples exist. Smoke, quality, and performance evidence remain separately typed.
+
+## End-User Measurements and Scoring Hooks
+
+You can import measurements produced by your own harness without giving Aiplane executable code. The import contract is versioned, requires provenance, validates score ranges and environment/runtime metadata, and rejects secret-bearing fields.
+
+Preview first:
 
 ```bash
-aiplane models benchmark MODEL_ALIAS --spec benchmarks/simple-python.json --task clamp_unit --dry-run
+aiplane benchmarks import results/my-measurements.json
 ```
 
-Run it and execute the evaluator command in the active profile environment:
+Write the validated record to the ignored `.aiplane/benchmarks/` cache:
 
 ```bash
-aiplane models benchmark MODEL_ALIAS --spec benchmarks/simple-python.json --task clamp_unit
+aiplane benchmarks import results/my-measurements.json --yes
 ```
 
-Run the evaluator command in a specific environment mode without changing the active profile setting:
+The record must use `contract_version: "1.0"`, `record_type: "benchmark_measurements"`, a model alias, suite identity, one or more runs, and `provenance.source`. Each run can supply quality/performance scores, elapsed time, TTFT, token counts, throughput, pass/fail, seed, and metadata. Imported records retain their provenance and feed the materialized catalog after confirmed import.
+
+For organization-specific placement signals, `hardware.yaml` can declare weighted `placement_scoring.extensions`, while a model supplies matching values under `score_contributions`. These hooks are data-only, bounded to `0-100`, inspectable in score components, and cannot execute plugins. Use:
 
 ```bash
-aiplane models benchmark MODEL_ALIAS --spec benchmarks/simple-python.json --environment conda
+aiplane hardware scoring
+aiplane models route --role chat --candidate MODEL_A --candidate MODEL_B
 ```
 
-Supported evaluator environment modes are `system`, `venv`, `conda`, and `docker`, using the profile's `environment.yaml` definitions.
-
-## Evaluator Commands
-
-Evaluator commands receive model output through placeholders:
-
-- `{output_file}`: file containing the model response.
-- `{prompt_file}`: file containing the prompt sent to the model.
-
-If the evaluator exits with code `0`, it passes. If it prints JSON with `score` and optional `passed`, `aiplane` uses that score:
-
-```json
-{"score": 82, "passed": true}
-```
-
-Scores are clamped to the `0-100` range. If no JSON score is printed, a successful evaluator gets `100` and a failing evaluator gets `0`.
+Only evidence with declared comparability affects measured quality/performance components. Local smoke results and arbitrary scores remain visible context, not universal quality claims.
 
 ## What The Built-In Suite Measures
 

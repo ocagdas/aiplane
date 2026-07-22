@@ -71,11 +71,13 @@ Automatic minor/major publication and manual selected-tag publication both:
 2. run the full quality gate;
 3. build one wheel and one source distribution;
 4. generate and verify `SHA256SUMS`;
-5. validate pip, pipx, and uv installation;
-6. reject an incomplete artifact set;
-7. create the GitHub Release;
-8. confirm exactly one wheel, one source distribution, and `SHA256SUMS`; and
-9. dispatch the public cross-platform verification workflow.
+5. create and locally verify signed build-provenance attestations for both distributions;
+6. render release notes from tracked `CHANGELOG.md`;
+7. validate pip, pipx, and uv installation;
+8. reject an incomplete artifact set;
+9. create the GitHub Release;
+10. confirm exactly one wheel, one source distribution, and `SHA256SUMS`; and
+11. dispatch the public cross-platform checksum, attestation, and installation verification workflow.
 
 To deliberately publish an existing patch tag, open **Actions -> Release artifacts -> Run workflow**, enter the exact tag, and run it from trusted `main`. Manual selection changes publication intent, not validation strength.
 
@@ -104,12 +106,13 @@ Local snapshots under ignored `.aiplane/wheelhouse` use PEP 440 local metadata a
 
 ## Verify and consume a published release
 
-Successful publication dispatches **Verify published release** automatically. Maintainers may also run it manually with the same tag. Its nine Linux/macOS/Windows x pip/pipx/uv jobs download the public assets, verify the manifest, exercise install/replacement/uninstall, and upload sanitized evidence.
+Successful publication dispatches **Verify published release** automatically. Each matrix job verifies both the SHA-256 manifest and GitHub build-provenance attestation before installation. Maintainers may also run it manually with the same tag. Its nine Linux/macOS/Windows x pip/pipx/uv jobs download the public assets, verify the manifest, exercise install/replacement/uninstall, and upload sanitized evidence.
 
 Manual smoke after downloading the wheel and manifest:
 
 ```bash
 python scripts/verify_release_manifest.py .
+gh attestation verify aiplane-* --repo ocagdas/aiplane
 python -m pip install ./aiplane-VERSION-py3-none-any.whl
 python -m pip show aiplane
 aiplane --version
@@ -120,6 +123,6 @@ Use the same installation owner for upgrade and uninstall. Preserve reviewed pro
 
 ## Integrity and rollback
 
-Linux can run `sha256sum --check SHA256SUMS`; macOS can run `shasum -a 256 --check SHA256SUMS`. The portable verifier avoids shell-specific checksum behavior on Windows.
+Linux can run `sha256sum --check SHA256SUMS`; macOS can run `shasum -a 256 --check SHA256SUMS`. The portable verifier avoids shell-specific checksum behavior on Windows. `gh attestation verify aiplane-* --repo ocagdas/aiplane` independently verifies that GitHub Actions built the files from this repository; checksum and attestation checks serve different purposes and both are required by the hosted workflow.
 
 For rollback, uninstall with the original installation owner, verify a previously downloaded immutable wheel, and reinstall it. Published tags and assets must never be moved or silently replaced.

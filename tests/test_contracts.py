@@ -328,7 +328,7 @@ def test_p0_documentation_sweep_stays_open_until_user_demonstrations() -> None:
 def test_post_gate_backlog_numbers_are_sequential() -> None:
     backlog = _project_plan_section("Product Adoption Backlog")
     numbered = [int(value) for value in re.findall(r"(?m)^(\d+)\. ", backlog)]
-    assert numbered == list(range(1, 25))
+    assert numbered == list(range(1, 26))
 
 
 def test_public_demo_plan_is_bounded_reproducible_and_uses_current_commands() -> None:
@@ -469,6 +469,11 @@ def test_release_workflow_is_checksummed_versioned_and_quality_gated() -> None:
     assert "python scripts/verify_release_manifest.py dist" in workflow
     assert "Verify published release assets" in workflow
     assert "published-assets.txt" in workflow
+    assert "uses: actions/attest@v4" in workflow
+    assert "subject-checksums: dist/SHA256SUMS" in workflow
+    assert "gh attestation verify dist/aiplane-*" in workflow
+    assert "python scripts/render_release_notes.py" in workflow
+    assert Path("CHANGELOG.md").is_file()
     for text in (setup, process):
         assert "SHA256SUMS" in text
         assert "rollback" in text.lower()
@@ -619,6 +624,8 @@ def test_published_release_workflow_verifies_every_os_and_install_owner() -> Non
     assert "channel: [pip, pipx, uv]" in workflow
     assert "gh release download" in workflow
     assert "python scripts/verify_release_manifest.py release" in workflow
+    assert "attestations: read" in workflow
+    assert "gh attestation verify release/aiplane-*" in workflow
     assert 'python scripts/verify_install_channels.py release --channel "$CHANNEL"' in workflow
     assert "python scripts/write_release_evidence.py" in workflow
     assert "python scripts/validate_trial_evidence.py" in workflow
@@ -662,6 +669,25 @@ def test_profile_render_export_and_replay_terminology_is_consistent() -> None:
     assert "Do not copy credentials, model weights" in backlog
 
 
+def test_materialized_catalog_commands_and_hardware_limits_are_documented() -> None:
+    readme = Path("README.md").read_text(encoding="utf-8")
+    providers = Path("docs/user/providers.md").read_text(encoding="utf-8")
+    hardware = Path("docs/user/hardware.md").read_text(encoding="utf-8")
+    development = Path("docs/project/development.md").read_text(encoding="utf-8")
+    plan = PROJECT_PLAN.read_text(encoding="utf-8")
+
+    assert "models catalog-cache status" in readme
+    for command in ("catalog-cache status", "catalog-cache rebuild", "catalog-cache clear"):
+        assert command in providers
+    assert "--catalog-cache off" in providers
+    assert "--property quantization=q4" in providers
+    assert "largest" in hardware and "single visible GPU" in hardware
+    assert "topology is captured" in hardware.lower()
+    assert "never treated as one interchangeable pool" in hardware
+    assert "benchmark_catalog_queries.py --sizes 1000 10000 100000" in development
+    assert "materialized model catalog and indexed queries" in plan
+
+
 def test_multi_client_replay_and_recommendation_provenance_are_documented() -> None:
     overview = Path("docs/user/overview.md").read_text(encoding="utf-8")
     schema = Path("docs/user/profile-schema.md").read_text(encoding="utf-8")
@@ -678,5 +704,5 @@ def test_multi_client_replay_and_recommendation_provenance_are_documented() -> N
     assert "deterministic and read-only" in machines
     assert "versioned provenance" in hardware
     assert "benchmark sample count" in hardware
-    assert "contextual" in hardware
+    assert "Ordinary\nsmoke-test" in hardware
     assert "recommendation-critical schema hardening" in plan

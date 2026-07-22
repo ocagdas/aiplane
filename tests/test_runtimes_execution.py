@@ -485,7 +485,7 @@ class RuntimeExecutionTests(unittest.TestCase):
         plan = RuntimeCatalog(profile).bundle_plan("vllm", model_name="provider-code-large-vllm", mode="docker")
         self.assertEqual(plan["name"], "vllm-provider-code-large-vllm-docker")
         self.assertEqual(plan["selected_file"], "Dockerfile")
-        self.assertIn("FROM python:3.13-slim", plan["files"]["Dockerfile"])
+        self.assertIn("FROM vllm/vllm-openai:latest", plan["files"]["Dockerfile"])
         self.assertIn("Provider/Code-Large-Instruct", plan["files"]["Dockerfile"])
         self.assertIn("name: aiplane-vllm", plan["files"]["environment.yaml"])
 
@@ -1085,7 +1085,7 @@ exit 0
             )
         self.assertEqual(code, 0)
         output = stdout.getvalue()
-        self.assertIn("FROM python:3.13-slim", output)
+        self.assertIn("FROM vllm/vllm-openai:latest", output)
         self.assertIn("Provider/Code-Large-Instruct", output)
 
     def test_runtime_list_cli_text_format_is_lean(self) -> None:
@@ -1120,3 +1120,85 @@ exit 0
             result = ModelCatalog(profile).complete("provider-code-large-vllm", "hello")
         self.assertEqual(result.backend, "openai_compatible")
         self.assertEqual(result.text, "handled test-model")
+
+    def test_artifact_lock_keeps_unresolved_integrity_explicit(self) -> None:
+        profile = load_profile("local-dev", Path.cwd())
+        lock = RuntimeCatalog(profile).artifact_lock("fixture-analysis-small")
+        self.assertEqual(lock["contract_version"], "1.0")
+        self.assertEqual(lock["record_type"], "model_artifact_lock")
+        self.assertEqual(lock["identity"]["model_id"], "provider-text-small:0.5b")
+        self.assertIsNone(lock["identity"]["revision"])
+        self.assertIsNone(lock["integrity"]["checksum"])
+        self.assertFalse(lock["complete"])
+
+    def test_launch_manifest_renders_exact_runtime_settings_without_execution(self) -> None:
+        profile = load_profile("local-dev", Path.cwd())
+        manifest = RuntimeCatalog(profile).launch_manifest(
+            "vllm",
+            "provider-code-large-vllm",
+            host="0.0.0.0",
+            port=9000,
+            context_tokens=8192,
+            gpu_devices=["0", "1"],
+            tensor_parallel=2,
+        )
+        command = manifest["launch"]["command"]
+        self.assertEqual(manifest["mode"], "render_only")
+        self.assertIn("Provider/Code-Large-Instruct", command)
+        self.assertIn("--max-model-len", command)
+        self.assertIn("--tensor-parallel-size", command)
+        self.assertEqual(manifest["launch"]["environment"]["CUDA_VISIBLE_DEVICES"], "0,1")
+        self.assertEqual(manifest["endpoint"]["base_url"], "http://0.0.0.0:9000")
+
+    def test_runtime_evidence_cli_outputs_versioned_json(self) -> None:
+        stdout = StringIO()
+        with redirect_stdout(stdout):
+            code = cli_main(["runtimes", "artifact-lock", "--model", "fixture-analysis-small"])
+        self.assertEqual(code, 0)
+        self.assertEqual(json.loads(stdout.getvalue())["record_type"], "model_artifact_lock")
+
+        stdout = StringIO()
+        with redirect_stdout(stdout):
+            code = cli_main(
+                [
+                    "runtimes",
+                    "launch-manifest",
+                    "ollama",
+                    "--model",
+                    "fixture-analysis-small",
+                ]
+            )
+        self.assertEqual(code, 0)
+        self.assertEqual(json.loads(stdout.getvalue())["record_type"], "runtime_launch_manifest")
+
+    def test_runtime_bundle_renders_gpu_cache_and_env_references(self) -> None:
+        profile = load_profile("local-dev", Path.cwd())
+        plan = RuntimeCatalog(profile).bundle_plan(
+            "vllm",
+            "provider-code-large-vllm",
+            cache_volume="hf-cache",
+            gpu_devices=["0", "1"],
+            environment=["HF_HOME"],
+            auth_env="HF_TOKEN",
+            context_tokens=32768,
+            tensor_parallel=2,
+        )
+        command = plan["commands"][1]
+        self.assertEqual(plan["record_type"], "runtime_bundle")
+        self.assertTrue(plan["render_only"])
+        self.assertIn("--gpus device=0,1", command)
+        self.assertIn("src=hf-cache", command)
+        self.assertIn("--env HF_HOME", command)
+        self.assertIn("--env HF_TOKEN", command)
+        self.assertIn("--max-model-len 32768", command)
+        self.assertIn("--tensor-parallel-size 2", command)
+        self.assertNotIn("HF_TOKEN=", command)
+
+    def test_runtime_bundle_rejects_embedded_env_values(self) -> None:
+        profile = load_profile("local-dev", Path.cwd())
+        with self.assertRaisesRegex(ValueError, "variable names"):
+            RuntimeCatalog(profile).bundle_plan(
+                "vllm",
+                "provider-code-large-vllm",
+                environment=["HF_TOKEN=secret"],
+            )

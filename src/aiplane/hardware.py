@@ -2,9 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
-import os
 import platform
-import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -12,8 +10,12 @@ from typing import Any
 from .boundaries import CommandRunner, SubprocessCommandRunner
 from .persistence import atomic_write_text
 from .config import dump_yaml
+from .evidence import evidence_provenance, evidence_source
+from .hardware_discovery import discover_hardware, group_gpus
 from .model_catalog import ModelCatalog, capability_profile
+from .placement import assess_placement
 from .runtime_catalog import RuntimeCatalog
+from .scoring import score_model, scoring_profiles
 from .policy import PolicyEngine
 from .models import Profile
 from .platform_support import HostPlatform, detect_host_platform
@@ -224,28 +226,50 @@ class HardwareManager:
         atomic_write_text(path, dump_yaml(self.config))
 
     def discover(self) -> dict[str, Any]:
-        linux_probes = self.host_platform.linux_hardware_probes_supported
-        discovered: dict[str, Any] = {
-            "platform": platform.platform(),
-            "platform_support": self.host_platform.summary(),
-            "machine": platform.machine(),
-            "processor": platform.processor(),
-            "cpu_count": os.cpu_count(),
-            "memory_gb": _memory_gb() if linux_probes else None,
-            "gpus": [],
-            "notes": [],
-        }
-        if linux_probes:
-            discovered["gpus"].extend(_nvidia_gpus(self.command_runner))
-            discovered["gpus"].extend(_amd_gpus(self.command_runner))
-        else:
-            discovered["notes"].append(
-                "Linux procfs, nvidia-smi, rocm-smi, and lspci discovery probes were skipped on this platform"
-            )
-        if not discovered["gpus"]:
-            discovered["notes"].append("No NVIDIA/AMD GPU discovered through available CLI tools")
+        discovered = discover_hardware(self.command_runner, self.host_platform)
         discovered["closest_profiles"] = self._closest_profiles(discovered)
         return discovered
+
+    def scoring(self) -> dict[str, Any]:
+        return scoring_profiles(self.config)
+
+    def assess(
+        self,
+        model_name: str,
+        *,
+        runtime: str | None = None,
+        context_tokens: int | None = None,
+        score_profile: str | None = None,
+    ) -> dict[str, Any]:
+        model = ModelCatalog(self.profile).show(model_name)
+        discovered = self.discover()
+        machine = self.machine(discovered)
+        compatibility = _recommendation_runtime_compatibility(
+            model_name, RuntimeCatalog(self.profile), model, runtime=runtime
+        )
+        selected_runtime = runtime or compatibility.get("recommended_runtime")
+        placement = assess_placement(
+            model,
+            machine,
+            runtime=str(selected_runtime or "") or None,
+            context_tokens=context_tokens,
+        )
+        benchmark = _latest_benchmark_summaries(self.profile.workspace).get(model_name)
+        score = score_model(
+            model,
+            placement,
+            compatibility,
+            config=self.config,
+            profile_name=score_profile,
+            benchmark=benchmark,
+        )
+        return {
+            "model": model,
+            "machine": machine,
+            "runtime_compatibility": compatibility,
+            "placement": placement,
+            "score": score,
+        }
 
     def doctor(self, model_name: str | None = None) -> dict[str, Any]:
         catalog = ModelCatalog(self.profile)
@@ -271,7 +295,14 @@ class HardwareManager:
             "no_local_fit_check_required": no_fit_required,
         }
 
-    def recommend(self, include_not_recommended: bool = False) -> dict[str, Any]:
+    def recommend(
+        self,
+        include_not_recommended: bool = False,
+        *,
+        runtime: str | None = None,
+        context_tokens: int | None = None,
+        score_profile: str | None = None,
+    ) -> dict[str, Any]:
         catalog = ModelCatalog(self.profile)
         runtime_catalog = RuntimeCatalog(self.profile)
         policy = PolicyEngine(self.profile)
@@ -306,25 +337,47 @@ class HardwareManager:
                 )
                 continue
 
-            runtime_compatibility = _recommendation_runtime_compatibility(name, runtime_catalog, payload)
+            runtime_compatibility = _recommendation_runtime_compatibility(
+                name, runtime_catalog, payload, runtime=runtime
+            )
+            selected_runtime = runtime or runtime_compatibility.get("recommended_runtime")
+            placement = assess_placement(
+                payload,
+                machine,
+                runtime=str(selected_runtime or "") or None,
+                context_tokens=context_tokens,
+            )
             level, reason = _recommend_model(
                 payload,
                 fit_basis,
                 runtime_compatibility=runtime_compatibility,
                 policy_decision=policy_decision,
             )
-            groups[level].append(
-                _recommendation_payload(
-                    payload,
-                    level,
-                    reason,
-                    benchmark_summary,
-                    runtime_compatibility=runtime_compatibility,
-                    policy_decision=policy_decision,
-                    machine=machine,
-                    discovered=discovered,
-                )
+            if not placement["eligible"]:
+                level = "not_recommended"
+                reason = "; ".join(placement["blockers"][:3]) or "no feasible local placement mode"
+            score = score_model(
+                payload,
+                placement,
+                runtime_compatibility,
+                config=self.config,
+                profile_name=score_profile,
+                benchmark=benchmark_summary,
             )
+            recommendation = _recommendation_payload(
+                payload,
+                level,
+                reason,
+                benchmark_summary,
+                runtime_compatibility=runtime_compatibility,
+                policy_decision=policy_decision,
+                machine=machine,
+                discovered=discovered,
+            )
+            recommendation["placement"] = placement
+            recommendation["score"] = score
+            recommendation["selection_score"] = score["selection_score"]
+            groups[level].append(recommendation)
 
         ordered_groups: dict[str, list[dict[str, Any]]] = {
             "recommended": groups["recommended"],
@@ -336,6 +389,7 @@ class HardwareManager:
         for rows in ordered_groups.values():
             rows.sort(
                 key=lambda item: (
+                    -item.get("selection_score", 0.0),
                     -item.get("capability_avg_score", 0.0),
                     -item.get("runtime_compatibility_score", 0.0),
                     item.get("provider", ""),
@@ -355,6 +409,11 @@ class HardwareManager:
             "machine": machine,
             "discovered": discovered,
             "provenance": _recommendation_run_provenance(machine, discovered, benchmark_summaries),
+            "scoring": {
+                "profile": score_profile or self.scoring()["default_profile"],
+                "contract": "placement_readiness",
+                "hard_eligibility_gate": True,
+            },
             "models": ordered_groups,
             "hidden": (
                 {
@@ -395,12 +454,15 @@ def _machine_from_active(active: dict[str, Any], discovered: dict[str, Any]) -> 
     gpus = [gpu for gpu in discovered.get("gpus", []) if isinstance(gpu, dict)]
     first_gpu = gpus[0] if gpus else {}
     max_vram = _max_vram_gb(discovered)
+    total_discovered_vram = _sum_vram_gb(discovered)
+    max_free_vram = _max_free_vram_gb(discovered)
+    total_free_vram = _sum_free_vram_gb(discovered)
     cpu_threads = _resolve_number(values.get("cpu_threads"), discovered.get("cpu_count"))
     cpu_cores = _resolve_number(values.get("cpu_cores", values.get("cpu")), cpu_threads)
     ram = _resolve_number(values.get("memory_gb"), discovered.get("memory_gb"))
     unified = _resolve_number(values.get("unified_memory_gb"), None)
     vram = _resolve_number(values.get("vram_gb"), max_vram)
-    total_vram = _resolve_number(values.get("total_vram_gb"), max_vram)
+    total_vram = _resolve_number(values.get("total_vram_gb"), total_discovered_vram)
     gpu_count = _resolve_number(values.get("gpu_count"), len(gpus))
     gpu_vendor = _resolve_text(
         values.get("gpu_vendor", values.get("vendor")),
@@ -434,8 +496,13 @@ def _machine_from_active(active: dict[str, Any], discovered: dict[str, Any]) -> 
             "model": gpu_model or "none",
             "count": gpu_count,
             "vram_gb": vram,
+            "free_vram_gb": max_free_vram,
             "total_vram_gb": total_vram,
+            "total_free_vram_gb": total_free_vram,
             "indices": values.get("gpu_indices"),
+            "devices": copy.deepcopy(gpus),
+            "groups": copy.deepcopy(discovered.get("gpu_groups") or group_gpus(gpus)),
+            "topology": copy.deepcopy(discovered.get("topology", {"state": "not_available", "links": []})),
         },
         "accelerator_apis": values.get("accelerator_apis") or _default_accelerators(str(gpu_vendor or "")),
         "os": _resolve_text(values.get("os"), platform.system().lower()),
@@ -530,85 +597,13 @@ def _template_values(template: object) -> dict[str, Any]:
     return values
 
 
-def _memory_gb() -> float | None:
-    meminfo = Path("/proc/meminfo")
-    if meminfo.exists():
-        for line in meminfo.read_text(encoding="utf-8").splitlines():
-            if line.startswith("MemTotal:"):
-                kb = int(line.split()[1])
-                return round(kb / 1024 / 1024, 2)
-    return None
-
-
-def _nvidia_gpus(command_runner: CommandRunner) -> list[dict[str, Any]]:
-    if not shutil.which("nvidia-smi"):
-        return []
-    result = command_runner.run(
-        [
-            "nvidia-smi",
-            "--query-gpu=name,memory.total,uuid",
-            "--format=csv,noheader,nounits",
-        ],
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-    if result.returncode:
-        return []
-    gpus = []
-    for line in result.stdout.splitlines():
-        parts = [part.strip() for part in line.split(",")]
-        if len(parts) >= 3:
-            gpus.append(
-                {
-                    "vendor": "nvidia",
-                    "name": parts[0],
-                    "vram_mb": int(parts[1]),
-                    "uuid": parts[2],
-                }
-            )
-    return gpus
-
-
-def _amd_gpus(command_runner: CommandRunner) -> list[dict[str, Any]]:
-    # Prefer rocminfo/rocm-smi when available; fall back to lspci names only.
-    gpus: list[dict[str, Any]] = []
-    if shutil.which("rocm-smi"):
-        result = command_runner.run(
-            ["rocm-smi", "--showproductname", "--showmeminfo", "vram"],
-            text=True,
-            capture_output=True,
-            check=False,
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            gpus.append(
-                {
-                    "vendor": "amd",
-                    "name": "AMD GPU detected by rocm-smi",
-                    "details": result.stdout.strip()[-1000:],
-                }
-            )
-            return gpus
-    if shutil.which("lspci"):
-        result = command_runner.run(["lspci"], text=True, capture_output=True, check=False)
-        if result.returncode == 0:
-            for line in result.stdout.splitlines():
-                lower = line.lower()
-                if "amd" in lower and ("vga" in lower or "display" in lower or "3d" in lower):
-                    gpus.append({"vendor": "amd", "name": line.strip()})
-    return gpus
-
-
 def _score_template(template: dict[str, Any], discovered: dict[str, Any]) -> tuple[int, list[str]]:
     score = 0
     reasons: list[str] = []
     gpus = discovered.get("gpus", [])
     vendors = {str(gpu.get("vendor", "")).lower() for gpu in gpus if isinstance(gpu, dict)}
     memory_gb = discovered.get("memory_gb")
-    max_vram_gb = 0.0
-    for gpu in gpus:
-        if isinstance(gpu, dict) and "vram_mb" in gpu:
-            max_vram_gb = max(max_vram_gb, float(gpu["vram_mb"]) / 1024)
+    max_vram_gb = _max_vram_gb(discovered)
 
     vendor = str(template.get("gpu_vendor") or template.get("vendor") or "").lower()
     gpu_count = _resolve_number(template.get("gpu_count"), None)
@@ -743,28 +738,22 @@ def _recommendation_run_provenance(
         "gpu_count": len(discovered.get("gpus", []) or []),
     }
     unresolved = sorted(key for key, value in detected.items() if value is None)
-    return {
-        "schema_version": "1.0",
-        "method": "deterministic_fit_runtime_policy_capability_order",
-        "sources": [
-            {"state": "configured", "source": "models.yaml", "name": "model_catalog"},
-            {"state": "configured", "source": "hardware.yaml#/selected", "name": "active_machine"},
-            {"state": "detected", "source": "hardware.discover", "name": "current_machine", "facts": detected},
-            {"state": "generated", "source": "runtime_catalog", "name": "runtime_compatibility"},
-            {
-                "state": "configured",
-                "source": "repository.yaml + approvals.yaml",
-                "name": "policy",
-            },
-        ],
-        "machine": {
-            "name": machine.get("name"),
-            "origin": machine.get("origin"),
-        },
-        "benchmark_records": len(benchmark_summaries),
-        "benchmark_role": "context_only_not_used_for_ranking",
-        "unresolved_detected_facts": unresolved,
-    }
+    sources = [
+        evidence_source("model_catalog", "configured", "models.yaml"),
+        evidence_source("active_machine", "configured", "hardware.yaml#/selected", value=machine.get("name")),
+        evidence_source("current_machine", "detected", "hardware.discover", value=detected),
+        evidence_source("runtime_compatibility", "generated", "runtime_catalog"),
+        evidence_source("policy", "configured", "repository.yaml + approvals.yaml"),
+    ]
+    return evidence_provenance(
+        sources,
+        uncertainty=[f"live hardware fact is unavailable: {name}" for name in unresolved],
+        method="deterministic_fit_runtime_policy_capability_order",
+        machine={"name": machine.get("name"), "origin": machine.get("origin")},
+        benchmark_records=len(benchmark_summaries),
+        benchmark_role="context_only_not_used_for_ranking",
+        unresolved_detected_facts=unresolved,
+    )
 
 
 def _model_recommendation_provenance(
@@ -850,19 +839,20 @@ def _model_recommendation_provenance(
         uncertainty.append("no supported local runtime is known")
     if discovered.get("memory_gb") is None:
         uncertainty.append("live system memory discovery is unavailable; configured machine values may be used")
-    return {
-        "schema_version": "1.0",
-        "sources": sources,
-        "sample_count": sample_count,
-        "evidence_state": "partial" if uncertainty else "complete",
-        "uncertainty": uncertainty,
-    }
+    return evidence_provenance(
+        sources,
+        sample_count=sample_count,
+        uncertainty=uncertainty,
+        method="deterministic_model_fit_explanation",
+    )
 
 
 def _recommendation_runtime_compatibility(
     model_name: str,
     runtime_catalog: RuntimeCatalog,
     model: dict[str, Any],
+    *,
+    runtime: str | None = None,
 ) -> dict[str, Any]:
     if not bool(model.get("local", False)):
         return {
@@ -876,6 +866,18 @@ def _recommendation_runtime_compatibility(
         }
 
     supported_runtimes = runtime_catalog.compatible_runtimes_for_entry(model, include_gui=False)
+    if runtime and runtime not in supported_runtimes:
+        return {
+            "state": "no_supported_runtime",
+            "supported_runtimes": sorted(set(supported_runtimes)),
+            "available_runtimes": [],
+            "preferred_runtime": str(model.get("preferred_runtime") or "") or None,
+            "recommended_runtime": None,
+            "compatibility_score": 0.0,
+            "reasoning": [f"model does not declare support for requested runtime '{runtime}'"],
+        }
+    if runtime:
+        supported_runtimes = [runtime]
     if not supported_runtimes:
         return {
             "state": "no_supported_runtime",
@@ -889,7 +891,7 @@ def _recommendation_runtime_compatibility(
 
     statuses = [runtime_catalog.runtime_available(runtime) for runtime in supported_runtimes]
     available = [str(row.get("name")) for row in statuses if bool(row.get("available"))]
-    preferred = str(model.get("preferred_runtime") or "").strip()
+    preferred = runtime or str(model.get("preferred_runtime") or "").strip()
     preferred_runtime = supported_runtimes[0] if not preferred else preferred
 
     if preferred and preferred in available:
@@ -998,12 +1000,55 @@ def _recommend_model(
     return "recommended", "meets policy, runtime compatibility, and configured RAM/VRAM targets"
 
 
+def _gpu_memory_value(gpu: dict[str, Any], key_gb: str, key_mb: str) -> float | None:
+    value = _float_or_none(gpu.get(key_gb))
+    if value is not None:
+        return value
+    mib = _float_or_none(gpu.get(key_mb))
+    return mib / 1024 if mib is not None else None
+
+
 def _max_vram_gb(discovered: dict[str, Any]) -> float:
-    gpu_vram_gb = 0.0
-    for gpu in discovered.get("gpus", []):
-        if isinstance(gpu, dict) and "vram_mb" in gpu:
-            gpu_vram_gb = max(gpu_vram_gb, float(gpu["vram_mb"]) / 1024)
-    return gpu_vram_gb
+    values = [
+        value
+        for gpu in discovered.get("gpus", [])
+        if isinstance(gpu, dict)
+        for value in [_gpu_memory_value(gpu, "vram_gb", "vram_mb")]
+        if value is not None
+    ]
+    return max(values, default=0.0)
+
+
+def _sum_vram_gb(discovered: dict[str, Any]) -> float:
+    values = [
+        value
+        for gpu in discovered.get("gpus", [])
+        if isinstance(gpu, dict)
+        for value in [_gpu_memory_value(gpu, "vram_gb", "vram_mb")]
+        if value is not None
+    ]
+    return round(sum(values), 2)
+
+
+def _max_free_vram_gb(discovered: dict[str, Any]) -> float | None:
+    values = [
+        value
+        for gpu in discovered.get("gpus", [])
+        if isinstance(gpu, dict)
+        for value in [_gpu_memory_value(gpu, "free_vram_gb", "free_vram_mb")]
+        if value is not None
+    ]
+    return max(values, default=None)
+
+
+def _sum_free_vram_gb(discovered: dict[str, Any]) -> float | None:
+    gpus = [gpu for gpu in discovered.get("gpus", []) if isinstance(gpu, dict)]
+    values = [_gpu_memory_value(gpu, "free_vram_gb", "free_vram_mb") for gpu in gpus]
+    return (
+        round(sum(value for value in values if value is not None), 2)
+        if gpus and all(value is not None for value in values)
+        else None
+    )
 
 
 def _fit_model(model: dict[str, Any], discovered: dict[str, Any]) -> HardwareFit:

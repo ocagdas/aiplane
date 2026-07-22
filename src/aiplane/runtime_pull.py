@@ -7,6 +7,8 @@ from .runtime_catalog import RuntimeCatalog
 
 SUPPORTED_PULL_SOURCES: dict[str, list[str]] = {
     "ollama": ["ollama", "huggingface_gguf"],
+    "docker_model_runner": ["docker_model", "huggingface", "huggingface_gguf"],
+    "mlx": ["huggingface", "nvidia", "local_file"],
     "vllm": ["huggingface", "nvidia"],
     "tgi": ["huggingface", "nvidia"],
     "transformers": ["huggingface", "nvidia"],
@@ -56,6 +58,13 @@ def runtime_pull_support(runtime: str, selected: dict[str, Any]) -> dict[str, An
     allowed = SUPPORTED_PULL_SOURCES.get(runtime, [])
     if source in allowed or provider in allowed:
         return {"supported": True, "supported_sources": allowed}
+    if runtime == "mlx":
+        return {
+            "supported": False,
+            "supported_sources": allowed,
+            "reason": "MLX-LM acquires Hugging Face artifacts when a reviewed launch manifest is executed; no separate pull command is claimed",
+            "acquisition_mode": "runtime_cache_on_launch",
+        }
     if runtime in {"localai", "lmstudio"}:
         return {
             "supported": False,

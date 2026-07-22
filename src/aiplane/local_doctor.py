@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from .config import CONFIG_FILES
+from .evidence import evidence_provenance, evidence_source
 from .hardware import HardwareManager
 from .integration_contracts import ALL_INTEGRATION_TOOLS, required_roles
 from .model_catalog import ModelCatalog, ownership_for_model
@@ -123,6 +124,15 @@ def local_coding_doctor(profile: Profile, include_optional: bool = False) -> dic
             },
         },
         "sections": sections,
+        "provenance": evidence_provenance(
+            [
+                evidence_source("profile", "configured", str(profile.root), value=profile.name),
+                evidence_source("doctor_rules", "generated", "local_doctor", value=DOCTOR_CONTRACT_VERSION),
+                evidence_source("hardware_selection", "configured", "hardware.yaml#/selected"),
+            ],
+            uncertainty=([f"{blocking} blocking readiness finding(s) remain unresolved"] if blocking else []),
+            method="deterministic_profile_readiness_checks",
+        ),
         "next_steps": _next_steps(profile.name, sections),
         "notes": [
             "This command is read-only and local/hybrid AI coding stack focused.",

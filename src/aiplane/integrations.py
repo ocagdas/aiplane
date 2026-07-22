@@ -15,6 +15,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 from .boundaries import CommandRunner, SubprocessCommandRunner
 from .config import provider_helper_path
+from .evidence import evidence_provenance, evidence_source
 from .model_catalog import ModelCatalog, ROLE_CAPABILITY_MAP, expand_capability_filters
 from .integration_contracts import (
     MCP_EXPORT_TOOLS,
@@ -224,6 +225,10 @@ class IntegrationManager:
                 "profile": self.profile.name,
                 "required_roles": self._required_roles(tool),
                 "selection": {},
+                "provenance": evidence_provenance(
+                    [evidence_source("integration_contract", "generated", "integration_contracts", value=tool)],
+                    method="mcp_contract_export",
+                ),
                 "notes": [
                     "MCP exports do not select an inference model; they configure a client to launch aiplane mcp serve.",
                     "Use integrations export for MCP config snippets.",
@@ -325,6 +330,7 @@ class IntegrationManager:
                 "offline": bool(offline),
             },
             "selection": selection,
+            "provenance": self._plan_provenance(selection, constraints, overrides, endpoint),
             "notes": [
                 "plan prints the model/runtime/endpoint decision; it does not write IDE config or start runtimes",
                 "export uses the same selection logic to print target-tool configuration",
@@ -464,6 +470,39 @@ class IntegrationManager:
                 "setup does not edit IDE config; run integrations export after setup succeeds",
             ],
         }
+
+    def _plan_provenance(
+        self,
+        selection: dict[str, dict[str, Any]],
+        constraints: dict[str, Any],
+        overrides: dict[str, str | None],
+        endpoint: str | None,
+    ) -> dict[str, Any]:
+        sources = [evidence_source("selection_rules", "generated", "model_catalog")]
+        uncertainty: list[str] = []
+        if any(value for value in constraints.values()) or any(overrides.values()):
+            sources.append(evidence_source("selection_constraints", "configured", "command_line"))
+        if endpoint:
+            sources.append(evidence_source("endpoint", "configured", "command_line", value=endpoint))
+        for role, row in selection.items():
+            origin = str(row.get("source") or "")
+            state = (
+                "discovered"
+                if origin == "discovered_cache"
+                else "configured"
+                if origin == "profile_configured"
+                else "generated"
+            )
+            sources.append(evidence_source(f"model.{role}", state, origin or "model_catalog", value=row.get("name")))
+            sources.append(evidence_source(f"runtime.{role}", "generated", "runtime_catalog", value=row.get("runtime")))
+            if not row.get("runtime"):
+                uncertainty.append(f"no runtime could be selected for {role}")
+        uncertainty.append("catalog capability scores are configured metadata, not measured task-quality evidence")
+        return evidence_provenance(
+            sources,
+            uncertainty=uncertainty,
+            method="deterministic_role_and_capability_selection",
+        )
 
     def _required_roles(self, tool: str) -> list[dict[str, Any]]:
         return required_roles(tool)

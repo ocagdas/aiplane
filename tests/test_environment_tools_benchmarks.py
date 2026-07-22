@@ -379,7 +379,11 @@ class EnvironmentToolBenchmarkTests(unittest.TestCase):
             spec.write_text(
                 json.dumps(
                     {
+                        "schema_version": "1.0",
                         "name": "custom-code",
+                        "version": "1.0",
+                        "kind": "quality",
+                        "allow_command_evaluators": True,
                         "tasks": {
                             "unit": {
                                 "prompt": "Write a Python function.",

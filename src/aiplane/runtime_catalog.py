@@ -3,6 +3,8 @@ from __future__ import annotations
 import importlib.util
 import os
 import platform
+import re
+import shlex
 import shutil
 from pathlib import Path
 from typing import Any
@@ -17,14 +19,24 @@ from .runtime_definitions import (
     RUNTIME_DEFINITIONS,
     SOURCE_DEFINITIONS,
 )
+from .runtime_evidence import artifact_lock as render_artifact_lock
+from .runtime_evidence import launch_manifest as render_launch_manifest
+from .runtime_parity import capability_matrix
 
 
 class RuntimeCatalog:
-    def __init__(self, profile: Profile, http_transport: HttpTransport | None = None):
+    def __init__(
+        self,
+        profile: Profile,
+        http_transport: HttpTransport | None = None,
+        generated_models_config: dict[str, Any] | None = None,
+    ):
         self.profile = profile
         self.http_transport = http_transport or UrllibHttpTransport()
         self.models_config = profile.models or {}
-        self.generated_models_config = self._load_generated_models_config()
+        self.generated_models_config = (
+            generated_models_config if generated_models_config is not None else self._load_generated_models_config()
+        )
 
     def list(self, include_gui: bool = False) -> list[dict[str, Any]]:
         rows = []
@@ -49,6 +61,9 @@ class RuntimeCatalog:
                 }
             )
         return sorted(rows, key=lambda row: row["name"])
+
+    def capabilities(self, runtime: str | None = None) -> dict[str, Any]:
+        return capability_matrix(runtime)
 
     def sources(self) -> list[dict[str, Any]]:
         return [{"name": name, **value} for name, value in sorted(SOURCE_DEFINITIONS.items())]
@@ -221,7 +236,19 @@ class RuntimeCatalog:
         atomic_write_text(path, dump_yaml(self.models_config))
         return {"name": model_name, "preferred_runtime": runtime, "path": str(path)}
 
-    def bundle_plan(self, runtime: str, model_name: str, mode: str = "docker") -> dict[str, Any]:
+    def bundle_plan(
+        self,
+        runtime: str,
+        model_name: str,
+        mode: str = "docker",
+        *,
+        cache_volume: str | None = None,
+        gpu_devices: list[str] | None = None,
+        environment: list[str] | None = None,
+        auth_env: str | None = None,
+        context_tokens: int | None = None,
+        tensor_parallel: int | None = None,
+    ) -> dict[str, Any]:
         if runtime not in RUNTIME_DEFINITIONS:
             raise ValueError(f"unknown runtime: {runtime}")
         if mode not in {"docker", "conda"}:
@@ -237,12 +264,27 @@ class RuntimeCatalog:
                 f"runtime {runtime!r} is not supported by model {model_name!r}; supported: {', '.join(supported) or 'none'}"
             )
         model_id = str(model.get("model") or model_name)
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:/@+-]*", model_id):
+            raise ValueError("bundle model id contains unsupported characters")
+        settings = _bundle_settings(
+            runtime,
+            cache_volume=cache_volume,
+            gpu_devices=gpu_devices,
+            environment=environment,
+            auth_env=auth_env,
+            context_tokens=context_tokens,
+            tensor_parallel=tensor_parallel,
+        )
         files = {
             "Dockerfile": _dockerfile_for_runtime(runtime, model_id),
             "environment.yaml": _conda_yaml_for_runtime(runtime),
         }
         selected_file = "Dockerfile" if mode == "docker" else "environment.yaml"
         return {
+            "$schema": "schemas/aiplane-runtime-bundle-v1.schema.json",
+            "schema_version": "1.0",
+            "record_type": "runtime_bundle",
+            "render_only": True,
             "name": f"{runtime}-{model_name}-{mode}",
             "runtime": runtime,
             "model": model_name,
@@ -250,11 +292,81 @@ class RuntimeCatalog:
             "mode": mode,
             "selected_file": selected_file,
             "files": files,
-            "commands": _bundle_commands(runtime, model_name, mode, selected_file),
+            "settings": settings,
+            "commands": _bundle_commands(runtime, model_name, mode, selected_file, settings),
             "notes": [
                 "This is a render-only reproducibility plan; it does not build images, create environments, or pull model weights.",
-                "Runtime-specific tuning such as tensor parallelism, quantization, GPU devices, and mounted model caches should be added before production use.",
+                "GPU devices, cache volumes, environment references, auth references, context, and tensor parallelism are rendered only when explicitly supplied.",
+                "Environment and auth values are never embedded; the generated command references variable names for the operator to populate.",
             ],
+        }
+
+    def artifact_lock(self, model_name: str) -> dict[str, Any]:
+        model = self._model(model_name)
+        if self._model_ownership(model) == "managed_service":
+            raise ValueError(f"managed-service model {model_name!r} does not have a local artifact lock")
+        lock_model = dict(model)
+        lock_model["supported_runtimes"] = self.compatible_runtimes_for_entry(model, include_gui=True)
+        return render_artifact_lock(model_name, lock_model)
+
+    def launch_manifest(
+        self,
+        runtime: str,
+        model_name: str,
+        *,
+        host: str = "127.0.0.1",
+        port: int | None = None,
+        context_tokens: int | None = None,
+        gpu_devices: list[str] | None = None,
+        tensor_parallel: int | None = None,
+        offload: str | None = None,
+    ) -> dict[str, Any]:
+        model = self._model(model_name)
+        if self._model_ownership(model) == "managed_service":
+            raise ValueError(f"managed-service model {model_name!r} cannot use a local launch manifest")
+        supported = self.compatible_runtimes_for_entry(model, include_gui=True)
+        if runtime not in supported:
+            raise ValueError(
+                f"runtime {runtime!r} is not supported by model {model_name!r}; supported: {', '.join(supported) or 'none'}"
+            )
+        return render_launch_manifest(
+            runtime,
+            model_name,
+            model,
+            host=host,
+            port=port,
+            context_tokens=context_tokens,
+            gpu_devices=gpu_devices,
+            tensor_parallel=tensor_parallel,
+            offload=offload,
+        )
+
+    def evidence_bundle(
+        self,
+        runtime: str,
+        model_name: str,
+        *,
+        host: str = "127.0.0.1",
+        port: int | None = None,
+        context_tokens: int | None = None,
+        gpu_devices: list[str] | None = None,
+        tensor_parallel: int | None = None,
+        offload: str | None = None,
+    ) -> dict[str, Any]:
+        """Render the shared artifact and launch contracts used by higher-level workflows."""
+        return {
+            "contract_version": "1.0",
+            "artifact_lock": self.artifact_lock(model_name),
+            "launch_manifest": self.launch_manifest(
+                runtime,
+                model_name,
+                host=host,
+                port=port,
+                context_tokens=context_tokens,
+                gpu_devices=gpu_devices,
+                tensor_parallel=tensor_parallel,
+                offload=offload,
+            ),
         }
 
     def runtime_available(self, runtime: str) -> dict[str, Any]:
@@ -436,6 +548,15 @@ class RuntimeCatalog:
             raise ValueError(f"unknown model: {name}")
         return model
 
+    def helper_substrate(self, runtime: str, override: str | None = None) -> str:
+        """Resolve the guarded helper substrate used by runtime and stack commands."""
+        if override and override not in {"native", "docker"}:
+            raise ValueError("runtime substrate must be native or docker")
+        if override:
+            return override
+        provider = self._providers().get(runtime, {})
+        return "docker" if str(provider.get("substrate") or "native") == "docker" else "native"
+
     def _model_ownership(self, model: dict[str, Any]) -> str:
         if model.get("ownership"):
             return str(model.get("ownership"))
@@ -455,10 +576,9 @@ def _dockerfile_for_runtime(runtime: str, model_id: str) -> str:
         )
     if runtime == "vllm":
         return (
-            "FROM python:3.13-slim\n"
-            "RUN python -m pip install --no-cache-dir --upgrade pip vllm\n"
+            "FROM vllm/vllm-openai:latest\n"
             "EXPOSE 8000\n"
-            f'CMD ["python", "-m", "vllm.entrypoints.openai.api_server", "--host", "0.0.0.0", "--model", "{model_id}"]\n'
+            f'ENTRYPOINT ["vllm", "serve", "{model_id}", "--host", "0.0.0.0"]\n'
         )
     if runtime == "tgi":
         return f"FROM ghcr.io/huggingface/text-generation-inference:latest\nENV MODEL_ID={model_id}\nEXPOSE 80\n"
@@ -506,6 +626,7 @@ def _conda_yaml_for_runtime(runtime: str) -> str:
 def _pip_packages_for_runtime(runtime: str) -> list[str]:
     packages = {
         "vllm": ["vllm"],
+        "mlx": ["mlx-lm"],
         "transformers": ["torch", "transformers", "accelerate", "huggingface_hub"],
         "faster_whisper": ["faster-whisper"],
         "diffusers": ["torch", "transformers", "accelerate", "diffusers"],
@@ -519,12 +640,80 @@ def _pip_packages_for_runtime(runtime: str) -> list[str]:
     return packages.get(runtime, [])
 
 
-def _bundle_commands(runtime: str, model_name: str, mode: str, selected_file: str) -> list[str]:
+_BUNDLE_RUNTIME_PORTS = {"ollama": 11434, "vllm": 8000, "tgi": 80, "localai": 8080, "llamacpp": 8080}
+_BUNDLE_CACHE_TARGETS = {
+    "ollama": "/root/.ollama",
+    "vllm": "/root/.cache/huggingface",
+    "tgi": "/data",
+    "localai": "/build/models",
+    "llamacpp": "/models",
+    "transformers": "/root/.cache/huggingface",
+}
+
+
+def _bundle_settings(
+    runtime: str,
+    *,
+    cache_volume: str | None,
+    gpu_devices: list[str] | None,
+    environment: list[str] | None,
+    auth_env: str | None,
+    context_tokens: int | None,
+    tensor_parallel: int | None,
+) -> dict[str, Any]:
+    safe_name = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
+    safe_env = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+    devices = [str(value) for value in gpu_devices or [] if value]
+    env_names = [str(value) for value in environment or [] if value]
+    if cache_volume and not safe_name.fullmatch(cache_volume):
+        raise ValueError("cache volume must contain only letters, numbers, dot, underscore, and dash")
+    if any(not re.fullmatch(r"[A-Za-z0-9_.:-]+", value) for value in devices):
+        raise ValueError("GPU device selectors may only contain letters, numbers, dot, colon, underscore, and dash")
+    if any(not safe_env.fullmatch(value) for value in env_names):
+        raise ValueError("environment references must be variable names, not KEY=value pairs")
+    if auth_env and not safe_env.fullmatch(auth_env):
+        raise ValueError("auth environment reference must be a variable name")
+    if context_tokens is not None and context_tokens < 1:
+        raise ValueError("context tokens must be positive")
+    if tensor_parallel is not None and tensor_parallel < 1:
+        raise ValueError("tensor parallel size must be positive")
+    return {
+        "port": _BUNDLE_RUNTIME_PORTS.get(runtime, 8000),
+        "cache": {"volume": cache_volume, "target": _BUNDLE_CACHE_TARGETS.get(runtime)} if cache_volume else None,
+        "gpu_devices": devices,
+        "environment": list(dict.fromkeys(env_names)),
+        "auth_env": auth_env,
+        "context_tokens": context_tokens,
+        "tensor_parallel": tensor_parallel,
+    }
+
+
+def _bundle_commands(
+    runtime: str, model_name: str, mode: str, selected_file: str, settings: dict[str, Any]
+) -> list[str]:
     if mode == "docker":
         tag = f"aiplane-{runtime}-{model_name}:local"
+        port = int(settings["port"])
+        run = ["docker", "run", "--rm", "-p", f"{port}:{port}"]
+        devices = settings.get("gpu_devices") or []
+        if devices:
+            run.extend(["--gpus", "all" if devices == ["all"] else f"device={','.join(devices)}"])
+        cache = settings.get("cache")
+        if cache and cache.get("target"):
+            run.extend(["--mount", f"type=volume,src={cache['volume']},dst={cache['target']}"])
+        for env_name in settings.get("environment") or []:
+            run.extend(["--env", env_name])
+        if settings.get("auth_env"):
+            run.extend(["--env", str(settings["auth_env"])])
+        run.append(tag)
+        if runtime == "vllm":
+            if settings.get("context_tokens"):
+                run.extend(["--max-model-len", str(settings["context_tokens"])])
+            if settings.get("tensor_parallel"):
+                run.extend(["--tensor-parallel-size", str(settings["tensor_parallel"])])
         return [
-            f"docker build -t {tag} -f {selected_file} .",
-            f"docker run --rm -p 8000:8000 {tag}",
+            shlex.join(["docker", "build", "-t", tag, "-f", selected_file, "."]),
+            shlex.join(run),
         ]
     return [
         f"conda env create -f {selected_file}",
@@ -629,6 +818,15 @@ def _runtime_prerequisite_spec(
             packages,
             ["The helper installs vLLM with pip. GPU/CUDA compatibility is still a runtime-native concern."],
         )
+    if runtime == "mlx":
+        return (
+            ["python", "pip"],
+            [],
+            packages,
+            [
+                "MLX-LM requires Apple Silicon and macOS; Aiplane renders plans elsewhere but does not claim compatibility."
+            ],
+        )
     if runtime == "transformers":
         return (
             ["python", "pip"],
@@ -678,7 +876,7 @@ def _runtime_prerequisite_spec(
 
 def _runtime_suggestions(runtime: str, situation: str) -> list[str]:
     suggestions = [f"aiplane runtimes prerequisites {runtime}"]
-    if runtime in {"ollama", "vllm", "tgi", "transformers", "localai"}:
+    if runtime in {"ollama", "vllm", "mlx", "tgi", "transformers", "localai"}:
         suggestions.append(f"aiplane runtimes install {runtime} --dry-run")
     if situation in {"start", "configure"} and runtime in {
         "ollama",

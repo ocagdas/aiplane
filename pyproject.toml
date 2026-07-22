@@ -44,6 +44,7 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+markers = ["performance: opt-in scale and timing benchmarks"]
 
 [tool.setuptools]
 script-files = ["scripts/provider_helper.sh", "scripts/ollama_helper.sh"]
@@ -53,7 +54,17 @@ script-files = ["scripts/provider_helper.sh", "scripts/ollama_helper.sh"]
   "config-templates/local.yaml",
   "config-templates/credentials.example.yaml",
 ]
-"schemas" = ["schemas/aiplane-profile-v1.schema.json", "schemas/aiplane-adapter-v1.schema.json"]
+"schemas" = [
+  "schemas/aiplane-profile-v1.schema.json",
+  "schemas/aiplane-adapter-v1.schema.json",
+  "schemas/aiplane-benchmark-suite-v1.schema.json",
+  "schemas/aiplane-benchmark-measurements-v1.schema.json",
+  "schemas/aiplane-artifact-lock-v1.schema.json",
+  "schemas/aiplane-runtime-launch-v1.schema.json",
+  "schemas/aiplane-runtime-bundle-v1.schema.json",
+  "schemas/aiplane-agent-environment-v1.schema.json",
+  "schemas/aiplane-kubernetes-artifacts-v1.schema.json",
+]
 "profile-templates/local-dev" = [
   "profile-templates/local-dev/approvals.yaml",
   "profile-templates/local-dev/backends.yaml",

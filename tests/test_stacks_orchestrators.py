@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from aiplane.agents import AgentManager
+
 from .support import (
     MachineManager,
     OrchestratorCatalog,
@@ -133,6 +135,8 @@ class StackOrchestratorTests(unittest.TestCase):
             self.assertEqual(plan["machine"], "azure_h100_test")
             self.assertEqual(plan["model"], "local-code-large")
             self.assertIn("preflight", plan)
+            self.assertFalse(plan["runtime_evidence"]["available"])
+            self.assertIn("not supported", plan["runtime_evidence"]["reason"])
             self.assertTrue(any(check["name"] == "runtime_prerequisites" for check in plan["preflight"]["checks"]))
             self.assertTrue(any(check["name"].startswith("port_available:") for check in plan["preflight"]["checks"]))
             doctor = stacks.doctor("code_on_gpu")
@@ -321,6 +325,30 @@ class StackOrchestratorTests(unittest.TestCase):
             self.assertIn("langgraph", dockerfile["content"])
             self.assertIn("AIPLANE_LIMITS_JSON", dockerfile["content"])
             self.assertEqual(dockerfile["metadata"]["limits"]["timeout"], "30m")
+            manifest = AgentManager(profile).manifest("coding-agents", stack="coding_agents")
+            self.assertEqual(manifest["source_stack"], "coding_agents")
+            self.assertEqual(set(manifest["roles"]), {"planner", "reviewer"})
+            self.assertEqual(manifest["roles"]["reviewer"]["model_alias"], "local-code-large")
+            self.assertEqual(manifest["roles"]["planner"]["tools"]["shell"], "guarded")
+            self.assertEqual(manifest["roles"]["planner"]["approval_mode"], "ask")
+            self.assertFalse(manifest["execution_boundary"]["runs_agents"])
+
+            stacks.setup(
+                "docker_agents",
+                orchestrator=None,
+                runtime="ollama",
+                runtime_substrate="docker",
+                model="fixture-analysis-small",
+                machine="local_box",
+                access="same_host",
+            )
+            docker_plan = stacks.plan("docker_agents")
+            self.assertEqual(docker_plan["runtime_substrate"], "docker")
+            docker_prepare = stacks.prepare("docker_agents", dry_run=True)
+            self.assertEqual(docker_prepare["runtime_substrate"], "docker")
+            for item in docker_prepare["commands"]:
+                if item["name"] in {"install runtime", "pull model"}:
+                    self.assertEqual(item["command"][-2:], ["--substrate", "docker"])
             self.assertEqual(
                 dockerfile["metadata"]["roles"]["planner"]["model"],
                 "fixture-analysis-small",
@@ -763,6 +791,7 @@ class StackOrchestratorTests(unittest.TestCase):
         self.assertIn("runtime_status_before", result)
         self.assertIn("runtime_status_after", result)
         self.assertIn("available", result["runtime_status_before"])
+        self.assertEqual(result["runtime_evidence"]["artifact_lock"]["record_type"], "model_artifact_lock")
         self.assertIn("available", result["runtime_status_after"])
 
     def test_stack_lifecycle_reports_failed_step(self) -> None:

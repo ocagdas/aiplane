@@ -10,7 +10,6 @@ from typing import Any, Callable
 
 from .boundaries import CommandRunner, SubprocessCommandRunner
 from .config import load_profile, local_config_path, provider_helper_path, resolve_output_format
-from .model_catalog import ModelCatalog
 from .platform_support import detect_host_platform
 from .runtime_catalog import RuntimeCatalog
 from .docker_model_runner import DockerModelRunner
@@ -72,6 +71,14 @@ def add_runtimes_parser(
         default=None,
         help="Output format. Text is a lean table, JSON is for scripts.",
     )
+    runtimes_capabilities = runtimes_sub.add_parser(
+        "capabilities",
+        help="Show normalized local-runner capabilities",
+        description="Show detection, inventory, identity mapping, fit, health, endpoint export, and lifecycle support for the primary local runners.",
+        formatter_class=formatter_class,
+    )
+    profile_arg(runtimes_capabilities)
+    runtimes_capabilities.add_argument("runtime", nargs="?", help="Optional primary runtime name")
     runtimes_sources = runtimes_sub.add_parser(
         "sources",
         help="List model catalogs/sources",
@@ -169,12 +176,50 @@ def add_runtimes_parser(
         default="docker",
         help="Bundle target mode to plan",
     )
+    runtimes_bundle.add_argument("--cache-volume", help="Named Docker volume for the runtime model cache")
+    runtimes_bundle.add_argument(
+        "--gpu-device", action="append", default=[], help="GPU device selector; repeat or use all"
+    )
+    runtimes_bundle.add_argument(
+        "--env", action="append", default=[], help="Environment variable name to pass through; values are not embedded"
+    )
+    runtimes_bundle.add_argument("--auth-env", help="Authentication environment variable name to pass through")
+    runtimes_bundle.add_argument("--context-tokens", type=int, help="Planned context limit")
+    runtimes_bundle.add_argument("--tensor-parallel", type=int, help="Planned tensor-parallel size")
     runtimes_bundle.add_argument(
         "--format",
         choices=["json", "dockerfile", "conda-yaml"],
         default="json",
         help="Output the whole JSON plan or only one rendered file",
     )
+    artifact_lock_parser = runtimes_sub.add_parser(
+        "artifact-lock",
+        help="Render immutable model artifact evidence",
+        description="Render a versioned artifact lock. Missing revision/checksum fields remain explicitly unresolved.",
+        formatter_class=formatter_class,
+    )
+    profile_arg(artifact_lock_parser)
+    artifact_lock_parser.add_argument("--model", required=True, help="Configured self-managed model alias")
+    launch_parser = runtimes_sub.add_parser(
+        "launch-manifest",
+        help="Render an external runtime launch contract",
+        description="Render a versioned, secret-free launch command and endpoint contract without starting a process.",
+        formatter_class=formatter_class,
+    )
+    profile_arg(launch_parser)
+    launch_parser.add_argument("runtime", help="Runtime name")
+    launch_parser.add_argument("--model", required=True, help="Configured self-managed model alias")
+    launch_parser.add_argument("--host", default="127.0.0.1", help="Listen host in the rendered command")
+    launch_parser.add_argument("--port", type=int, help="Listen port; defaults to the runtime's conventional port")
+    launch_parser.add_argument("--context-tokens", type=int, help="Context limit in the rendered command")
+    launch_parser.add_argument(
+        "--gpu-device",
+        action="append",
+        default=[],
+        help="GPU device selector; repeat for multiple devices",
+    )
+    launch_parser.add_argument("--tensor-parallel", type=int, help="Tensor-parallel worker count")
+    launch_parser.add_argument("--offload", help="Runtime-specific offload value, such as llama.cpp GPU layers")
     for lifecycle_action in [
         "configure",
         "install",
@@ -256,6 +301,9 @@ def handle_runtimes_command(
             else:
                 print(json_dumps(rows, indent=2))
             return 0
+        if args.runtimes_command == "capabilities":
+            print(json_dumps(catalog.capabilities(args.runtime), indent=2))
+            return 0
         if args.runtimes_command == "sources":
             print(json_dumps(catalog.sources(), indent=2))
             return 0
@@ -279,13 +327,43 @@ def handle_runtimes_command(
             print(json_dumps(catalog.set_preferred_runtime(args.name, args.runtime), indent=2))
             return 0
         if args.runtimes_command == "bundle":
-            plan = catalog.bundle_plan(args.runtime, model_name=args.model, mode=args.mode)
+            plan = catalog.bundle_plan(
+                args.runtime,
+                model_name=args.model,
+                mode=args.mode,
+                cache_volume=args.cache_volume,
+                gpu_devices=args.gpu_device,
+                environment=args.env,
+                auth_env=args.auth_env,
+                context_tokens=args.context_tokens,
+                tensor_parallel=args.tensor_parallel,
+            )
             if args.format == "dockerfile":
                 print(plan["files"]["Dockerfile"], end="")
             elif args.format == "conda-yaml":
                 print(plan["files"]["environment.yaml"], end="")
             else:
                 print(json_dumps(plan, indent=2))
+            return 0
+        if args.runtimes_command == "artifact-lock":
+            print(json_dumps(catalog.artifact_lock(args.model), indent=2))
+            return 0
+        if args.runtimes_command == "launch-manifest":
+            print(
+                json_dumps(
+                    catalog.launch_manifest(
+                        args.runtime,
+                        args.model,
+                        host=args.host,
+                        port=args.port,
+                        context_tokens=args.context_tokens,
+                        gpu_devices=args.gpu_device,
+                        tensor_parallel=args.tensor_parallel,
+                        offload=args.offload,
+                    ),
+                    indent=2,
+                )
+            )
             return 0
         if args.runtimes_command == "prerequisites":
             payload = catalog.prerequisites(args.runtime)
@@ -309,6 +387,52 @@ def handle_runtimes_command(
             "inspect",
         }
         if args.runtimes_command in lifecycle_actions:
+            if args.runtime == "mlx":
+                mutating = args.runtimes_command in {
+                    "configure",
+                    "install",
+                    "update",
+                    "update-installed",
+                    "start",
+                    "stop",
+                    "restart",
+                    "pull",
+                    "repull",
+                    "remove",
+                    "clear",
+                }
+                payload: dict[str, Any] = {
+                    "name": "mlx_runtime_operation",
+                    "runtime": "mlx",
+                    "action": args.runtimes_command,
+                    "model": args.model,
+                    "dry_run": args.dry_run,
+                    "execution": "planned_only",
+                    "mutates": mutating,
+                    "capabilities": catalog.capabilities("mlx")["runtimes"]["mlx"],
+                }
+                if args.runtimes_command in {"install", "update", "update-installed"}:
+                    payload["command"] = ["python", "-m", "pip", "install", "--upgrade", "mlx-lm"]
+                elif args.runtimes_command == "start" and args.model != "all":
+                    try:
+                        payload["runtime_evidence"] = catalog.evidence_bundle("mlx", args.model)
+                    except ValueError as exc:
+                        payload["reason"] = str(exc)
+                elif args.runtimes_command in {"status", "list-runtime-models", "inspect"}:
+                    payload["status"] = catalog.runtime_available("mlx")
+                    payload["configured_models"] = catalog.models_by_runtime("mlx", include_gui=True)["models"]["mlx"]
+                else:
+                    payload["reason"] = (
+                        "MLX-LM has no stable separate operation for this action; use the launch manifest and its runtime-managed model cache"
+                    )
+                if mutating and not args.dry_run:
+                    payload["reason"] = (
+                        "MLX lifecycle is plan-only; rerun with --dry-run, review the command/manifest, then execute it outside Aiplane"
+                    )
+                    print(json_dumps(payload, indent=2))
+                    return 2
+                print(json_dumps(payload, indent=2))
+                return 0
             if args.runtime == "docker_model_runner":
                 payload, returncode = DockerModelRunner(_COMMAND_RUNNER).run(
                     args.runtimes_command, model=args.model, yes=args.yes, dry_run=args.dry_run
@@ -441,11 +565,7 @@ def handle_runtimes_command(
 
 
 def _runtime_helper_substrate(profile: object, runtime: str, override: str | None = None) -> str:
-    if override:
-        return override
-    provider = ModelCatalog(profile).providers().get(runtime, {}) if hasattr(profile, "models") else {}
-    substrate = str(provider.get("substrate") or "native") if isinstance(provider, dict) else "native"
-    return "docker" if substrate == "docker" else "native"
+    return RuntimeCatalog(profile).helper_substrate(runtime, override)
 
 
 def _run_provider_helper(

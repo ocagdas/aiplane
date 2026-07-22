@@ -24,6 +24,16 @@ RUNTIME_DEFINITIONS: dict[str, dict[str, Any]] = {
         "good_for": ["Docker-managed local inference", "OpenAI-compatible clients", "portable OCI model identities"],
         "install_hint": "Install a Docker release with the docker model command, then run aiplane runtimes install docker_model_runner --yes",
     },
+    "mlx": {
+        "ownership": "self_managed",
+        "description": "Apple Silicon inference server built on MLX and Hugging Face model identities",
+        "managed_by_helper": "partial",
+        "gui_required": False,
+        "protocol": "openai_compatible",
+        "model_sources": ["huggingface", "local_file"],
+        "good_for": ["Apple Silicon", "unified-memory Macs", "local OpenAI-compatible serving"],
+        "install_hint": "python -m pip install mlx-lm",
+    },
     "azure_speech": {
         "ownership": "managed_service",
         "description": "Azure AI Speech managed text-to-speech service",
@@ -152,7 +162,7 @@ SOURCE_DEFINITIONS: dict[str, dict[str, Any]] = {
     "huggingface": {
         "ownership": "self_managed",
         "description": "Hugging Face Hub model repos with tokenizer/config/weights",
-        "typical_runtimes": ["vllm", "tgi", "transformers"],
+        "typical_runtimes": ["vllm", "mlx", "tgi", "transformers"],
         "catalog_adapter": "huggingface",
     },
     "nvidia": {
@@ -221,7 +231,7 @@ SOURCE_DEFINITIONS: dict[str, dict[str, Any]] = {
         "api_key_env": "ANTHROPIC_API_KEY",
         "auth": {"required": True, "method": "api_key"},
         "typical_runtimes": [],
-        "catalog_adapter": "profile_catalog",
+        "catalog_adapter": "anthropic",
     },
     "azure_openai": {
         "ownership": "managed_service",
@@ -272,6 +282,18 @@ PROVIDER_ENDPOINT_DEFAULTS: dict[str, dict[str, Any]] = {
         "timeout_seconds": 60,
         "origin": "default_runtime_catalog",
         "notes": "Docker Model Runner host endpoint. Its local API is unauthenticated; do not expose it directly to untrusted networks.",
+    },
+    "mlx": {
+        "supported_apis": ["chat_completions"],
+        "ownership": "self_managed",
+        "access": {"kind": "same_host"},
+        "substrate": "venv",
+        "runtime": "mlx",
+        "protocol": "openai_compatible",
+        "endpoint": "http://localhost:8080/v1",
+        "enabled": False,
+        "origin": "default_runtime_catalog",
+        "notes": "Conventional MLX-LM server endpoint. Keep the development server private.",
     },
     "vllm": {
         "supported_apis": ["chat_completions"],

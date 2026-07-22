@@ -14,6 +14,8 @@ Download the `.whl` attached to the [latest GitHub Release](https://github.com/o
 
 Download `SHA256SUMS` from the same release and verify the wheel before installation. Linux can use `sha256sum --check SHA256SUMS`; macOS can use `shasum -a 256 --check SHA256SUMS`; on Windows compare `Get-FileHash -Algorithm SHA256` output with the manifest.
 
+Also verify its signed build provenance with GitHub CLI: `gh attestation verify aiplane-* --repo ocagdas/aiplane`. The checksum detects a changed download; the attestation confirms which repository and workflow built it. Both checks run automatically in the published-release verification matrix.
+
 Choose one installation owner:
 
 ```bash

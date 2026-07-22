@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aiplane.dev/schemas/agent-environment/v1",
+  "title": "aiplane agent environment",
+  "type": "object",
+  "required": [
+    "$schema",
+    "schema_version",
+    "record_type",
+    "render_only",
+    "name",
+    "profile",
+    "orchestrator",
+    "roles",
+    "execution_boundary"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "schemas/aiplane-agent-environment-v1.schema.json"
+    },
+    "schema_version": {
+      "const": "1.0"
+    },
+    "record_type": {
+      "const": "agent_environment"
+    },
+    "render_only": {
+      "const": true
+    },
+    "name": {
+      "type": "string"
+    },
+    "profile": {
+      "type": "string"
+    },
+    "source_stack": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "orchestrator": {
+      "type": "string"
+    },
+    "roles": {
+      "type": "object",
+      "minProperties": 1
+    },
+    "tools": {
+      "type": "object"
+    },
+    "limits": {
+      "type": "object"
+    },
+    "approval_mode": {
+      "type": "string"
+    },
+    "audit_label": {
+      "type": "string"
+    },
+    "execution_boundary": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": true
+}

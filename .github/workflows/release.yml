@@ -14,6 +14,9 @@ on:
 permissions:
   actions: write
   contents: write
+  id-token: write
+  attestations: write
+  artifact-metadata: write
 
 jobs:
   release:
@@ -84,18 +87,27 @@ jobs:
         if: ${{ github.event_name == 'workflow_dispatch' || steps.tag.outputs.automatic_publish == 'true' }}
         run: python scripts/verify_release_manifest.py dist
 
+      - name: Attest release distributions
+        if: ${{ github.event_name == 'workflow_dispatch' || steps.tag.outputs.automatic_publish == 'true' }}
+        uses: actions/attest@v4
+        with:
+          subject-checksums: dist/SHA256SUMS
+
+      - name: Verify release build provenance
+        if: ${{ github.event_name == 'workflow_dispatch' || steps.tag.outputs.automatic_publish == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh attestation verify dist/aiplane-* --repo "$GITHUB_REPOSITORY"
+
       - name: Write generated release notes
         if: ${{ github.event_name == 'workflow_dispatch' || steps.tag.outputs.automatic_publish == 'true' }}
         run: |
-          {
-            echo "# aiplane ${{ steps.tag.outputs.name }}"
-            echo
-            echo "Validated ${{ steps.tag.outputs.change_kind }} release artifacts for ${{ steps.tag.outputs.name }}."
-            echo
-            echo "Commit: $(git rev-parse HEAD)"
-            echo
-            echo "Verify downloads with SHA256SUMS before installation."
-          } > RELEASE_NOTES.md
+          python scripts/render_release_notes.py \
+            --tag "${{ steps.tag.outputs.name }}" \
+            --change-kind "${{ steps.tag.outputs.change_kind }}" \
+            --commit "$(git rev-parse HEAD)" \
+            --checksums dist/SHA256SUMS \
+            --output RELEASE_NOTES.md
 
       - name: Publish GitHub Release artifacts
         if: ${{ github.event_name == 'workflow_dispatch' || steps.tag.outputs.automatic_publish == 'true' }}

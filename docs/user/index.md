@@ -36,6 +36,8 @@ aiplane recommend
 aiplane export continue
 ```
 
+For release, demo, or acceptance testing, use the [installation-to-feature manual test checklist](manual-test-checklist.md). It labels read-only, preview, mutating, optional-runtime, and render-only checks and records expected outcomes.
+
 ## Common workflows
 
 Use these after the first workflow succeeds.

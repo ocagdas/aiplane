@@ -25,7 +25,7 @@ The current read tools are:
 - `aiplane.docs.list` and `aiplane.docs.read` for project docs/help text
 - `aiplane.profiles.list`
 - `aiplane.providers.list` with `status`, `runtime`, and `group_by` filters for ownership/runtime grouping
-- `aiplane.providers.models`
+- `aiplane.providers.models` and `aiplane.providers.diagnose`
 - `aiplane.models.defaults`
 - `aiplane.models.list` with filters, named-machine/current-machine fit filtering, sorting, and limits
 - `aiplane.models.show`
@@ -36,7 +36,8 @@ The current read tools are:
 - `aiplane.integrations.export`
 - `aiplane.integrations.roles` and `aiplane.integrations.plan`
 - `aiplane.orchestrators.list` and `aiplane.orchestrators.show`
-- `aiplane.runtimes.status`
+- `aiplane.runtimes.status` and render-only `aiplane.runtimes.bundle`
+- render-only `aiplane.agents.manifest`
 - `aiplane.remote.tunnel.plan`
 - `aiplane.remote.tunnel.status`
 

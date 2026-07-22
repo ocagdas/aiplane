@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aiplane.dev/schemas/aiplane-artifact-lock-v1.schema.json",
+  "title": "Aiplane model artifact lock v1",
+  "type": "object",
+  "required": [
+    "contract_version",
+    "record_type",
+    "model_alias",
+    "identity",
+    "integrity",
+    "provenance",
+    "complete"
+  ],
+  "properties": {
+    "contract_version": {
+      "const": "1.0"
+    },
+    "record_type": {
+      "const": "model_artifact_lock"
+    },
+    "model_alias": {
+      "type": "string",
+      "minLength": 1
+    },
+    "identity": {
+      "type": "object",
+      "required": [
+        "source",
+        "model_id",
+        "revision",
+        "file",
+        "format",
+        "quantization"
+      ]
+    },
+    "integrity": {
+      "type": "object",
+      "required": [
+        "checksum",
+        "size_bytes",
+        "size"
+      ]
+    },
+    "access": {
+      "type": "object"
+    },
+    "runtime_compatibility": {
+      "type": "object"
+    },
+    "provenance": {
+      "type": "object"
+    },
+    "complete": {
+      "type": "boolean"
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": false
+}

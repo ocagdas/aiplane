@@ -138,9 +138,19 @@ aiplane providers test azure_openai --credential-ref azure_openai.business_a
 aiplane providers test elevenlabs
 ```
 
-The test command currently has live adapters for Azure OpenAI deployment listing, ElevenLabs voice listing, and OpenAI-compatible `/v1/models` endpoints. Other providers still rely on doctor checks until a provider-specific safe test is added.
+The test command has live adapters for Azure OpenAI deployment listing, ElevenLabs voice listing, Anthropic model listing, and OpenAI-compatible `/v1/models` endpoints. Custom OpenAI-compatible endpoints can explicitly declare that authentication is not required; hosted defaults still fail closed when credentials are missing.
 
 ## Provider Commands
+
+Inspect discovery readiness without making a network request or revealing credential values:
+
+```bash
+aiplane providers diagnose
+aiplane providers diagnose openai
+aiplane providers diagnose anthropic
+```
+
+The versioned result separates adapter, endpoint, and credential-reference checks and gives the next online query command. Use `providers test` afterward when you intend to contact the endpoint.
 
 List known model providers. The list includes `ownership` so you can distinguish `self_managed` model sources from `managed_service` providers:
 
@@ -286,6 +296,15 @@ aiplane providers clear --scope all
 
 `aiplane models refresh` imports model-provider catalog entries into the ignored `models.discovered.yaml` cache so you can later filter locally by runtime, role, capability, score, RAM/VRAM fit, explicit GPU vendor/API requirements, benchmark results, and target hardware. The template `models.yaml` starts empty except for `defaults:` and `models:`. Source discovery definitions come from `model-providers.yaml`, ignored user overrides, and built-in source seeds. Runtime/provider endpoint values such as localhost ports are conventional built-in defaults used for planning, exports, and doctor/test hints; they are not proof that a runtime is installed or configured. Discovered entries are repopulated from provider discovery whenever you refresh. It is online-first where an adapter exists, and it is not runtime inventory.
 
+Refresh also generates an ignored, materialized query cache at
+`.aiplane/cache/model-catalog-v1.json`. Editable YAML remains the source of
+truth. The cache stores safe enriched model fields, exact-match indexes, and the
+latest local benchmark summary so repeated queries do not reparse and enrich the
+whole catalog. It excludes secret-bearing properties, is written atomically, and
+is rebuilt automatically when its schema, enrichment rules, profile catalog,
+discovery cache, or benchmark inputs change. A missing or corrupt cache falls
+back to the source files and is regenerated.
+
 When an online source adapter succeeds, the source result is treated as authoritative for discovered/imported entries when it is not a query or limit-truncated window: new source ids are imported into `models.discovered.yaml`, stale discovered ids are pruned, and changed source metadata updates discovered entries. Profile-owned entries in `models.yaml` are preserved by refresh; if a local profile-owned entry points at a returned source id, only source-derived metadata is refreshed while human-maintained fields stay intact. In this context, profile-owned means human-maintained data such as entry names, enabled/disabled state, roles, preferred runtime, RAM/VRAM overrides, and notes.
 
 When a self-managed online source fails or no online adapter exists, refresh reports the reason and falls back to local profile entries without pruning or updating. Managed providers with live catalog adapters, such as OpenAI-compatible `/v1/models`, Azure OpenAI deployments, or ElevenLabs voices, report a structured refresh failure when endpoint or credential configuration is missing; fix `providers show` / `providers test` first, then rerun refresh.
@@ -305,7 +324,27 @@ When provider metadata includes popularity fields, `models list` can filter and 
 aiplane models list --source huggingface --role chat --min-likes 100 --sort-by likes --limit 10
 aiplane models list --source huggingface --role embedding --sort-by downloads --limit 10
 aiplane models list --provider huggingface --runtime vllm --sort-by popularity --limit 10
+aiplane models list --provider ollama --runner ollama --alias local_chat
+aiplane models list --model-id qwen2.5-coder:7b --min-parameters-b 7 --max-parameters-b 14
+aiplane models list --provider ollama --runner ollama --min-benchmark-score 80 --property quantization=q4
 ```
+
+`--property FIELD=VALUE` performs an exact match against safe catalog metadata
+and accepts dotted paths for nested values. Repeat it to require several model
+properties. `--runner` is an alias for `--runtime`.
+
+Materialization is optional per query and directly manageable:
+
+```bash
+aiplane models list --provider ollama --catalog-cache off
+aiplane models list --provider ollama --catalog-cache rebuild
+aiplane models catalog-cache status
+aiplane models catalog-cache rebuild
+aiplane models catalog-cache clear
+```
+
+`models clear-cache` clears provider discovery data. `models catalog-cache
+clear` clears only the derived query cache; the next normal query rebuilds it.
 
 Compact text output places the Aiplane `ALIAS` beside the provider-native
 `MODEL`, so commands such as `models show`, `models promote`, `models pull`, and
