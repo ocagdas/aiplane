@@ -1120,3 +1120,53 @@ exit 0
             result = ModelCatalog(profile).complete("provider-code-large-vllm", "hello")
         self.assertEqual(result.backend, "openai_compatible")
         self.assertEqual(result.text, "handled test-model")
+
+    def test_artifact_lock_keeps_unresolved_integrity_explicit(self) -> None:
+        profile = load_profile("local-dev", Path.cwd())
+        lock = RuntimeCatalog(profile).artifact_lock("fixture-analysis-small")
+        self.assertEqual(lock["contract_version"], "1.0")
+        self.assertEqual(lock["record_type"], "model_artifact_lock")
+        self.assertEqual(lock["identity"]["model_id"], "provider-text-small:0.5b")
+        self.assertIsNone(lock["identity"]["revision"])
+        self.assertIsNone(lock["integrity"]["checksum"])
+        self.assertFalse(lock["complete"])
+
+    def test_launch_manifest_renders_exact_runtime_settings_without_execution(self) -> None:
+        profile = load_profile("local-dev", Path.cwd())
+        manifest = RuntimeCatalog(profile).launch_manifest(
+            "vllm",
+            "provider-code-large-vllm",
+            host="0.0.0.0",
+            port=9000,
+            context_tokens=8192,
+            gpu_devices=["0", "1"],
+            tensor_parallel=2,
+        )
+        command = manifest["launch"]["command"]
+        self.assertEqual(manifest["mode"], "render_only")
+        self.assertIn("Provider/Code-Large-Instruct", command)
+        self.assertIn("--max-model-len", command)
+        self.assertIn("--tensor-parallel-size", command)
+        self.assertEqual(manifest["launch"]["environment"]["CUDA_VISIBLE_DEVICES"], "0,1")
+        self.assertEqual(manifest["endpoint"]["base_url"], "http://0.0.0.0:9000")
+
+    def test_runtime_evidence_cli_outputs_versioned_json(self) -> None:
+        stdout = StringIO()
+        with redirect_stdout(stdout):
+            code = cli_main(["runtimes", "artifact-lock", "--model", "fixture-analysis-small"])
+        self.assertEqual(code, 0)
+        self.assertEqual(json.loads(stdout.getvalue())["record_type"], "model_artifact_lock")
+
+        stdout = StringIO()
+        with redirect_stdout(stdout):
+            code = cli_main(
+                [
+                    "runtimes",
+                    "launch-manifest",
+                    "ollama",
+                    "--model",
+                    "fixture-analysis-small",
+                ]
+            )
+        self.assertEqual(code, 0)
+        self.assertEqual(json.loads(stdout.getvalue())["record_type"], "runtime_launch_manifest")

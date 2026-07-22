@@ -10,6 +10,7 @@ from urllib.parse import urlparse
 from .config import dump_yaml
 
 _DNS_LABEL = re.compile(r"^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$")
+_QUANTITY = re.compile(r"^(?:\d+(?:\.\d+)?|\.\d+)(?:[EPTGMK]i?|[numkMGTPE]|e[+-]?\d+)?$")
 
 
 def render_kubernetes(
@@ -19,6 +20,12 @@ def render_kubernetes(
     device_class: str,
     namespace: str = "default",
     replicas: int = 1,
+    claim_count: int = 1,
+    cpu: str = "1",
+    memory: str = "4Gi",
+    cache_size: str = "20Gi",
+    image_pull_policy: str = "IfNotPresent",
+    service_type: str = "ClusterIP",
 ) -> dict[str, Any]:
     name = _name(str(stack.get("name") or ""))
     namespace = _name(namespace)
@@ -29,11 +36,28 @@ def render_kubernetes(
         raise ValueError("image must be a non-empty container image reference")
     if replicas < 1:
         raise ValueError("replicas must be at least 1")
+    if claim_count < 1:
+        raise ValueError("claim count must be at least 1")
+    if image_pull_policy not in {"Always", "IfNotPresent", "Never"}:
+        raise ValueError("image pull policy must be Always, IfNotPresent, or Never")
+    if service_type not in {"ClusterIP", "NodePort", "LoadBalancer"}:
+        raise ValueError("service type must be ClusterIP, NodePort, or LoadBalancer")
+    for label, value in {"cpu": cpu, "memory": memory, "cache size": cache_size}.items():
+        if not _QUANTITY.fullmatch(value):
+            raise ValueError(f"{label} must be a non-negative Kubernetes quantity")
     endpoint = str(stack.get("endpoint") or "")
     parsed = urlparse(endpoint)
     if parsed.scheme not in {"http", "https"} or not parsed.hostname:
         raise ValueError("stack endpoint must be an absolute HTTP(S) URL")
     port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    evidence = stack.get("runtime_evidence") if isinstance(stack.get("runtime_evidence"), dict) else {}
+    launch_manifest = evidence.get("launch_manifest") if isinstance(evidence.get("launch_manifest"), dict) else {}
+    launch = launch_manifest.get("launch") if isinstance(launch_manifest.get("launch"), dict) else {}
+    endpoint_evidence = launch_manifest.get("endpoint") if isinstance(launch_manifest.get("endpoint"), dict) else {}
+    command = [str(value) for value in launch.get("command", [])] if isinstance(launch.get("command"), list) else []
+    health_path = str(endpoint_evidence.get("health_path") or "/v1/models")
+    if not health_path.startswith("/"):
+        raise ValueError("launch health path must be absolute")
     claim_name = f"{name}-accelerator"
     files = {
         "resourceclaim.yaml": (
@@ -48,7 +72,7 @@ def render_kubernetes(
             "      - name: accelerator\n"
             f"        exactly:\n          deviceClassName: {device_class}\n"
             "          allocationMode: ExactCount\n"
-            "          count: 1\n"
+            f"          count: {claim_count}\n"
         ),
         "deployment.yaml": (
             "apiVersion: apps/v1\n"
@@ -72,7 +96,19 @@ def render_kubernetes(
             "      containers:\n"
             f"        - name: {name}\n"
             f"          image: {image}\n"
+            f"          imagePullPolicy: {image_pull_policy}\n"
+            + (f"          command: {json.dumps(command)}\n" if command else "")
+            + "          securityContext:\n"
+            "            allowPrivilegeEscalation: false\n"
+            "            capabilities:\n"
+            '              drop: ["ALL"]\n'
+            "            runAsNonRoot: true\n"
             "          resources:\n"
+            "            requests:\n"
+            f"              cpu: {cpu}\n"
+            f"              memory: {memory}\n"
+            "            limits:\n"
+            f"              memory: {memory}\n"
             "            claims:\n"
             "              - name: accelerator\n"
             "          env:\n"
@@ -80,6 +116,20 @@ def render_kubernetes(
             f"              value: {json.dumps(str(stack.get('model') or ''))}\n"
             "          ports:\n"
             f"            - name: http\n              containerPort: {port}\n"
+            "          readinessProbe:\n"
+            f"            httpGet:\n              path: {health_path}\n              port: http\n"
+            "            initialDelaySeconds: 5\n"
+            "            periodSeconds: 10\n"
+            "          livenessProbe:\n"
+            f"            httpGet:\n              path: {health_path}\n              port: http\n"
+            "            initialDelaySeconds: 30\n"
+            "            periodSeconds: 20\n"
+            "          volumeMounts:\n"
+            "            - name: model-cache\n"
+            "              mountPath: /var/lib/aiplane/models\n"
+            "      volumes:\n"
+            "        - name: model-cache\n"
+            f"          emptyDir:\n            sizeLimit: {cache_size}\n"
         ),
         "service.yaml": (
             "apiVersion: v1\n"
@@ -88,6 +138,7 @@ def render_kubernetes(
             f"  name: {name}\n"
             f"  namespace: {namespace}\n"
             "spec:\n"
+            f"  type: {service_type}\n"
             "  selector:\n"
             f"    app.kubernetes.io/name: {name}\n"
             "  ports:\n"
@@ -100,14 +151,18 @@ def render_kubernetes(
                 "nameOverride": name,
                 "namespace": namespace,
                 "replicaCount": replicas,
-                "image": {"repository": image, "pullPolicy": "IfNotPresent"},
+                "image": {"repository": image, "pullPolicy": image_pull_policy},
                 "model": {"alias": str(stack.get("model") or ""), "runtime": str(stack.get("runtime") or "")},
-                "service": {"port": port},
-                "resourceClaim": {"name": claim_name, "deviceClassName": device_class, "count": 1},
+                "service": {"type": service_type, "port": port},
+                "resources": {"cpu": cpu, "memory": memory, "cacheSize": cache_size},
+                "health": {"path": health_path},
+                "launch": {"command": command},
+                "resourceClaim": {"name": claim_name, "deviceClassName": device_class, "count": claim_count},
             }
         ),
     }
     return {
+        "$schema": "schemas/aiplane-kubernetes-artifacts-v1.schema.json",
         "schema_version": "1.0",
         "artifact_family": "kubernetes",
         "stack": name,
@@ -116,7 +171,7 @@ def render_kubernetes(
         "review_required": True,
         "files": files,
         "notes": [
-            "Review image entrypoint, ports, storage, probes, security context, and device class before use.",
+            "Review the rendered command, image entrypoint, resource quantities, cache persistence, probes, security context, and device class before use.",
             "Aiplane does not apply these artifacts. No kubectl or Helm command was executed.",
             "The output contains model identity and topology only; credentials must be supplied separately.",
         ],

@@ -289,6 +289,37 @@ For runtimes that are libraries or file loaders, such as raw Transformers or Dif
 - **LM Studio**: GUI-managed. It can still be used as an endpoint, but `aiplane` does not install or operate the GUI.
 
 
+## Artifact Locks and Launch Manifests
+
+Render model identity and integrity evidence without pulling or copying weights:
+
+```bash
+aiplane runtimes artifact-lock --model MODEL_ALIAS
+```
+
+Unknown revision, checksum, format, quantization, license, or size fields remain `null`; `complete` is true only when immutable revision and checksum/digest evidence are both present.
+
+Render a reviewed external-runner command and endpoint contract:
+
+```bash
+aiplane runtimes launch-manifest ollama --model MODEL_ALIAS
+aiplane runtimes launch-manifest vllm --model MODEL_ALIAS --host 0.0.0.0 --port 8000 --context-tokens 32768 --gpu-device 0 --gpu-device 1 --tensor-parallel 2
+aiplane runtimes launch-manifest llamacpp --model GGUF_ALIAS --context-tokens 8192 --offload 35
+```
+
+The manifest is versioned, JSON, render-only, and secret-free. It records artifact evidence, runtime/protocol requirements, the exact argument vector, endpoint/health metadata, context, device selection, parallelism, and offload settings. It does not install a runtime, pull a model, bind a port, or start a service. Renderers cover Ollama, vLLM, llama.cpp, MLX, Docker Model Runner, and LM Studio when the selected model/runtime mapping is compatible. vLLM renders `vllm serve`; MLX renders `python -m mlx_lm.server`. Higher-level pull previews, benchmark records, stack plan/doctor, profile replay comparisons, and stack lifecycle results reuse these artifact and launch contracts instead of inventing separate evidence shapes.
+
+## Primary runner capability contract
+
+Inspect normalized detection, inventory, alias/native-id mapping, hardware fit, health, endpoint export, and lifecycle support:
+
+```bash
+aiplane runtimes capabilities
+aiplane runtimes capabilities mlx
+```
+
+The primary contract covers Ollama, llama.cpp, MLX, Docker Model Runner, LM Studio, and vLLM. `supported` means Aiplane has a guarded read or execution boundary; `planned_only` means it renders an exact plan while the external runtime retains process ownership; `runtime_managed` means the runner exposes an active/cache-oriented inventory rather than a general disk catalog. MLX install/start remains plan-only and is only a compatible execution target on supported Apple Silicon/macOS hosts.
+
 ## Helper Lifecycle Commands
 
 Use the same helper surface across manageable runtimes from the main CLI:

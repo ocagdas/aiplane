@@ -133,6 +133,8 @@ class StackOrchestratorTests(unittest.TestCase):
             self.assertEqual(plan["machine"], "azure_h100_test")
             self.assertEqual(plan["model"], "local-code-large")
             self.assertIn("preflight", plan)
+            self.assertFalse(plan["runtime_evidence"]["available"])
+            self.assertIn("not supported", plan["runtime_evidence"]["reason"])
             self.assertTrue(any(check["name"] == "runtime_prerequisites" for check in plan["preflight"]["checks"]))
             self.assertTrue(any(check["name"].startswith("port_available:") for check in plan["preflight"]["checks"]))
             doctor = stacks.doctor("code_on_gpu")
@@ -763,6 +765,7 @@ class StackOrchestratorTests(unittest.TestCase):
         self.assertIn("runtime_status_before", result)
         self.assertIn("runtime_status_after", result)
         self.assertIn("available", result["runtime_status_before"])
+        self.assertEqual(result["runtime_evidence"]["artifact_lock"]["record_type"], "model_artifact_lock")
         self.assertIn("available", result["runtime_status_after"])
 
     def test_stack_lifecycle_reports_failed_step(self) -> None:

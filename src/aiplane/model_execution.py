@@ -98,7 +98,7 @@ class ModelExecution:
             command = ["test", "-f", model_id]
         else:
             command = ["provider-native-pull", source, model_id]
-        return {
+        plan = {
             "name": name,
             "source": source,
             "model": model_id,
@@ -106,6 +106,12 @@ class ModelExecution:
             "file": file,
             "command": command,
         }
+        if name and for_runtime:
+            try:
+                plan["runtime_evidence"] = RuntimeCatalog(self.profile).evidence_bundle(for_runtime, name)
+            except ValueError as exc:
+                plan["runtime_evidence"] = {"contract_version": "1.0", "available": False, "reason": str(exc)}
+        return plan
 
     def get(self, name: str) -> dict[str, Any]:
         models = self.models()

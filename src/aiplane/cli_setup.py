@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 from typing import Any, Callable
 
+from .benchmark_evidence import import_measurement_record, load_suite
 from .benchmark_tools import BenchmarkToolManager
 from .config import load_profile
 from .env import EnvironmentManager
@@ -161,6 +162,30 @@ def add_setup_parsers(
     )
     benchmarks_plan.add_argument("--spec", help="Custom aiplane benchmark spec path for aiplane-smoke")
 
+    benchmarks_validate = benchmarks_sub.add_parser(
+        "suite-validate",
+        help="Validate and normalize a benchmark suite",
+        description="Validate a versioned JSON/YAML benchmark suite without executing it.",
+        formatter_class=formatter_class,
+        allow_abbrev=False,
+    )
+    profile_arg(benchmarks_validate)
+    benchmarks_validate.add_argument("path", help="Benchmark suite JSON/YAML path")
+    benchmarks_import = benchmarks_sub.add_parser(
+        "import",
+        help="Preview or import external benchmark measurements",
+        description="Validate provenance-bearing JSON/YAML measurements. Preview is the default; --yes writes only to the ignored workspace cache.",
+        formatter_class=formatter_class,
+        allow_abbrev=False,
+    )
+    profile_arg(benchmarks_import)
+    benchmarks_import.add_argument("path", help="Benchmark measurement JSON/YAML path")
+    benchmarks_import.add_argument(
+        "--yes",
+        action="store_true",
+        help="Write the validated record under .aiplane/benchmarks",
+    )
+
     tools_cmd = command_factory(
         subparsers,
         "tools",
@@ -280,8 +305,20 @@ def handle_setup_command(
             payload = manager.doctor(args.name)
         elif args.benchmarks_command == "install":
             payload = manager.install(args.name, dry_run=args.dry_run)
-        else:
+        elif args.benchmarks_command == "plan":
             payload = manager.plan(args.name, model=args.model, endpoint=args.endpoint, spec=args.spec)
+        elif args.benchmarks_command == "suite-validate":
+            payload = load_suite(Path(args.path).resolve())
+        else:
+            from .model_catalog import ModelCatalog
+
+            source = Path(args.path).resolve()
+            payload = import_measurement_record(profile.workspace, source, dry_run=True)
+            catalog = ModelCatalog(profile)
+            catalog.show(payload["record"]["model_name"])
+            if args.yes:
+                payload = import_measurement_record(profile.workspace, source, dry_run=False)
+                catalog.rebuild_materialized()
         print(json_dumps(payload, indent=2))
         return 0
     manager = EnvironmentManager(profile)

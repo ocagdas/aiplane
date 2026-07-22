@@ -17,6 +17,9 @@ from .runtime_definitions import (
     RUNTIME_DEFINITIONS,
     SOURCE_DEFINITIONS,
 )
+from .runtime_evidence import artifact_lock as render_artifact_lock
+from .runtime_evidence import launch_manifest as render_launch_manifest
+from .runtime_parity import capability_matrix
 
 
 class RuntimeCatalog:
@@ -56,6 +59,9 @@ class RuntimeCatalog:
                 }
             )
         return sorted(rows, key=lambda row: row["name"])
+
+    def capabilities(self, runtime: str | None = None) -> dict[str, Any]:
+        return capability_matrix(runtime)
 
     def sources(self) -> list[dict[str, Any]]:
         return [{"name": name, **value} for name, value in sorted(SOURCE_DEFINITIONS.items())]
@@ -262,6 +268,74 @@ class RuntimeCatalog:
                 "This is a render-only reproducibility plan; it does not build images, create environments, or pull model weights.",
                 "Runtime-specific tuning such as tensor parallelism, quantization, GPU devices, and mounted model caches should be added before production use.",
             ],
+        }
+
+    def artifact_lock(self, model_name: str) -> dict[str, Any]:
+        model = self._model(model_name)
+        if self._model_ownership(model) == "managed_service":
+            raise ValueError(f"managed-service model {model_name!r} does not have a local artifact lock")
+        lock_model = dict(model)
+        lock_model["supported_runtimes"] = self.compatible_runtimes_for_entry(model, include_gui=True)
+        return render_artifact_lock(model_name, lock_model)
+
+    def launch_manifest(
+        self,
+        runtime: str,
+        model_name: str,
+        *,
+        host: str = "127.0.0.1",
+        port: int | None = None,
+        context_tokens: int | None = None,
+        gpu_devices: list[str] | None = None,
+        tensor_parallel: int | None = None,
+        offload: str | None = None,
+    ) -> dict[str, Any]:
+        model = self._model(model_name)
+        if self._model_ownership(model) == "managed_service":
+            raise ValueError(f"managed-service model {model_name!r} cannot use a local launch manifest")
+        supported = self.compatible_runtimes_for_entry(model, include_gui=True)
+        if runtime not in supported:
+            raise ValueError(
+                f"runtime {runtime!r} is not supported by model {model_name!r}; supported: {', '.join(supported) or 'none'}"
+            )
+        return render_launch_manifest(
+            runtime,
+            model_name,
+            model,
+            host=host,
+            port=port,
+            context_tokens=context_tokens,
+            gpu_devices=gpu_devices,
+            tensor_parallel=tensor_parallel,
+            offload=offload,
+        )
+
+    def evidence_bundle(
+        self,
+        runtime: str,
+        model_name: str,
+        *,
+        host: str = "127.0.0.1",
+        port: int | None = None,
+        context_tokens: int | None = None,
+        gpu_devices: list[str] | None = None,
+        tensor_parallel: int | None = None,
+        offload: str | None = None,
+    ) -> dict[str, Any]:
+        """Render the shared artifact and launch contracts used by higher-level workflows."""
+        return {
+            "contract_version": "1.0",
+            "artifact_lock": self.artifact_lock(model_name),
+            "launch_manifest": self.launch_manifest(
+                runtime,
+                model_name,
+                host=host,
+                port=port,
+                context_tokens=context_tokens,
+                gpu_devices=gpu_devices,
+                tensor_parallel=tensor_parallel,
+                offload=offload,
+            ),
         }
 
     def runtime_available(self, runtime: str) -> dict[str, Any]:
@@ -513,6 +587,7 @@ def _conda_yaml_for_runtime(runtime: str) -> str:
 def _pip_packages_for_runtime(runtime: str) -> list[str]:
     packages = {
         "vllm": ["vllm"],
+        "mlx": ["mlx-lm"],
         "transformers": ["torch", "transformers", "accelerate", "huggingface_hub"],
         "faster_whisper": ["faster-whisper"],
         "diffusers": ["torch", "transformers", "accelerate", "diffusers"],
@@ -636,6 +711,15 @@ def _runtime_prerequisite_spec(
             packages,
             ["The helper installs vLLM with pip. GPU/CUDA compatibility is still a runtime-native concern."],
         )
+    if runtime == "mlx":
+        return (
+            ["python", "pip"],
+            [],
+            packages,
+            [
+                "MLX-LM requires Apple Silicon and macOS; Aiplane renders plans elsewhere but does not claim compatibility."
+            ],
+        )
     if runtime == "transformers":
         return (
             ["python", "pip"],
@@ -685,7 +769,7 @@ def _runtime_prerequisite_spec(
 
 def _runtime_suggestions(runtime: str, situation: str) -> list[str]:
     suggestions = [f"aiplane runtimes prerequisites {runtime}"]
-    if runtime in {"ollama", "vllm", "tgi", "transformers", "localai"}:
+    if runtime in {"ollama", "vllm", "mlx", "tgi", "transformers", "localai"}:
         suggestions.append(f"aiplane runtimes install {runtime} --dry-run")
     if situation in {"start", "configure"} and runtime in {
         "ollama",

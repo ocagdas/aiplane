@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aiplane.dev/schemas/aiplane-kubernetes-artifacts-v1.schema.json",
+  "title": "Aiplane Kubernetes artifact family",
+  "type": "object",
+  "required": ["schema_version", "artifact_family", "render_only", "apply_supported", "review_required", "files"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "artifact_family": {"const": "kubernetes"},
+    "render_only": {"const": true},
+    "apply_supported": {"const": false},
+    "review_required": {"const": true},
+    "files": {
+      "type": "object",
+      "required": ["resourceclaim.yaml", "deployment.yaml", "service.yaml", "values.yaml"],
+      "additionalProperties": {"type": "string"}
+    }
+  },
+  "additionalProperties": true
+}

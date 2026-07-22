@@ -12,6 +12,7 @@ from .hardware import HardwareManager
 from .model_resources import accelerator_api_requirements, gpu_vendor_requirement, number_or_none
 from .models import Profile
 from .profile_archive import load_profile_archive, snapshot_profile
+from .runtime_evidence import artifact_lock
 
 
 COMPARISON_SCHEMA_VERSION = "1.0"
@@ -33,6 +34,8 @@ def compare_profile_sources(
     paths = sorted(set(left_docs) | set(right_docs))
     semantic_changes = [path for path in paths if left_docs.get(path) != right_docs.get(path)]
     byte_changes = _byte_changes(lhs["archive"], rhs["archive"])
+    left_locks = _artifact_locks(left_docs.get("models.yaml", {}))
+    right_locks = _artifact_locks(right_docs.get("models.yaml", {}))
     result = {
         "name": "profile_comparison",
         "schema_version": COMPARISON_SCHEMA_VERSION,
@@ -44,6 +47,7 @@ def compare_profile_sources(
         "evidence": {
             "semantic_changed_files": semantic_changes,
             "byte_changed_files": byte_changes,
+            "artifact_locks": {"left": left_locks, "right": right_locks},
             "comparison_basis": [
                 "validated portable archive manifests",
                 "parsed canonical portable YAML evidence",
@@ -529,3 +533,23 @@ def _strings(value: Any) -> list[str]:
     if isinstance(value, str) and value.strip():
         return [value.strip().lower()]
     return []
+
+
+def _artifact_locks(models_document: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    if not isinstance(models_document, dict):
+        return {}
+    models = models_document.get("models", {})
+    providers = models_document.get("providers", {})
+    if not isinstance(models, dict):
+        return {}
+    provider_rows = providers if isinstance(providers, dict) else {}
+    locks: dict[str, dict[str, Any]] = {}
+    for name, value in sorted(models.items()):
+        if not isinstance(value, dict):
+            continue
+        provider = provider_rows.get(str(value.get("provider") or ""), {})
+        provider_ownership = provider.get("ownership") if isinstance(provider, dict) else None
+        if str(value.get("ownership") or provider_ownership or "self_managed") == "managed_service":
+            continue
+        locks[str(name)] = artifact_lock(str(name), value)
+    return locks

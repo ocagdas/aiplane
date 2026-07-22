@@ -19,6 +19,7 @@ from .model_output import group_model_rows, group_rows
 from .models import Profile
 from .policy import PolicyEngine
 from .providers import ProviderRegistry
+from .role_routing import compare_role_models
 
 JsonDumps = Callable[..., str]
 ProfileArg = Callable[[argparse.ArgumentParser], None]
@@ -599,6 +600,20 @@ def add_models_parser(
         help="Print the prompt without calling the provider",
     )
     models_test.add_argument("name", help="Model alias to test")
+    models_route = models_sub.add_parser(
+        "route",
+        help="Compare configured models for one role",
+        description="Compare policy, hardware placement, task suitability, measured evidence, and user score contributions without collapsing them into one universal score.",
+        formatter_class=formatter_class,
+    )
+    profile_arg(models_route)
+    models_route.add_argument("--role", required=True, help="Role such as chat, code, completion, or reasoning")
+    models_route.add_argument(
+        "--candidate", action="append", default=[], help="Model alias; repeat to compare an explicit set"
+    )
+    models_route.add_argument("--runtime", help="Require one runtime for local placement")
+    models_route.add_argument("--context-tokens", type=int, help="Requested context length")
+    models_route.add_argument("--score-profile", help="Placement scoring profile from hardware.yaml")
     models_benchmark = models_sub.add_parser(
         "benchmark",
         help="Run smoke benchmark tasks",
@@ -622,6 +637,11 @@ def add_models_parser(
         help="Environment mode used for custom evaluator commands; defaults to the active profile environment",
     )
     models_benchmark.add_argument("--timeout-seconds", type=int, help="Timeout for each custom evaluator command")
+    models_benchmark.add_argument(
+        "--repeats",
+        type=int,
+        help="Override the suite repeat count (1-100)",
+    )
     models_benchmark.add_argument(
         "--dry-run",
         action="store_true",
@@ -907,6 +927,21 @@ def handle_models_command(
             )
         )
         return 0
+    if args.models_command == "route":
+        print(
+            json_dumps(
+                compare_role_models(
+                    profile,
+                    args.role,
+                    candidates=args.candidate or None,
+                    runtime=args.runtime,
+                    context_tokens=args.context_tokens,
+                    score_profile=args.score_profile,
+                ),
+                indent=2,
+            )
+        )
+        return 0
     if args.models_command == "benchmark":
         model_name = args.name
         if not model_name:
@@ -920,6 +955,7 @@ def handle_models_command(
             spec_path=spec_path,
             environment_mode=args.environment,
             timeout_seconds=args.timeout_seconds,
+            repeats=args.repeats,
         )
         print(json_dumps(result, indent=2))
         return 0

@@ -185,8 +185,10 @@ def _typed_benchmark_components(
         )
     summary = benchmark.get("summary", {}) if isinstance(benchmark.get("summary"), dict) else {}
     kind = str(benchmark.get("benchmark_kind") or summary.get("benchmark_kind") or "")
-    quality = _number(summary.get("quality_score")) if kind == "comparable_quality" else None
-    performance = _number(summary.get("performance_score")) if kind == "comparable_performance" else None
+    quality = _number(summary.get("quality_score")) if kind in {"comparable_quality", "comparable_mixed"} else None
+    performance = (
+        _number(summary.get("performance_score")) if kind in {"comparable_performance", "comparable_mixed"} else None
+    )
     return (
         _component(quality, "measured" if quality is not None else "unresolved", "typed comparable quality benchmark"),
         _component(

@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from urllib.error import URLError
 from urllib.parse import urlencode
 from urllib.request import Request
-from typing import Mapping
+from typing import Any, Mapping
 
 from .boundaries import HttpTransport, UrllibHttpTransport
 
@@ -15,6 +15,7 @@ class BackendResult:
     backend: str
     text: str
     escalated: bool = False
+    telemetry: dict[str, Any] = field(default_factory=dict)
 
 
 class LocalBackend:
@@ -90,7 +91,27 @@ class OllamaBackend:
                 f"Details: {exc}"
             ) from exc
         message = body.get("message", {})
-        return BackendResult(self.name, str(message.get("content", "")), False)
+        prompt_tokens = body.get("prompt_eval_count")
+        output_tokens = body.get("eval_count")
+        eval_duration_ns = body.get("eval_duration")
+        tokens_per_second = None
+        if (
+            isinstance(output_tokens, (int, float))
+            and isinstance(eval_duration_ns, (int, float))
+            and eval_duration_ns > 0
+        ):
+            tokens_per_second = round(float(output_tokens) / (float(eval_duration_ns) / 1_000_000_000), 3)
+        telemetry = {
+            "elapsed_ms": round(float(body["total_duration"]) / 1_000_000, 3)
+            if isinstance(body.get("total_duration"), (int, float))
+            else None,
+            "ttft_ms": None,
+            "prompt_tokens": prompt_tokens,
+            "output_tokens": output_tokens,
+            "tokens_per_second": tokens_per_second,
+            "source": "ollama_native_response",
+        }
+        return BackendResult(self.name, str(message.get("content", "")), False, telemetry)
 
 
 class OpenAICompatibleBackend:
@@ -143,15 +164,28 @@ class OpenAICompatibleBackend:
                 f"Start the runtime or configure a reachable local/remote endpoint. Details: {exc}"
             ) from exc
         choices = body.get("choices", [])
+        usage = body.get("usage") if isinstance(body.get("usage"), dict) else {}
+        telemetry = {
+            "elapsed_ms": None,
+            "ttft_ms": None,
+            "prompt_tokens": usage.get("prompt_tokens"),
+            "output_tokens": (
+                usage.get("completion_tokens")
+                if usage.get("completion_tokens") is not None
+                else usage.get("output_tokens")
+            ),
+            "tokens_per_second": None,
+            "source": "openai_compatible_usage" if usage else None,
+        }
         if not choices:
-            return BackendResult(self.name, "", False)
+            return BackendResult(self.name, "", False, telemetry)
         first = choices[0]
         if not isinstance(first, dict):
-            return BackendResult(self.name, "", False)
+            return BackendResult(self.name, "", False, telemetry)
         message = first.get("message")
         if isinstance(message, dict):
-            return BackendResult(self.name, str(message.get("content", "")), False)
-        return BackendResult(self.name, str(first.get("text", "")), False)
+            return BackendResult(self.name, str(message.get("content", "")), False, telemetry)
+        return BackendResult(self.name, str(first.get("text", "")), False, telemetry)
 
 
 class AnthropicMessagesBackend:

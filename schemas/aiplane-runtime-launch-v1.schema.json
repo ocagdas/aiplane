@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aiplane.dev/schemas/aiplane-runtime-launch-v1.schema.json",
+  "title": "Aiplane runtime launch manifest v1",
+  "type": "object",
+  "required": [
+    "contract_version",
+    "record_type",
+    "mode",
+    "runtime",
+    "artifact",
+    "launch",
+    "endpoint"
+  ],
+  "properties": {
+    "contract_version": {
+      "const": "1.0"
+    },
+    "record_type": {
+      "const": "runtime_launch_manifest"
+    },
+    "mode": {
+      "const": "render_only"
+    },
+    "runtime": {
+      "type": "object"
+    },
+    "artifact": {
+      "$ref": "aiplane-artifact-lock-v1.schema.json"
+    },
+    "launch": {
+      "type": "object",
+      "required": [
+        "command",
+        "environment",
+        "host",
+        "port"
+      ],
+      "properties": {
+        "command": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        },
+        "environment": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "host": {
+          "type": "string",
+          "minLength": 1
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        }
+      }
+    },
+    "endpoint": {
+      "type": "object"
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": false
+}

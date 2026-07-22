@@ -35,6 +35,10 @@ class StackLifecycle:
         model = str(stack.get("model") or "")
         orchestrator = str(stack.get("orchestrator") or "")
         commands = self._lifecycle_commands(name, action, runtime, model, orchestrator)
+        try:
+            runtime_evidence = RuntimeCatalog(self.profile).evidence_bundle(runtime, model)
+        except ValueError as exc:
+            runtime_evidence = {"contract_version": "1.0", "available": False, "reason": str(exc)}
         executable, reason = self._lifecycle_executable(stack)
         if dry_run or not executable:
             return {
@@ -45,6 +49,7 @@ class StackLifecycle:
                 "reason": None if executable else reason,
                 "execution_mode": "same_host" if executable else "planned_remote",
                 "endpoint_security": self.endpoint_plan(name),
+                "runtime_evidence": runtime_evidence,
                 "commands": commands,
             }
         results = []
@@ -87,6 +92,7 @@ class StackLifecycle:
             "finished_at": round(finished_at, 3),
             "duration_seconds": round(max(0.0, finished_at - started_at), 3),
             "runtime_status_before": runtime_status_before,
+            "runtime_evidence": runtime_evidence,
             "runtime_status_after": runtime_status_after,
             "results": results,
             "notes": [

@@ -307,6 +307,16 @@ def add_stack_parsers(
     stacks_kubernetes.add_argument("--device-class", required=True, help="Kubernetes DRA device class name")
     stacks_kubernetes.add_argument("--namespace", default="default")
     stacks_kubernetes.add_argument("--replicas", type=int, default=1)
+    stacks_kubernetes.add_argument("--claim-count", type=int, default=1, help="Accelerator devices requested per pod")
+    stacks_kubernetes.add_argument("--cpu", default="1", help="CPU request")
+    stacks_kubernetes.add_argument("--memory", default="4Gi", help="Memory request and limit")
+    stacks_kubernetes.add_argument("--cache-size", default="20Gi", help="Ephemeral model-cache size limit")
+    stacks_kubernetes.add_argument(
+        "--image-pull-policy", choices=["Always", "IfNotPresent", "Never"], default="IfNotPresent"
+    )
+    stacks_kubernetes.add_argument(
+        "--service-type", choices=["ClusterIP", "NodePort", "LoadBalancer"], default="ClusterIP"
+    )
     stacks_kubernetes.add_argument(
         "--file", choices=["resourceclaim.yaml", "deployment.yaml", "service.yaml", "values.yaml"]
     )
@@ -453,6 +463,12 @@ def handle_stack_command(
                 device_class=args.device_class,
                 namespace=args.namespace,
                 replicas=args.replicas,
+                claim_count=args.claim_count,
+                cpu=args.cpu,
+                memory=args.memory,
+                cache_size=args.cache_size,
+                image_pull_policy=args.image_pull_policy,
+                service_type=args.service_type,
             )
             if args.file:
                 print(payload["files"][args.file], end="")

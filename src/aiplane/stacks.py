@@ -184,6 +184,11 @@ class StackManager:
         runtime_status = runtime_catalog.runtime_available(runtime)
         endpoint = stack.get("endpoint") or _default_endpoint(runtime)
         preflight = self._preflight(stack, runtime, model_name, endpoint, runtime_catalog)
+        runtime_evidence: dict[str, Any]
+        try:
+            runtime_evidence = runtime_catalog.evidence_bundle(runtime, model_name)
+        except ValueError as exc:
+            runtime_evidence = {"contract_version": "1.0", "available": False, "reason": str(exc)}
         steps = [
             {
                 "name": "check machine fit",
@@ -279,6 +284,7 @@ class StackManager:
             "model_config": model,
             "machine_config": machine,
             "runtime_status": runtime_status,
+            "runtime_evidence": runtime_evidence,
             "orchestrator_status": (OrchestratorCatalog(self.profile).doctor(orchestrator) if orchestrator else None),
             "preflight": preflight,
             "endpoint_security": self.endpoint_plan(name),
@@ -296,6 +302,7 @@ class StackManager:
     def doctor(self, name: str) -> dict[str, Any]:
         plan = self.plan(name)
         machine_rows = [row for row in plan["fit"]["machines"] if row["name"] == plan["machine"]]
+        runtime_evidence = plan.get("runtime_evidence", {})
         checks = [
             {
                 "name": "machine_exists",
@@ -311,6 +318,11 @@ class StackManager:
                 "name": "runtime_known",
                 "ok": bool(plan["runtime_status"].get("name")),
                 "detail": plan["runtime_status"].get("reason"),
+            },
+            {
+                "name": "runtime_evidence_rendered",
+                "ok": bool(runtime_evidence.get("artifact_lock") and runtime_evidence.get("launch_manifest")),
+                "detail": runtime_evidence.get("reason") or "artifact lock and launch manifest rendered",
             },
             {
                 "name": "runtime_available_now",

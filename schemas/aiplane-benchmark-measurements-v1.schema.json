@@ -1,0 +1,141 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aiplane.dev/schemas/aiplane-benchmark-measurements-v1.schema.json",
+  "title": "Aiplane benchmark measurements v1",
+  "type": "object",
+  "required": [
+    "contract_version",
+    "record_type",
+    "model_name",
+    "suite",
+    "runs",
+    "provenance"
+  ],
+  "properties": {
+    "contract_version": {
+      "const": "1.0"
+    },
+    "record_type": {
+      "const": "benchmark_measurements"
+    },
+    "created_at": {
+      "type": "string"
+    },
+    "profile": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "model_name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "provider": {},
+    "model": {},
+    "suite": {
+      "type": "object",
+      "required": [
+        "name",
+        "version",
+        "kind"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": [
+            "smoke",
+            "quality",
+            "performance",
+            "mixed"
+          ]
+        },
+        "comparability": {
+          "type": [
+            "object",
+            "null"
+          ]
+        }
+      }
+    },
+    "runtime": {
+      "type": "object"
+    },
+    "environment": {
+      "type": "object"
+    },
+    "decoding": {
+      "type": "object"
+    },
+    "runs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "task"
+        ],
+        "properties": {
+          "task": {
+            "type": "string",
+            "minLength": 1
+          },
+          "repeat_index": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "passed": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "quality_score": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 100
+          },
+          "performance_score": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 100
+          },
+          "score": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 100
+          }
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "required": [
+        "source"
+      ],
+      "properties": {
+        "source": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  },
+  "additionalProperties": true
+}
