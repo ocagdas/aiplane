@@ -4,7 +4,7 @@ import copy
 import json
 
 from aiplane.cli import main as cli_main
-from aiplane.config import create_profile, load_profile
+from aiplane.config import create_profile, dump_yaml, load_profile, parse_yaml
 from aiplane.profile_schema import (
     PROFILE_SCHEMA_ID,
     PROFILE_SCHEMA_VERSION,
@@ -76,6 +76,40 @@ def test_profile_merge_semantics_are_recursive_and_non_mutating() -> None:
     assert merged["repository"] is None
     assert base == original_base
     assert override == original_override
+
+
+def test_profile_validation_rejects_ambiguous_recommendation_fields(tmp_path, capsys) -> None:
+    profiles = tmp_path / "profiles"
+    create_profile("invalid-model", profiles_dir=profiles)
+    models_path = profiles / "invalid-model" / "models.yaml"
+    models = parse_yaml(models_path.read_text(encoding="utf-8"))
+    models["defaults"] = {"chat_model": None}
+    models["models"] = {
+        "bad": {
+            "model": "bad:latest",
+            "provider": "ollama",
+            "local": "yes",
+            "min_ram_gb": -1,
+            "min_vram_gb": 8,
+            "recommended_vram_gb": 4,
+            "supported_runtimes": ["ollama", "ollama"],
+        }
+    }
+    models_path.write_text(dump_yaml(models), encoding="utf-8")
+
+    assert cli_main(["--profiles-dir", str(profiles), "profiles", "validate", "invalid-model"]) == 1
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["ok"] is False
+    failed = {check["path"]: check for check in payload["checks"] if not check["ok"]}
+    assert "$.models.models.bad.local" in failed
+    assert "$.models.models.bad.min_ram_gb" in failed
+    assert "$.models.models.bad.recommended_vram_gb" in failed
+    assert "$.models.models.bad.supported_runtimes" in failed
+    assert all(check["remediation"] for check in failed.values())
+    default = next(check for check in payload["checks"] if check["name"] == "model_default:chat_model")
+    assert default["ok"] is True
+    assert default["detail"] == "unset"
 
 
 def test_profile_validation_reports_schema_version_paths_and_remedies(tmp_path, capsys) -> None:

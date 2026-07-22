@@ -7,6 +7,7 @@ from typing import Any, Callable
 from .config import load_profile
 from .orchestrators import OrchestratorCatalog
 from .stacks import StackManager
+from .kubernetes_artifacts import render_kubernetes
 
 
 def add_stack_parsers(
@@ -293,6 +294,22 @@ def add_stack_parsers(
         help="Artifact format to export",
     )
     stacks_export.add_argument("name", help="Stack name")
+    stacks_kubernetes = stacks_sub.add_parser(
+        "render-kubernetes",
+        help="Render a review-only Kubernetes artifact family",
+        description="Render ResourceClaim, Deployment, Service, and Helm values without writing files or applying resources.",
+        formatter_class=formatter_class,
+        allow_abbrev=False,
+    )
+    profile_arg(stacks_kubernetes)
+    stacks_kubernetes.add_argument("name", help="Stack name")
+    stacks_kubernetes.add_argument("--image", required=True, help="Reviewed runtime container image")
+    stacks_kubernetes.add_argument("--device-class", required=True, help="Kubernetes DRA device class name")
+    stacks_kubernetes.add_argument("--namespace", default="default")
+    stacks_kubernetes.add_argument("--replicas", type=int, default=1)
+    stacks_kubernetes.add_argument(
+        "--file", choices=["resourceclaim.yaml", "deployment.yaml", "service.yaml", "values.yaml"]
+    )
     for lifecycle_action in ["prepare", "start", "stop", "restart"]:
         lifecycle = stacks_sub.add_parser(
             lifecycle_action,
@@ -428,6 +445,19 @@ def handle_stack_command(
                 print("\n# Notes")
                 for note in exported["notes"]:
                     print(f"# - {note}")
+            return 0
+        if args.stacks_command == "render-kubernetes":
+            payload = render_kubernetes(
+                manager.plan(args.name),
+                image=args.image,
+                device_class=args.device_class,
+                namespace=args.namespace,
+                replicas=args.replicas,
+            )
+            if args.file:
+                print(payload["files"][args.file], end="")
+            else:
+                print(json_dumps(payload, indent=2))
             return 0
         if args.stacks_command == "prepare":
             print(json_dumps(manager.prepare(args.name, dry_run=args.dry_run), indent=2))

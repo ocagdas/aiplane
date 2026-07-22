@@ -237,8 +237,21 @@ def test_public_positioning_agrees_across_metadata_and_launch_docs() -> None:
     readme_opening = Path("README.md").read_text(encoding="utf-8")[:2000]
     assert "aiplane quickstart local-coding --dry-run" in readme_opening
     assert "First outcome:" in readme_opening
+    assert "Know what fits. See what is missing. Generate the right config." in readme_opening
 
     readme = Path("README.md").read_text(encoding="utf-8")
+    for outcome_heading in (
+        "## The problem it solves",
+        "## What you get",
+        "## Install",
+        "## Core onboarding flow",
+        "## Quick local Ollama demo",
+    ):
+        assert readme.count(outcome_heading) == 1
+    assert readme.index("First outcome:") < readme.index("## Install")
+    assert readme.index("## The problem it solves") < readme.index("## What you get")
+    assert readme.index("## What you get") < readme.index("## Install")
+    assert "<summary><strong>Expand the full install" in readme
     assert readme.index("## Core onboarding flow") < readme.index("## Advanced and experimental commands")
     readme_lower = readme.lower()
     for stale_breadth in (
@@ -315,7 +328,7 @@ def test_p0_documentation_sweep_stays_open_until_user_demonstrations() -> None:
 def test_post_gate_backlog_numbers_are_sequential() -> None:
     backlog = _project_plan_section("Product Adoption Backlog")
     numbered = [int(value) for value in re.findall(r"(?m)^(\d+)\. ", backlog)]
-    assert numbered == list(range(1, 24))
+    assert numbered == list(range(1, 25))
 
 
 def test_public_demo_plan_is_bounded_reproducible_and_uses_current_commands() -> None:
@@ -627,6 +640,13 @@ def test_profile_render_export_and_replay_terminology_is_consistent() -> None:
         assert "export" in document.lower()
         assert "replay" in document.lower()
 
+    for document in (readme, overview, schema):
+        assert "profiles archive" in document
+        assert "profiles restore" in document
+        assert "profiles compare" in document
+        assert "profiles drift" in document
+        assert "never overwritten" in document.lower()
+
     assert "cannot currently restore the YAML" in readme
     assert "prints to stdout" in readme
     assert "capability-equivalent" in readme
@@ -640,3 +660,23 @@ def test_profile_render_export_and_replay_terminology_is_consistent() -> None:
     ):
         assert classification in roadmap
     assert "Do not copy credentials, model weights" in backlog
+
+
+def test_multi_client_replay_and_recommendation_provenance_are_documented() -> None:
+    overview = Path("docs/user/overview.md").read_text(encoding="utf-8")
+    schema = Path("docs/user/profile-schema.md").read_text(encoding="utf-8")
+    workflows = Path("docs/user/workflows.md").read_text(encoding="utf-8")
+    machines = Path("docs/user/machines-and-stacks.md").read_text(encoding="utf-8")
+    hardware = Path("docs/user/hardware.md").read_text(encoding="utf-8")
+    plan = PROJECT_PLAN.read_text(encoding="utf-8")
+
+    for document in (overview, schema, workflows, machines, plan):
+        assert "profiles replay-check" in document
+    for document in (overview, schema, workflows, machines):
+        assert "--client-archive" in document
+    assert "at least two" in schema
+    assert "deterministic and read-only" in machines
+    assert "versioned provenance" in hardware
+    assert "benchmark sample count" in hardware
+    assert "contextual" in hardware
+    assert "recommendation-critical schema hardening" in plan

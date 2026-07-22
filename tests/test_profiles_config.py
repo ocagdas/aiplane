@@ -187,6 +187,27 @@ class ProfileConfigTests(unittest.TestCase):
             profile = _REAL_LOAD_PROFILE("local-dev", Path.cwd(), profiles_dir=profiles_dir)
             self.assertTrue(cli_module._validate_profile(profile)["ok"])
 
+    def test_named_validate_and_render_work_with_multiple_profiles_and_no_default(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            profiles_dir = Path(tmp) / "profiles"
+            create_profile("source", profiles_dir=profiles_dir)
+            create_profile("restored", profiles_dir=profiles_dir)
+
+            for command in ("validate", "render"):
+                stdout = StringIO()
+                with redirect_stdout(stdout):
+                    code = cli_main(
+                        [
+                            "--profiles-dir",
+                            str(profiles_dir),
+                            "profiles",
+                            command,
+                            "restored",
+                        ]
+                    )
+                self.assertEqual(code, 0)
+                self.assertTrue(json.loads(stdout.getvalue()))
+
     def test_profiles_repair_cli_restores_selected_missing_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             profiles_dir = Path(tmp) / "profiles"

@@ -291,6 +291,7 @@ class HardwareManager:
             payload = dict(model)
             payload["name"] = name
             benchmark_summary = benchmark_summaries.get(name)
+            policy_decision = policy.model_decision(name)
             if not bool(model.get("local", False)):
                 groups["remote_or_cloud"].append(
                     _recommendation_payload(
@@ -298,12 +299,14 @@ class HardwareManager:
                         "remote_or_cloud",
                         "remote/cloud model does not consume local inference hardware",
                         benchmark_summary,
+                        policy_decision=policy_decision,
+                        machine=machine,
+                        discovered=discovered,
                     )
                 )
                 continue
 
             runtime_compatibility = _recommendation_runtime_compatibility(name, runtime_catalog, payload)
-            policy_decision = policy.model_decision(name)
             level, reason = _recommend_model(
                 payload,
                 fit_basis,
@@ -318,6 +321,8 @@ class HardwareManager:
                     benchmark_summary,
                     runtime_compatibility=runtime_compatibility,
                     policy_decision=policy_decision,
+                    machine=machine,
+                    discovered=discovered,
                 )
             )
 
@@ -349,6 +354,7 @@ class HardwareManager:
             "criteria": criteria,
             "machine": machine,
             "discovered": discovered,
+            "provenance": _recommendation_run_provenance(machine, discovered, benchmark_summaries),
             "models": ordered_groups,
             "hidden": (
                 {
@@ -662,6 +668,9 @@ def _recommendation_payload(
     benchmark_summary: dict[str, Any] | None = None,
     runtime_compatibility: dict[str, Any] | None = None,
     policy_decision: Any | None = None,
+    *,
+    machine: dict[str, Any] | None = None,
+    discovered: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     capabilities = capability_profile(model)
     payload = {
@@ -712,7 +721,142 @@ def _recommendation_payload(
     payload["capabilities"] = capabilities
     if benchmark_summary:
         payload["latest_benchmark"] = benchmark_summary
+    payload["provenance"] = _model_recommendation_provenance(
+        model,
+        machine or {},
+        discovered or {},
+        runtime_compatibility,
+        policy_decision,
+        benchmark_summary,
+    )
     return payload
+
+
+def _recommendation_run_provenance(
+    machine: dict[str, Any],
+    discovered: dict[str, Any],
+    benchmark_summaries: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    detected = {
+        "cpu_count": discovered.get("cpu_count"),
+        "memory_gb": discovered.get("memory_gb"),
+        "gpu_count": len(discovered.get("gpus", []) or []),
+    }
+    unresolved = sorted(key for key, value in detected.items() if value is None)
+    return {
+        "schema_version": "1.0",
+        "method": "deterministic_fit_runtime_policy_capability_order",
+        "sources": [
+            {"state": "configured", "source": "models.yaml", "name": "model_catalog"},
+            {"state": "configured", "source": "hardware.yaml#/selected", "name": "active_machine"},
+            {"state": "detected", "source": "hardware.discover", "name": "current_machine", "facts": detected},
+            {"state": "generated", "source": "runtime_catalog", "name": "runtime_compatibility"},
+            {
+                "state": "configured",
+                "source": "repository.yaml + approvals.yaml",
+                "name": "policy",
+            },
+        ],
+        "machine": {
+            "name": machine.get("name"),
+            "origin": machine.get("origin"),
+        },
+        "benchmark_records": len(benchmark_summaries),
+        "benchmark_role": "context_only_not_used_for_ranking",
+        "unresolved_detected_facts": unresolved,
+    }
+
+
+def _model_recommendation_provenance(
+    model: dict[str, Any],
+    machine: dict[str, Any],
+    discovered: dict[str, Any],
+    runtime_compatibility: dict[str, Any] | None,
+    policy_decision: Any | None,
+    benchmark_summary: dict[str, Any] | None,
+) -> dict[str, Any]:
+    name = str(model.get("name") or "")
+    runtime_state = str((runtime_compatibility or {}).get("state") or "not_applicable")
+    policy_state = str(getattr(policy_decision, "outcome", "not_evaluated"))
+    sources: list[dict[str, Any]] = [
+        {
+            "state": "configured",
+            "source": f"models.yaml#/models/{name}",
+            "name": "model",
+        },
+        {
+            "state": "configured",
+            "source": "hardware.yaml#/selected",
+            "name": "machine",
+            "value": machine.get("name"),
+        },
+        {
+            "state": "detected",
+            "source": "hardware.discover",
+            "name": "hardware",
+            "value": {
+                "cpu_count": discovered.get("cpu_count"),
+                "memory_gb": discovered.get("memory_gb"),
+                "gpu_count": len(discovered.get("gpus", []) or []),
+            },
+        },
+        {
+            "state": "generated",
+            "source": "runtime_catalog",
+            "name": "runtime_compatibility",
+            "value": runtime_state,
+        },
+        {
+            "state": "configured",
+            "source": "repository.yaml + approvals.yaml",
+            "name": "policy",
+            "value": policy_state,
+        },
+    ]
+    uncertainty: list[str] = [
+        "capability scores are catalog metadata and are not measured task-quality evidence",
+        "benchmark records are shown as context and do not affect this deterministic ranking",
+    ]
+    summary = benchmark_summary.get("summary", {}) if isinstance(benchmark_summary, dict) else {}
+    sample_count = sum(
+        int(summary.get(key, 0) or 0)
+        for key in ("passed", "failed", "previewed")
+        if isinstance(summary.get(key, 0), (int, float))
+    )
+    if benchmark_summary:
+        sources.append(
+            {
+                "state": "measured",
+                "source": benchmark_summary.get("path"),
+                "name": "latest_benchmark",
+                "sample_count": sample_count,
+            }
+        )
+        if sample_count == 0:
+            uncertainty.append("latest benchmark summary does not report a task sample count")
+    else:
+        sources.append(
+            {
+                "state": "unresolved",
+                "source": None,
+                "name": "latest_benchmark",
+                "sample_count": 0,
+            }
+        )
+        uncertainty.append("no local benchmark record is available for this model")
+    if runtime_state == "runtime_supported_only":
+        uncertainty.append("a compatible runtime is configured but was not detected as available")
+    if runtime_state == "no_supported_runtime":
+        uncertainty.append("no supported local runtime is known")
+    if discovered.get("memory_gb") is None:
+        uncertainty.append("live system memory discovery is unavailable; configured machine values may be used")
+    return {
+        "schema_version": "1.0",
+        "sources": sources,
+        "sample_count": sample_count,
+        "evidence_state": "partial" if uncertainty else "complete",
+        "uncertainty": uncertainty,
+    }
 
 
 def _recommendation_runtime_compatibility(

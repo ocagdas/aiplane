@@ -272,7 +272,7 @@ class HardwareMachineTests(unittest.TestCase):
             benchmark = {
                 "created_at": "2026-06-19T00:00:00+00:00",
                 "model_name": "fixture-analysis-small",
-                "summary": {"average_score": 88, "average_elapsed_ms": 1234},
+                "summary": {"passed": 2, "failed": 1, "average_score": 88, "average_elapsed_ms": 1234},
             }
             (root / "20260619T000000Z-fixture-analysis-small.json").write_text(json.dumps(benchmark), encoding="utf-8")
             profile = load_profile("local-dev", workspace)
@@ -280,6 +280,33 @@ class HardwareMachineTests(unittest.TestCase):
             rows = [row for group in result["models"].values() for row in group]
             model_row = next(row for row in rows if row["name"] == "fixture-analysis-small")
             self.assertEqual(model_row["latest_benchmark"]["summary"]["average_score"], 88)
+            self.assertEqual(model_row["provenance"]["sample_count"], 3)
+            measured = next(
+                source for source in model_row["provenance"]["sources"] if source["name"] == "latest_benchmark"
+            )
+            self.assertEqual(measured["state"], "measured")
+            self.assertEqual(measured["sample_count"], 3)
+
+    def test_hardware_recommendation_exposes_versioned_source_and_uncertainty_provenance(self) -> None:
+        profile = load_profile("local-dev", Path.cwd())
+        result = HardwareManager(profile).recommend(include_not_recommended=True)
+
+        self.assertEqual(result["provenance"]["schema_version"], "1.0")
+        self.assertEqual(result["provenance"]["benchmark_role"], "context_only_not_used_for_ranking")
+        rows = [row for group in result["models"].values() for row in group]
+        self.assertTrue(rows)
+        for row in rows:
+            provenance = row["provenance"]
+            self.assertEqual(provenance["schema_version"], "1.0")
+            self.assertIn(provenance["evidence_state"], {"complete", "partial"})
+            self.assertIsInstance(provenance["sample_count"], int)
+            self.assertTrue(provenance["sources"])
+            names = {source["name"] for source in provenance["sources"]}
+            self.assertTrue({"model", "machine", "hardware", "runtime_compatibility", "policy"} <= names)
+            self.assertIn("uncertainty", provenance)
+        remote_rows = result["models"]["remote_or_cloud"]
+        self.assertTrue(remote_rows)
+        self.assertIn("policy_decision", remote_rows[0])
 
     def test_hardware_schema_and_active_machine_are_available(self) -> None:
         profile = load_profile("local-dev", Path.cwd())

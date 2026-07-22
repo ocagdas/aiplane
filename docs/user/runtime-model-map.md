@@ -406,3 +406,18 @@ aiplane integrations export continue --select-best --runtime ollama
 `runtimes bundle` is different: it renders Dockerfile/Conda/JSON packaging plans and does not install runtimes, start services, or download weights. For a runnable local task, use `integrations setup ... --dry-run` then `integrations setup ...`; for a reusable named model/runtime/machine binding, use `stacks setup`, `stacks prepare --dry-run`, `stacks prepare`, and `stacks start`.
 
 Model aliases live in the selected profile catalog (`models.yaml` for profile-owned entries and `models.discovered.yaml` for discovery cache entries). Each alias maps to a provider/source-native model id in its `model` field. For Ollama, helper commands resolve the alias to that native id and run `ollama pull <model-id>` or `ollama run <model-id>`. The downloaded files remain in Ollama's own store: native Ollama uses its normal local model store, while Docker substrate uses the configured Docker volume mounted at `/root/.ollama` inside the container. `aiplane` records the mapping and delegates storage to the runtime; it does not copy weights into the profile directory.
+
+## Docker Model Runner
+
+Docker Model Runner is the docker_model_runner runtime with host endpoint http://localhost:12434/engines/v1.
+
+~~~bash
+aiplane runtimes status docker_model_runner
+aiplane runtimes list-runtime-models docker_model_runner
+aiplane runtimes inspect docker_model_runner --model ai/model-id
+aiplane runtimes benchmark docker_model_runner --model ai/model-id
+aiplane runtimes pull docker_model_runner --model ai/model-id --dry-run
+aiplane runtimes pull docker_model_runner --model ai/model-id --yes
+~~~
+
+Read operations call the native Docker model command. Lifecycle and model-store changes are preview-first and require --yes. Keep the normally unauthenticated endpoint local or behind a reviewed access layer.

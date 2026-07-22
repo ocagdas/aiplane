@@ -1,95 +1,140 @@
 # aiplane
 
-AI development setups are difficult to reproduce because model capabilities must fit the intended task, available RAM/VRAM, installed runtimes, endpoints, and development tools. `aiplane` is an environment doctor and configuration compiler: it inventories those facts, diagnoses what is ready or missing (the read-only doctor role), and compiles reviewed profiles into hardware-aware recommendations and deterministic tool configuration.
+[![CI](https://github.com/ocagdas/aiplane/actions/workflows/ci.yml/badge.svg)](https://github.com/ocagdas/aiplane/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.11%2B-3776AB.svg)](pyproject.toml)
 
-First outcome: inspect the proposed local setup and receive exact doctor, recommendation, and export steps without changing runtimes, development-tool files, or external services.
+**Know what fits. See what is missing. Generate the right config.**
+
+Your AI setup worked on one machine. Can you explain why, reproduce it on
+another, and configure each supported development tool without rebuilding it from memory?
+
+`aiplane` is an **environment doctor and configuration compiler** for local and
+hybrid AI development. It connects the facts that usually drift apart - hardware,
+models, runtimes, endpoints, policy, and client configuration - then turns them
+into one reviewable workflow.
+
+First outcome: get a read-only assessment and one exact next action without
+installing a runtime, pulling weights, editing development-tool files, or
+touching an external service.
 
 ```bash
 aiplane quickstart local-coding --dry-run
 ```
 
-Profiles are declarative YAML that can be reviewed like other environment contracts. Secrets remain in ignored local files or environment variables. Human-readable and JSON output support both operators and CI.
+Profiles are declarative YAML. Output is available as readable text or
+deterministic JSON. Secrets stay in ignored local files or environment
+variables.
 
-`aiplane` is not a coding agent, chat UI, inference server, model marketplace, model proxy, or cloud platform. It configures, checks, plans, and exports the operational layer around those tools.
+## The problem it solves
 
-## Why this exists
+Most AI tools run a model, serve an endpoint, or act as an assistant. Aiplane
+handles the awkward questions before and around them:
 
-Most teams discover that “working AI setup” becomes a pile of one-off shell commands, hidden assumptions, and environment drift:
+| Question | Aiplane answer |
+| --- | --- |
+| What can this PC actually run? | Discover the machine and filter reviewed models by RAM, VRAM, GPU, runtime, and role. |
+| Why is this setup not ready? | Diagnose missing tools, endpoints, credentials, defaults, and hardware fit with actionable findings. |
+| Which model name do I put in the client? | Keep a stable profile alias beside the provider-native model identity. |
+| How do I configure another client? | Compile the same reviewed choice into deterministic client-specific configuration. |
+| Will this profile still work elsewhere? | Archive, restore, compare, and classify current-machine drift without copying secrets or model weights. |
 
-- one model works on a laptop, another only on a shared GPU workstation,
-- one assistant needs one endpoint format, another needs another,
-- local runtimes and hosted endpoints use different credentials and connection settings,
-- hardware constraints (`RAM`, `VRAM`, GPU type) get implicit and untracked,
-- and repeatability depends on tribal knowledge.
+No more mystery aliases, undocumented ports, or "it works on my GPU" setup
+notes.
 
-`aiplane` reduces this by making setup, checks, and exports profile-first and explicit.
+## What you get
 
-## What `aiplane` does today
+- **Hardware-aware choices** - inspect the current PC, a saved machine profile,
+  or explicit RAM/VRAM/GPU constraints.
+- **Actionable diagnosis** - findings include impact, provenance, remediation,
+  mutability, and dry-run support.
+- **One model identity story** - see the Aiplane alias and provider-native model
+  name together.
+- **Deterministic exports** - generate reviewed configuration for existing
+  coding tools and OpenAI-compatible clients without editing their files.
+- **Portable profiles** - keep models, endpoints, hardware expectations, and
+  policy in inspectable YAML; compare exact, equivalent, incompatible, and
+  unresolved destinations.
+- **Safe automation** - use stable JSON in scripts and CI while keeping broad
+  host, cloud, and secret mutation outside the default workflow.
 
-Current maturity: **developer preview / pre-1.0 alpha**. The supported public workflow is intentionally narrow:
+> [!NOTE]
+> Aiplane is a **developer preview / pre-1.0 alpha**. The public path is
+> deliberately narrow: discover -> doctor -> recommend -> export. Supporting
+> commands are tested, but their maturity varies and is documented in
+> [command coverage](docs/project/project-plan.md#command-coverage).
 
-- create and validate a reviewable environment profile;
-- discover local hardware, installed runtimes, configured endpoints, and configuration provenance;
-- diagnose readiness problems with impact and remediation;
-- recommend reviewed models that fit the selected hardware and policy; and
-- export deterministic configuration for existing development tools without editing their files.
 
-The result is an explicit environment contract that can be inspected, compared, and reproduced instead of a collection of machine-specific setup notes.
+Advanced, review-first workflows are available without turning Aiplane into a model server or cluster controller:
 
-`aiplane` also retains tested supporting and experimental commands for specialised troubleshooting and planning. They are available to advanced users, but they do not expand the public product promise or block the core workflow. See [command coverage](docs/project/project-plan.md#command-coverage) for their maturity and limitations.
+~~~bash
+aiplane integrations import continue ~/.continue/config.yaml --as imported-draft
+aiplane support list --kind runtime
+aiplane providers adapter-validate tests/fixtures/adapter-v1.json
+aiplane runtimes pull docker_model_runner --model ai/model-id --dry-run
+aiplane stacks render-kubernetes STACK --image IMAGE --device-class DEVICE_CLASS
+~~~
+
+Literal credentials are never imported, lifecycle mutations require confirmation, support records do not claim unverified upstream versions, and Kubernetes application remains outside this command surface.
+
+Aiplane does not replace your coding assistant, model runtime, chat interface,
+inference server, model registry, gateway, or cloud platform. It makes the
+configuration around those systems explicit and reproducible.
 
 ## Install
 
-For evaluation without cloning the repository, download the wheel from the [latest GitHub Release](https://github.com/ocagdas/aiplane/releases/latest), then install it with one of these isolated or environment-specific methods:
+Download the wheel from the
+[latest GitHub Release](https://github.com/ocagdas/aiplane/releases/latest),
+then install it as an isolated application:
 
 ```bash
-# Recommended isolated application install. Choose one.
+# Choose one.
 uv tool install ./aiplane-0.1.0-py3-none-any.whl
 pipx install ./aiplane-0.1.0-py3-none-any.whl
 
-# Or install into the currently active venv or Conda environment.
+# Or install into an active venv or Conda environment.
 python -m pip install ./aiplane-0.1.0-py3-none-any.whl
+
+aiplane --version
 ```
 
-Use the filename attached to the release; `0.1.0` is illustrative. All three methods register the `aiplane` command and include the profile/config templates and runtime helper assets. Verify the installed package with `aiplane --version`; it reports the effective version, package metadata version, module version, install type, and module path. See [Setup](docs/user/setup.md#standard-wheel-install-no-repository-clone) for verification, upgrades, uninstallation, index-based commands, Conda usage, and platform limitations.
+Use the filename attached to the release; `0.1.0` is illustrative. See
+[Installation and setup](docs/user/setup.md#standard-wheel-install-no-repository-clone)
+for upgrades, uninstallation, Conda usage, verification, and platform notes.
 
-Contributor and source-checkout installs remain available through `scripts/setup_env.sh`; they are not required for normal evaluation. From the repository root, choose one environment owner:
-
-```bash
-# Native/current Python environment (prefer an already isolated environment)
-scripts/setup_env.sh --mode local --action install --editable
-
-# Project-local venv; activate it after installation
-scripts/setup_env.sh --mode venv --action install --editable
-source .venv/bin/activate
-
-# Dedicated Conda environment; sourcing keeps it active in this shell
-source scripts/setup_env.sh --mode conda --conda-env aiplane --action install --editable
-```
-
-Use only one of these paths. `--editable` keeps the installation linked to the checkout; use `--static` for a snapshot that changes only when reinstalled. See [Source-checkout install modes](docs/user/setup.md#source-checkout-install-modes) for prerequisites, activation behavior, dry-run examples, verification, and platform support.
-
-After installation, create the editable `profiles/local-dev/` profile used by
-the CLI. It contains the reviewed hardware, model, runtime, endpoint, and policy
-configuration. This safe first-run form keeps an existing
-profile, detects local hardware, validates the profile, and skips provider model
-catalog queries:
+Create the editable local profile without contacting model-provider catalogs:
 
 ```bash
 aiplane profiles bootstrap-local --no-overwrite --no-discovery
 ```
 
-To run that same command directly from a repository checkout without installing
-the package, expose the `src/` directory to Python explicitly:
+<details>
+<summary><strong>Install from a source checkout</strong></summary>
+
+Choose one environment owner from the repository root:
+
+```bash
+# Current Python environment
+scripts/setup_env.sh --mode local --action install --editable
+
+# Project-local venv
+scripts/setup_env.sh --mode venv --action install --editable
+source .venv/bin/activate
+
+# Dedicated Conda environment
+source scripts/setup_env.sh --mode conda --conda-env aiplane --action install --editable
+```
+
+Use `--static` instead of `--editable` for a snapshot installation. To invoke
+the source tree without installing it:
 
 ```bash
 PYTHONPATH=src python -m aiplane profiles bootstrap-local --no-overwrite --no-discovery
 ```
 
-Local CLI preferences are separate and optional. The following creates the
-ignored `.aiplane/config.yaml`, where you can set the default profile, output
-format, verbosity, and custom paths; it does not create a profile or discover
-hardware or models:
+</details>
+
+Local CLI preferences are optional and separate from profiles:
 
 ```bash
 aiplane config init --template local
@@ -98,21 +143,26 @@ aiplane config show
 
 ## Core onboarding flow
 
-Use this when you want the first useful flow with minimal complexity:
+Four read-only commands take you from "what is here?" to usable configuration:
 
 ```bash
 aiplane discover
 aiplane doctor
 aiplane recommend
+aiplane export continue
+```
+
+Use the selected model alias with another supported client when needed:
+
+```bash
 aiplane export codex --model MODEL_ALIAS
 aiplane export copilot-cli --model MODEL_ALIAS --format json
 aiplane export copilot-vscode --model MODEL_ALIAS
 ```
 
-`discover` inspects the model catalog state already present in the selected
-profile; it does not contact provider catalogs. To populate or update the
-ignored `models.discovered.yaml` cache, explicitly preview and run a model
-catalog refresh, then review the discovered entries:
+`discover` inspects the catalog state already present in the profile; it does
+not contact provider catalogs. To update the ignored discovery cache, preview
+the network operation first, run it, then review alias/native-model pairs:
 
 ```bash
 aiplane models refresh --dry-run
@@ -120,11 +170,12 @@ aiplane models refresh
 aiplane models list --group-by runtime
 ```
 
-Refresh does not add reviewed aliases or defaults to `models.yaml`. Promote a
-discovered entry when you want it to become part of the editable profile; see
-[Model Catalog Refresh](docs/user/providers.md#model-catalog-refresh).
+Discovery does not silently turn results into reviewed configuration. Promote
+an entry before using it as a stable profile alias. See
+[Model catalog refresh](docs/user/providers.md#model-catalog-refresh).
 
-The single-command equivalent is offline-safe by default:
+Prefer one command? Quickstart is offline-safe by default, preserves existing
+profile files, and reports one exact next action:
 
 ```bash
 aiplane quickstart local-coding
@@ -134,18 +185,15 @@ aiplane quickstart local-coding --pull-model MODEL_ALIAS
 aiplane quickstart local-coding --discovery  # explicitly contact configured catalogs
 ```
 
-Quickstart preserves existing profile files on repeat runs and reports one exact next action. When no model alias exists, it offers only two setup paths—local Ollama or an existing managed endpoint—and requires no manual YAML editing. Provider catalog access is opt-in with `--discovery`.
-
-This path is designed to detect local hardware, runtimes, model catalog state,
-endpoint setup status, and role mappings, report configuration sources (detected, built-in, provider-discovered cache, profile-configured, and unresolved records), and then report one exact next action. Doctor findings include severity, impact, remediation command metadata, mutability, and dry-run support where action is needed.
-
 ## Quick local Ollama demo
 
-The core onboarding flow above is inspect-first. For an end-to-end evaluator demo
-that prepares and runs a local model, use this order after downloading the wheel.
-The wheel version below is illustrative. Catalog refresh contacts Ollama; promotion
-writes the editable profile; integration setup may install/start Ollama and download
-model weights.
+This walkthrough goes from a clean directory to a hardware-filtered local model,
+reviewed client configuration, and interactive endpoint chat. Catalog refresh
+contacts Ollama; promotion writes the profile; setup may install or start Ollama
+and pull model weights. Every mutating step has a preview immediately before it.
+
+<details>
+<summary><strong>Expand the full install -> discover -> promote -> run walkthrough</strong></summary>
 
 ```bash
 # 1. Install and create a clean demo workspace.
@@ -183,35 +231,49 @@ aiplane export copilot-vscode --model local_chat
 aiplane chat --model local_chat
 ```
 
+</details>
+
 `models list` shows the Aiplane `ALIAS` beside the provider-native `MODEL` by
 default. Use `--identity alias` or `--identity model` for one value per line, or
-`--identity both` explicitly for the normal full output. Host-client exports print reviewed configuration; they do not install, launch, or edit Codex, Copilot CLI, or VS Code. Type `/exit` to leave chat.
+`--identity both` for the normal full output. Host-client exports print reviewed
+configuration; they do not install, launch, or edit Codex, Copilot CLI, or VS
+Code. Type `/exit` to leave chat.
 
 ## Profiles, render, export, and replay
 
 - A **profile** is the editable YAML source of truth for an intended AI development setup: reviewed model aliases, runtimes, endpoints, hardware expectations, tool roles, and policy.
-- `aiplane profiles render PROFILE` reads the profile's YAML files and prints one consistently ordered JSON snapshot. Use that snapshot for validation, comparison, CI, or archival evidence; it is not an installable config and cannot currently restore the YAML.
+- `aiplane profiles render PROFILE` reads the profile's canonical YAML files and prints one consistently ordered JSON snapshot. Use that snapshot for validation, comparison, CI, or archival evidence; it is not an installable config and cannot currently restore the YAML.
+- `aiplane profiles archive PROFILE --output PATH` creates a deterministic, checksummed JSON archive of reviewed profile YAML. Its manifest explicitly excludes raw credentials, ignored discovery/provider overrides, audit/tunnel/session state, model weights, runtime caches, and generated exports.
+- `aiplane profiles restore ARCHIVE --as PROFILE` validates and previews restoration. Add `--yes` to create a new profile; existing profiles are never overwritten.
+- `aiplane profiles compare LEFT RIGHT` compares two profile names by default; use `--left-source archive` or `--right-source archive` for a validated archive operand.
+- `aiplane profiles drift SOURCE` compares explicit active hardware evidence with live discovery on this PC; use `--source archive` to assess an archive before restoration.
 - `aiplane export TARGET` compiles the selected profile into configuration text understood by another tool, such as Codex, Copilot CLI, Copilot in VS Code, or Continue. It prints to stdout and does not install the tool, edit its files, start a runtime, or copy credentials.
-- A **replay** copies the reviewed YAML profile to another workspace or machine, validates it, inspects the destination, and compiles fresh target-tool configuration there.
+- A **replay** restores reviewed YAML, validates it, inspects the destination, and compiles fresh target-tool configuration there.
 
-Today, ordinary reviewed filesystem or version-control procedures own backup and transfer:
+The archive is a reviewable transfer artifact, not a managed backup service. Preview both operations before moving configuration between machines:
 
 ```bash
-# Source machine: preserve the editable source and comparison evidence.
-cp -a profiles/local-dev portable-local-dev
+# Source machine: validate the manifest, then write the portable archive.
+aiplane profiles archive local-dev --output local-dev.aiplane-profile.json --dry-run
+aiplane profiles archive local-dev --output local-dev.aiplane-profile.json
 aiplane profiles render local-dev > local-dev.profile.json
+aiplane profiles compare local-dev local-dev.aiplane-profile.json --right-source archive
 aiplane export continue > continue.expected.yaml
 
-# Destination machine: restore the YAML source, then evaluate this machine.
-cp -a portable-local-dev profiles/local-dev
-aiplane profiles validate local-dev
-aiplane discover
-aiplane doctor
-aiplane recommend
-aiplane export continue > continue.actual.yaml
+# Destination machine: preview restoration, create a new profile, then assess it.
+aiplane profiles restore local-dev.aiplane-profile.json --as restored-local
+aiplane profiles restore local-dev.aiplane-profile.json --as restored-local --yes
+aiplane profiles validate restored-local
+aiplane profiles compare local-dev restored-local
+aiplane profiles drift restored-local
+aiplane doctor --profile restored-local
+aiplane recommend --profile restored-local
+aiplane export continue --profile restored-local > continue.actual.yaml
 ```
 
-Identical machines with equivalent resolved inputs should reproduce the same export. Machines with small hardware differences may still be **capability-equivalent** when the reviewed models, runtimes, endpoints, and policy remain suitable; discovery and doctor should expose the variance without forcing a different result. Material differences must remain visible and may legitimately change recommendations or exports. Credentials, model weights, discovery caches, audit logs, tunnel state, and runtime-owned data are machine-local and are not part of the portable profile. See [Profile backup, recovery, and replay](docs/user/profile-schema.md#backup-recovery-and-cross-machine-replay).
+Archive and restore validate paths, required files, YAML mappings, file sizes, SHA-256 checksums, and credential safety before writing. The archive includes the nine canonical profile YAML files plus profile-owned `model-providers.yaml` when present. Review it before sharing because endpoints, paths, machine names, and account aliases may still be operationally sensitive.
+
+Identical portable evidence is classified as **exact**. When only active hardware differs, Aiplane reports **capability-equivalent** only if every selected local model still meets its configured minimum RAM, VRAM, GPU-vendor, and accelerator-API requirements. Resource failures are **materially incompatible** and missing model or machine facts are **unresolved**. Other portable configuration changes are conservatively material. Each result includes the changed facts and their provenance; neither command mutates profiles or the current machine. Credentials, model weights, discovery caches, audit logs, tunnel state, and runtime-owned data remain machine-local. See [Profile backup, recovery, and replay](docs/user/profile-schema.md#backup-recovery-and-cross-machine-replay).
 
 Command categories are explicit in [command coverage](docs/project/project-plan.md#command-coverage): core commands lead onboarding, supporting commands troubleshoot specific subsystems, and experimental commands remain outside the developer-preview path.
 

@@ -240,6 +240,18 @@ Practical tips:
 - Tunnel state is versioned JSON under `.aiplane/remote/`. Status and stop verify the stored process identity before treating a PID as the helper-started SSH process; stale or reused PIDs are never signalled.
 - If state is malformed, stop fails closed and preserves the file for inspection. If identity cannot be captured at start, the new SSH process is terminated and no state is saved.
 
+### Prove the approved setup on multiple clients
+
+Restore the same approved profile archive independently on each client, run validation, drift, doctor, and the required exports there, then re-archive each restored profile. On the control machine, compare at least two returned client archives in one read-only check:
+
+```bash
+aiplane profiles replay-check approved.json --source archive \
+  --client-archive laptop.json \
+  --client-archive desktop.json
+```
+
+This proves portable profile equivalence. It does not prove live tunnel or endpoint reachability, so each client must still run its own tunnel status and doctor checks.
+
 ## Workflow 9: Machines and Stacks
 
 Use this when you want to bind machine, runtime, model, access policy, and optional orchestrator into one named plan.

@@ -16,6 +16,7 @@ COMMAND_TIERS = (
             "integrations",
             "runtimes",
             "providers",
+            "support",
             "environment",
             "tools",
             "credentials",

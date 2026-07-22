@@ -13,6 +13,8 @@ from .config import (
     repair_profile,
     resolve_profile_name,
 )
+from .profile_archive import archive_profile, restore_profile_archive
+from .profile_compare import assess_profile_drift, check_profile_replays, compare_profile_sources
 from .profile_schema import canonical_profile, load_profile_schema
 
 CommandFactory = Callable[..., argparse.ArgumentParser]
@@ -43,6 +45,11 @@ def add_profiles_parser(
             "  aiplane profiles remove old-local --dry-run\n"
             "  aiplane profiles show --selected\n"
             "  aiplane profiles render local-dev\n"
+            "  aiplane profiles archive local-dev --output local-dev.aiplane-profile.json --dry-run\n"
+            "  aiplane profiles restore local-dev.aiplane-profile.json --as restored-local --yes\n"
+            "  aiplane profiles compare local-dev restored-local\n"
+            "  aiplane profiles replay-check approved.json --source archive --client-archive laptop.json --client-archive desktop.json\n"
+            "  aiplane profiles drift local-dev\n"
             "  aiplane profiles schema\n"
             "  aiplane hardware discover\n"
             "  aiplane hardware active\n"
@@ -269,6 +276,153 @@ def add_profiles_parser(
         nargs="?",
         help="Profile name. If omitted, uses the effective default profile",
     )
+    archive = profile_sub.add_parser(
+        "archive",
+        help="Create a deterministic portable profile archive",
+        description=(
+            "Validate and package reviewed profile YAML into a deterministic JSON archive with checksums and an explicit "
+            "exclusion manifest. Credentials, generated caches, runtime state, model weights, and generated exports are excluded."
+        ),
+        formatter_class=formatter_class,
+        allow_abbrev=False,
+        epilog=(
+            "Examples:\n"
+            "  aiplane profiles archive local-dev --output local-dev.aiplane-profile.json --dry-run\n"
+            "  aiplane profiles archive local-dev --output local-dev.aiplane-profile.json\n"
+            "  aiplane profiles archive local-dev --output local-dev.aiplane-profile.json --overwrite"
+        ),
+    )
+    archive.add_argument(
+        "name",
+        nargs="?",
+        help="Profile name. If omitted, uses the effective default profile",
+    )
+    archive.add_argument(
+        "--output",
+        required=True,
+        metavar="PATH",
+        help="Destination JSON archive path; must be outside the source profile directory",
+    )
+    archive.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Replace an existing archive file; never changes the source profile",
+    )
+    archive.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Validate content and show the portable manifest without writing the archive",
+    )
+    restore = profile_sub.add_parser(
+        "restore",
+        help="Preview or restore a portable profile archive",
+        description=(
+            "Validate a portable JSON archive and restore its reviewed YAML into a new profile directory. "
+            "The default is a preview; --yes is required to write. Existing profiles are never overwritten."
+        ),
+        formatter_class=formatter_class,
+        allow_abbrev=False,
+        epilog=(
+            "Examples:\n"
+            "  aiplane profiles restore local-dev.aiplane-profile.json --as restored-local\n"
+            "  aiplane profiles restore local-dev.aiplane-profile.json --as restored-local --yes"
+        ),
+    )
+    restore.add_argument("archive", metavar="ARCHIVE", help="Portable profile JSON archive to validate and restore")
+    restore.add_argument(
+        "--as",
+        dest="target_name",
+        metavar="NAME",
+        help="Destination profile name; defaults to the archived profile name",
+    )
+    restore.add_argument(
+        "--yes",
+        action="store_true",
+        help="Create the destination profile after validation",
+    )
+    restore.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Force preview mode even when --yes is present",
+    )
+    compare = profile_sub.add_parser(
+        "compare",
+        help="Compare portable profile or archive evidence",
+        description=(
+            "Compare two validated portable sources and classify them as exact, capability-equivalent, "
+            "materially incompatible, or unresolved. The command is read-only."
+        ),
+        formatter_class=formatter_class,
+        allow_abbrev=False,
+        epilog=(
+            "Examples:\n"
+            "  aiplane profiles compare local-dev restored-local\n"
+            "  aiplane profiles compare backup.json local-dev --left-source archive"
+        ),
+    )
+    compare.add_argument("left", metavar="LEFT", help="Left profile name or archive path")
+    compare.add_argument("right", metavar="RIGHT", help="Right profile name or archive path")
+    compare.add_argument(
+        "--left-source",
+        choices=["profile", "archive"],
+        default="profile",
+        help="Interpret LEFT as a profile name or validated archive path",
+    )
+    compare.add_argument(
+        "--right-source",
+        choices=["profile", "archive"],
+        default="profile",
+        help="Interpret RIGHT as a profile name or validated archive path",
+    )
+    replay_check = profile_sub.add_parser(
+        "replay-check",
+        help="Verify approved profile replay across multiple clients",
+        description=(
+            "Compare one approved profile or archive with at least two portable archives produced by separate "
+            "client installations. This command is deterministic and read-only."
+        ),
+        formatter_class=formatter_class,
+        allow_abbrev=False,
+        epilog=(
+            "Examples:\n"
+            "  aiplane profiles replay-check approved.json --source archive "
+            "--client-archive laptop.json --client-archive desktop.json"
+        ),
+    )
+    replay_check.add_argument("source", metavar="SOURCE", help="Approved profile name or portable archive path")
+    replay_check.add_argument(
+        "--source",
+        dest="source_type",
+        choices=["profile", "archive"],
+        default="profile",
+        help="Interpret SOURCE as a profile name or validated archive path",
+    )
+    replay_check.add_argument(
+        "--client-archive",
+        action="append",
+        required=True,
+        metavar="PATH",
+        help="Portable archive produced by a replayed client profile; repeat for at least two distinct clients",
+    )
+    drift = profile_sub.add_parser(
+        "drift",
+        help="Assess profile portability against this machine",
+        description=(
+            "Compare explicit active profile hardware evidence with live hardware discovery and classify "
+            "selected-model compatibility. The command is read-only."
+        ),
+        formatter_class=formatter_class,
+        allow_abbrev=False,
+        epilog=("Examples:\n  aiplane profiles drift local-dev\n  aiplane profiles drift backup.json --source archive"),
+    )
+    drift.add_argument("source", metavar="SOURCE", help="Profile name or portable archive path")
+    drift.add_argument(
+        "--source",
+        dest="source_type",
+        choices=["profile", "archive"],
+        default="profile",
+        help="Interpret SOURCE as a profile name or validated archive path",
+    )
     validate = profile_sub.add_parser(
         "validate",
         help="Validate a profile",
@@ -335,22 +489,73 @@ def handle_profiles_command(
         result = remove_profile(args.name, yes=args.yes, dry_run=args.dry_run, profiles_dir=profiles_dir)
         print(json_dumps(result, indent=2, sort_keys=True))
         return 0
+    if args.profile_command == "archive":
+        profile_name = args.name or resolve_profile_name(requested_profile, profiles_dir=profiles_dir)
+        result = archive_profile(
+            profile_name,
+            args.output,
+            profiles_dir=profiles_dir,
+            dry_run=args.dry_run,
+            overwrite=args.overwrite,
+        )
+        print(json_dumps(result, indent=2, sort_keys=True))
+        return 0 if not result["conflicts"] else 1
+    if args.profile_command == "restore":
+        result = restore_profile_archive(
+            args.archive,
+            name=args.target_name,
+            profiles_dir=profiles_dir,
+            dry_run=args.dry_run,
+            yes=args.yes,
+        )
+        print(json_dumps(result, indent=2, sort_keys=True))
+        return 0 if not result["conflicts"] else 1
+    if args.profile_command == "compare":
+        result = compare_profile_sources(
+            args.left,
+            args.right,
+            left_source=args.left_source,
+            right_source=args.right_source,
+            profiles_dir=profiles_dir,
+        )
+        print(json_dumps(result, indent=2, sort_keys=True))
+        return 0
+    if args.profile_command == "replay-check":
+        result = check_profile_replays(
+            args.source,
+            args.client_archive,
+            source_type=args.source_type,
+            profiles_dir=profiles_dir,
+        )
+        print(json_dumps(result, indent=2, sort_keys=True))
+        return 0 if result["replay_ready"] else 1
+    if args.profile_command == "drift":
+        result = assess_profile_drift(
+            args.source,
+            source_type=args.source_type,
+            profiles_dir=profiles_dir,
+        )
+        print(json_dumps(result, indent=2, sort_keys=True))
+        return 0
     if args.profile_command == "bootstrap-local":
         result = bootstrap_profile(args, workspace, profiles_dir)
         print(json_dumps(result, indent=2, sort_keys=True))
         validation = result.get("validation") if isinstance(result.get("validation"), dict) else None
         return 0 if validation is None or validation.get("ok", False) else 1
 
-    effective_profile = resolve_profile_name(requested_profile, profiles_dir=profiles_dir)
-    profile_name = args.name or effective_profile
-    profile = load_profile(profile_name, workspace, profiles_dir=profiles_dir)
-    if args.profile_command == "render":
-        print(json_dumps(canonical_profile(profile), indent=2, sort_keys=True))
-        return 0
-    if args.profile_command == "validate":
+    if args.profile_command in {"render", "validate"}:
+        profile_name = args.name or resolve_profile_name(requested_profile, profiles_dir=profiles_dir)
+        profile = load_profile(profile_name, workspace, profiles_dir=profiles_dir)
+        if args.profile_command == "render":
+            print(json_dumps(canonical_profile(profile), indent=2, sort_keys=True))
+            return 0
         result = validate_profile(profile)
         print(json_dumps(result, indent=2))
         return 0 if result["ok"] else 1
+
+    effective_profile = resolve_profile_name(requested_profile, profiles_dir=profiles_dir)
+    profile_name = args.name or effective_profile
+    profile = load_profile(profile_name, workspace, profiles_dir=profiles_dir)
     payload = (
         profile_selected(profile, effective_profile) if args.selected else profile_summary(profile, effective_profile)
     )
