@@ -11,6 +11,8 @@ from aiplane.hardware import HardwareManager
 from aiplane.platform_support import HostPlatform, detect_host_platform
 from aiplane.remote import RemoteManager
 
+from .boundary_fakes import FakeCommandRunner
+
 
 @pytest.mark.parametrize(
     ("release", "expected"),
@@ -52,12 +54,21 @@ def test_hardware_discovery_uses_platform_specific_probes(tmp_path: Path, system
     profile = load_profile("local-dev", tmp_path)
     host = HostPlatform(system, None, (), "arm64")
 
-    result = HardwareManager(profile, host_platform=host).discover()
+    runner = FakeCommandRunner(returncode=1)
+    result = HardwareManager(profile, command_runner=runner, host_platform=host).discover()
 
     assert result["platform_support"]["system"] == system
     assert result["memory_gb"] is None
     assert result["gpus"] == []
     assert any("No supported accelerator" in note for note in result["notes"])
+    if system == "Darwin":
+        assert [command[:2] for command in runner.commands] == [
+            ["sysctl", "-n"],
+            ["system_profiler", "SPDisplaysDataType"],
+        ]
+    else:
+        assert len(runner.commands) == 1
+        assert runner.commands[0][:3] == ["powershell", "-NoProfile", "-NonInteractive"]
 
 
 def test_unsupported_payload_distinguishes_platform_from_missing_tool() -> None:
