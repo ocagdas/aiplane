@@ -127,7 +127,8 @@ class PolicyGrantStore:
             }
 
         atomic_update_json(self.path, update)
-        assert removed is not None
+        if removed is None:
+            raise RuntimeError("policy revoke invariant violated: grant was not removed")
         return removed.as_dict(now=now)
 
     def _load(self) -> list[PolicyGrant]:

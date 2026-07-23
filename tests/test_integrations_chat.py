@@ -223,6 +223,26 @@ class IntegrationChatTests(unittest.TestCase):
         self.assertIn("+ ollama pull command-r7b", progress_output)
         self.assertIn("67 MB/5.1 GB", progress_output)
 
+    def test_integrations_setup_progress_rejects_windows_execution(self) -> None:
+        manager = IntegrationManager(load_profile("local-dev", Path.cwd()))
+        with patch("aiplane.integrations.os.name", "nt"):
+            with self.assertRaisesRegex(RuntimeError, "unsupported on Windows"):
+                manager._run_with_progress(["echo", "ignored"], cwd=Path.cwd(), label="setup: test")
+
+    def test_integrations_setup_progress_requires_pipes(self) -> None:
+        class PipeLessProcess:
+            stdout = None
+            stderr = None
+
+        class PipeLessRunner:
+            @staticmethod
+            def popen(*args, **kwargs):
+                return PipeLessProcess()
+
+        manager = IntegrationManager(load_profile("local-dev", Path.cwd()), command_runner=PipeLessRunner())
+        with self.assertRaisesRegex(RuntimeError, "must expose both stdout and stderr pipes"):
+            manager._run_with_progress(["echo", "ignored"], cwd=Path.cwd(), label="setup: test")
+
     def test_integrations_setup_passes_profiles_dir_to_helper(self) -> None:
         source = load_profile("local-dev", Path.cwd())
         with tempfile.TemporaryDirectory() as tmp:

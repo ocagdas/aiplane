@@ -15,6 +15,7 @@ from .secrets import contains_secret
 
 PROFILE_ARCHIVE_KIND = "aiplane.profile-archive"
 PROFILE_ARCHIVE_VERSION = "1.0"
+PROFILE_ARCHIVE_EXCLUSION_CONTRACT_VERSION = 1
 PROVIDER_CONFIG_FILE = "model-providers.yaml"
 PORTABLE_PROFILE_FILES = tuple(sorted((*CONFIG_FILES.values(), PROVIDER_CONFIG_FILE)))
 REQUIRED_PROFILE_FILES = frozenset(CONFIG_FILES.values())
@@ -226,8 +227,10 @@ def validate_profile_archive(payload: Any) -> dict[str, Any]:
     manifest = payload.get("manifest")
     if not isinstance(files, list) or not isinstance(manifest, dict):
         raise ValueError("profile archive files must be a list and manifest must be an object")
-    if manifest.get("excluded") != list(EXCLUDED_PROFILE_STATE):
-        raise ValueError("profile archive exclusion manifest does not match the supported v1 contract")
+    excluded = _validated_excluded_manifest(manifest.get("excluded"))
+    excluded_contract_version = manifest.get("excluded_contract_version", 1)
+    if excluded_contract_version != PROFILE_ARCHIVE_EXCLUSION_CONTRACT_VERSION:
+        raise ValueError(f"unsupported exclusion manifest contract version: {excluded_contract_version!r}")
 
     validated_files: list[dict[str, Any]] = []
     seen: set[str] = set()
@@ -264,7 +267,11 @@ def validate_profile_archive(payload: Any) -> dict[str, Any]:
         "kind": PROFILE_ARCHIVE_KIND,
         "schema_version": PROFILE_ARCHIVE_VERSION,
         "profile": profile_name,
-        "manifest": {"included": expected_included, "excluded": list(EXCLUDED_PROFILE_STATE)},
+        "manifest": {
+            "included": expected_included,
+            "excluded_contract_version": PROFILE_ARCHIVE_EXCLUSION_CONTRACT_VERSION,
+            "excluded": excluded,
+        },
         "files": validated_files,
     }
 
@@ -292,10 +299,36 @@ def _build_archive(name: str, source: Path) -> dict[str, Any]:
         "profile": name,
         "manifest": {
             "included": [_file_metadata(entry) for entry in records],
+            "excluded_contract_version": PROFILE_ARCHIVE_EXCLUSION_CONTRACT_VERSION,
             "excluded": list(EXCLUDED_PROFILE_STATE),
         },
         "files": records,
     }
+
+
+def _validated_excluded_manifest(value: Any) -> list[dict[str, str]]:
+    if not isinstance(value, list):
+        raise ValueError("profile archive exclusion manifest must be a list")
+    rows: list[dict[str, str]] = []
+    seen_paths: set[str] = set()
+    expected = {str(entry["path"]): str(entry["reason"]) for entry in EXCLUDED_PROFILE_STATE}
+    for item in value:
+        if not isinstance(item, dict):
+            raise ValueError("profile archive exclusion manifest entries must be objects")
+        path = item.get("path")
+        reason = item.get("reason")
+        if not isinstance(path, str) or not path.strip():
+            raise ValueError("profile archive exclusion manifest path must be a non-empty string")
+        if not isinstance(reason, str) or not reason.strip():
+            raise ValueError("profile archive exclusion manifest reason must be a non-empty string")
+        if path in seen_paths:
+            raise ValueError(f"profile archive exclusion manifest contains duplicate path: {path}")
+        expected_reason = expected.get(path)
+        if expected_reason is not None and expected_reason != reason:
+            raise ValueError(f"profile archive exclusion manifest reason mismatch for path: {path}")
+        seen_paths.add(path)
+        rows.append({"path": path, "reason": reason})
+    return rows
 
 
 def _validate_profile_content(filename: str, content: str) -> None:

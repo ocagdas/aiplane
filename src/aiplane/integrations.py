@@ -712,6 +712,10 @@ class IntegrationManager:
     def _run_with_progress(
         self, command: list[str], cwd: Path, label: str, env: dict[str, str] | None = None
     ) -> subprocess.CompletedProcess[str]:
+        if os.name == "nt":
+            raise RuntimeError(
+                "integration setup execution is unsupported on Windows; run in Linux/macOS or use --dry-run"
+            )
         sys.stderr.write(f"{label}\n")
         sys.stderr.flush()
         process = self.command_runner.popen(
@@ -721,8 +725,8 @@ class IntegrationManager:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
-        assert process.stdout is not None
-        assert process.stderr is not None
+        if process.stdout is None or process.stderr is None:
+            raise RuntimeError("integration setup helper must expose both stdout and stderr pipes")
         buffers: dict[str, bytearray] = {"stdout": bytearray(), "stderr": bytearray()}
         streams = {
             process.stdout.fileno(): ("stdout", process.stdout),

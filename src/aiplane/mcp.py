@@ -978,7 +978,12 @@ def serve_stdio(
         allow_writes=allow_writes,
     )
     while True:
-        message = _read_message(sys.stdin.buffer)
+        try:
+            message = _read_message(sys.stdin.buffer)
+        except ValueError as exc:
+            sys.stderr.write(f"aiplane mcp framing error: {exc}\n")
+            sys.stderr.flush()
+            return 2
         if message is None:
             return 0
         response = server.handle_message(message)
@@ -997,7 +1002,15 @@ def _read_message(stream) -> dict[str, Any] | None:
         header = line.decode("ascii", errors="replace").strip()
         key, _, value = header.partition(":")
         if key.lower() == "content-length":
-            content_length = int(value.strip())
+            raw_length = value.strip()
+            if not raw_length:
+                raise ValueError("invalid Content-Length header: empty value")
+            try:
+                content_length = int(raw_length)
+            except ValueError as exc:
+                raise ValueError("invalid Content-Length header: must be an integer") from exc
+            if content_length < 0:
+                raise ValueError("invalid Content-Length header: value must be non-negative")
     if content_length is None:
         raise ValueError("missing Content-Length header")
     body = stream.read(content_length)

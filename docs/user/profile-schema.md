@@ -43,6 +43,19 @@ Canonical profile document merges follow these rules:
 
 There is no implicit merge of editable profile directories today. These rules define deterministic behavior for comparison/import tooling and prevent surprising list concatenation or silent null deletion.
 
+## YAML parser subset limits
+
+Aiplane keeps profile loading dependency-free with a built-in YAML subset parser. Supported inputs are nested mappings, scalars, and inline lists (`[a, b]`).
+
+Unsupported YAML constructs are rejected with line-specific errors:
+
+- dash-list syntax (`- item`);
+- document markers (`---`, `...`);
+- block scalars (`|`, `>`);
+- anchors, aliases, and tags.
+
+When you need those constructs, rewrite the profile files using the supported subset before running `profiles validate`, `profiles archive`, or import workflows.
+
 ## Backup, recovery, and cross-machine replay
 
 The editable YAML directory remains the restorable and transferable source of truth. `profiles render` only reads the nine canonical YAML files and prints one consistently ordered JSON snapshot for validation, comparison, CI, or archival evidence; the rendered JSON is not currently accepted as restore input and is not configuration for an IDE or runtime.
