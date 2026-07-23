@@ -9,6 +9,8 @@ from pathlib import Path
 from .boundaries import CommandRunner, SubprocessCommandRunner
 from .approvals import ApprovalHandler
 from .audit import AuditLogger
+from .docker_model_runner import DockerModelRunner
+from .deployment_artifacts import render_deployment_artifacts
 from .env import EnvironmentManager
 from .persistence import atomic_write_text
 from .models import AuditEvent, Profile
@@ -16,6 +18,7 @@ from .platform_support import detect_host_platform
 from .policy import PolicyEngine
 from .runtime_catalog import RuntimeCatalog
 from .tool_catalog import CORE_TOOLCHAIN, TOOLCHAIN, TOOL_WORKFLOWS, WORKFLOW_REQUIREMENTS
+from .vagrant_providers import configured_local_vm_target, inspect_vagrant_provider, selected_vagrant_provider
 
 
 class ToolExecutor:
@@ -141,9 +144,16 @@ class ToolExecutor:
 
 
 class ToolchainManager:
-    def __init__(self, profile: Profile, command_runner: CommandRunner | None = None):
+    def __init__(
+        self,
+        profile: Profile,
+        command_runner: CommandRunner | None = None,
+        *,
+        host_system: str | None = None,
+    ):
         self.profile = profile
         self.command_runner = command_runner or SubprocessCommandRunner()
+        self.host_system = host_system
 
     def list(self) -> list[dict[str, object]]:
         return [self._tool_row(name) for name in sorted(TOOLCHAIN)]
@@ -241,11 +251,13 @@ class ToolchainManager:
         self,
         name: str,
         known_rows: dict[str, dict[str, object]] | None = None,
+        *,
+        include_optional: bool = True,
     ) -> dict[str, object]:
         spec = WORKFLOW_REQUIREMENTS[name]
         required = [str(value) for value in spec.get("required", [])]
         any_of = [[str(value) for value in group] for group in spec.get("any_of", [])]
-        optional = [str(value) for value in spec.get("optional", [])]
+        optional = [str(value) for value in spec.get("optional", [])] if include_optional else []
         names = list(dict.fromkeys([*required, *(item for group in any_of for item in group), *optional]))
         known_rows = known_rows or {}
         rows = {tool: dict(known_rows.get(tool) or self._tool_row(tool)) for tool in names}
@@ -260,11 +272,17 @@ class ToolchainManager:
         missing_required = [tool for tool in required if not rows[tool]["installed"]]
         unsatisfied = [group for group in any_of if not any(rows[tool]["installed"] for tool in group)]
         ready = not missing_required and not unsatisfied
+        provider_status = None
+        if name == "local_vm":
+            provider_status = rows.get("vagrant", {}).get("provider_status") or self._local_vm_provider_status()
+            ready = ready and bool(provider_status.get("usable"))
         next_actions = []
         for tool in missing_required:
             next_actions.append(f"aiplane tools install {tool} --dry-run")
         for group in unsatisfied:
             next_actions.append("install one of: " + ", ".join(group))
+        if provider_status and not provider_status.get("usable"):
+            next_actions.extend(str(action) for action in provider_status.get("remediation", []))
         return {
             "name": name,
             "summary": spec.get("summary"),
@@ -275,7 +293,8 @@ class ToolchainManager:
             "runtimes": list(spec.get("runtimes", [])),
             "missing_required": missing_required,
             "unsatisfied_alternatives": unsatisfied,
-            "next_actions": next_actions,
+            "vm_provider_status": provider_status,
+            "next_actions": list(dict.fromkeys(next_actions)),
             "tools": [rows[tool] for tool in names],
         }
 
@@ -318,13 +337,26 @@ class ToolchainManager:
             workflow_readiness = self._workflow_readiness(
                 workflow,
                 {str(row["name"]): row for row in rows},
+                include_optional=include_optional,
             )
         runtime_rows = _runtime_prerequisite_rows(
             self.profile,
             include_optional=include_optional,
             progress=progress,
             runtimes=(list(WORKFLOW_REQUIREMENTS[workflow].get("runtimes", [])) if workflow else None),
+            command_runner=self.command_runner,
         )
+        if workflow == "local_runtime" and workflow_readiness is not None:
+            usable = [str(row["runtime"]) for row in runtime_rows if row.get("usable")]
+            workflow_readiness["runtime_any_of"] = list(WORKFLOW_REQUIREMENTS[workflow].get("runtimes", []))
+            workflow_readiness["usable_runtimes"] = usable
+            workflow_readiness["runtime_statuses"] = runtime_rows
+            workflow_readiness["readiness"] = "ready" if usable else "needs_setup"
+            if not usable:
+                workflow_readiness["next_actions"] = [
+                    "configure and start one compatible local runtime, then rerun this workflow doctor"
+                ]
+
         installable_missing = [row for row in rows if not row["installed"] and row.get("install_mode") == "automated"]
         manual_missing = [row for row in rows if not row["installed"] and row.get("install_mode") != "automated"]
         installed = [row for row in rows if row["installed"]]
@@ -363,7 +395,11 @@ class ToolchainManager:
         return {
             "name": "tools_doctor",
             "platform": _platform_info(),
-            "ok": all(bool(row["installed"]) for row in rows if row.get("required", True)),
+            "ok": all(
+                bool(row["installed"]) and bool((row.get("health") or {}).get("ok"))
+                for row in rows
+                if row.get("required", True)
+            ),
             "tools": rows,
             "notes": [
                 "Doctor checks whether prerequisite CLIs are installed and whether selected services are reachable.",
@@ -438,6 +474,16 @@ class ToolchainManager:
             raise ValueError(f"unknown tool: {name}")
         row = self._tool_row(name)
         workflow = dict(TOOL_WORKFLOWS.get(name, {}))
+        provider_status = row.get("provider_status") if name == "vagrant" else None
+        commands = [str(command) for command in workflow.get("commands", [])]
+        if isinstance(provider_status, dict) and provider_status.get("name"):
+            provider_name = str(provider_status["name"])
+            commands = [
+                "vagrant validate",
+                f"vagrant up --provider {provider_name}",
+                "vagrant ssh",
+                "vagrant halt",
+            ]
         return {
             "name": "tools_plan",
             "tool": name,
@@ -445,7 +491,8 @@ class ToolchainManager:
             "task": workflow.get("task", row.get("category")),
             "summary": workflow.get("summary", row.get("description")),
             "prerequisites": workflow.get("prerequisites", []),
-            "commands": [str(command) for command in workflow.get("commands", [])],
+            "provider_status": provider_status,
+            "commands": commands,
             "artifacts": workflow.get("artifacts", []),
             "next_steps": workflow.get("next_steps", []),
             "notes": [
@@ -459,13 +506,28 @@ class ToolchainManager:
             raise ValueError(f"unknown tool: {name}")
         if name not in TOOL_WORKFLOWS:
             raise ValueError(f"tool export is not available for {name}")
-        filename, content = _tool_export_content(name)
+        provider = None
+        if name == "vagrant":
+            target_name, target = configured_local_vm_target(self.profile.targets)
+            if target is None or target_name is None:
+                raise ValueError("vagrant export requires a configured local_vm target")
+            provider = selected_vagrant_provider(target)
+            artifacts = render_deployment_artifacts(
+                target_name,
+                target,
+                "local_vm",
+                ["vagrant", provider, "ansible"],
+            )
+            filename, content = "Vagrantfile", artifacts["files"]["Vagrantfile"]
+        else:
+            filename, content = _tool_export_content(name)
         workflow = TOOL_WORKFLOWS[name]
         return {
             "name": "tools_export",
             "tool": name,
             "filename": filename,
             "content": content,
+            "provider": provider,
             "notes": [
                 str(workflow.get("summary", "Starter artifact.")),
                 "Review and adapt this starter artifact before running mutating commands.",
@@ -496,7 +558,42 @@ class ToolchainManager:
             "installable_by_aiplane": install_mode == "automated",
             "install_commands": install_commands,
         }
+        if name == "vagrant":
+            provider_status = self._local_vm_provider_status()
+            row["provider_status"] = provider_status
+            row["health"] = {
+                "ok": bool(path) and bool(provider_status.get("usable")),
+                "reason": str(provider_status.get("reason")),
+            }
         return row
+
+    def _local_vm_provider_status(self) -> dict[str, object]:
+        try:
+            target_name, target = configured_local_vm_target(self.profile.targets)
+        except ValueError as exc:
+            return {
+                "name": None,
+                "target": None,
+                "usable": False,
+                "reason": str(exc),
+                "remediation": ["set local_vm_default to one configured local VM target"],
+            }
+        if target is None:
+            return {
+                "name": None,
+                "target": None,
+                "usable": False,
+                "reason": "no local VM target configures a Vagrant provider",
+                "remediation": ["add a local_vm target with provider: virtualbox, libvirt, hyperv, or vmware_desktop"],
+            }
+        provider = selected_vagrant_provider(target)
+        status = inspect_vagrant_provider(
+            provider,
+            workspace=self.profile.workspace,
+            command_runner=self.command_runner,
+            system=self.host_system,
+        )
+        return {**status, "target": target_name}
 
     def _install_commands(self, name: str) -> list[str]:
         spec = TOOLCHAIN[name]
@@ -703,6 +800,7 @@ def _runtime_prerequisite_rows(
     include_optional: bool,
     progress: Callable[[str], None] | None = None,
     runtimes: list[str] | None = None,
+    command_runner: CommandRunner | None = None,
 ) -> list[dict[str, object]]:
     catalog = RuntimeCatalog(profile)
     selected_runtimes = (
@@ -718,16 +816,29 @@ def _runtime_prerequisite_rows(
     for runtime in dict.fromkeys(selected_runtimes):
         if progress:
             progress(f"checking runtime prerequisite {runtime}")
-        payload = catalog.prerequisites(runtime)
+        payload = catalog.prerequisites(runtime, include_optional=include_optional)
         ok = bool(payload.get("ok"))
         notes = list(payload.get("notes", [])) if isinstance(payload.get("notes"), list) else []
-        availability = None
-        if runtime == "azure_speech":
-            availability = catalog.runtime_available(runtime)
-            ok = bool(availability.get("available"))
-            reason = availability.get("reason")
-            if reason:
-                notes.append(f"Azure Speech status: {reason}")
+        availability = catalog.runtime_available(runtime)
+        if runtime == "docker_model_runner":
+            status, _ = DockerModelRunner(command_runner).run("status")
+            availability = {
+                "available": bool(status.get("available")),
+                "reason": status.get("reason") or status.get("message") or "docker model status succeeded",
+                "evidence": "docker model status --json",
+            }
+        host = detect_host_platform()
+        platform_compatible = not (
+            runtime == "mlx"
+            and (host.normalized_system != "darwin" or host.machine.lower() not in {"arm64", "aarch64"})
+        )
+        available = bool(availability.get("available"))
+        usable = ok and platform_compatible and available
+        reason = availability.get("reason")
+        if reason:
+            notes.append(f"Runtime status: {reason}")
+        if not platform_compatible:
+            notes.append("Runtime status: MLX requires Apple Silicon on macOS; this host is plan-only.")
         rows.append(
             {
                 "runtime": runtime,
@@ -742,6 +853,9 @@ def _runtime_prerequisite_rows(
                 "setup_commands": _runtime_setup_commands(runtime, payload),
                 "notes": notes,
                 "availability": availability,
+                "platform_compatible": platform_compatible,
+                "available": available,
+                "usable": usable,
             }
         )
     return rows

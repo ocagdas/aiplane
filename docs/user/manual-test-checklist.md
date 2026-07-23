@@ -276,8 +276,10 @@ aiplane runtimes launch-manifest "$RUNTIME" --model "$CHAT_ALIAS"
 aiplane runtimes launch-manifest vllm --model "$CHAT_ALIAS" --host 0.0.0.0 --port 8000 --context-tokens 8192 --gpu-device 0 --tensor-parallel 1
 aiplane runtimes bundle "$RUNTIME" --model "$CHAT_ALIAS" --mode auto --format json
 aiplane runtimes bundle "$RUNTIME" --model "$CHAT_ALIAS" --mode auto --format selected-file
-# Run when the selected runner supports Docker (for example Ollama or vLLM):
-aiplane runtimes bundle "$RUNTIME" --model "$CHAT_ALIAS" --mode docker --cache-volume manual-model-cache --gpu-device all --env HF_HOME --auth-env HF_TOKEN
+# Exercise all Docker-only settings with a vLLM-compatible alias:
+aiplane runtimes bundle vllm --model provider-code-large-vllm --mode docker --cache-volume manual-model-cache --gpu-device all --env HF_HOME --auth-env HF_TOKEN --context-tokens 8192 --tensor-parallel 1
+# Confirm unsupported settings fail instead of being ignored:
+aiplane runtimes bundle vllm --model provider-code-large-vllm --mode conda --gpu-device 0
 ```
 
 - [ ] Artifact lock includes alias, native model id, source, revision/file, checksum/digest, format, quantization, and completeness.
@@ -285,6 +287,8 @@ aiplane runtimes bundle "$RUNTIME" --model "$CHAT_ALIAS" --mode docker --cache-v
 - [ ] Launch manifest is versioned, secret-free, render-only, and includes exact command, endpoint, health path, device selection, context, and parallel/offload inputs.
 - [ ] vLLM uses `vllm serve`; MLX uses `python -m mlx_lm.server`.
 - [ ] No process starts while rendering evidence.
+- [ ] Bundle JSON reports an explicit reproducibility level and blockers; mutable `latest` images are recipe-deterministic, not reproducible builds.
+- [ ] llama.cpp rejects `--mode docker`; native mode remains available.
 
 ## 10. Preview, install, and prepare a runtime/model
 
@@ -572,6 +576,37 @@ aiplane deploy render --target gpu_workstation_ssh
 - [ ] AKS output points workload rendering to `stacks render-kubernetes`; it does not run `kubectl` or an IaC apply.
 - [ ] SSH workstation output uses only the configured host/user/port and contains no credential value.
 - [ ] Repeating a render produces byte-identical JSON and file content.
+- [ ] Cloud output reports `artifact_readiness: scaffold`, non-empty `unresolved_inputs`, one selected `iac`, and no plan/apply/up command in `next_commands`.
+- [ ] Changing a disposable target copy among `iac: opentofu`, `iac: terraform`, and `iac: pulumi` selects only the matching IaC tool and artifact family. Pulumi emits `Pulumi.yaml`, `requirements.txt`, and `__main__.py` with `pulumi preview --diff`; HCL selections emit `main.tf`. None emits an apply/up command.
+
+## 18B. Verify provider-aware local VM planning
+
+**Read-only:**
+
+```bash
+aiplane environment doctor --workflow local_vm
+aiplane tools plan vagrant
+aiplane tools export vagrant
+aiplane deploy workflow-plan --target local_dev_vm
+aiplane deploy render --target local_dev_vm
+aiplane deploy render --target local_dev_vm --file Vagrantfile
+```
+
+- [ ] The workflow names `local_dev_vm` and its selected provider.
+- [ ] Vagrant without a usable provider reports `needs_setup`, with provider-specific remediation.
+- [ ] `provider: virtualbox`, `libvirt`, `hyperv`, or `vmware_desktop` renders the matching `config.vm.provider` block.
+- [ ] The artifact reports `vm_provider`, contains `Vagrantfile` plus `playbook.yml`, and recommends only `vagrant validate`; it does not run `vagrant up`.
+- [ ] With multiple local VM targets, `local_vm_default` selects the target used by `tools plan/export vagrant`.
+
+Optional official-tool validation in a disposable directory:
+
+```bash
+AIPLANE_RUN_EXTERNAL_VALIDATORS=1 python -m pytest -q tests/test_external_artifact_validation.py -rs
+```
+
+- [ ] Installed validators run; unavailable tools and unusable VM providers skip with an explicit reason.
+- [ ] Ansible syntax validation does not connect to the configured host.
+- [ ] Pulumi uses a disposable local backend and preview only.
 
 ## 19. Failure and safety checks
 
@@ -604,10 +639,11 @@ python -m ruff format --check src tests
 python -m ruff check src tests
 ```
 
-Optional synthetic catalog benchmark:
+Optional synthetic catalog benchmark and installed-tool artifact validation:
 
 ```bash
 AIPLANE_RUN_CATALOG_BENCHMARKS=1 python -m pytest -q tests/test_catalog_query_performance.py
+AIPLANE_RUN_EXTERNAL_VALIDATORS=1 python -m pytest -q tests/test_external_artifact_validation.py -rs
 ```
 
 - [ ] Profile validation passes.

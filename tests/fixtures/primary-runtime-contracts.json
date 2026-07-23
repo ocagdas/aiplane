@@ -1,0 +1,137 @@
+{
+  "ollama": {
+    "alias": "fixture-ollama-qwen-coder",
+    "model": "qwen2.5-coder:7b",
+    "source": "ollama",
+    "format": "ollama",
+    "mode": "docker",
+    "selected_file": "Dockerfile",
+    "artifact_marker": "FROM ollama/ollama:latest",
+    "launch_prefix": [
+      "ollama",
+      "serve"
+    ],
+    "bundle_options": {
+      "cache_volume": "ollama-model-cache",
+      "gpu_devices": [
+        "0"
+      ],
+      "environment": [
+        "OLLAMA_KEEP_ALIVE"
+      ]
+    },
+    "command_markers": [
+      "--gpus device=0",
+      "src=ollama-model-cache,dst=/root/.ollama"
+    ]
+  },
+  "llamacpp": {
+    "alias": "fixture-llamacpp-qwen-gguf",
+    "model": "models/qwen2.5-coder-7b-instruct-q4_k_m.gguf",
+    "source": "local_file",
+    "format": "gguf",
+    "mode": "native",
+    "selected_file": "runtime-launch.json",
+    "artifact_marker": "llama-server",
+    "launch_prefix": [
+      "llama-server",
+      "--model"
+    ],
+    "bundle_options": {
+      "gpu_devices": [
+        "0"
+      ],
+      "context_tokens": 8192
+    },
+    "command_markers": [
+      "--ctx-size 8192"
+    ]
+  },
+  "mlx": {
+    "alias": "fixture-mlx-qwen-coder",
+    "model": "mlx-community/Qwen2.5-Coder-7B-Instruct-4bit",
+    "source": "huggingface",
+    "format": "safetensors",
+    "mode": "conda",
+    "selected_file": "environment.yaml",
+    "artifact_marker": "mlx-lm",
+    "launch_prefix": [
+      "python",
+      "-m",
+      "mlx_lm.server"
+    ],
+    "bundle_options": {},
+    "command_markers": [
+      "conda env create",
+      "conda activate aiplane-mlx"
+    ]
+  },
+  "docker_model_runner": {
+    "alias": "fixture-dmr-qwen-coder",
+    "model": "ai/qwen2.5-coder:7B-Q4_K_M",
+    "source": "docker_model",
+    "format": "oci_model",
+    "mode": "native",
+    "selected_file": "runtime-launch.json",
+    "artifact_marker": "docker",
+    "launch_prefix": [
+      "docker",
+      "model",
+      "run"
+    ],
+    "bundle_options": {},
+    "command_markers": [
+      "docker model run"
+    ]
+  },
+  "lmstudio": {
+    "alias": "fixture-lmstudio-qwen-coder",
+    "model": "lmstudio-community/Qwen2.5-Coder-7B-Instruct-GGUF",
+    "source": "lmstudio_catalog",
+    "format": "gguf",
+    "mode": "native",
+    "selected_file": "runtime-launch.json",
+    "artifact_marker": "lms",
+    "launch_prefix": [
+      "lms",
+      "server",
+      "start"
+    ],
+    "bundle_options": {},
+    "command_markers": [
+      "lms server start --port 1234"
+    ]
+  },
+  "vllm": {
+    "alias": "fixture-vllm-qwen-coder",
+    "model": "Qwen/Qwen2.5-Coder-7B-Instruct",
+    "source": "huggingface",
+    "format": "safetensors",
+    "mode": "docker",
+    "selected_file": "Dockerfile",
+    "artifact_marker": "ENTRYPOINT [\"vllm\", \"serve\"",
+    "launch_prefix": [
+      "vllm",
+      "serve"
+    ],
+    "bundle_options": {
+      "cache_volume": "huggingface-model-cache",
+      "gpu_devices": [
+        "0",
+        "1"
+      ],
+      "environment": [
+        "HF_HOME"
+      ],
+      "auth_env": "HF_TOKEN",
+      "context_tokens": 8192,
+      "tensor_parallel": 2
+    },
+    "command_markers": [
+      "--gpus device=0,1",
+      "src=huggingface-model-cache,dst=/root/.cache/huggingface",
+      "--max-model-len 8192",
+      "--tensor-parallel-size 2"
+    ]
+  }
+}

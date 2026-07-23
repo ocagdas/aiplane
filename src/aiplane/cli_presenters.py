@@ -337,7 +337,7 @@ def _environment_doctor_text(payload: dict[str, object]) -> str:
                 "status": (
                     "ready" if item.get("ok") else (f"missing {missing_count}" if missing_count else "needs setup")
                 ),
-                "required": "optional",
+                "required": "alternative" if payload.get("workflow") == "local_runtime" else "optional",
                 "why": why,
             }
         )
@@ -366,6 +366,26 @@ def _environment_doctor_text(payload: dict[str, object]) -> str:
     ]
     for row in rows:
         lines.append("  ".join(clipped(row[key], widths[key]).ljust(widths[key]) for key in keys))
+    workflow_readiness = (
+        payload.get("workflow_readiness") if isinstance(payload.get("workflow_readiness"), dict) else None
+    )
+    if workflow_readiness is not None:
+        lines.append("")
+        workflow_name = workflow_readiness.get("name")
+        workflow_state = workflow_readiness.get("readiness", "unknown")
+        lines.append(f"workflow {workflow_name}: {workflow_state}")
+        usable = workflow_readiness.get("usable_runtimes", [])
+        if isinstance(usable, list) and usable:
+            lines.append("usable runtimes: " + ", ".join(str(value) for value in usable))
+        provider_status = workflow_readiness.get("vm_provider_status")
+        if isinstance(provider_status, dict):
+            provider_name = provider_status.get("name") or "unconfigured"
+            provider_state = "usable" if provider_status.get("usable") else "unavailable"
+            lines.append(f"Vagrant provider {provider_name}: {provider_state} ({provider_status.get('reason')})")
+        actions = workflow_readiness.get("next_actions", [])
+        if isinstance(actions, list) and actions:
+            lines.append("workflow next actions:")
+            lines.extend(f"- {action}" for action in actions)
     notes = payload.get("notes", [])
     if isinstance(notes, list) and notes:
         lines.append("")

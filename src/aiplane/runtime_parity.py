@@ -3,6 +3,8 @@
 from __future__ import annotations
 from typing import Any
 
+from .runtime_specs import runtime_endpoint
+
 PARITY_RUNTIMES = ("ollama", "llamacpp", "mlx", "docker_model_runner", "lmstudio", "vllm")
 
 _INTERFACES = {
@@ -10,42 +12,42 @@ _INTERFACES = {
         "detection": ("supported", "GET /api/tags"),
         "inventory": ("supported", "ollama list; GET /api/tags"),
         "health": ("supported", "GET /api/tags; ollama ps"),
-        "endpoint_export": ("supported", "http://localhost:11434"),
+        "endpoint_export": ("supported", runtime_endpoint("ollama")),
         "lifecycle": ("supported", "guarded helper commands"),
     },
     "llamacpp": {
         "detection": ("supported", "llama-server on PATH; GET /health"),
         "inventory": ("runtime_managed", "GET /models or configured catalog"),
         "health": ("supported", "GET /health"),
-        "endpoint_export": ("supported", "http://localhost:8080/v1"),
+        "endpoint_export": ("supported", runtime_endpoint("llamacpp")),
         "lifecycle": ("planned_only", "launch manifest and helper dry-run"),
     },
     "mlx": {
         "detection": ("supported", "python import mlx_lm; GET /v1/models"),
         "inventory": ("runtime_managed", "configured catalog and Hugging Face cache"),
         "health": ("supported", "GET /v1/models"),
-        "endpoint_export": ("supported", "http://localhost:8080/v1"),
+        "endpoint_export": ("supported", runtime_endpoint("mlx")),
         "lifecycle": ("planned_only", "launch manifest and pip install plan"),
     },
     "docker_model_runner": {
         "detection": ("supported", "docker model status --json"),
         "inventory": ("supported", "docker model list --format json"),
         "health": ("supported", "docker model status --json; GET /engines/v1/models"),
-        "endpoint_export": ("supported", "http://localhost:12434/engines/v1"),
+        "endpoint_export": ("supported", runtime_endpoint("docker_model_runner")),
         "lifecycle": ("supported", "guarded docker model commands"),
     },
     "lmstudio": {
         "detection": ("supported", "lms status; GET /v1/models"),
         "inventory": ("supported", "lms ls --json; lms ps --json"),
         "health": ("supported", "lms status; GET /v1/models"),
-        "endpoint_export": ("supported", "http://localhost:1234/v1"),
+        "endpoint_export": ("supported", runtime_endpoint("lmstudio")),
         "lifecycle": ("planned_only", "guarded lms server command plan"),
     },
     "vllm": {
         "detection": ("supported", "python import vllm; GET /health"),
         "inventory": ("runtime_managed", "GET /v1/models"),
         "health": ("supported", "GET /health; GET /metrics"),
-        "endpoint_export": ("supported", "http://localhost:8000/v1"),
+        "endpoint_export": ("supported", runtime_endpoint("vllm")),
         "lifecycle": ("supported", "guarded helper commands"),
     },
 }

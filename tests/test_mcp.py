@@ -478,7 +478,7 @@ class McpTests(unittest.TestCase):
                 "code_on_gpu",
                 orchestrator="langgraph",
                 runtime="vllm",
-                model="local-code-large",
+                model="provider-code-large-vllm",
                 machine="azure_h100_test",
                 endpoint="http://localhost:8000/v1",
             )

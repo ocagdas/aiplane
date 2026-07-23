@@ -19,6 +19,7 @@ from .runtime_catalog import RuntimeCatalog
 from .stack_lifecycle import StackLifecycle
 from .stack_roles import StackRolePlanner
 from .runtime_definitions import PROVIDER_ENDPOINT_DEFAULTS
+from .runtime_specs import PRIMARY_RUNTIME_SPECS, runtime_endpoint, runtime_spec
 from .remote import RemoteManager
 
 
@@ -131,6 +132,7 @@ class StackManager:
         runtime_catalog = RuntimeCatalog(self.profile)
         if runtime not in {row["name"] for row in runtime_catalog.list(include_gui=True)}:
             raise ValueError(f"unknown runtime: {runtime}")
+        runtime_catalog.validate_model_runtime(model, runtime)
         resolved_substrate = runtime_catalog.helper_substrate(runtime, runtime_substrate)
         normalized_roles = self._normalize_roles(
             roles or {},
@@ -192,7 +194,7 @@ class StackManager:
         runtime_catalog = RuntimeCatalog(self.profile)
         runtime_substrate = runtime_catalog.helper_substrate(runtime, str(stack.get("runtime_substrate") or "") or None)
         runtime_status = runtime_catalog.runtime_available(runtime)
-        endpoint = stack.get("endpoint") or _default_endpoint(runtime)
+        endpoint = stack.get("endpoint") or runtime_catalog.endpoint(runtime) or _default_endpoint(runtime)
         preflight = self._preflight(stack, runtime, model_name, endpoint, runtime_catalog)
         runtime_evidence: dict[str, Any]
         try:
@@ -392,7 +394,9 @@ class StackManager:
         model = str(stack.get("model") or "")
         runtime = str(stack.get("runtime") or "")
         orchestrator = str(stack.get("orchestrator") or "")
-        endpoint = str(stack.get("endpoint") or _default_endpoint(runtime))
+        runtime_catalog = RuntimeCatalog(self.profile)
+        endpoint = str(stack.get("endpoint") or runtime_catalog.endpoint(runtime) or _default_endpoint(runtime))
+        runtime_catalog.validate_model_runtime(model, runtime)
         if artifact in {"continue", "openai-compatible"}:
             exported = IntegrationManager(self.profile).export(artifact, model, endpoint=endpoint)
             return {
@@ -491,7 +495,10 @@ class StackManager:
             "machine": stack.get("machine"),
             "limits": stack.get("limits", {}),
             "tools": stack.get("tools", {}),
-            "roles": self._role_plan(stack, stack.get("endpoint") or _default_endpoint(runtime)),
+            "roles": self._role_plan(
+                stack,
+                stack.get("endpoint") or RuntimeCatalog(self.profile).endpoint(runtime) or _default_endpoint(runtime),
+            ),
             "endpoint_security": self.endpoint_plan(name),
             "approval_mode": stack.get("approval_mode"),
             "audit_label": stack.get("audit_label"),
@@ -502,7 +509,9 @@ class StackManager:
     def endpoint_plan(self, name: str) -> dict[str, Any]:
         stack = self._stack(name)
         runtime = str(stack.get("runtime") or "")
-        endpoint = str(stack.get("endpoint") or _default_endpoint(runtime))
+        endpoint = str(
+            stack.get("endpoint") or RuntimeCatalog(self.profile).endpoint(runtime) or _default_endpoint(runtime)
+        )
         return _endpoint_security_plan(name, stack, endpoint)
 
     def _preflight(
@@ -988,10 +997,10 @@ def _compose_deploy_lines(docker: dict[str, Any]) -> list[str]:
 
 
 def _ports_for_runtime(runtime: str) -> list[str]:
+    if runtime in PRIMARY_RUNTIME_SPECS:
+        spec = runtime_spec(runtime)
+        return [f"{spec.port}:{spec.container_port}"] if spec.container_port else []
     ports = {
-        "ollama": ["11434:11434"],
-        "vllm": ["8000:8000"],
-        "llamacpp": ["8080:8080"],
         "tgi": ["8081:80"],
         "localai": ["8082:8080"],
     }
@@ -1025,18 +1034,8 @@ def _compact_json(value: object) -> str:
 
 def _default_endpoint(runtime: str) -> str:
     provider_default = PROVIDER_ENDPOINT_DEFAULTS.get(runtime, {})
-    if provider_default.get("ownership") == "managed_service" and provider_default.get("endpoint"):
-        return str(provider_default.get("endpoint"))
-    if runtime == "ollama":
-        return "http://localhost:11434/v1"
-    if runtime == "docker_model_runner":
-        return "http://localhost:12434/engines/v1"
-    if runtime == "vllm":
-        return "http://localhost:8000/v1"
-    if runtime == "llamacpp":
-        return "http://localhost:8080/v1"
-    if runtime == "tgi":
-        return "http://localhost:8081/v1"
-    if runtime == "localai":
-        return "http://localhost:8082/v1"
+    if provider_default.get("endpoint"):
+        return str(provider_default["endpoint"])
+    if runtime in PRIMARY_RUNTIME_SPECS:
+        return runtime_endpoint(runtime)
     return "http://localhost:8000/v1"

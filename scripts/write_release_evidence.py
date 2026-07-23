@@ -4,7 +4,6 @@ from __future__ import annotations
 import argparse
 import json
 import platform
-import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -63,13 +62,15 @@ def main() -> int:
             "notes": "Hosted runner; release artifacts downloaded into an isolated workspace.",
         },
         "timing": {"started_at": started_at, "ended_at": ended_at, "elapsed_seconds": args.elapsed_seconds},
-        "commands": [{
-            "command": f"python scripts/verify_install_channels.py release --channel {args.channel}",
-            "exit_code": 0,
-            "elapsed_seconds": args.elapsed_seconds,
-            "outcome": "Install, portable workflow, replacement or upgrade, and uninstall passed.",
-            "written_paths": [],
-        }],
+        "commands": [
+            {
+                "command": f"python scripts/verify_install_channels.py release --channel {args.channel}",
+                "exit_code": 0,
+                "elapsed_seconds": args.elapsed_seconds,
+                "outcome": "Install, portable workflow, replacement or upgrade, and uninstall passed.",
+                "written_paths": [],
+            }
+        ],
         "first_failure": None,
         "assistance": {"beyond_written_workflow": False, "details": "Automated deterministic CI rehearsal."},
         "outcome": {

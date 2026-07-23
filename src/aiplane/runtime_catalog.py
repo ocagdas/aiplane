@@ -10,9 +10,11 @@ import shlex
 import shutil
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from .boundaries import HttpTransport, UrllibHttpTransport
 from .backends import OllamaBackend, OpenAICompatibleBackend
+from .artifact_validation import validate_runtime_bundle
 from .persistence import atomic_write_text
 from .config import dump_yaml, parse_yaml
 from .models import Profile
@@ -24,6 +26,7 @@ from .runtime_definitions import (
 from .runtime_evidence import artifact_lock as render_artifact_lock
 from .runtime_evidence import launch_manifest as render_launch_manifest
 from .runtime_parity import capability_matrix
+from .runtime_specs import PRIMARY_RUNTIME_SPECS, runtime_spec
 
 
 class RuntimeCatalog:
@@ -64,15 +67,32 @@ class RuntimeCatalog:
             )
         return sorted(rows, key=lambda row: row["name"])
 
+    def endpoint(self, runtime: str) -> str | None:
+        provider = self._providers().get(runtime, {})
+        value = str(provider.get("endpoint") or "").strip()
+        return value or None
+
+    def endpoint_port(self, runtime: str) -> int:
+        endpoint = self.endpoint(runtime)
+        if endpoint:
+            parsed = urlsplit(endpoint)
+            if parsed.port is not None:
+                return parsed.port
+        spec = PRIMARY_RUNTIME_SPECS.get(runtime)
+        return spec.port if spec else 8000
+
     def capabilities(self, runtime: str | None = None) -> dict[str, Any]:
         return capability_matrix(runtime)
 
     def sources(self) -> list[dict[str, Any]]:
         return [{"name": name, **value} for name, value in sorted(SOURCE_DEFINITIONS.items())]
 
-    def prerequisites(self, runtime: str) -> dict[str, Any]:
+    def prerequisites(self, runtime: str, *, include_optional: bool = True) -> dict[str, Any]:
         if runtime == "all":
-            rows = [self.prerequisites(row["name"]) for row in self.list(include_gui=True)]
+            rows = [
+                self.prerequisites(row["name"], include_optional=include_optional)
+                for row in self.list(include_gui=True)
+            ]
             return {
                 "name": "runtime_prerequisites",
                 "runtime": "all",
@@ -92,6 +112,8 @@ class RuntimeCatalog:
                 "notes": ["Unknown runtime. Use `aiplane runtimes list --include-gui` to inspect known runtimes."],
             }
         required, optional, packages, notes = _runtime_prerequisite_spec(runtime)
+        if not include_optional:
+            optional = []
         missing_required = [_tool_row(name, packages.get(name)) for name in required if shutil.which(name) is None]
         missing_optional = [_tool_row(name, packages.get(name)) for name in optional if shutil.which(name) is None]
         managed = definition.get("managed_by_helper")
@@ -203,6 +225,21 @@ class RuntimeCatalog:
             runtimes = [name for name in runtimes if not RUNTIME_DEFINITIONS.get(name, {}).get("gui_required")]
         return [name for name in dict.fromkeys(runtimes) if name in RUNTIME_DEFINITIONS]
 
+    def validate_model_runtime(self, model_name: str, runtime: str) -> dict[str, Any]:
+        model = self._model(model_name)
+        if self._model_ownership(model) == "managed_service":
+            raise ValueError(
+                f"managed-service model {model_name!r} cannot use self-managed runtime {runtime!r}; "
+                "use its provider endpoint instead"
+            )
+        supported = self.compatible_runtimes_for_entry(model, include_gui=True)
+        if runtime not in supported:
+            supported_text = ", ".join(supported) or "none"
+            raise ValueError(
+                f"runtime {runtime!r} is not supported by model {model_name!r}; supported: {supported_text}"
+            )
+        return model
+
     def select_runtime(self, model_name: str) -> dict[str, Any]:
         model = self._model(model_name)
         supported = self.supported_runtimes(model_name)
@@ -264,21 +301,14 @@ class RuntimeCatalog:
         if mode not in support["modes"]:
             supported_modes = ", ".join(support["modes"])
             raise ValueError(f"runtime {runtime!r} does not support {mode!r} bundles; supported: {supported_modes}")
-        model = self._model(model_name)
-        if self._model_ownership(model) == "managed_service":
-            raise ValueError(
-                f"managed-service model {model_name!r} cannot be bundled with runtime {runtime!r}; use provider credentials/endpoints and integration export instead"
-            )
-        supported = self.compatible_runtimes_for_entry(model, include_gui=True)
-        if runtime not in supported:
-            raise ValueError(
-                f"runtime {runtime!r} is not supported by model {model_name!r}; supported: {', '.join(supported) or 'none'}"
-            )
+        model = self.validate_model_runtime(model_name, runtime)
         model_id = str(model.get("model") or model_name)
         if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:/@+-]*", model_id):
             raise ValueError("bundle model id contains unsupported characters")
         settings = _bundle_settings(
             runtime,
+            mode,
+            port=self.endpoint_port(runtime),
             cache_volume=cache_volume,
             gpu_devices=gpu_devices,
             environment=environment,
@@ -286,13 +316,14 @@ class RuntimeCatalog:
             context_tokens=context_tokens,
             tensor_parallel=tensor_parallel,
         )
+        selected_file = {"docker": "Dockerfile", "conda": "environment.yaml", "native": "runtime-launch.json"}[mode]
         files: dict[str, str] = {}
-        if "docker" in support["modes"]:
-            files["Dockerfile"] = _dockerfile_for_runtime(runtime, model_id)
-        if "conda" in support["modes"]:
-            files["environment.yaml"] = _conda_yaml_for_runtime(runtime)
         launch = None
-        if "native" in support["modes"]:
+        if mode == "docker":
+            files[selected_file] = _dockerfile_for_runtime(runtime, model_id)
+        elif mode == "conda":
+            files[selected_file] = _conda_yaml_for_runtime(runtime)
+        else:
             launch = render_launch_manifest(
                 runtime,
                 model_name,
@@ -301,20 +332,19 @@ class RuntimeCatalog:
                 gpu_devices=gpu_devices,
                 tensor_parallel=tensor_parallel,
             )
-            files["runtime-launch.json"] = json.dumps(launch, indent=2, sort_keys=True) + "\n"
-        selected_file = {"docker": "Dockerfile", "conda": "environment.yaml", "native": "runtime-launch.json"}[mode]
+            files[selected_file] = json.dumps(launch, indent=2, sort_keys=True) + "\n"
         checksums = {
             filename: hashlib.sha256(content.encode("utf-8")).hexdigest() for filename, content in files.items()
         }
         notes = [
-            "This is a render-only reproducibility plan; it does not build images, create environments, start processes, or pull model weights.",
+            "This is a render-only, recipe-deterministic plan; it does not build images, create environments, start processes, or pull model weights.",
             str(support["note"]),
             "GPU devices, cache volumes, environment references, auth references, context, and tensor parallelism are rendered only when explicitly supplied.",
             "Environment and auth values are never embedded; the generated command references variable names for the operator to populate.",
         ]
         if mode == "native":
             notes.append("Review runtime-launch.json before running the generated launch command.")
-        return {
+        payload = {
             "$schema": "schemas/aiplane-runtime-bundle-v1.schema.json",
             "schema_version": "1.0",
             "record_type": "runtime_bundle",
@@ -330,9 +360,12 @@ class RuntimeCatalog:
             "files": files,
             "checksums": checksums,
             "settings": settings,
+            "image": _docker_image_tag(runtime, model_name) if mode == "docker" else None,
+            "reproducibility": _bundle_reproducibility(mode, files[selected_file]),
             "commands": _bundle_commands(runtime, model_name, mode, selected_file, settings, launch),
             "notes": notes,
         }
+        return validate_runtime_bundle(payload)
 
     def artifact_lock(self, model_name: str) -> dict[str, Any]:
         model = self._model(model_name)
@@ -354,20 +387,13 @@ class RuntimeCatalog:
         tensor_parallel: int | None = None,
         offload: str | None = None,
     ) -> dict[str, Any]:
-        model = self._model(model_name)
-        if self._model_ownership(model) == "managed_service":
-            raise ValueError(f"managed-service model {model_name!r} cannot use a local launch manifest")
-        supported = self.compatible_runtimes_for_entry(model, include_gui=True)
-        if runtime not in supported:
-            raise ValueError(
-                f"runtime {runtime!r} is not supported by model {model_name!r}; supported: {', '.join(supported) or 'none'}"
-            )
+        model = self.validate_model_runtime(model_name, runtime)
         return render_launch_manifest(
             runtime,
             model_name,
             model,
             host=host,
-            port=port,
+            port=port if port is not None else self.endpoint_port(runtime),
             context_tokens=context_tokens,
             gpu_devices=gpu_devices,
             tensor_parallel=tensor_parallel,
@@ -600,49 +626,29 @@ class RuntimeCatalog:
         return "managed_service" if provider_name in PROVIDER_ENDPOINT_DEFAULTS else "self_managed"
 
 
-_PARITY_BUNDLE_SUPPORT: dict[str, dict[str, object]] = {
-    "ollama": {
-        "default": "docker",
-        "modes": ["docker", "native"],
-        "note": "Ollama is packaged as its vendor container or handed off to its native CLI.",
-    },
-    "vllm": {
-        "default": "docker",
-        "modes": ["docker", "conda", "native"],
-        "note": "vLLM supports container, Python environment, and native launch handoffs.",
-    },
-    "llamacpp": {
-        "default": "native",
-        "modes": ["docker", "native"],
-        "note": "llama.cpp needs a reviewed native binary or container build; a fake Python environment is not emitted.",
-    },
-    "mlx": {
-        "default": "conda",
-        "modes": ["conda", "native"],
-        "note": "MLX is an Apple-platform Python/native workflow; a Linux Dockerfile is not emitted.",
-    },
-    "docker_model_runner": {
-        "default": "native",
-        "modes": ["native"],
-        "note": "Docker Model Runner is a Docker host feature, not a separate image or Conda environment.",
-    },
-    "lmstudio": {
-        "default": "native",
-        "modes": ["native"],
-        "note": "LM Studio is GUI/native managed; the bundle records only its reviewed CLI handoff.",
-    },
+_BUNDLE_NOTES = {
+    "ollama": "Ollama is packaged as its vendor container or handed off to its native CLI.",
+    "vllm": "vLLM supports container, Python environment, and native launch handoffs.",
+    "llamacpp": "llama.cpp uses a reviewed native llama-server handoff; no placeholder container is emitted.",
+    "mlx": "MLX is an Apple-platform Python/native workflow; a Linux Dockerfile is not emitted.",
+    "docker_model_runner": "Docker Model Runner is a Docker host feature, not a separate image or Conda environment.",
+    "lmstudio": "LM Studio is GUI/native managed; the bundle records only its reviewed CLI handoff.",
 }
 
 
 def _bundle_support(runtime: str) -> dict[str, object]:
-    return _PARITY_BUNDLE_SUPPORT.get(
-        runtime,
-        {
-            "default": "docker",
-            "modes": ["docker", "conda"],
-            "note": "This runtime retains the generic container and Python-environment starter contract.",
-        },
-    )
+    if runtime in PRIMARY_RUNTIME_SPECS:
+        spec = runtime_spec(runtime)
+        return {
+            "default": spec.default_bundle_mode,
+            "modes": list(spec.bundle_modes),
+            "note": _BUNDLE_NOTES[runtime],
+        }
+    return {
+        "default": "docker",
+        "modes": ["docker", "conda"],
+        "note": "This runtime retains the generic container and Python-environment starter contract.",
+    }
 
 
 def _dockerfile_for_runtime(runtime: str, model_id: str) -> str:
@@ -665,13 +671,6 @@ def _dockerfile_for_runtime(runtime: str, model_id: str) -> str:
             "FROM localai/localai:latest\n"
             "EXPOSE 8080\n"
             f"# Mount or copy the model assets for {model_id} into the LocalAI models directory.\n"
-        )
-    if runtime == "llamacpp":
-        return (
-            "FROM ubuntu:24.04\n"
-            "RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl && rm -rf /var/lib/apt/lists/*\n"
-            "EXPOSE 8080\n"
-            f"# Add llama-server installation and mount the GGUF file for {model_id}.\n"
         )
     packages = " ".join(_pip_packages_for_runtime(runtime))
     return (
@@ -718,20 +717,37 @@ def _pip_packages_for_runtime(runtime: str) -> list[str]:
     return packages.get(runtime, [])
 
 
-_BUNDLE_RUNTIME_PORTS = {"ollama": 11434, "vllm": 8000, "tgi": 80, "localai": 8080, "llamacpp": 8080}
-_BUNDLE_CACHE_TARGETS = {
-    "ollama": "/root/.ollama",
-    "vllm": "/root/.cache/huggingface",
+_BUNDLE_SETTING_SUPPORT = {
+    ("ollama", "docker"): {"cache_volume", "gpu_devices", "environment", "auth_env"},
+    ("ollama", "native"): {"gpu_devices"},
+    ("vllm", "docker"): {
+        "cache_volume",
+        "gpu_devices",
+        "environment",
+        "auth_env",
+        "context_tokens",
+        "tensor_parallel",
+    },
+    ("vllm", "native"): {"gpu_devices", "context_tokens", "tensor_parallel"},
+    ("llamacpp", "native"): {"gpu_devices", "context_tokens"},
+}
+_GENERIC_DOCKER_SETTINGS = {"cache_volume", "gpu_devices", "environment", "auth_env"}
+_GENERIC_CACHE_TARGETS = {
     "tgi": "/data",
     "localai": "/build/models",
-    "llamacpp": "/models",
     "transformers": "/root/.cache/huggingface",
+}
+_DOCKER_CONTAINER_PORTS = {
+    "tgi": 80,
+    "localai": 8080,
 }
 
 
 def _bundle_settings(
     runtime: str,
+    mode: str,
     *,
+    port: int,
     cache_volume: str | None,
     gpu_devices: list[str] | None,
     environment: list[str] | None,
@@ -743,6 +759,23 @@ def _bundle_settings(
     safe_env = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
     devices = [str(value) for value in gpu_devices or [] if value]
     env_names = [str(value) for value in environment or [] if value]
+    supplied = {
+        "cache_volume": cache_volume,
+        "gpu_devices": devices,
+        "environment": env_names,
+        "auth_env": auth_env,
+        "context_tokens": context_tokens,
+        "tensor_parallel": tensor_parallel,
+    }
+    supported = _BUNDLE_SETTING_SUPPORT.get((runtime, mode), _GENERIC_DOCKER_SETTINGS if mode == "docker" else set())
+    unsupported = sorted(name for name, value in supplied.items() if value not in (None, []) and name not in supported)
+    if unsupported:
+        supported_text = ", ".join(sorted(supported)) or "none"
+        unsupported_text = ", ".join(unsupported)
+        raise ValueError(
+            f"bundle settings unsupported for runtime {runtime!r} in {mode!r} mode: "
+            f"{unsupported_text}; supported settings: {supported_text}"
+        )
     if cache_volume and not safe_name.fullmatch(cache_volume):
         raise ValueError("cache volume must contain only letters, numbers, dot, underscore, and dash")
     if any(not re.fullmatch(r"[A-Za-z0-9_.:-]+", value) for value in devices):
@@ -755,14 +788,49 @@ def _bundle_settings(
         raise ValueError("context tokens must be positive")
     if tensor_parallel is not None and tensor_parallel < 1:
         raise ValueError("tensor parallel size must be positive")
+    spec = PRIMARY_RUNTIME_SPECS.get(runtime)
+    cache_target = spec.cache_target if spec else _GENERIC_CACHE_TARGETS.get(runtime)
     return {
-        "port": _BUNDLE_RUNTIME_PORTS.get(runtime, 8000),
-        "cache": {"volume": cache_volume, "target": _BUNDLE_CACHE_TARGETS.get(runtime)} if cache_volume else None,
+        "port": port,
+        "container_port": (spec.container_port if spec else _DOCKER_CONTAINER_PORTS.get(runtime)) if mode == "docker" else None,
+        "cache": {"volume": cache_volume, "target": cache_target} if cache_volume else None,
         "gpu_devices": devices,
         "environment": list(dict.fromkeys(env_names)),
         "auth_env": auth_env,
         "context_tokens": context_tokens,
         "tensor_parallel": tensor_parallel,
+        "supported_options": sorted(supported),
+    }
+
+
+def _docker_image_tag(runtime: str, model_name: str) -> str:
+    raw = f"aiplane-{runtime}-{model_name}"
+    normalized = re.sub(r"[^a-z0-9._-]+", "-", raw.lower()).strip("-._")
+    normalized = re.sub(r"-+", "-", normalized)
+    changed = normalized != raw
+    if len(normalized) > 220:
+        normalized = normalized[:220].rstrip("-._")
+        changed = True
+    if changed:
+        normalized = f"{normalized}-{hashlib.sha256(raw.encode()).hexdigest()[:8]}"
+    if not normalized or not re.fullmatch(r"[a-z0-9]+(?:[._-][a-z0-9]+)*", normalized):
+        raise ValueError(f"model alias {model_name!r} cannot be converted to a safe Docker image name")
+    return f"{normalized}:local"
+
+
+def _bundle_reproducibility(mode: str, selected_content: str) -> dict[str, Any]:
+    blockers = []
+    if mode == "docker" and ":latest" in selected_content:
+        blockers.append("container image uses a mutable latest tag")
+    if mode == "conda":
+        blockers.append("pip dependencies are not version locked")
+    if mode == "native":
+        blockers.append("runtime executable version is unresolved")
+    return {
+        "level": "recipe_deterministic",
+        "version_pinned": not blockers,
+        "digest_locked": False,
+        "blockers": blockers,
     }
 
 
@@ -775,9 +843,10 @@ def _bundle_commands(
     launch: dict[str, Any] | None = None,
 ) -> list[str]:
     if mode == "docker":
-        tag = f"aiplane-{runtime}-{model_name}:local"
+        tag = _docker_image_tag(runtime, model_name)
         port = int(settings["port"])
-        run = ["docker", "run", "--rm", "-p", f"{port}:{port}"]
+        container_port = int(settings.get("container_port") or port)
+        run = ["docker", "run", "--rm", "-p", f"{port}:{container_port}"]
         devices = settings.get("gpu_devices") or []
         if devices:
             run.extend(["--gpus", "all" if devices == ["all"] else f"device={','.join(devices)}"])

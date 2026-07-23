@@ -1,8 +1,10 @@
 default: aks_gpu_pool
+local_vm_default: local_dev_vm
 targets:
   aks_gpu_pool:
     type: azure_aks
     control_cli: az
+    iac: opentofu
     subscription: null
     resource_group: rg-ai-coding
     cluster: ai-coding-aks
@@ -25,6 +27,7 @@ targets:
   azure_gpu_vm:
     type: azure_vm
     control_cli: az
+    iac: opentofu
     subscription: null
     resource_group: rg-ai-coding
     region: uksouth
@@ -70,6 +73,13 @@ targets:
         gpu: optional
         notes: choose when RAM matters more than accelerator throughput
     notes: Azure GPU VM target managed through az; validate SKU availability and quota in the selected region
+  local_dev_vm:
+    type: local_vm
+    provider: virtualbox
+    box: bento/ubuntu-24.04
+    cpus: 4
+    memory_mb: 8192
+    notes: Render-only local development VM target; validate Vagrant and the selected provider before running vagrant up
   gpu_workstation_ssh:
     type: ssh_tunnel
     ssh:

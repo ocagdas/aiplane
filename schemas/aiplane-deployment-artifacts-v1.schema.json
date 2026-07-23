@@ -3,22 +3,284 @@
   "$id": "https://aiplane.dev/schemas/deployment-artifacts/v1",
   "title": "aiplane deployment artifact family",
   "type": "object",
-  "required": ["$schema", "schema_version", "record_type", "render_only", "apply_supported", "review_required", "target", "workflow", "files", "checksums"],
+  "required": [
+    "$schema",
+    "schema_version",
+    "record_type",
+    "render_only",
+    "apply_supported",
+    "review_required",
+    "target",
+    "workflow",
+    "files",
+    "checksums",
+    "artifact_readiness",
+    "unresolved_inputs",
+    "validation_commands"
+  ],
   "properties": {
-    "$schema": {"const": "schemas/aiplane-deployment-artifacts-v1.schema.json"},
-    "schema_version": {"const": "1.0"},
-    "record_type": {"const": "deployment_artifacts"},
-    "render_only": {"const": true},
-    "apply_supported": {"const": false},
-    "review_required": {"const": true},
-    "target": {"type": "string", "minLength": 1},
-    "target_type": {"type": "string"},
-    "workflow": {"enum": ["local_install", "local_vm", "remote_workstation", "remote_vm", "cloud_vm", "cloud_kubernetes"]},
-    "tool_owners": {"type": "array", "items": {"type": "string"}},
-    "files": {"type": "object", "additionalProperties": {"type": "string"}, "minProperties": 1},
-    "checksums": {"type": "object", "additionalProperties": {"type": "string", "pattern": "^[a-f0-9]{64}$"}},
-    "next_commands": {"type": "array", "items": {"type": "string"}},
-    "notes": {"type": "array", "items": {"type": "string"}}
+    "$schema": {
+      "const": "schemas/aiplane-deployment-artifacts-v1.schema.json"
+    },
+    "schema_version": {
+      "const": "1.0"
+    },
+    "record_type": {
+      "const": "deployment_artifacts"
+    },
+    "render_only": {
+      "const": true
+    },
+    "apply_supported": {
+      "const": false
+    },
+    "review_required": {
+      "const": true
+    },
+    "target": {
+      "type": "string",
+      "minLength": 1
+    },
+    "target_type": {
+      "type": "string"
+    },
+    "workflow": {
+      "enum": [
+        "local_install",
+        "local_vm",
+        "remote_workstation",
+        "remote_vm",
+        "cloud_vm",
+        "cloud_kubernetes"
+      ]
+    },
+    "tool_owners": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "files": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "minProperties": 1
+    },
+    "checksums": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      },
+      "minProperties": 1
+    },
+    "next_commands": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "iac": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "opentofu",
+        "terraform",
+        "pulumi",
+        null
+      ]
+    },
+    "artifact_readiness": {
+      "enum": [
+        "scaffold",
+        "validate_ready",
+        "plan_ready"
+      ]
+    },
+    "unresolved_inputs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "validation_commands": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "vm_provider": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "virtualbox",
+        "libvirt",
+        "hyperv",
+        "vmware_desktop",
+        null
+      ]
+    }
   },
-  "additionalProperties": false
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "workflow": {
+            "enum": [
+              "cloud_vm",
+              "cloud_kubernetes"
+            ]
+          }
+        },
+        "required": [
+          "workflow"
+        ]
+      },
+      "then": {
+        "properties": {
+          "iac": {
+            "enum": [
+              "opentofu",
+              "terraform",
+              "pulumi"
+            ]
+          }
+        },
+        "required": [
+          "iac"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "iac": {
+            "const": "opentofu"
+          }
+        },
+        "required": [
+          "iac"
+        ]
+      },
+      "then": {
+        "properties": {
+          "files": {
+            "required": [
+              "main.tf"
+            ]
+          },
+          "validation_commands": {
+            "const": [
+              "tofu fmt -check"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "iac": {
+            "const": "terraform"
+          }
+        },
+        "required": [
+          "iac"
+        ]
+      },
+      "then": {
+        "properties": {
+          "files": {
+            "required": [
+              "main.tf"
+            ]
+          },
+          "validation_commands": {
+            "const": [
+              "terraform fmt -check"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "iac": {
+            "const": "pulumi"
+          }
+        },
+        "required": [
+          "iac"
+        ]
+      },
+      "then": {
+        "properties": {
+          "files": {
+            "required": [
+              "Pulumi.yaml",
+              "requirements.txt",
+              "__main__.py"
+            ]
+          },
+          "validation_commands": {
+            "const": [
+              "pulumi preview --diff"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "workflow": {
+            "const": "local_vm"
+          }
+        },
+        "required": [
+          "workflow"
+        ]
+      },
+      "then": {
+        "properties": {
+          "vm_provider": {
+            "enum": [
+              "virtualbox",
+              "libvirt",
+              "hyperv",
+              "vmware_desktop"
+            ]
+          },
+          "files": {
+            "required": [
+              "Vagrantfile",
+              "playbook.yml"
+            ]
+          },
+          "validation_commands": {
+            "const": [
+              "vagrant validate"
+            ]
+          }
+        },
+        "required": [
+          "vm_provider"
+        ]
+      }
+    }
+  ]
 }

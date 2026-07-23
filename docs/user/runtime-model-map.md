@@ -309,9 +309,9 @@ aiplane runtimes launch-manifest llamacpp --model GGUF_ALIAS --context-tokens 81
 
 The manifest is versioned, JSON, render-only, and secret-free. It records artifact evidence, runtime/protocol requirements, the exact argument vector, endpoint/health metadata, context, device selection, parallelism, and offload settings. It does not install a runtime, pull a model, bind a port, or start a service. Renderers cover Ollama, vLLM, llama.cpp, MLX, Docker Model Runner, and LM Studio when the selected model/runtime mapping is compatible. vLLM renders `vllm serve`; MLX renders `python -m mlx_lm.server`. Higher-level pull previews, benchmark records, stack plan/doctor, profile replay comparisons, and stack lifecycle results reuse these artifact and launch contracts instead of inventing separate evidence shapes.
 
-## Reproducible runtime bundles
+## Deterministic runtime bundle recipes
 
-Render a versioned container, Conda, or native launch handoff without building, pulling, or starting anything:
+Render a versioned container, Conda, or native launch recipe without building, pulling, or starting anything:
 
 ```bash
 aiplane runtimes bundle vllm --model MODEL_ALIAS --mode docker --cache-volume hf-cache --gpu-device 0 --gpu-device 1 --env HF_HOME --auth-env HF_TOKEN --context-tokens 32768 --tensor-parallel 2
@@ -320,9 +320,11 @@ aiplane runtimes bundle mlx --model MODEL_ALIAS --mode auto --format selected-fi
 aiplane runtimes bundle docker_model_runner --model MODEL_ALIAS --mode native --format launch-json
 ```
 
-`--mode auto` is the default and selects a truthful runner-specific substrate. Ollama defaults to its vendor container; vLLM supports Docker, Conda, and native handoff; llama.cpp defaults to native and can also render a container starter; MLX supports Conda/native and deliberately emits no Linux Dockerfile; Docker Model Runner and LM Studio emit native launch handoffs only because pretending they are standalone images or Conda environments would be misleading. Every emitted file has a SHA-256 checksum in the JSON contract. `--format selected-file` prints the resolved artifact.
+`--mode auto` selects a runner-specific handoff. Ollama defaults to its vendor container; vLLM supports Docker, Conda, and native handoff; llama.cpp is native-only until a genuinely runnable container recipe exists; MLX supports Conda/native and emits no Linux Dockerfile; Docker Model Runner and LM Studio emit native launch handoffs only. Each plan emits only its selected artifact, and every emitted file has a SHA-256 checksum. `--format selected-file` prints that artifact.
 
-Docker plans use the runtime's conventional port, optional named cache volume, explicit GPU selectors, and environment-variable names. Named stacks can persist `--runtime-substrate docker`; plan and lifecycle previews then forward that exact substrate to the guarded runtime helper. `--env` and `--auth-env` accept names only, never embedded values. The JSON contract is linked to `schemas/aiplane-runtime-bundle-v1.schema.json` and remains render-only.
+Options are runtime/mode-aware. Docker-only cache, environment, and authentication references are rejected for Conda/native modes that cannot apply them; context and tensor parallelism are accepted only by launchers that render those arguments. Docker image names are derived safely from aliases while the original alias remains metadata. The primary endpoints are consistent across providers, launch manifests, bundles, capabilities, and stacks: Ollama `11434`, llama.cpp/MLX `8080`, vLLM `8000`, Docker Model Runner `12434`, and LM Studio `1234`. Docker bundles keep the selected endpoint port as the host port and map it to the runner's conventional internal container port, so a profile override such as vLLM `9001` renders `9001:8000` rather than changing the container listener implicitly.
+
+The JSON contract reports `recipe_deterministic`, `version_pinned`, or `digest_locked` evidence explicitly. Current bundle recipes are normally `recipe_deterministic`: mutable image tags, unpinned Python dependencies, or unresolved native executable versions are listed as blockers rather than being called reproducible builds. Artifact locks reach `digest_locked` only when both immutable revision and checksum/digest evidence exist. The contract is linked to `schemas/aiplane-runtime-bundle-v1.schema.json` and remains render-only.
 
 ## Primary runner capability contract
 

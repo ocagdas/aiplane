@@ -5,14 +5,18 @@ from __future__ import annotations
 from typing import Any
 
 from .runtime_definitions import RUNTIME_DEFINITIONS
+from .runtime_specs import PRIMARY_RUNTIME_SPECS, runtime_endpoint, runtime_spec
 
 CONTRACT_VERSION = "1.0"
-LAUNCH_RENDERERS = {"ollama", "vllm", "llamacpp", "mlx", "docker_model_runner", "lmstudio"}
+LAUNCH_RENDERERS = set(PRIMARY_RUNTIME_SPECS)
 
 
 def artifact_lock(model_name: str, model: dict[str, Any]) -> dict[str, Any]:
     model_id = str(model.get("model") or model_name)
     source = str(model.get("source") or model.get("provider") or "")
+    immutable_revision = bool(model.get("revision") or model.get("commit_sha"))
+    checksum_locked = bool(model.get("checksum") or model.get("sha256") or model.get("digest"))
+    complete = immutable_revision and checksum_locked
     return {
         "contract_version": CONTRACT_VERSION,
         "record_type": "model_artifact_lock",
@@ -43,10 +47,12 @@ def artifact_lock(model_name: str, model: dict[str, Any]) -> dict[str, Any]:
             "discovered_name": model.get("discovered_name"),
             "generated": bool(model.get("_generated") or model.get("generated")),
         },
-        "complete": bool(
-            (model.get("revision") or model.get("commit_sha"))
-            and (model.get("checksum") or model.get("sha256") or model.get("digest"))
-        ),
+        "complete": complete,
+        "reproducibility": {
+            "level": "digest_locked" if complete else "unresolved",
+            "immutable_revision": immutable_revision,
+            "checksum_locked": checksum_locked,
+        },
         "notes": [
             "Null fields are unresolved; they are not inferred or silently pinned.",
             "A complete lock requires both an immutable revision and checksum/digest.",
@@ -93,7 +99,9 @@ def launch_manifest(
         tensor_parallel=tensor_parallel,
         offload=offload,
     )
-    protocol = str(RUNTIME_DEFINITIONS[runtime].get("protocol") or "")
+    spec = runtime_spec(runtime)
+    protocol = spec.protocol
+    artifact = artifact_lock(model_name, model)
     return {
         "contract_version": CONTRACT_VERSION,
         "record_type": "runtime_launch_manifest",
@@ -104,7 +112,7 @@ def launch_manifest(
             "protocol": protocol,
             "requirements": {"commands": [command[0]], "gpu_devices": devices},
         },
-        "artifact": artifact_lock(model_name, model),
+        "artifact": artifact,
         "launch": {
             "command": command,
             "working_directory": None,
@@ -117,9 +125,14 @@ def launch_manifest(
             "offload": offload,
         },
         "endpoint": {
-            "base_url": f"http://{host}:{selected_port}",
-            "health_path": _health_path(runtime),
+            "base_url": runtime_endpoint(runtime, host, selected_port),
+            "health_path": spec.health_path,
             "protocol": protocol,
+        },
+        "reproducibility": {
+            "level": "recipe_deterministic",
+            "runtime_version_pinned": False,
+            "artifact_level": artifact["reproducibility"]["level"],
         },
         "notes": [
             "This manifest is preview-only and never starts a process or pulls weights.",
@@ -179,22 +192,7 @@ def _environment(runtime: str, devices: list[str]) -> dict[str, str]:
 
 
 def _default_port(runtime: str) -> int:
-    return {
-        "ollama": 11434,
-        "vllm": 8000,
-        "llamacpp": 8080,
-        "mlx": 8080,
-        "docker_model_runner": 12434,
-        "lmstudio": 1234,
-    }[runtime]
-
-
-def _health_path(runtime: str) -> str:
-    if runtime == "ollama":
-        return "/api/tags"
-    if runtime == "docker_model_runner":
-        return "/engines/v1/models"
-    return "/v1/models"
+    return runtime_spec(runtime).port
 
 
 def _infer_format(model_id: str) -> str | None:

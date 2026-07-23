@@ -124,9 +124,40 @@ class StackOrchestratorTests(unittest.TestCase):
             )
             MachineManager(profile).import_azure_sku("Standard_NC40ads_H100_v5", "uksouth", name="azure_h100_test")
             stacks = StackManager(profile)
+            with self.assertRaisesRegex(
+                ValueError,
+                "runtime .*vllm.* is not supported by model .*local-gguf-instruct.*supported: llamacpp, localai, ollama",
+            ):
+                stacks.setup(
+                    "invalid_pair",
+                    orchestrator=None,
+                    runtime="vllm",
+                    model="local-gguf-instruct",
+                    machine="azure_h100_test",
+                    dry_run=True,
+                )
+
+            stacks.config.setdefault("stacks", {})["legacy_invalid_pair"] = {
+                "runtime": "vllm",
+                "model": "local-gguf-instruct",
+                "machine": "azure_h100_test",
+                "access": "same_host",
+                "endpoint_policy": "private",
+            }
+            for artifact in [
+                "continue",
+                "openai-compatible",
+                "dockerfile",
+                "conda-yaml",
+                "compose",
+                "langgraph",
+            ]:
+                with self.subTest(artifact=artifact), self.assertRaisesRegex(ValueError, "not supported"):
+                    stacks.export(artifact, "legacy_invalid_pair")
+
             created = stacks.create(
                 "code_on_gpu",
-                "local-code-large",
+                "provider-code-large-vllm",
                 "vllm",
                 "azure_h100_test",
                 endpoint="http://localhost:8000/v1",
@@ -134,10 +165,10 @@ class StackOrchestratorTests(unittest.TestCase):
             self.assertEqual(created["stack"]["runtime"], "vllm")
             plan = stacks.plan("code_on_gpu")
             self.assertEqual(plan["machine"], "azure_h100_test")
-            self.assertEqual(plan["model"], "local-code-large")
+            self.assertEqual(plan["model"], "provider-code-large-vllm")
             self.assertIn("preflight", plan)
-            self.assertFalse(plan["runtime_evidence"]["available"])
-            self.assertIn("not supported", plan["runtime_evidence"]["reason"])
+            self.assertEqual(plan["runtime_evidence"]["contract_version"], "1.0")
+            self.assertEqual(plan["runtime_evidence"]["launch_manifest"]["runtime"]["name"], "vllm")
             self.assertTrue(any(check["name"] == "runtime_prerequisites" for check in plan["preflight"]["checks"]))
             self.assertTrue(any(check["name"].startswith("port_available:") for check in plan["preflight"]["checks"]))
             doctor = stacks.doctor("code_on_gpu")
@@ -145,6 +176,18 @@ class StackOrchestratorTests(unittest.TestCase):
             self.assertTrue(any(check["name"] == "runtime_prerequisites" for check in doctor["checks"]))
             exported = stacks.export("openai-compatible", "code_on_gpu")
             self.assertEqual(exported["endpoint"], "http://localhost:8000/v1")
+
+            profile.models["providers"]["vllm"]["endpoint"] = "http://localhost:9001/v1"
+            stacks.setup(
+                "code_on_profile_endpoint",
+                orchestrator=None,
+                runtime="vllm",
+                model="provider-code-large-vllm",
+                machine="azure_h100_test",
+                access="same_host",
+            )
+            inherited = stacks.export("openai-compatible", "code_on_profile_endpoint")
+            self.assertEqual(inherited["endpoint"], "http://localhost:9001/v1")
 
     def test_orchestrators_are_catalog_only_in_cli(self) -> None:
         stdout = StringIO()
@@ -864,7 +907,7 @@ class StackOrchestratorTests(unittest.TestCase):
                 "remote_stack_no_target",
                 orchestrator=None,
                 runtime="vllm",
-                model="local-code-large",
+                model="provider-code-large-vllm",
                 machine="azure_h100_test",
                 access="ssh_tunnel",
             )
@@ -897,7 +940,7 @@ class StackOrchestratorTests(unittest.TestCase):
                 "remote_stack",
                 orchestrator=None,
                 runtime="vllm",
-                model="local-code-large",
+                model="provider-code-large-vllm",
                 machine="azure_h100_test",
                 access="ssh_tunnel",
             )

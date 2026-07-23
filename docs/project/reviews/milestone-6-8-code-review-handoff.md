@@ -2,9 +2,9 @@
 
 ## Purpose
 
-This handoff converts the detailed read-only review of deployment rendering, workflow readiness, runtime packaging, stack exports, schemas, and tests into implementable tasks. It does not authorize or begin any code change.
+This handoff records the detailed review of deployment rendering, workflow readiness, runtime packaging, stack exports, schemas, and tests, together with the maintenance implementation status.
 
-The reviewed worktree passed 652 tests with 3 optional skips and 23 subtests, plus Ruff formatting/lint and profile/CLI smoke checks. Those mechanical gates are healthy, but they do not cover several semantic contradictions described below.
+The maintenance worktree passes 716 tests with 9 optional skips and 29 subtests in 16.86 seconds using the configured four-worker gate, plus repository-wide Ruff formatting/lint, profile validation, CLI acceptance checks, and diff hygiene. The opt-in official-tool gate passes the available Ansible check and explicitly skips five checks whose tools or usable provider are absent. The remaining live-evidence gaps are listed explicitly below.
 
 ## Guardrails
 
@@ -37,6 +37,30 @@ The reviewed worktree passed 652 tests with 3 optional skips and 23 subtests, pl
 
 - Model base-policy evaluation now uses provider and cloud base decisions, so action-scoped provider/cloud grants cannot leak into model decisions and `explain_base()` remains profile-policy-only.
 - Native runtime bundles now keep review guidance in `notes`; `commands` contains only the rendered executable launch command.
+
+## Implementation progress
+
+Completed in the maintenance iteration:
+
+- Tasks 1–5: stack compatibility, authoritative primary-runtime facts, availability-based local-runtime readiness, mode-aware bundle settings, and removal of the placeholder llama.cpp Docker mode.
+- Tasks 7–8: collision-resistant Docker image naming plus required-only/workflow summary correctness.
+- Tasks 10–12: scaffold/readiness metadata, application/schema invariant hardening, and explicit reproducibility levels.
+- Task 14: public runtime/cloud/manual guidance and the unified project plan now match implemented behavior.
+
+Also completed in the follow-up iteration:
+
+- Task 6: OpenTofu, Terraform, and Pulumi selection now aligns tool ownership, remediation guidance, emitted files, checksums, and validation/preview commands for Azure VM and AKS scaffolds. OpenTofu remains the default; Pulumi emits a Python project family without an apply path.
+- Task 13: dedicated realistic fixtures now cover all six primary runners across identities, launch commands, endpoints, artifact formats, supported settings, bundle modes, checksums, and host/container port behavior.
+
+Also completed in the final maintenance follow-up:
+
+- Task 9: target-level Vagrant provider selection now covers VirtualBox, libvirt, Hyper-V, and VMware Desktop; provider executable/capability and plugin checks gate local-VM readiness; provider-specific plans, renders, tool exports, schema invariants, and synthetic tests are implemented.
+- JSON Schema validation now uses a pinned Draft 2020-12 validator. Official-tool checks for HCL, Packer, Ansible, Pulumi, and Vagrant are isolated behind `AIPLANE_RUN_EXTERNAL_VALIDATORS=1`; missing tools or unusable providers skip explicitly.
+- Shared deployment/runtime fixture helpers remove repeated profile construction and artifact materialization while preserving behavioral assertions.
+
+Outstanding:
+
+- Cross-platform/live-provider evidence listed in the completion gate remains an environment evidence task, not missing deterministic implementation.
 
 ## Actionable tasks
 
