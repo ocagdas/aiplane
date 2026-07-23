@@ -600,8 +600,8 @@ def parse_yaml(text: str) -> dict[str, Any]:
 
     while index < len(lines):
         raw = lines[index]
+        line_number = index + 1
         index += 1
-        line_number = index
         if not raw.strip() or raw.lstrip().startswith("#"):
             continue
         indent = len(raw) - len(raw.lstrip(" "))

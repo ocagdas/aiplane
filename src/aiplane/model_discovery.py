@@ -121,13 +121,13 @@ def roles_for_discovered_model(provider_name: str, model_id: str, source_metadat
     if pipeline in {"visual-question-answering", "image-to-text"}:
         return ["analysis", "vision"]
     if pipeline in {"text-generation", "text2text-generation", "conversational"}:
-        return roles_for_model_id(model_id)
+        return _roles_for_model_id(model_id)
     if provider_name == "huggingface" and pipeline and not pipeline.startswith("text"):
         return [pipeline.replace("-", "_")]
-    return roles_for_model_id(model_id)
+    return _roles_for_model_id(model_id)
 
 
-def roles_for_model_id(model_id: str) -> list[str]:
+def _roles_for_model_id(model_id: str) -> list[str]:
     value = model_id.lower()
     if "embed" in value:
         return ["embedding"]
