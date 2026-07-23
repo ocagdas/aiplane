@@ -606,11 +606,11 @@ def parse_yaml(text: str) -> dict[str, Any]:
             continue
         indent = len(raw) - len(raw.lstrip(" "))
         stripped = raw.strip()
-        if stripped in {"---", "..."}:
+        if stripped.startswith("---") or stripped.startswith("..."):
             raise ValueError(
                 f"unsupported YAML document marker at line {line_number}; use a single mapping document without ---/..."
             )
-        if stripped.startswith("- "):
+        if stripped.startswith("-") and (len(stripped) == 1 or stripped[1].isspace() or stripped[1] == "#"):
             raise ValueError(
                 f"unsupported YAML dash-list syntax at line {line_number}; use inline lists like [item1, item2]"
             )
