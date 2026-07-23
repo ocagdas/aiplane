@@ -12,6 +12,8 @@ def validate_runtime_bundle(payload: dict[str, Any]) -> dict[str, Any]:
     selected_file = payload.get("selected_file")
     if selected_file not in files:
         raise ValueError("runtime bundle selected_file must name an emitted file")
+    if set(files) != {selected_file}:
+        raise ValueError("runtime bundle must emit only the selected_file")
     expected_file = {
         "docker": "Dockerfile",
         "conda": "environment.yaml",
