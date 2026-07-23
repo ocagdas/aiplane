@@ -18,7 +18,6 @@ from .model_refresh import ModelRefreshCoordinator
 from .model_query import filter_catalog_rows
 from .model_discovery import (
     preferred_runtime_for_discovered_roles as _preferred_runtime_for_discovered_roles,
-    preferred_runtime_for_source as _preferred_runtime_for_source,
     resource_requirements_from_source_metadata as _resource_requirements_from_source_metadata,
     roles_for_discovered_model as _roles_for_discovered_model,
     supported_runtimes_for_discovered_roles as _supported_runtimes_for_discovered_roles,
