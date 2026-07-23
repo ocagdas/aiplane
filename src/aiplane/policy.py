@@ -70,12 +70,12 @@ class PolicyEngine:
         provider_name = str(model.get("provider") or "")
         if not provider_name:
             return self._decision(False, False, f"model {model_name!r} is missing provider", "model.provider")
-        provider_decision = self.provider_decision(provider_name)
+        provider_decision = self._provider_base(provider_name)
         if not provider_decision.allowed:
             return self._decision(False, False, provider_decision.reason, provider_decision.matched_rule)
         if bool(model.get("local", False)):
             return self._decision(True, False, f"model {model_name!r} is allowed", "model.provider")
-        cloud_decision = self.cloud_decision()
+        cloud_decision = self._cloud_base()
         if not cloud_decision.allowed:
             return self._decision(False, False, cloud_decision.reason, cloud_decision.matched_rule)
         return self._decision(True, False, f"model {model_name!r} is allowed", "model.provider")

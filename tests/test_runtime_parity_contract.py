@@ -160,6 +160,10 @@ def test_six_runner_bundle_modes_are_truthful_and_reproducible() -> None:
         assert first["mode"] == mode
         assert first["selected_file"] in first["files"]
         assert set(first["checksums"]) == set(first["files"])
+        if mode == "native":
+            assert len(first["commands"]) == 1
+            assert not first["commands"][0].startswith("review ")
+            assert any("Review runtime-launch.json" in note for note in first["notes"])
     assert "Dockerfile" not in catalog.bundle_plan("mlx", alias, mode="auto")["files"]
     assert set(catalog.bundle_plan("docker_model_runner", alias)["files"]) == {"runtime-launch.json"}
 

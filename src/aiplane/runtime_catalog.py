@@ -306,6 +306,14 @@ class RuntimeCatalog:
         checksums = {
             filename: hashlib.sha256(content.encode("utf-8")).hexdigest() for filename, content in files.items()
         }
+        notes = [
+            "This is a render-only reproducibility plan; it does not build images, create environments, start processes, or pull model weights.",
+            str(support["note"]),
+            "GPU devices, cache volumes, environment references, auth references, context, and tensor parallelism are rendered only when explicitly supplied.",
+            "Environment and auth values are never embedded; the generated command references variable names for the operator to populate.",
+        ]
+        if mode == "native":
+            notes.append("Review runtime-launch.json before running the generated launch command.")
         return {
             "$schema": "schemas/aiplane-runtime-bundle-v1.schema.json",
             "schema_version": "1.0",
@@ -323,12 +331,7 @@ class RuntimeCatalog:
             "checksums": checksums,
             "settings": settings,
             "commands": _bundle_commands(runtime, model_name, mode, selected_file, settings, launch),
-            "notes": [
-                "This is a render-only reproducibility plan; it does not build images, create environments, start processes, or pull model weights.",
-                str(support["note"]),
-                "GPU devices, cache volumes, environment references, auth references, context, and tensor parallelism are rendered only when explicitly supplied.",
-                "Environment and auth values are never embedded; the generated command references variable names for the operator to populate.",
-            ],
+            "notes": notes,
         }
 
     def artifact_lock(self, model_name: str) -> dict[str, Any]:
@@ -803,7 +806,7 @@ def _bundle_commands(
     if not launch:
         raise ValueError(f"native launch handoff is unavailable for runtime: {runtime}")
     command = launch.get("launch", {}).get("command", [])
-    return ["review runtime-launch.json", shlex.join([str(value) for value in command])]
+    return [shlex.join([str(value) for value in command])]
 
 
 def _diagram(include_gui: bool = False) -> str:

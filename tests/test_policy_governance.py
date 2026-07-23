@@ -78,6 +78,68 @@ def test_override_is_action_scoped_and_drift_detects_stale_grant(tmp_path: Path)
         ]
 
 
+def test_provider_and_cloud_grants_do_not_leak_into_model_decisions(tmp_path: Path) -> None:
+    now = datetime(2026, 7, 23, 12, 0, tzinfo=timezone.utc)
+    with _isolated_test_profile(workspace=tmp_path) as source:
+        provider_restricted = replace(
+            source,
+            repository={**source.repository, "allowed_providers": ["ollama"]},
+            models={
+                "models": {
+                    "local-openai": {
+                        "provider": "openai",
+                        "model": "local-openai",
+                        "local": True,
+                        "enabled": True,
+                    }
+                }
+            },
+        )
+        provider_engine = PolicyEngine(provider_restricted, clock=_clock(now))
+        provider_model_base = provider_engine.explain_base("model:local-openai")
+        provider_engine.grants.grant(
+            "provider:openai",
+            kind="override",
+            reason="provider-only exception",
+            duration="30m",
+        )
+
+        assert provider_engine.provider_decision("openai").outcome == "overridden"
+        assert provider_engine.model_decision("local-openai") == provider_model_base
+        assert provider_engine.explain_base("model:local-openai") == provider_model_base
+
+        cloud_restricted = replace(
+            source,
+            repository={
+                **source.repository,
+                "allowed_providers": ["openai"],
+                "allow_cloud": False,
+            },
+            models={
+                "models": {
+                    "remote-openai": {
+                        "provider": "openai",
+                        "model": "remote-openai",
+                        "local": False,
+                        "enabled": True,
+                    }
+                }
+            },
+        )
+        cloud_engine = PolicyEngine(cloud_restricted, clock=_clock(now))
+        cloud_model_base = cloud_engine.explain_base("model:remote-openai")
+        cloud_engine.grants.grant(
+            "backend:cloud",
+            kind="override",
+            reason="cloud-only exception",
+            duration="30m",
+        )
+
+        assert cloud_engine.cloud_decision().outcome == "overridden"
+        assert cloud_engine.model_decision("remote-openai") == cloud_model_base
+        assert cloud_engine.explain_base("model:remote-openai") == cloud_model_base
+
+
 def test_policy_state_rejects_malformed_data_and_policy_fails_closed(tmp_path: Path) -> None:
     with _isolated_test_profile(workspace=tmp_path) as profile:
         store = PolicyGrantStore(profile)

@@ -30,9 +30,13 @@ The reviewed worktree passed 652 tests with 3 optional skips and 23 subtests, pl
 10. Local VM readiness checks Vagrant but not an actual provider, while generated files hardcode VirtualBox. A disposable `vagrant validate` failed when no provider was installed.
 11. Cloud artifacts are useful scaffolds but not directly runnable plans: the VM HCL has no resources, Packer has no source/build, and the Ansible inventory has no active host.
 12. Bundle and deployment schemas do not enforce cross-field invariants such as checksum/file equality or `selected_file` membership.
-13. Native bundle `commands` contains `review runtime-launch.json`, which is an instruction rather than an executable command.
-14. The project plan and user documentation currently overstate completion around conventional ports, applied settings, and reproducibility.
-15. Runtime facts are duplicated across definitions, launch evidence, bundle code, and stack defaults, directly enabling endpoint/port drift.
+13. The project plan and user documentation currently overstate completion around conventional ports, applied settings, and reproducibility.
+14. Runtime facts are duplicated across definitions, launch evidence, bundle code, and stack defaults, directly enabling endpoint/port drift.
+
+## Resolved during review follow-up
+
+- Model base-policy evaluation now uses provider and cloud base decisions, so action-scoped provider/cloud grants cannot leak into model decisions and `explain_base()` remains profile-policy-only.
+- Native runtime bundles now keep review guidance in `notes`; `commands` contains only the rendered executable launch command.
 
 ## Actionable tasks
 
