@@ -1009,15 +1009,13 @@ def _read_message(stream) -> dict[str, Any] | None:
                 content_length = int(raw_length)
             except ValueError as exc:
                 raise ValueError("invalid Content-Length header: must be an integer") from exc
-            if content_length < 0:
-                raise ValueError("invalid Content-Length header: value must be non-negative")
+            if content_length <= 0:
+                raise ValueError("invalid Content-Length header: value must be greater than zero")
     if content_length is None:
         raise ValueError("missing Content-Length header")
     body = stream.read(content_length)
     if len(body) != content_length:
         raise ValueError("unexpected EOF while reading message body")
-    if content_length == 0:
-        raise ValueError("invalid Content-Length header: value must be greater than zero")
     return json.loads(body.decode("utf-8"))
 
 
