@@ -150,7 +150,7 @@ aiplane providers diagnose openai
 aiplane providers diagnose anthropic
 ```
 
-The versioned result separates adapter, endpoint, and credential-reference checks and gives the next online query command. Use `providers test` afterward when you intend to contact the endpoint.
+The versioned result separates enabled state, live adapter support, endpoint configuration, and credential-reference checks and gives the next online query command. Diagnostics never contact the provider. Named OpenAI-compatible, Azure OpenAI, and ElevenLabs-style provider entries retain their own endpoint and credential settings rather than silently falling back to a built-in provider name. Use `providers test` afterward when you intend to contact the endpoint. Online model discovery fails closed with structured `failure_codes` before network access when readiness is incomplete; `models refresh --verbosity 1` carries those diagnostics into its provider summary.
 
 List known model providers. The list includes `ownership` so you can distinguish `self_managed` model sources from `managed_service` providers:
 

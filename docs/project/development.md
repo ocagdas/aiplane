@@ -301,6 +301,10 @@ The normal suite skips these timing cases. Keep correctness assertions comparing
 indexed and full-scan results; treat elapsed times as local regression evidence,
 not portable performance guarantees.
 
+Isolated profile tests copy a session-prepared synthetic profile tree, so each test retains its own writable filesystem while avoiding repeated YAML enrichment. Domain suites that exercise aggregate workflows such as the local doctor must fake host-owned probes (hardware, installed tools, and non-loopback runtimes) through their typed boundaries. Keep at least one dedicated loopback integration test for endpoint behavior. Do not replace production profile loading, remove assertions, or mock the domain function under test merely to improve timing.
+
+The current serial baseline after this fixture/probe review is 644 passed, 3 skipped, and 23 subtests in about 48 seconds on the review host, down from about 61 seconds before the changes. The configured four-worker gate completes in about 17 seconds on the same host, and the doctor module itself fell from about 14 seconds to under 1 second. These numbers are local diagnostic evidence, not CI budgets; use `--durations` and compare on the same host before claiming a regression or improvement.
+
 The packaging test builds and installs one wheel in an isolated venv and owns wheel-content, helper, schema, bootstrap, and preservation contracts. Upgrade/replacement/uninstall lifecycle verification is intentionally separate in `scripts/verify_install_channels.py`, the cross-platform CI matrix, and the release workflow; do not nest that complete lifecycle inside the packaging unit again.
 
 Four file-scheduled workers remain the portable default. On a suitably provisioned local machine, `AIPLANE_TEST_WORKERS=6 scripts/check.sh` is a measured optional speedup. Keep the default conservative for shared CI runners, and retain `AIPLANE_TEST_WORKERS=0` for serial diagnosis.

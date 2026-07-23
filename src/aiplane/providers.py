@@ -54,6 +54,7 @@ class ProviderModelsResult:
     models: list[str]
     reason: str
     model_metadata: dict[str, dict[str, Any]] | None = None
+    diagnostics: dict[str, Any] | None = None
 
 
 class ProviderRegistry:
@@ -444,85 +445,108 @@ class ProviderRegistry:
         model_names = {alias for alias, model in self.catalog.models().items() if model_source(model) == name}
         return [status for status in self.catalog.doctor() if status.name in model_names]
 
+    def _resolved_provider(self, name: str) -> dict[str, Any]:
+        source = self.model_providers(include_removed=True).get(name, {})
+        endpoint = self.catalog.providers().get(name, {})
+        resolved = {
+            **PROVIDER_ENDPOINT_DEFAULTS.get(name, {}),
+            **source,
+            **endpoint,
+        }
+        # Source/catalog discovery enablement is independent from whether a
+        # runtime endpoint is selected for inference in models.yaml.
+        resolved["enabled"] = bool(source.get("enabled", True))
+        return resolved
+
+    def discovery_readiness(self, name: str) -> dict[str, Any]:
+        providers = self.model_providers(include_removed=True)
+        if name not in providers or providers[name].get("removed"):
+            raise ValueError(f"unknown catalog provider: {name}")
+        merged = self._resolved_provider(name)
+        adapter = str(_provider_catalog_adapter(merged) or "profile_catalog")
+        live = adapter in SUPPORTED_CATALOG_ADAPTERS and adapter != "profile_catalog"
+        endpoint = str(merged.get("endpoint") or "").rstrip("/")
+        auth = merged.get("auth") if isinstance(merged.get("auth"), dict) else {}
+        auth_required = bool(auth.get("required", False))
+        credential_ref = str(merged.get("credential_ref") or "") or None
+        key_env = str(merged.get("api_key_env") or "") or None
+        credential_ready = False
+        credential_detail = "not required"
+        if auth_required:
+            try:
+                if credential_ref:
+                    credential = CredentialStore().resolve(credential_ref)
+                    credential_ready = bool(CredentialStore().api_key(credential_ref))
+                    credential_detail = "configured" if credential_ready else "reference has no usable key"
+                    endpoint = str(credential.get("endpoint") or endpoint).rstrip("/")
+                    key_env = str(credential.get("api_key_env") or credential.get("token_env") or key_env or "") or None
+                else:
+                    credential_ready = bool(key_env and os.environ.get(key_env))
+                    credential_detail = "configured" if credential_ready else "missing"
+            except ValueError:
+                credential_detail = "reference not found"
+        endpoint_required = adapter in {"openai", "anthropic", "azure_openai", "elevenlabs"}
+        endpoint_ready = bool(endpoint) or not endpoint_required
+        checks = [
+            {
+                "name": "enabled",
+                "ok": bool(merged.get("enabled", True)),
+                "code": None if merged.get("enabled", True) else "provider_disabled",
+                "detail": "enabled" if merged.get("enabled", True) else "disabled",
+                "remediation": f"Run aiplane providers enable {name}.",
+            },
+            {
+                "name": "adapter",
+                "ok": live,
+                "code": None if live else "live_adapter_unavailable",
+                "detail": adapter,
+                "remediation": "Choose a supported live catalog adapter or maintain profile catalog entries.",
+            },
+            {
+                "name": "endpoint",
+                "ok": endpoint_ready,
+                "code": None if endpoint_ready else "endpoint_missing",
+                "detail": endpoint or "missing",
+                "remediation": "Configure a credential-free provider endpoint URL.",
+            },
+            {
+                "name": "credential",
+                "ok": not auth_required or credential_ready,
+                "code": None if not auth_required or credential_ready else "credential_missing",
+                "detail": credential_detail,
+                "remediation": f"Configure credential_ref or set {key_env or 'the provider API-key environment variable'}.",
+            },
+        ]
+        failures = [check["code"] for check in checks if not check["ok"] and check["code"]]
+        return {
+            "provider": name,
+            "ownership": _provider_ownership(merged),
+            "catalog_adapter": adapter,
+            "live_discovery_supported": live,
+            "network_contacted": False,
+            "endpoint": endpoint or None,
+            "auth": {"required": auth_required, "method": auth.get("method", "none")},
+            "credential_ref": credential_ref,
+            "api_key_env": key_env,
+            "credential_configured": credential_ready if auth_required else None,
+            "ready": not failures,
+            "failure_codes": failures,
+            "checks": checks,
+            "next_command": f"aiplane providers models {name} --online",
+        }
+
     def diagnose(self, name: str | None = None) -> dict[str, Any]:
         """Explain live-discovery readiness without contacting a provider."""
         providers = self.model_providers(include_removed=True)
         if name and (name not in providers or providers[name].get("removed")):
             raise ValueError(f"unknown catalog provider: {name}")
-        selected = {name: providers[name]} if name else providers
-        rows = []
-        for provider_name, source in sorted(selected.items()):
-            if source.get("removed"):
-                continue
-            merged = {**source, **self.catalog.providers().get(provider_name, {})}
-            adapter = str(_provider_catalog_adapter(merged) or "profile_catalog")
-            live = adapter in SUPPORTED_CATALOG_ADAPTERS and adapter != "profile_catalog"
-            endpoint = str(
-                merged.get("endpoint") or PROVIDER_ENDPOINT_DEFAULTS.get(provider_name, {}).get("endpoint") or ""
-            ).rstrip("/")
-            auth = merged.get("auth") if isinstance(merged.get("auth"), dict) else {}
-            auth_required = bool(auth.get("required", False))
-            credential_ref = str(merged.get("credential_ref") or "") or None
-            key_env = (
-                str(
-                    merged.get("api_key_env")
-                    or PROVIDER_ENDPOINT_DEFAULTS.get(provider_name, {}).get("api_key_env")
-                    or ""
-                )
-                or None
-            )
-            try:
-                credential_ready = (
-                    bool(CredentialStore().resolve(credential_ref))
-                    if credential_ref
-                    else bool(key_env and os.environ.get(key_env))
-                )
-                credential_detail = "configured" if credential_ready else "missing"
-            except ValueError:
-                credential_ready = False
-                credential_detail = "reference not found"
-            endpoint_ready = bool(endpoint) or adapter in {"huggingface", "huggingface_gguf", "ollama", "civitai"}
-            checks = [
-                {
-                    "name": "adapter",
-                    "ok": live,
-                    "detail": adapter,
-                    "remediation": "Choose a supported live catalog adapter or maintain profile catalog entries.",
-                },
-                {
-                    "name": "endpoint",
-                    "ok": endpoint_ready,
-                    "detail": endpoint or "adapter default",
-                    "remediation": "Configure the provider endpoint.",
-                },
-                {
-                    "name": "credential",
-                    "ok": not auth_required or credential_ready,
-                    "detail": "not required" if not auth_required else credential_detail,
-                    "remediation": f"Configure credential_ref or set {key_env or 'the provider API-key environment variable'}.",
-                },
-            ]
-            rows.append(
-                {
-                    "provider": provider_name,
-                    "enabled": bool(merged.get("enabled", True)),
-                    "ownership": _provider_ownership(merged),
-                    "catalog_adapter": adapter,
-                    "live_discovery_supported": live,
-                    "endpoint": endpoint or None,
-                    "auth": {"required": auth_required, "method": auth.get("method", "none")},
-                    "credential_ref": credential_ref,
-                    "api_key_env": key_env,
-                    "credential_configured": credential_ready if auth_required else None,
-                    "ready": bool(merged.get("enabled", True)) and all(check["ok"] for check in checks),
-                    "checks": checks,
-                    "next_command": f"aiplane providers models {provider_name} --online",
-                }
-            )
+        names = [name] if name else [key for key, value in sorted(providers.items()) if not value.get("removed")]
+        rows = [self.discovery_readiness(provider_name) for provider_name in names]
         return {
             "contract_version": "1.0",
             "name": "provider_discovery_diagnostics",
             "network_contacted": False,
+            "ready": all(row["ready"] for row in rows),
             "providers": rows,
         }
 
@@ -530,10 +554,7 @@ class ProviderRegistry:
         self, name: str, credential_ref: str | None = None, timeout: int | None = None
     ) -> dict[str, Any]:
         providers = self.model_providers(include_removed=True)
-        provider_config = {
-            **providers.get(name, {}),
-            **self.catalog.providers().get(name, {}),
-        }
+        provider_config = self._resolved_provider(name)
         if name not in providers and not provider_config:
             raise ValueError(f"unknown provider: {name}")
         if providers.get(name, {}).get("removed"):
@@ -685,6 +706,16 @@ class ProviderRegistry:
             return ProviderModelsResult(name, "disabled", [], "model provider is disabled")
         online_error = None
         if online:
+            readiness = self.discovery_readiness(name)
+            if not readiness["ready"]:
+                failures = ", ".join(str(value) for value in readiness["failure_codes"])
+                return ProviderModelsResult(
+                    name,
+                    "configuration_error",
+                    [],
+                    f"online catalog query blocked by provider readiness: {failures}",
+                    diagnostics=readiness,
+                )
             try:
                 online_result = self._online_models(name, query=query, limit=limit)
             except Exception as exc:  # noqa: BLE001 - provider catalog adapters should degrade to the local catalog.
@@ -747,9 +778,9 @@ class ProviderRegistry:
         if adapter == "anthropic" or name == "anthropic":
             return self._anthropic_models(name, query=query, limit=limit)
         if adapter == "azure_openai" or name == "azure_openai":
-            return self._azure_openai_deployments(query=query, limit=limit)
+            return self._azure_openai_deployments(name, query=query, limit=limit)
         if adapter == "elevenlabs" or name == "elevenlabs":
-            return self._elevenlabs_voices(query=query, limit=limit)
+            return self._elevenlabs_voices(name, query=query, limit=limit)
         return None
 
     def _openai_compatible_models(
@@ -758,10 +789,7 @@ class ProviderRegistry:
         query: str | None = None,
         limit: int = DEFAULT_PROVIDER_MODEL_LIMIT,
     ) -> ProviderModelsResult:
-        provider_config = {
-            **self.model_providers().get(name, {}),
-            **self.catalog.providers().get(name, {}),
-        }
+        provider_config = self._resolved_provider(name)
         defaults = PROVIDER_ENDPOINT_DEFAULTS.get(name, {})
         endpoint = str(
             provider_config.get("endpoint")
@@ -821,7 +849,7 @@ class ProviderRegistry:
     def _anthropic_models(
         self, name: str, query: str | None = None, limit: int = DEFAULT_PROVIDER_MODEL_LIMIT
     ) -> ProviderModelsResult:
-        provider_config = {**self.model_providers().get(name, {}), **self.catalog.providers().get(name, {})}
+        provider_config = self._resolved_provider(name)
         endpoint = str(provider_config.get("endpoint") or "https://api.anthropic.com").rstrip("/")
         credential_ref = str(provider_config.get("credential_ref") or "")
         key_env = str(provider_config.get("api_key_env") or "ANTHROPIC_API_KEY")
@@ -853,9 +881,9 @@ class ProviderRegistry:
         return ProviderModelsResult(name, "provider_api", ids, f"queried Anthropic models API: {url}", metadata)
 
     def _azure_openai_deployments(
-        self, query: str | None = None, limit: int = DEFAULT_PROVIDER_MODEL_LIMIT
+        self, name: str, query: str | None = None, limit: int = DEFAULT_PROVIDER_MODEL_LIMIT
     ) -> ProviderModelsResult:
-        runtime_provider = self.catalog.providers().get("azure_openai", {})
+        runtime_provider = self._resolved_provider(name)
         endpoint = str(runtime_provider.get("endpoint") or os.environ.get("AZURE_OPENAI_ENDPOINT") or "").rstrip("/")
         if not endpoint:
             raise ValueError("Azure OpenAI discovery needs provider endpoint or AZURE_OPENAI_ENDPOINT")
@@ -904,7 +932,7 @@ class ProviderRegistry:
                 break
         unique_ids = sorted(dict.fromkeys(ids))[: max(1, int(limit))]
         return ProviderModelsResult(
-            "azure_openai",
+            name,
             "provider_api",
             unique_ids,
             f"queried Azure OpenAI deployments API: {url}",
@@ -912,9 +940,9 @@ class ProviderRegistry:
         )
 
     def _elevenlabs_voices(
-        self, query: str | None = None, limit: int = DEFAULT_PROVIDER_MODEL_LIMIT
+        self, name: str, query: str | None = None, limit: int = DEFAULT_PROVIDER_MODEL_LIMIT
     ) -> ProviderModelsResult:
-        runtime_provider = self.catalog.providers().get("elevenlabs", {})
+        runtime_provider = self._resolved_provider(name)
         endpoint = str(
             runtime_provider.get("endpoint") or os.environ.get("ELEVENLABS_ENDPOINT") or "https://api.elevenlabs.io/v1"
         ).rstrip("/")
@@ -968,7 +996,7 @@ class ProviderRegistry:
                 break
         unique_ids = list(dict.fromkeys(ids))[: max(1, int(limit))]
         return ProviderModelsResult(
-            "elevenlabs",
+            name,
             "provider_api",
             unique_ids,
             f"queried ElevenLabs voices API: {url}",

@@ -8,6 +8,7 @@ from typing import Any, Callable
 from .audit import AuditLogger
 from .config import load_profile
 from .mcp import mcp_manifest, serve_stdio
+from .models import AuditEvent
 from .policy import PolicyEngine
 from .secrets import CredentialStore
 
@@ -111,6 +112,46 @@ def add_governance_parsers(
         help="Action name to explain, such as backend:cloud, provider:ollama, model:fixture-chat-small, or write_file",
     )
 
+    policy_list = policy_sub.add_parser(
+        "list",
+        help="List local temporary approvals and overrides",
+        description="List ignored workspace-local policy grants without changing repository policy.",
+        formatter_class=formatter_class,
+    )
+    profile_arg(policy_list)
+    policy_list.add_argument("--active-only", action="store_true", help="Hide expired grants")
+
+    grant = policy_sub.add_parser(
+        "grant",
+        help="Create an expiring local approval or override",
+        description="Create an ignored workspace-local policy grant. Approval-required actions become temporary approvals; blocked actions require --override. This never edits profile policy.",
+        formatter_class=formatter_class,
+    )
+    profile_arg(grant)
+    grant.add_argument("--action", required=True, help="Canonical action such as tool:write_file or provider:openai")
+    grant.add_argument("--reason", required=True, help="Non-secret operator reason recorded in audit")
+    grant.add_argument("--expires-in", required=True, help="Positive duration such as 30m, 8h, or 7d")
+    grant.add_argument("--override", action="store_true", help="Allow an otherwise blocked action until expiry")
+    grant.add_argument("--yes", action="store_true", help="Confirm creation of the local policy grant")
+
+    revoke = policy_sub.add_parser(
+        "revoke",
+        help="Revoke one local policy grant",
+        description="Remove one ignored workspace-local grant by id and record the action in the audit log.",
+        formatter_class=formatter_class,
+    )
+    profile_arg(revoke)
+    revoke.add_argument("grant_id", help="Grant id from policy list")
+    revoke.add_argument("--yes", action="store_true", help="Confirm revocation")
+
+    drift = policy_sub.add_parser(
+        "drift",
+        help="Report expired or stale local grants",
+        description="Compare local grants with current profile policy without changing either.",
+        formatter_class=formatter_class,
+    )
+    profile_arg(drift)
+
 
 def handle_governance_command(
     args: argparse.Namespace,
@@ -154,7 +195,65 @@ def handle_governance_command(
         return 0
     if args.command == "policy":
         profile = load_profile(effective_profile, workspace, profiles_dir=profiles_dir)
-        decision = PolicyEngine(profile).explain(args.action)
-        print(json_dumps(decision.__dict__, indent=2, sort_keys=True))
+        engine = PolicyEngine(profile)
+        if args.policy_command == "explain":
+            decision = engine.explain(args.action)
+            print(json_dumps(decision.__dict__, indent=2, sort_keys=True))
+            return 0
+        if args.policy_command == "list":
+            payload = {
+                "schema_version": "1.0",
+                "profile": profile.name,
+                "grants": engine.grants.list(include_expired=not args.active_only),
+            }
+            print(json_dumps(payload, indent=2, sort_keys=True))
+            return 0
+        if args.policy_command == "drift":
+            print(json_dumps(engine.drift(), indent=2, sort_keys=True))
+            return 0
+        if not args.yes:
+            raise ValueError(f"policy {args.policy_command} requires --yes")
+        audit = AuditLogger(profile)
+        if args.policy_command == "grant":
+            base = engine.explain_base(args.action)
+            if args.override:
+                if base.allowed:
+                    raise ValueError("policy override requires an action currently blocked by profile policy")
+                kind = "override"
+            else:
+                if not (base.allowed and base.requires_approval):
+                    raise ValueError(
+                        "temporary approval requires an action currently marked approval_required; use --override only for blocked actions"
+                    )
+                kind = "temporary_approval"
+            record = engine.grants.grant(args.action, kind=kind, reason=args.reason, duration=args.expires_in)
+            audit.record(
+                AuditEvent(
+                    "policy_grant",
+                    profile.name,
+                    args.action,
+                    "granted",
+                    {"id": record["id"], "kind": kind, "expires_at": record["expires_at"], "reason": args.reason},
+                )
+            )
+            print(
+                json_dumps(
+                    {"schema_version": "1.0", "profile": profile.name, "grant": record}, indent=2, sort_keys=True
+                )
+            )
+            return 0
+        record = engine.grants.revoke(args.grant_id)
+        audit.record(
+            AuditEvent(
+                "policy_revoke",
+                profile.name,
+                str(record["action"]),
+                "revoked",
+                {"id": record["id"], "kind": record["kind"]},
+            )
+        )
+        print(
+            json_dumps({"schema_version": "1.0", "profile": profile.name, "revoked": record}, indent=2, sort_keys=True)
+        )
         return 0
     return None

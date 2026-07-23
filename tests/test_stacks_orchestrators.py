@@ -778,7 +778,7 @@ class StackOrchestratorTests(unittest.TestCase):
                 stderr = ""
 
             with patch("aiplane.boundaries.subprocess.run", return_value=Completed()):
-                result = stacks.start("local_stack")
+                result = stacks.start("local_stack", yes=True)
         self.assertEqual(result["status"], "executed")
         self.assertEqual(result["outcome"], "completed")
         self.assertEqual(result["steps_total"], 1)
@@ -832,7 +832,7 @@ class StackOrchestratorTests(unittest.TestCase):
                 stderr = "failed"
 
             with patch("aiplane.boundaries.subprocess.run", return_value=Failed()):
-                result = stacks.prepare("local_stack")
+                result = stacks.prepare("local_stack", yes=True)
         self.assertEqual(result["status"], "executed")
         self.assertEqual(result["outcome"], "failed")
         self.assertEqual(result["steps_total"], 2)

@@ -202,3 +202,23 @@ aiplane tool --yes run_tests python -m pytest -q
 `--yes` does not add a tool to the profile allowlist or bypass workspace path
 checks. It only satisfies an approval already required by policy for that one
 command. Tool decisions and outcomes are written to the local profile audit log.
+
+
+## Expiring Local Policy Grants
+
+Repository/profile policy remains the durable source of truth. When an approved exception is needed, use an ignored workspace-local grant with a reason and explicit expiry:
+
+```bash
+aiplane policy list
+aiplane policy grant --action tool:write_file --reason "reviewed maintenance" --expires-in 30m --yes
+aiplane policy drift
+aiplane policy revoke GRANT_ID --yes
+```
+
+A blocked action requires the more visible `--override` flag; an ordinary grant can only satisfy an action already marked `approval_required`:
+
+```bash
+aiplane policy grant --action backend:cloud --reason "approved evaluation" --expires-in 8h --override --yes
+```
+
+Grants are action-scoped, audited, expire automatically, and never rewrite profile policy. `policy drift` reports expired grants and grants made unnecessary by later policy changes. Malformed local grant state fails closed. Keep reasons non-secret because they are included in local audit records.

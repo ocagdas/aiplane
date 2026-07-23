@@ -61,11 +61,15 @@ def _ensure_repo_test_profile(name: str, profiles_dir: Path | str | None = None)
 def _isolated_profiles_dir(name: str = "local-dev"):
     with tempfile.TemporaryDirectory() as tmp:
         profiles_dir = Path(tmp) / "profiles"
-        source = Path.cwd() / "profile-templates" / name
+        template_source = Path.cwd() / "profile-templates" / name
+        prepared_root = os.environ.get("AIPLANE_PROFILES_DIR")
+        prepared_source = Path(prepared_root) / name if prepared_root else None
+        source = prepared_source if prepared_source is not None and prepared_source.is_dir() else template_source
         destination = profiles_dir / name
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copytree(source, destination)
-        _materialize_test_models(destination)
+        if source == template_source:
+            _materialize_test_models(destination)
         yield profiles_dir
 
 

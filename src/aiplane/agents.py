@@ -5,6 +5,7 @@ import json
 from typing import Any
 
 from .config import agent_artifacts_root, dump_yaml
+from .agent_frameworks import FRAMEWORK_SPECS, framework_readiness, normalize_framework, render_framework_starter
 from .integrations import IntegrationManager
 from .model_catalog import ModelCatalog
 from .stacks import StackManager
@@ -33,6 +34,35 @@ AGENT_FRAMEWORKS: dict[str, dict[str, Any]] = {
         "files": ["agent.py", "requirements.txt", ".env.example"],
     },
 }
+
+for _framework_name, _framework_spec in FRAMEWORK_SPECS.items():
+    AGENT_FRAMEWORKS.setdefault(
+        _framework_name,
+        {
+            "description": f"Render-only {_framework_name} agent environment starter configuration.",
+            "packages": list(_framework_spec["packages"]),
+            "good_for": ["reviewed role binding", "endpoint configuration", "tool-policy handoff"],
+            "files": [
+                "requirements.txt",
+                ".env.example",
+                "agent-environment.json",
+                "agent-environment.yaml",
+                "framework-config.yaml",
+            ],
+        },
+    )
+
+
+_AGENT_CONFIG_FILES = [
+    "requirements.txt",
+    ".env.example",
+    "README.md",
+    "agent-environment.json",
+    "agent-environment.yaml",
+    "framework-config.yaml",
+]
+for _framework_spec in AGENT_FRAMEWORKS.values():
+    _framework_spec["files"] = list(dict.fromkeys([*_framework_spec.get("files", []), *_AGENT_CONFIG_FILES]))
 
 
 @dataclass(frozen=True)
@@ -120,7 +150,7 @@ class AgentManager:
         """Compile profile or stack configuration into a secret-free agent contract."""
         if stack:
             stack_plan = StackManager(self.profile).plan(stack)
-            orchestrator = stack_plan.get("orchestrator") or framework
+            orchestrator = normalize_framework(str(stack_plan.get("orchestrator") or framework))
             source_roles = stack_plan.get("roles") if isinstance(stack_plan.get("roles"), dict) else {}
             tools = stack_plan.get("tools") if isinstance(stack_plan.get("tools"), dict) else {}
             limits = stack_plan.get("limits") if isinstance(stack_plan.get("limits"), dict) else {}
@@ -128,7 +158,7 @@ class AgentManager:
             audit_label = stack_plan.get("audit_label") or stack
         else:
             selection = self._selection(name, framework, model, runtime, provider, endpoint, api_key_env)
-            orchestrator = framework
+            orchestrator = normalize_framework(framework)
             source_roles = {
                 "primary": {
                     "model": selection.model_alias,
@@ -172,6 +202,19 @@ class AgentManager:
                     "api_key_env": key_env,
                 },
             }
+        readiness = framework_readiness(orchestrator, roles, str(approval_mode))
+        framework_metadata = {
+            "name": name,
+            "profile": self.profile.name,
+            "runtime": next(iter(roles.values())).get("runtime") if roles else None,
+            "endpoint": next(iter(roles.values())).get("endpoint") if roles else None,
+            "roles": roles,
+            "tools": tools,
+            "limits": limits,
+            "approval_mode": approval_mode,
+            "audit_label": audit_label,
+        }
+        framework_config = render_framework_starter(orchestrator, framework_metadata)
         return {
             "$schema": "schemas/aiplane-agent-environment-v1.schema.json",
             "schema_version": "1.0",
@@ -181,7 +224,14 @@ class AgentManager:
             "profile": self.profile.name,
             "source_stack": stack,
             "orchestrator": orchestrator,
+            "framework": {
+                "name": orchestrator,
+                "packages": readiness["packages"],
+                "config_format": "aiplane_agent_framework_starter_v1",
+            },
             "roles": roles,
+            "readiness": readiness,
+            "framework_config": framework_config,
             "tools": tools,
             "limits": limits,
             "approval_mode": approval_mode,
@@ -226,6 +276,8 @@ class AgentManager:
             or "You are a focused coding assistant. Keep answers concise and ask before destructive actions."
         )
         if file == "agent.py":
+            if framework not in {"langgraph", "simple-openai"}:
+                raise ValueError(f"{framework} is config-only; export framework-config.yaml instead")
             content = (
                 _langgraph_agent(selection, instruction)
                 if framework == "langgraph"
@@ -237,7 +289,7 @@ class AgentManager:
             content = _env_example(selection)
         elif file == "README.md":
             content = _readme(name, framework, selection)
-        elif file in {"agent-environment.json", "agent-environment.yaml"}:
+        elif file in {"agent-environment.json", "agent-environment.yaml", "framework-config.yaml"}:
             manifest = self.manifest(
                 name,
                 framework=framework,
@@ -248,11 +300,15 @@ class AgentManager:
                 api_key_env=api_key_env,
             )
             content = (
-                json.dumps(manifest, indent=2, sort_keys=True) + "\n" if file.endswith(".json") else dump_yaml(manifest)
+                json.dumps(manifest, indent=2, sort_keys=True) + "\n"
+                if file.endswith(".json")
+                else manifest["framework_config"]
+                if file == "framework-config.yaml"
+                else dump_yaml(manifest)
             )
         else:
             raise ValueError(
-                "file must be agent.py, requirements.txt, .env.example, README.md, agent-environment.json, or agent-environment.yaml"
+                "file must be agent.py, requirements.txt, .env.example, README.md, agent-environment.json, agent-environment.yaml, or framework-config.yaml"
             )
         return {
             "name": "agent_export",

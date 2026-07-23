@@ -94,6 +94,7 @@ class RuntimeCatalog:
         missing_optional = [_tool_row(name, packages.get(name)) for name in optional if shutil.which(name) is None]
         managed = definition.get("managed_by_helper")
         install_supported = runtime in {
+            "docker_model_runner",
             "ollama",
             "vllm",
             "tgi",
@@ -106,6 +107,7 @@ class RuntimeCatalog:
             "known_runtime": True,
             "supported_by_aiplane_helper": runtime
             in {
+                "docker_model_runner",
                 "ollama",
                 "vllm",
                 "tgi",

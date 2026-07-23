@@ -1,5 +1,7 @@
 # Manual Test Checklist
 
+For a shorter copy-paste procedure that captures shareable P0, replay, hardware-calibration, benchmark-calibration, and optional Docker Model Runner evidence, use the [Field Evidence Collection Runbook](evidence-collection.md). This checklist remains the exhaustive feature-acceptance path.
+
 This checklist validates an `aiplane` installation from a clean shell through profiles, hardware, catalogs, model selection, runtime evidence, interactive chat, integrations, agents, reproducibility, stacks, and render-only Kubernetes artifacts.
 
 Use a disposable working directory and a disposable profile. Commands marked **read-only** do not intentionally change state. Commands marked **preview** render a proposed mutation. Commands marked **mutating** require review and may install software, download model weights, or edit the disposable profile. External runtimes remain separate products; skip runner-specific live checks when that runner or suitable hardware is unavailable.
@@ -367,6 +369,8 @@ Run a saved smoke benchmark only after the endpoint works:
 ```bash
 aiplane models benchmark "$CHAT_ALIAS" --task all
 aiplane models list --require-benchmark --sort-by benchmark
+aiplane benchmarks compare --by runtime --model "$CHAT_ALIAS"
+aiplane benchmarks compare --by model --runtime "$RUNTIME"
 ```
 
 Validate a versioned custom suite and preview an external measurement import:
@@ -379,6 +383,9 @@ aiplane benchmarks import path/to/measurements.json --dry-run
 - [ ] Smoke scores are scoped to the named/versioned suite and are not presented as universal quality.
 - [ ] Benchmark records include runtime evidence.
 - [ ] Native prompt/output token counts, elapsed time, TTFT, and throughput appear only when the runtime exposes them; unavailable values remain null.
+- [ ] Comparison leaders appear only for at least two distinct values under explicit suite comparability metadata.
+- [ ] TTFT leaders contain a non-empty telemetry source; provenance-free TTFT cannot become a leader.
+- [ ] Quality, performance, throughput, elapsed time, and TTFT remain separate rather than collapsing into a universal score.
 - [ ] Custom command evaluators run in the selected environment boundary and return structured scores.
 - [ ] User scoring extensions are declarative, versioned, bounded, and provenance-labelled.
 - [ ] External measurement import is preview-first and rejects invalid contracts.
@@ -417,6 +424,11 @@ aiplane agents plan manual-agent --framework langgraph --model "$CHAT_ALIAS"
 aiplane agents manifest manual-agent --framework langgraph --model "$CHAT_ALIAS"
 aiplane agents export manual-agent --framework langgraph --model "$CHAT_ALIAS" --file agent.py
 aiplane agents export manual-agent --framework langgraph --model "$CHAT_ALIAS" --file agent-environment.yaml
+aiplane agents export manual-agent --framework crewai --model "$CHAT_ALIAS" --file framework-config.yaml
+aiplane agents export manual-agent --framework autogen --model "$CHAT_ALIAS" --file framework-config.yaml
+aiplane agents export manual-agent --framework semantic_kernel --model "$CHAT_ALIAS" --file framework-config.yaml
+aiplane agents export manual-agent --framework llamaindex_workflows --model "$CHAT_ALIAS" --file framework-config.yaml
+aiplane agents export manual-agent --framework openhands --model "$CHAT_ALIAS" --file framework-config.yaml
 aiplane orchestrators list
 aiplane orchestrators show langgraph
 aiplane orchestrators setup langgraph --runtime "$RUNTIME" --model "$CHAT_ALIAS" --dry-run
@@ -425,7 +437,9 @@ aiplane orchestrators doctor langgraph
 
 - [ ] Plans contain reviewed model alias, native id, endpoint, tool policy, approval mode, limits, and audit label where configured.
 - [ ] The manifest is schema version `1.0`, is marked `render_only`, and says Aiplane does not run agents.
-- [ ] Starter output contains no secret values.
+- [ ] Each framework config contains its framework-specific topology key and readiness checks.
+- [ ] Single-role frameworks report a readiness mismatch when given multiple roles.
+- [ ] Starter output contains no secret values and explicitly says it installs nothing and runs no agents.
 - [ ] Aiplane configures and validates the environment; it does not silently launch an autonomous workflow.
 
 ## 15. Machines and stacks
@@ -442,14 +456,21 @@ aiplane agents manifest manual-stack-agents --stack manual-stack
 aiplane stacks doctor manual-stack
 aiplane stacks endpoint-plan manual-stack
 aiplane stacks prepare manual-stack --dry-run
+aiplane stacks prepare manual-stack
 aiplane stacks start manual-stack --dry-run
+aiplane stacks start manual-stack
 aiplane stacks status manual-stack
+# Run mutating same-host operations only after reviewing previews:
+aiplane stacks prepare manual-stack --yes
+aiplane stacks start manual-stack --yes
 ```
 
 - [ ] Stack plan includes fit, runtime status, endpoint security, artifact lock, and launch manifest.
 - [ ] Doctor has a `runtime_evidence_rendered` check.
 - [ ] An incompatible runtime/model tuple produces an explicit evidence failure reason.
 - [ ] Lifecycle previews include the same evidence contracts.
+- [ ] Omitting `--yes` returns `confirmation_required` and executes no command.
+- [ ] A Docker Model Runner stack resolves the alias to its native model id, uses `http://localhost:12434/engines/v1`, and renders native `docker model` commands.
 - [ ] Remote targets remain planned-not-executed unless an explicitly supported guarded boundary exists.
 
 ## 16. Render-only Kubernetes artifacts
@@ -506,6 +527,11 @@ aiplane profiles replay-check manual-test.profile.json --source archive --client
 ```bash
 aiplane mcp manifest
 aiplane policy explain --action provider:ollama
+aiplane policy list
+aiplane policy drift
+aiplane policy grant --action tool:write_file --reason "manual acceptance window" --expires-in 30m --yes
+# Copy the id from policy list before revoking:
+aiplane policy revoke GRANT_ID --yes
 aiplane audit tail --limit 50
 ```
 
@@ -519,7 +545,9 @@ Send a valid MCP initialize request from an MCP client, inspect the tool list, t
 
 - [ ] Manifest exposes structured read/planning tools.
 - [ ] Mutating tools remain guarded; arbitrary shell execution is not exposed.
-- [ ] Policy output explains allowed, approval-required, and blocked decisions.
+- [ ] Policy output explains allowed, approval-required, temporarily-approved, blocked, and overridden decisions.
+- [ ] Grants are action-scoped, expiring, ignored workspace-local JSON; grant and revoke events are audited.
+- [ ] `policy drift` reports expired or stale grants, and malformed local state fails closed.
 - [ ] Audit output redacts secrets.
 
 ## 19. Failure and safety checks

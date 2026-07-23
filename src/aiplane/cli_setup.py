@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .benchmark_evidence import import_measurement_record, load_suite
+from .benchmark_comparison import DIMENSIONS, compare_benchmarks
 from .benchmark_tools import BenchmarkToolManager
 from .config import load_profile
 from .env import EnvironmentManager
@@ -186,6 +187,20 @@ def add_setup_parsers(
         help="Write the validated record under .aiplane/benchmarks",
     )
 
+    benchmarks_compare = benchmarks_sub.add_parser(
+        "compare",
+        help="Compare saved benchmark records without collapsing metrics",
+        description="Group saved measurements by a selected dimension. Only suites with explicit matching comparability metadata receive leaders.",
+        formatter_class=formatter_class,
+        allow_abbrev=False,
+    )
+    profile_arg(benchmarks_compare)
+    benchmarks_compare.add_argument("--by", choices=sorted(DIMENSIONS), default="runtime")
+    benchmarks_compare.add_argument("--model", action="append", default=[], help="Model alias filter; repeat as needed")
+    benchmarks_compare.add_argument("--runtime", action="append", default=[], help="Runtime filter; repeat as needed")
+    benchmarks_compare.add_argument("--suite", help="Exact suite name")
+    benchmarks_compare.add_argument("--include-dry-run", action="store_true")
+
     tools_cmd = command_factory(
         subparsers,
         "tools",
@@ -309,6 +324,15 @@ def handle_setup_command(
             payload = manager.plan(args.name, model=args.model, endpoint=args.endpoint, spec=args.spec)
         elif args.benchmarks_command == "suite-validate":
             payload = load_suite(Path(args.path).resolve())
+        elif args.benchmarks_command == "compare":
+            payload = compare_benchmarks(
+                profile,
+                by=args.by,
+                models=args.model,
+                runtimes=args.runtime,
+                suite=args.suite,
+                include_dry_run=args.include_dry_run,
+            )
         else:
             from .model_catalog import ModelCatalog
 

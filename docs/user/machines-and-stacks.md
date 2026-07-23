@@ -373,19 +373,21 @@ Prepare the stack. This is the convenience lifecycle command for install/pull/co
 
 ```bash
 aiplane stacks prepare coding_agents --dry-run
-aiplane stacks prepare coding_agents
+aiplane stacks prepare coding_agents --yes
 ```
 
 Start or stop runtime-side services:
 
 ```bash
 aiplane stacks start coding_agents --dry-run
-aiplane stacks start coding_agents
-aiplane stacks stop coding_agents
-aiplane stacks restart coding_agents
+aiplane stacks start coding_agents --yes
+aiplane stacks stop coding_agents --yes
+aiplane stacks restart coding_agents --yes
 ```
 
-`start` does not implicitly install or pull models. Use `prepare` first when you want the higher-level install/pull/config path.
+`start` does not implicitly install or pull models. Use `prepare` first when you want the higher-level install/pull/config path. Every executable same-host lifecycle mutation requires `--yes`; omitting it returns `confirmation_required` without invoking a command. Remote lifecycle remains render-only even when `--yes` is supplied.
+
+For a `docker_model_runner` stack, the default endpoint is `http://localhost:12434/engines/v1`. Plan and lifecycle output use Docker's native `docker model install-runner`, `pull`, `start-runner`, `stop-runner`, and `restart-runner` boundary rather than translating these operations through the generic runtime helper. The profile alias is resolved to its provider-native model id before rendering a pull command.
 
 For same-host/local stacks, lifecycle commands return structured execution reporting: `status`, `outcome`, `execution_mode`, `steps_total`, `steps_executed`, `failed_step`, `started_at`, `finished_at`, `duration_seconds`, per-step stdout/stderr tails, and best-effort `runtime_status_before` / `runtime_status_after` snapshots. Remote, SSH, Azure, and AKS stacks still return planned commands instead of executing.
 
@@ -405,7 +407,18 @@ aiplane stacks export llamaindex-workflows coding_agents
 aiplane stacks export openhands coding_agents
 ```
 
-The Dockerfile, Conda YAML, Compose, and framework exports are starter artifacts for review, CI, or custom packaging. They include profile-aware comments or metadata for stack name, profile, orchestrator, runtime, model, endpoint, machine, role bindings, limits, tool policies, approval labels, audit labels, and selected Docker resource hints where available. Framework exports are metadata starters; they do not install packages, generate a full agent application, or run autonomous workflows. The normal user flow is still `stacks setup`, `stacks prepare`, and `stacks start`.
+The Dockerfile, Conda YAML, Compose, and framework exports are starter artifacts for review, CI, or custom packaging. They include profile-aware comments or metadata for stack name, profile, orchestrator, runtime, model, endpoint, machine, role bindings, limits, tool policies, approval labels, audit labels, and selected Docker resource hints where available. Framework exports contain framework-specific topology keys and readiness checks for LangGraph, CrewAI, AutoGen, Semantic Kernel, LlamaIndex Workflows, OpenHands, and the simple OpenAI-compatible client. They are Aiplane starter metadata, not the framework's native project format; they do not install packages, write credentials, or run autonomous workflows.
+
+The same secret-free contract is available without a stack:
+
+```bash
+aiplane agents templates
+aiplane agents manifest repo-helper --framework crewai --model MODEL_ALIAS
+aiplane agents export repo-helper --framework crewai --model MODEL_ALIAS --file framework-config.yaml
+aiplane agents export repo-helper --framework crewai --model MODEL_ALIAS --file agent-environment.yaml
+```
+
+Only `langgraph` and `simple-openai` currently emit `agent.py`; the other frameworks intentionally export configuration for translation into a reviewed framework project. The normal stack flow is still `stacks setup`, `stacks prepare --dry-run`, and an explicitly confirmed `stacks prepare/start --yes`.
 
 ## Orchestrators
 
@@ -464,7 +477,7 @@ Limits, role bindings, approval labels, audit labels, and tool policies for orch
 
 ## Current Limits
 
-- Same-host/local stack lifecycle is the first supported execution path. It calls `scripts/provider_helper.sh` directly for runtime install/pull/start/stop/restart actions.
+- Same-host/local stack lifecycle is the first supported execution path. Most runtimes call `scripts/provider_helper.sh`; Docker Model Runner uses its native `docker model` adapter. All executable lifecycle mutations require `--yes`.
 - SSH, Azure VM, and AKS stack lifecycle automation returns planned commands instead of executing until remote execution and audit controls are hardened.
 - Stack export artifacts are starter files, not guaranteed production-ready deployment manifests.
 

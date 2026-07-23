@@ -177,7 +177,12 @@ class ModelCatalogMutationTests(unittest.TestCase):
         self.assertEqual(summary["provider"], "azure_openai")
         self.assertEqual(summary["status"], "failed")
         self.assertEqual(summary["source_contacted"], False)
-        self.assertIn("Azure OpenAI discovery needs", summary["error"])
+        self.assertIn("endpoint_missing", summary["error"])
+        self.assertEqual(
+            summary["diagnostics"]["failure_codes"],
+            ["endpoint_missing", "credential_missing"],
+        )
+        self.assertFalse(summary["diagnostics"]["network_contacted"])
         self.assertIn("providers show azure_openai", payload["next_steps"][0])
 
     def test_models_refresh_cli_previews_with_mocked_provider(self) -> None:

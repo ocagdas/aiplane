@@ -36,7 +36,7 @@ aiplane recommend
 aiplane export continue
 ```
 
-For release, demo, or acceptance testing, use the [installation-to-feature manual test checklist](manual-test-checklist.md). It labels read-only, preview, mutating, optional-runtime, and render-only checks and records expected outcomes.
+For release, demo, or acceptance testing, use the [installation-to-feature manual test checklist](manual-test-checklist.md). It labels read-only, preview, mutating, optional-runtime, and render-only checks and records expected outcomes. To collect sanitized, shareable P0, replay, hardware, benchmark, and optional Docker Model Runner evidence, follow the [Field Evidence Collection Runbook](evidence-collection.md).
 
 ## Common workflows
 

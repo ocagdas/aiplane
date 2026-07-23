@@ -83,6 +83,30 @@ def locked_append_text(path: Path, text: str, *, encoding: str = "utf-8") -> Non
             os.fsync(stream.fileno())
 
 
+def atomic_update_json(path: Path, transform: Callable[[dict[str, Any]], dict[str, Any] | None]) -> dict[str, Any]:
+    import json
+
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with file_lock(path):
+        if path.exists():
+            try:
+                current = json.loads(path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError as exc:
+                raise ValueError(f"JSON state file {path} is invalid") from exc
+        else:
+            current = {}
+        if not isinstance(current, dict):
+            raise ValueError(f"JSON state file {path} must contain an object")
+        updated = transform(current)
+        result = current if updated is None else updated
+        if not isinstance(result, dict):
+            raise TypeError("JSON transaction must return an object or None")
+        text = json.dumps(result, indent=2, sort_keys=True) + "\n"
+        _atomic_write_text_unlocked(path, text, encoding="utf-8")
+        return result
+
+
 def atomic_update_yaml(path: Path, transform: Callable[[dict[str, Any]], dict[str, Any] | None]) -> dict[str, Any]:
     from .config import dump_yaml, parse_yaml
 

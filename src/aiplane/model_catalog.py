@@ -654,7 +654,7 @@ class ModelCatalog:
                     **self.providers().get(provider_name, {}),
                 },
             )
-        if discovered.source == "error":
+        if discovered.source in {"error", "configuration_error"}:
             if progress:
                 progress("failed", provider_name, discovered.reason)
             return self._refresh_failure_result(
@@ -666,6 +666,7 @@ class ModelCatalog:
                 limit=limit,
                 verbose=verbose,
                 error=discovered.reason,
+                diagnostics=discovered.diagnostics,
                 provider_config={
                     **configured_providers.get(provider_name, {}),
                     **self.providers().get(provider_name, {}),
@@ -700,6 +701,7 @@ class ModelCatalog:
         verbose: bool,
         error: str,
         provider_config: dict[str, Any],
+        diagnostics: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         all_models = self.models()
         provider_models = [model for model in all_models.values() if model_source(model) == provider_name]
@@ -738,6 +740,8 @@ class ModelCatalog:
             "changes": changes,
             "error": error,
         }
+        if diagnostics is not None:
+            provider_result["diagnostics"] = diagnostics
         path = self.profile.root / "models.yaml"
         discovered_path = self._generated_path()
         return {
