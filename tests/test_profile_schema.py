@@ -161,3 +161,8 @@ def test_parse_yaml_rejects_document_markers_with_actionable_error() -> None:
 def test_parse_yaml_rejects_block_scalars_with_actionable_error() -> None:
     with pytest.raises(ValueError, match="block scalar at line 2"):
         parse_yaml("notes:\n  text: |\n")
+
+
+def test_parse_yaml_rejects_block_scalars_with_indent_indicator() -> None:
+    with pytest.raises(ValueError, match="block scalar at line 2"):
+        parse_yaml("notes:\n  text: |2\n")

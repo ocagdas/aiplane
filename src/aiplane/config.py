@@ -622,7 +622,7 @@ def parse_yaml(text: str) -> dict[str, Any]:
         key, value = stripped.split(":", 1)
         key = key.strip()
         value = value.strip()
-        if value in {"|", "|-", "|+", ">", ">-", ">+"}:
+        if value.startswith(("|", ">")) and (len(value) == 1 or value[1] in "+-0123456789"):
             raise ValueError(
                 f"unsupported YAML block scalar at line {line_number}; use a quoted single-line scalar"
             )

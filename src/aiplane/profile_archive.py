@@ -227,10 +227,10 @@ def validate_profile_archive(payload: Any) -> dict[str, Any]:
     manifest = payload.get("manifest")
     if not isinstance(files, list) or not isinstance(manifest, dict):
         raise ValueError("profile archive files must be a list and manifest must be an object")
-    excluded = _validated_excluded_manifest(manifest.get("excluded"))
     excluded_contract_version = manifest.get("excluded_contract_version", 1)
     if excluded_contract_version != PROFILE_ARCHIVE_EXCLUSION_CONTRACT_VERSION:
         raise ValueError(f"unsupported exclusion manifest contract version: {excluded_contract_version!r}")
+    excluded = _validated_excluded_manifest(manifest.get("excluded"))
 
     validated_files: list[dict[str, Any]] = []
     seen: set[str] = set()
