@@ -305,8 +305,9 @@ Security reporting is documented in [SECURITY.md](SECURITY.md). The tested trust
 - `aiplane environment plan`: renders how a command would run under current profile context.
 - `aiplane environment doctor` and `aiplane tools doctor`: first checks when setup quality looks off.
 - `aiplane tools matrix --workflow cloud_vm`: focused mandatory/alternative/optional readiness for a real setup path.
-- `aiplane deploy render --target azure_gpu_vm`: checksummed, secret-free target artifacts for review without applying infrastructure.
-- `aiplane runtimes bundle RUNNER --model ALIAS --mode auto`: an honest Docker, Conda, or native handoff for the selected runner.
+- `aiplane deploy render --target azure_gpu_vm`: checksummed, secret-free target scaffolds for the selected OpenTofu, Terraform, or Pulumi family, with unresolved inputs and no implicit apply step.
+- `aiplane environment doctor --workflow local_vm`: verifies Vagrant and the configured VirtualBox, libvirt, Hyper-V, or VMware Desktop provider before reporting the local-VM workflow ready.
+- `aiplane runtimes bundle RUNNER --model ALIAS --mode auto`: a compatibility-checked Docker, Conda, or native recipe with explicit reproducibility evidence.
 
 More detail:
 

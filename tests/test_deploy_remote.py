@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from aiplane.artifact_validation import validate_deployment_artifacts
+
+from .artifact_fixtures import copy_profile_targets, profile_with_target_iac, profile_with_targets
+
 from .support import (
     DeployManager,
     _isolated_profiles_dir,
@@ -150,22 +154,10 @@ class DeployRemoteTests(unittest.TestCase):
 
     def test_remote_tunnel_plan_rejects_invalid_host(self) -> None:
         source = load_profile("local-dev", Path.cwd())
-        mutated_targets = json.loads(json.dumps(source.targets))
+        mutated_targets = copy_profile_targets(source)
         mutated_targets["targets"]["gpu_workstation_ssh"]["ssh"]["host"] = "gpu-workstation with space"
 
-        profile = Profile(
-            name="tmp",
-            root=source.root,
-            workspace=Path.cwd(),
-            hardware=source.hardware,
-            backends=source.backends,
-            repository=source.repository,
-            tools=source.tools,
-            approvals=source.approvals,
-            environment=source.environment,
-            models=source.models,
-            targets=mutated_targets,
-        )
+        profile = profile_with_targets(source, mutated_targets)
 
         with self.assertRaises(ValueError) as exc:
             RemoteManager(profile).tunnel_plan("gpu_workstation_ssh")
@@ -174,22 +166,10 @@ class DeployRemoteTests(unittest.TestCase):
 
     def test_remote_tunnel_plan_rejects_invalid_user(self) -> None:
         source = load_profile("local-dev", Path.cwd())
-        mutated_targets = json.loads(json.dumps(source.targets))
+        mutated_targets = copy_profile_targets(source)
         mutated_targets["targets"]["gpu_workstation_ssh"]["ssh"]["user"] = "bad user"
 
-        profile = Profile(
-            name="tmp",
-            root=source.root,
-            workspace=Path.cwd(),
-            hardware=source.hardware,
-            backends=source.backends,
-            repository=source.repository,
-            tools=source.tools,
-            approvals=source.approvals,
-            environment=source.environment,
-            models=source.models,
-            targets=mutated_targets,
-        )
+        profile = profile_with_targets(source, mutated_targets)
 
         with self.assertRaises(ValueError) as exc:
             RemoteManager(profile).tunnel_plan("gpu_workstation_ssh")
@@ -198,22 +178,10 @@ class DeployRemoteTests(unittest.TestCase):
 
     def test_remote_tunnel_plan_rejects_invalid_port(self) -> None:
         source = load_profile("local-dev", Path.cwd())
-        mutated_targets = json.loads(json.dumps(source.targets))
+        mutated_targets = copy_profile_targets(source)
         mutated_targets["targets"]["gpu_workstation_ssh"]["ssh"]["port"] = 70000
 
-        profile = Profile(
-            name="tmp",
-            root=source.root,
-            workspace=Path.cwd(),
-            hardware=source.hardware,
-            backends=source.backends,
-            repository=source.repository,
-            tools=source.tools,
-            approvals=source.approvals,
-            environment=source.environment,
-            models=source.models,
-            targets=mutated_targets,
-        )
+        profile = profile_with_targets(source, mutated_targets)
 
         with self.assertRaises(ValueError) as exc:
             RemoteManager(profile).tunnel_plan("gpu_workstation_ssh")
@@ -222,22 +190,10 @@ class DeployRemoteTests(unittest.TestCase):
 
     def test_remote_tunnel_plan_rejects_invalid_endpoint(self) -> None:
         source = load_profile("local-dev", Path.cwd())
-        mutated_targets = json.loads(json.dumps(source.targets))
+        mutated_targets = copy_profile_targets(source)
         mutated_targets["targets"]["gpu_workstation_ssh"]["endpoint"] = "localhost:11434/v1"
 
-        profile = Profile(
-            name="tmp",
-            root=source.root,
-            workspace=Path.cwd(),
-            hardware=source.hardware,
-            backends=source.backends,
-            repository=source.repository,
-            tools=source.tools,
-            approvals=source.approvals,
-            environment=source.environment,
-            models=source.models,
-            targets=mutated_targets,
-        )
+        profile = profile_with_targets(source, mutated_targets)
 
         with self.assertRaises(ValueError) as exc:
             RemoteManager(profile).tunnel_plan("gpu_workstation_ssh")
@@ -411,20 +367,112 @@ def test_deploy_render_cli_can_print_one_artifact() -> None:
 
 def test_deploy_render_rejects_inventory_injection() -> None:
     source = load_profile("local-dev", Path.cwd())
-    targets = json.loads(json.dumps(source.targets))
+    targets = copy_profile_targets(source)
     targets["targets"]["gpu_workstation_ssh"]["ssh"]["user"] = "operator\nmalicious=true"
-    profile = Profile(
-        name="tmp",
-        root=source.root,
-        workspace=source.workspace,
-        hardware=source.hardware,
-        backends=source.backends,
-        repository=source.repository,
-        tools=source.tools,
-        approvals=source.approvals,
-        environment=source.environment,
-        models=source.models,
-        targets=targets,
-    )
+    profile = profile_with_targets(source, targets)
     with unittest.TestCase().assertRaisesRegex(ValueError, "unsupported inventory characters"):
         DeployManager(profile).render("gpu_workstation_ssh")
+
+
+def test_deployment_artifact_application_validation_rejects_checksum_drift() -> None:
+    payload = DeployManager(load_profile("local-dev", Path.cwd())).render("azure_gpu_vm")
+    assert validate_deployment_artifacts(payload) is payload
+
+    missing = json.loads(json.dumps(payload))
+    missing["checksums"] = {}
+    with unittest.TestCase().assertRaisesRegex(ValueError, "checksums must be a non-empty object"):
+        validate_deployment_artifacts(missing)
+
+    mismatch = json.loads(json.dumps(payload))
+    mismatch["checksums"].pop(next(iter(mismatch["checksums"])))
+    with unittest.TestCase().assertRaisesRegex(ValueError, "keys must match"):
+        validate_deployment_artifacts(mismatch)
+
+
+def test_cloud_artifacts_select_matching_iac_family_and_safe_preview() -> None:
+    source = load_profile("local-dev", Path.cwd())
+    selections = {
+        "opentofu": ({"main.tf"}, ["tofu fmt -check"]),
+        "terraform": ({"main.tf"}, ["terraform fmt -check"]),
+        "pulumi": ({"Pulumi.yaml", "requirements.txt", "__main__.py"}, ["pulumi preview --diff"]),
+    }
+    for target_name in ["azure_gpu_vm", "aks_gpu_pool"]:
+        for selected, (required_files, validation_commands) in selections.items():
+            manager = DeployManager(profile_with_target_iac(source, target_name, selected))
+            workflow = manager.workflow_plan(target_name)
+            payload = manager.render(target_name)
+
+            assert workflow["iac"] == selected
+            assert workflow["iac_tool"] == {
+                "name": selected,
+                "command": "tofu" if selected == "opentofu" else selected,
+                "doctor_command": f"aiplane tools doctor {selected}",
+                "setup_plan_command": f"aiplane tools plan {selected}",
+            }
+            assert selected in workflow["recommended_tools"]
+            assert not ({"opentofu", "terraform", "pulumi"} - {selected}) & set(workflow["recommended_tools"])
+            assert payload["iac"] == selected
+            assert payload["artifact_readiness"] == "scaffold"
+            assert payload["unresolved_inputs"]
+            assert required_files <= set(payload["files"])
+            if target_name == "azure_gpu_vm":
+                assert {"aiplane.pkr.hcl", "inventory.ini", "playbook.yml"} <= set(payload["files"])
+            assert payload["validation_commands"] == validation_commands
+            assert payload["next_commands"] == []
+            assert all(" apply" not in item and " up" not in item for item in validation_commands)
+
+            if selected == "pulumi":
+                assert "main.tf" not in payload["files"]
+                assert "runtime:\n  name: python" in payload["files"]["Pulumi.yaml"]
+                assert "pulumi-azure-native" in payload["files"]["requirements.txt"]
+                compile(payload["files"]["__main__.py"], "__main__.py", "exec")
+            else:
+                assert "Pulumi.yaml" not in payload["files"]
+                assert "__main__.py" not in payload["files"]
+
+
+def test_cloud_iac_defaults_to_opentofu_and_rejects_unknown_implementations() -> None:
+    source = load_profile("local-dev", Path.cwd())
+    targets = copy_profile_targets(source)
+    targets["targets"]["azure_gpu_vm"].pop("iac", None)
+    manager = DeployManager(profile_with_targets(source, targets))
+    assert manager.workflow_plan("azure_gpu_vm")["iac"] == "opentofu"
+    assert manager.render("azure_gpu_vm")["validation_commands"] == ["tofu fmt -check"]
+
+    targets["targets"]["azure_gpu_vm"]["iac"] = "cloudformation"
+    manager = DeployManager(profile_with_targets(source, targets))
+    with unittest.TestCase().assertRaisesRegex(ValueError, "target iac must be"):
+        manager.render("azure_gpu_vm")
+
+
+def test_deployment_validation_rejects_iac_file_and_command_drift() -> None:
+    source = load_profile("local-dev", Path.cwd())
+    payload = DeployManager(profile_with_target_iac(source, "azure_gpu_vm", "pulumi")).render("azure_gpu_vm")
+
+    wrong_command = json.loads(json.dumps(payload))
+    wrong_command["validation_commands"] = ["terraform fmt -check"]
+    with unittest.TestCase().assertRaisesRegex(ValueError, "pulumi preview"):
+        validate_deployment_artifacts(wrong_command)
+
+    wrong_family = json.loads(json.dumps(payload))
+    wrong_family["files"]["main.tf"] = "# drift\n"
+    import hashlib
+
+    wrong_family["checksums"]["main.tf"] = hashlib.sha256(b"# drift\n").hexdigest()
+    with unittest.TestCase().assertRaisesRegex(ValueError, "no HCL module"):
+        validate_deployment_artifacts(wrong_family)
+
+
+def test_non_cloud_artifacts_cannot_claim_an_iac_implementation() -> None:
+    payload = DeployManager(load_profile("local-dev", Path.cwd())).render("gpu_workstation_ssh")
+    payload["iac"] = "opentofu"
+    with unittest.TestCase().assertRaisesRegex(ValueError, "must not declare"):
+        validate_deployment_artifacts(payload)
+
+
+def test_remote_scaffold_does_not_recommend_ansible_execution_with_unresolved_user() -> None:
+    payload = DeployManager(load_profile("local-dev", Path.cwd())).render("gpu_workstation_ssh")
+    assert payload["artifact_readiness"] == "scaffold"
+    assert payload["unresolved_inputs"] == ["ssh.user"]
+    assert payload["next_commands"] == []
+    assert all("--check" not in command for command in payload["validation_commands"])

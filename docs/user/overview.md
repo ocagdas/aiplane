@@ -108,7 +108,7 @@ aiplane integrations export continue
 # Export an MCP client config snippet.
 aiplane integrations export vscode-mcp
 
-# Render a reproducible runtime bundle plan.
+# Render a deterministic runtime bundle recipe.
 aiplane runtimes bundle vllm --model MODEL_ALIAS --mode docker --format dockerfile
 ```
 

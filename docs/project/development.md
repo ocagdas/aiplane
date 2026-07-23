@@ -301,9 +301,17 @@ The normal suite skips these timing cases. Keep correctness assertions comparing
 indexed and full-scan results; treat elapsed times as local regression evidence,
 not portable performance guarantees.
 
+Generated artifact schemas are validated in the normal suite with the pinned `jsonschema` development dependency. Official infrastructure-tool validation remains opt-in and runs only tools installed on the current host:
+
+```bash
+AIPLANE_RUN_EXTERNAL_VALIDATORS=1 python -m pytest -q tests/test_external_artifact_validation.py -rs
+```
+
+This gate uses disposable directories and non-applying operations: formatter/validation checks, Ansible syntax inspection, Pulumi preview with a local backend, and Vagrant validation only when the selected provider capability is usable. Missing tools skip explicitly.
+
 Isolated profile tests copy a session-prepared synthetic profile tree, so each test retains its own writable filesystem while avoiding repeated YAML enrichment. Domain suites that exercise aggregate workflows such as the local doctor must fake host-owned probes (hardware, installed tools, and non-loopback runtimes) through their typed boundaries. Keep at least one dedicated loopback integration test for endpoint behavior. Do not replace production profile loading, remove assertions, or mock the domain function under test merely to improve timing.
 
-The current serial baseline after this fixture/probe review is 644 passed, 3 skipped, and 23 subtests in about 48 seconds on the review host, down from about 61 seconds before the changes. The configured four-worker gate completes in about 17 seconds on the same host, and the doctor module itself fell from about 14 seconds to under 1 second. These numbers are local diagnostic evidence, not CI budgets; use `--durations` and compare on the same host before claiming a regression or improvement.
+The configured four-worker gate after the schema, fixture, and Vagrant-provider work passes 716 tests with 9 optional skips and 29 subtests in 16.86 seconds on the review host. A serial diagnostic immediately before the final provider-plan assertion passed 715 tests with the same skips and subtests in 51.00 seconds; the slowest test remained the packaging check at 7.36 seconds, and no schema or Vagrant-provider test became a new hotspot. These numbers are local diagnostic evidence, not CI budgets; use `--durations` and compare on the same host before claiming a regression or improvement.
 
 The packaging test builds and installs one wheel in an isolated venv and owns wheel-content, helper, schema, bootstrap, and preservation contracts. Upgrade/replacement/uninstall lifecycle verification is intentionally separate in `scripts/verify_install_channels.py`, the cross-platform CI matrix, and the release workflow; do not nest that complete lifecycle inside the packaging unit again.
 

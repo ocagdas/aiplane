@@ -17,7 +17,9 @@
     "commands",
     "selected_file",
     "checksums",
-    "supported_modes"
+    "supported_modes",
+    "notes",
+    "reproducibility"
   ],
   "properties": {
     "$schema": {
@@ -50,7 +52,8 @@
       "additionalProperties": {
         "type": "string"
       },
-      "minProperties": 1
+      "minProperties": 1,
+      "maxProperties": 1
     },
     "settings": {
       "type": "object"
@@ -91,8 +94,142 @@
         "type": "string",
         "pattern": "^[a-f0-9]{64}$"
       },
-      "minProperties": 1
+      "minProperties": 1,
+      "maxProperties": 1
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "image": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*:[A-Za-z0-9_.-]+$"
+    },
+    "reproducibility": {
+      "type": "object",
+      "required": [
+        "level",
+        "version_pinned",
+        "digest_locked",
+        "blockers"
+      ],
+      "properties": {
+        "level": {
+          "enum": [
+            "recipe_deterministic",
+            "version_pinned",
+            "digest_locked"
+          ]
+        },
+        "version_pinned": {
+          "type": "boolean"
+        },
+        "digest_locked": {
+          "type": "boolean"
+        },
+        "blockers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
     }
   },
-  "additionalProperties": true
+  "additionalProperties": true,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "mode": {
+            "const": "docker"
+          }
+        },
+        "required": [
+          "mode"
+        ]
+      },
+      "then": {
+        "properties": {
+          "selected_file": {
+            "const": "Dockerfile"
+          },
+          "files": {
+            "required": [
+              "Dockerfile"
+            ]
+          },
+          "checksums": {
+            "required": [
+              "Dockerfile"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "mode": {
+            "const": "conda"
+          }
+        },
+        "required": [
+          "mode"
+        ]
+      },
+      "then": {
+        "properties": {
+          "selected_file": {
+            "const": "environment.yaml"
+          },
+          "files": {
+            "required": [
+              "environment.yaml"
+            ]
+          },
+          "checksums": {
+            "required": [
+              "environment.yaml"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "mode": {
+            "const": "native"
+          }
+        },
+        "required": [
+          "mode"
+        ]
+      },
+      "then": {
+        "properties": {
+          "selected_file": {
+            "const": "runtime-launch.json"
+          },
+          "files": {
+            "required": [
+              "runtime-launch.json"
+            ]
+          },
+          "checksums": {
+            "required": [
+              "runtime-launch.json"
+            ]
+          }
+        }
+      }
+    }
+  ]
 }

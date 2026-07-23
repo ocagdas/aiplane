@@ -3,6 +3,8 @@ from __future__ import annotations
 from contextlib import contextmanager
 
 import aiplane.tools as tools_module
+from aiplane.cli_presenters import _environment_doctor_text
+from aiplane.platform_support import HostPlatform
 from .support import (
     ApprovalHandler,
     AuditLogger,
@@ -489,3 +491,146 @@ def test_environment_doctor_can_focus_on_one_workflow() -> None:
     checked = {row["name"] for row in payload["installed"]}
     assert checked == {"azure-cli", "kubectl", "opentofu", "terraform", "pulumi"}
     assert "helm" not in checked
+
+
+def _runtime_workflow_row(runtime: str, usable: bool) -> dict[str, object]:
+    return {
+        "runtime": runtime,
+        "known_runtime": True,
+        "ok": usable,
+        "available": usable,
+        "usable": usable,
+        "platform_compatible": True,
+        "missing_required": [],
+        "missing_optional": [],
+        "notes": [],
+        "availability": {"available": usable, "reason": "fixture"},
+    }
+
+
+def test_local_runtime_workflow_requires_at_least_one_usable_runner() -> None:
+    profile = load_profile("local-dev", Path.cwd())
+    manager = tools_module.ToolchainManager(profile)
+    unavailable = [_runtime_workflow_row(name, False) for name in ["ollama", "llamacpp", "mlx"]]
+    with patch.object(tools_module, "_runtime_prerequisite_rows", return_value=unavailable):
+        payload = manager.environment_doctor(workflow="local_runtime", include_optional=False)
+    readiness = payload["workflow_readiness"]
+    assert readiness["readiness"] == "needs_setup"
+    assert readiness["usable_runtimes"] == []
+    assert "workflow local_runtime: needs_setup" in _environment_doctor_text(payload)
+
+    available = [*unavailable, _runtime_workflow_row("vllm", True)]
+    with patch.object(tools_module, "_runtime_prerequisite_rows", return_value=available):
+        payload = manager.environment_doctor(workflow="local_runtime", include_optional=False)
+    readiness = payload["workflow_readiness"]
+    assert readiness["readiness"] == "ready"
+    assert readiness["usable_runtimes"] == ["vllm"]
+    text = _environment_doctor_text(payload)
+    assert "workflow local_runtime: ready" in text
+    assert "usable runtimes: vllm" in text
+
+
+def test_required_only_workflow_does_not_probe_optional_tools() -> None:
+    profile = load_profile("local-dev", Path.cwd())
+    probed = []
+
+    def fake_row(_manager, name: str) -> dict[str, object]:
+        probed.append(name)
+        return {
+            "name": name,
+            "category": "fixture",
+            "description": name,
+            "needed_for": [],
+            "requirement": "optional",
+            "installed": True,
+            "install_mode": "manual",
+            "installable_by_aiplane": False,
+        }
+
+    with (
+        patch.object(tools_module.ToolchainManager, "_tool_row", autospec=True, side_effect=fake_row),
+        patch.object(tools_module, "_runtime_prerequisite_rows", return_value=[]),
+    ):
+        tools_module.ToolchainManager(profile).environment_doctor(
+            workflow="cloud_vm",
+            include_optional=False,
+        )
+    assert set(probed) == {"azure-cli", "openssh-client", "opentofu", "terraform", "pulumi"}
+    assert "packer" not in probed
+    assert "ansible" not in probed
+
+
+def test_runtime_prerequisites_can_skip_optional_tool_probes() -> None:
+    profile = load_profile("local-dev", Path.cwd())
+    with patch("aiplane.runtime_catalog.shutil.which", return_value=None) as which:
+        payload = tools_module.RuntimeCatalog(profile).prerequisites("vllm", include_optional=False)
+    assert payload["optional_tools"] == []
+    assert payload["missing_optional"] == []
+    assert "nvidia-smi" not in [call.args[0] for call in which.call_args_list]
+
+
+def test_local_runtime_rows_reject_mlx_on_non_apple_platforms() -> None:
+    profile = load_profile("local-dev", Path.cwd())
+
+    class Catalog:
+        def prerequisites(self, runtime: str, *, include_optional: bool = True) -> dict[str, object]:
+            return {
+                "known_runtime": True,
+                "ok": True,
+                "missing_required": [],
+                "missing_optional": [],
+                "notes": [],
+            }
+
+        def runtime_available(self, runtime: str) -> dict[str, object]:
+            return {"available": True, "reason": "fixture endpoint is reachable"}
+
+    linux = HostPlatform("Linux", "ubuntu", (), "x86_64")
+    with (
+        patch.object(tools_module, "RuntimeCatalog", return_value=Catalog()),
+        patch.object(tools_module, "detect_host_platform", return_value=linux),
+    ):
+        row = tools_module._runtime_prerequisite_rows(profile, False, runtimes=["mlx"])[0]
+    assert row["platform_compatible"] is False
+    assert row["available"] is True
+    assert row["usable"] is False
+
+
+def test_docker_model_runner_requires_a_functional_docker_model_surface() -> None:
+    profile = load_profile("local-dev", Path.cwd())
+
+    class Catalog:
+        def prerequisites(self, runtime: str, *, include_optional: bool = True) -> dict[str, object]:
+            return {
+                "known_runtime": True,
+                "ok": True,
+                "missing_required": [],
+                "missing_optional": [],
+                "notes": [],
+            }
+
+        def runtime_available(self, runtime: str) -> dict[str, object]:
+            return {"available": True, "reason": "fixture endpoint is reachable"}
+
+    class DockerModels:
+        def __init__(self, command_runner=None):
+            pass
+
+        def run(self, action: str):
+            return {
+                "available": False,
+                "reason": "this Docker installation does not provide the docker model command",
+            }, 2
+
+    with (
+        patch.object(tools_module, "RuntimeCatalog", return_value=Catalog()),
+        patch.object(tools_module, "DockerModelRunner", DockerModels),
+    ):
+        row = tools_module._runtime_prerequisite_rows(
+            profile,
+            False,
+            runtimes=["docker_model_runner"],
+        )[0]
+    assert row["available"] is False
+    assert row["usable"] is False
+    assert "does not provide" in row["availability"]["reason"]

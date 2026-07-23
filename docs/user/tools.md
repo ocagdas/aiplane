@@ -35,7 +35,7 @@
 | Provider-agnostic cloud provisioning | OpenTofu | Optional | Default IaC target for repeatable cloud resources across providers. | Doctor, install hint, and starter module export; apply workflows remain planned. |
 | Terraform-standardized teams | Terraform | Optional | Terraform-compatible IaC for teams already committed to HashiCorp Terraform. | Doctor, install hint, and starter module export; apply workflows remain planned. |
 | Language-native cloud provisioning | Pulumi | Optional | IaC using Python, TypeScript, Go, and other supported languages. | Doctor, install hint, and starter project export; richer apply workflows remain planned. |
-| Local VM development | Vagrant | Optional | Creates repeatable local VM dev/test environments using a provider such as VirtualBox, libvirt, Hyper-V, or VMware. | Doctor, install hint, and starter Vagrantfile export; provider-specific VM workflows remain planned. |
+| Local VM development | Vagrant | Optional | Creates repeatable local VM dev/test environments using VirtualBox, libvirt, Hyper-V, or VMware Desktop. | Provider-aware doctor, plan, and Vagrantfile export; lifecycle remains owned by Vagrant. |
 | Reusable VM/cloud images | Packer | Optional | Builds golden machine images before provisioning local or cloud VMs. | Doctor, install hint, and starter template export; image pipelines remain planned. |
 | Containerized dev shell | Dev Container CLI | Optional | Opens reproducible development shells backed by Docker-compatible containers. | Doctor, install hint, and starter devcontainer export; richer feature/mount tuning remains planned. |
 | Multi-container local stack | Docker Compose | Optional | Starts multiple local services/runtimes together. | Doctor, service health check, compose stack export. |
@@ -107,7 +107,7 @@ aiplane tools export packer
 aiplane tools export ansible
 ```
 
-The output reports command path, detected version where available, install hints, purposes, and service checks where they make sense. For example, Docker checks whether the daemon is reachable; Azure CLI checks whether `az account show` works.
+The output reports command path, detected version where available, install hints, purposes, and service checks where they make sense. For example, Docker checks whether the daemon is reachable; Azure CLI checks whether `az account show` works. For `local_vm`, readiness also requires the configured provider executable/capability and any required Vagrant plugin; Vagrant alone is insufficient. `local_vm_default` selects the provider-backed target used by `tools plan/export vagrant` when a profile contains multiple local VM targets.
 
 For Python source formatting, use the project helper scripts directly rather than an `aiplane` command:
 

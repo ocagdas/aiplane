@@ -30,7 +30,9 @@ aiplane deploy apply --target aks_gpu_pool --yes
 aiplane deploy apply --target azure_gpu_vm --yes
 ```
 
-Run `workflow-plan`, `render`, `plan`, and `doctor` first. `render` emits a schema-linked, checksummed, secret-free artifact family for review: Azure VM targets include OpenTofu/Terraform-compatible HCL, an Azure Packer starter, Ansible inventory, and a playbook; AKS targets include Azure-specific infrastructure HCL and directs operators to `stacks render-kubernetes` for workload artifacts. It never calls an external tool or applies a file. Use `--file NAME` to print one artifact.
+Run `workflow-plan`, `render`, `plan`, and `doctor` first. Cloud targets select one `iac` implementation in `targets.yaml`; `opentofu` is the default, `terraform` uses the same HCL family, and `pulumi` emits a Python Pulumi project. Validation ownership follows that selection: `tofu fmt -check`, `terraform fmt -check`, or `pulumi preview --diff`. `render` emits a schema-linked, checksummed, secret-free artifact family for review. Azure VM targets retain the Azure Packer starter, Ansible inventory, and playbook alongside the selected IaC family; AKS targets emit the selected infrastructure scaffold and direct operators to `stacks render-kubernetes` for workload artifacts.
+
+Rendered JSON distinguishes `scaffold` from `validate_ready`, lists unresolved inputs, and keeps validation commands separate from next commands. Cloud starters and unresolved SSH inventories emit no `next_commands`; Pulumi preview is exposed only as non-applying validation guidance. No renderer recommends apply, up, or Ansible execution for an incomplete scaffold. Rendering never calls an external tool or applies a file. Use `--file NAME` to print one artifact.
 
 `workflow-plan` classifies the target as local install, local VM, remote workstation/VM, cloud VM, or cloud Kubernetes and shows which external tools own each phase. `apply` requires `--yes` and only runs the narrow mutating steps shown in the plan.
 For AKS this currently means bootstrap steps such as loading cluster credentials
@@ -56,6 +58,7 @@ targets:
   aks_gpu_pool:
     type: azure_aks
     control_cli: az
+    iac: opentofu
     resource_group: rg-ai-coding
     cluster: ai-coding-aks
     namespace: aiplane-models

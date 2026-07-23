@@ -863,7 +863,7 @@ class ModelListingTests(unittest.TestCase):
 
             with self.assertRaisesRegex(ValueError, "managed-service model"):
                 RuntimeCatalog(profile).set_preferred_runtime("managed-chat-small", "ollama")
-            with self.assertRaisesRegex(ValueError, "cannot be bundled"):
+            with self.assertRaisesRegex(ValueError, "managed-service model.*provider endpoint"):
                 RuntimeCatalog(profile).bundle_plan("ollama", "managed-chat-small")
             with self.assertRaisesRegex(ValueError, "cannot define local runtime fields"):
                 catalog.complete("managed-chat-small", "hello")

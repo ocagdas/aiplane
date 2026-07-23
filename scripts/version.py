@@ -202,7 +202,9 @@ def classify_from_data(
     version_files_changed = bool(changed_files & VERSION_FILES)
     version_value_changed = parent_version is not None and parent_version != version
     version_change = (
-        classify_version_change(parent_version, version) if version_value_changed and parent_version is not None else "none"
+        classify_version_change(parent_version, version)
+        if version_value_changed and parent_version is not None
+        else "none"
     )
     mode = "none"
     reason = "not a main push"

@@ -42,7 +42,7 @@
   "properties": {
     "$schema": {"const": "https://aiplane.dev/schemas/profile/v1"},
     "schema_version": {"const": "1.0"},
-    "name": {"type": "string", "minLength": 1, "pattern": "^[^/\\]+$"},
+    "name": {"type": "string", "minLength": 1, "pattern": "^[^/\\\\]+$"},
     "hardware": {"type": "object"},
     "backends": {"type": "object"},
     "repository": {"type": "object"},

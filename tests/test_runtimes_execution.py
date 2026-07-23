@@ -487,7 +487,10 @@ class RuntimeExecutionTests(unittest.TestCase):
         self.assertEqual(plan["selected_file"], "Dockerfile")
         self.assertIn("FROM vllm/vllm-openai:latest", plan["files"]["Dockerfile"])
         self.assertIn("Provider/Code-Large-Instruct", plan["files"]["Dockerfile"])
-        self.assertIn("name: aiplane-vllm", plan["files"]["environment.yaml"])
+        self.assertEqual(set(plan["files"]), {"Dockerfile"})
+        conda = RuntimeCatalog(profile).bundle_plan("vllm", model_name="provider-code-large-vllm", mode="conda")
+        self.assertIn("name: aiplane-vllm", conda["files"]["environment.yaml"])
+        self.assertEqual(set(conda["files"]), {"environment.yaml"})
 
     def test_runtime_preference_can_be_changed(self) -> None:
         source = load_profile("local-dev", Path.cwd())
@@ -1148,7 +1151,7 @@ exit 0
         self.assertIn("--max-model-len", command)
         self.assertIn("--tensor-parallel-size", command)
         self.assertEqual(manifest["launch"]["environment"]["CUDA_VISIBLE_DEVICES"], "0,1")
-        self.assertEqual(manifest["endpoint"]["base_url"], "http://0.0.0.0:9000")
+        self.assertEqual(manifest["endpoint"]["base_url"], "http://0.0.0.0:9000/v1")
 
     def test_runtime_evidence_cli_outputs_versioned_json(self) -> None:
         stdout = StringIO()

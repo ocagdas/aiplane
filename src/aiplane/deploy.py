@@ -5,8 +5,9 @@ from dataclasses import dataclass
 from typing import Any
 
 from .boundaries import CommandRunner, SubprocessCommandRunner
-from .deployment_artifacts import render_deployment_artifacts
+from .deployment_artifacts import iac_implementation, render_deployment_artifacts
 from .models import Profile
+from .vagrant_providers import inspect_vagrant_provider, selected_vagrant_provider
 
 
 @dataclass(frozen=True)
@@ -38,6 +39,11 @@ class DeployManager:
                         "vm": target.get("name"),
                         "size": target.get("size"),
                         "namespace": target.get("namespace"),
+                        "vm_provider": (
+                            selected_vagrant_provider(target)
+                            if str(target.get("type") or "") in {"local_vm", "vagrant"}
+                            else None
+                        ),
                     }
                 )
         return rows
@@ -50,10 +56,25 @@ class DeployManager:
         target_name, target = self._target(name)
         target_type = str(target.get("type") or "")
         workflow = _workflow_for_target(target_name, target)
+        selected_iac = iac_implementation(target) if workflow in {"cloud_vm", "cloud_kubernetes"} else None
+        selected_vm_provider = selected_vagrant_provider(target) if workflow == "local_vm" else None
+        vm_provider_status = (
+            inspect_vagrant_provider(
+                selected_vm_provider,
+                workspace=self.profile.workspace,
+                command_runner=self.command_runner,
+            )
+            if selected_vm_provider
+            else None
+        )
         return {
             "target": target_name,
             "type": target_type,
             "workflow": workflow,
+            "iac": selected_iac,
+            "iac_tool": _iac_tool_contract(selected_iac) if selected_iac else None,
+            "vm_provider": selected_vm_provider,
+            "vm_provider_status": vm_provider_status,
             "phases": _workflow_phases(workflow, target),
             "boundaries": {
                 "local_install": workflow == "local_install",
@@ -300,17 +321,27 @@ def _workflow_for_target(target_name: str, target: dict[str, Any]) -> str:
     return "custom_remote"
 
 
+def _iac_tool_contract(iac: str) -> dict[str, str]:
+    command = {"opentofu": "tofu", "terraform": "terraform", "pulumi": "pulumi"}[iac]
+    return {
+        "name": iac,
+        "command": command,
+        "doctor_command": f"aiplane tools doctor {iac}",
+        "setup_plan_command": f"aiplane tools plan {iac}",
+    }
+
+
 def _workflow_tools(workflow: str, target: dict[str, Any]) -> list[str]:
     if workflow == "cloud_kubernetes":
-        return ["az", "kubectl", "helm", "opentofu", "terraform", "pulumi"]
+        return ["az", "kubectl", "helm", iac_implementation(target)]
     if workflow == "cloud_vm":
-        return ["az", "ssh", "opentofu", "terraform", "pulumi", "packer", "ansible"]
+        return ["az", "ssh", iac_implementation(target), "packer", "ansible"]
     if workflow == "remote_workstation":
         return ["ssh", "ansible"]
     if workflow == "remote_vm":
         return ["ssh", "ansible", "packer"]
     if workflow == "local_vm":
-        return ["vagrant", "packer", "ansible"]
+        return ["vagrant", selected_vagrant_provider(target), "packer", "ansible"]
     if workflow == "local_install":
         return ["docker", "conda", "venv"]
     return [str(target.get("control_cli") or "ssh")]

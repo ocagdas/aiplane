@@ -39,12 +39,16 @@ dev = [
   "setuptools==83.0.0",
   "ruff==0.12.0",
   "black==25.9.0",
+  "jsonschema==4.26.0",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
-markers = ["performance: opt-in scale and timing benchmarks"]
+markers = [
+  "performance: opt-in scale and timing benchmarks",
+  "external_validation: opt-in validation using installed external infrastructure tools",
+]
 
 [tool.setuptools]
 script-files = ["scripts/provider_helper.sh", "scripts/ollama_helper.sh"]
