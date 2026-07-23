@@ -323,6 +323,75 @@ TOOLCHAIN: dict[str, dict[str, object]] = {
 }
 
 
+# End-user workflows are separate from tool categories. Required alternatives are
+# any-of groups: a user needs one supported IaC implementation, not every one.
+WORKFLOW_REQUIREMENTS: dict[str, dict[str, object]] = {
+    "local_runtime": {
+        "summary": "Run a self-managed model endpoint on the current machine.",
+        "required": [],
+        "any_of": [],
+        "optional": ["docker", "docker-compose"],
+        "runtimes": ["ollama", "llamacpp", "mlx", "docker_model_runner", "lmstudio", "vllm"],
+    },
+    "local_container": {
+        "summary": "Use repeatable local containers and development shells.",
+        "required": ["docker"],
+        "any_of": [],
+        "optional": ["docker-compose", "devcontainer-cli"],
+        "runtimes": [],
+    },
+    "local_vm": {
+        "summary": "Create a repeatable local VM and configure it after boot.",
+        "required": ["vagrant"],
+        "any_of": [],
+        "optional": ["packer", "ansible", "openssh-client"],
+        "runtimes": [],
+    },
+    "remote_workstation": {
+        "summary": "Inspect and configure an existing workstation through SSH.",
+        "required": ["openssh-client"],
+        "any_of": [],
+        "optional": ["ansible"],
+        "runtimes": [],
+    },
+    "cloud_vm": {
+        "summary": "Plan an Azure VM, access it through SSH, and optionally configure or image it.",
+        "required": ["azure-cli", "openssh-client"],
+        "any_of": [["opentofu", "terraform", "pulumi"]],
+        "optional": ["packer", "ansible"],
+        "runtimes": [],
+    },
+    "cloud_kubernetes": {
+        "summary": "Plan Azure Kubernetes infrastructure and inspect workload prerequisites.",
+        "required": ["azure-cli", "kubectl"],
+        "any_of": [["opentofu", "terraform", "pulumi"]],
+        "optional": ["helm"],
+        "runtimes": [],
+    },
+    "quality": {
+        "summary": "Run the repository's configured formatting and lint gates.",
+        "required": ["ruff"],
+        "any_of": [],
+        "optional": ["black"],
+        "runtimes": [],
+    },
+    "benchmark_quality": {
+        "summary": "Run optional model-quality evaluation frameworks.",
+        "required": [],
+        "any_of": [["lm-evaluation-harness"]],
+        "optional": [],
+        "runtimes": [],
+    },
+    "benchmark_serving": {
+        "summary": "Measure serving throughput, latency, and multi-user load.",
+        "required": [],
+        "any_of": [["vllm-benchmark-scripts", "locust"]],
+        "optional": [],
+        "runtimes": [],
+    },
+}
+
+
 TOOL_WORKFLOWS: dict[str, dict[str, object]] = {
     "vagrant": {
         "task": "local VM lifecycle",

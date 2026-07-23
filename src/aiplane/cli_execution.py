@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .agents import AgentManager
+from .agent_frameworks import FRAMEWORK_SPECS
 from .approvals import ApprovalHandler
 from .audit import AuditLogger
 from .code_tasks import CodeTaskRunner
@@ -169,7 +170,7 @@ def add_execution_parsers(
     agents_plan.add_argument("name", help="Agent application name, such as repo-helper")
     agents_plan.add_argument(
         "--framework",
-        choices=["langgraph", "simple-openai"],
+        choices=sorted(FRAMEWORK_SPECS),
         default="langgraph",
         help="Agent scaffold framework",
     )
@@ -195,7 +196,7 @@ def add_execution_parsers(
     profile_arg(agents_manifest)
     agents_manifest.add_argument("name", help="Agent environment name")
     agents_manifest.add_argument("--stack", help="Compile roles, tools, limits, and approvals from a configured stack")
-    agents_manifest.add_argument("--framework", choices=["langgraph", "simple-openai"], default="langgraph")
+    agents_manifest.add_argument("--framework", choices=sorted(FRAMEWORK_SPECS), default="langgraph")
     agents_manifest.add_argument("--model", help="Direct model alias when --stack is omitted")
     agents_manifest.add_argument("--runtime")
     agents_manifest.add_argument("--provider")
@@ -212,7 +213,7 @@ def add_execution_parsers(
     agents_export.add_argument("name", help="Agent application name, such as repo-helper")
     agents_export.add_argument(
         "--framework",
-        choices=["langgraph", "simple-openai"],
+        choices=sorted(FRAMEWORK_SPECS),
         default="langgraph",
         help="Agent scaffold framework",
     )
@@ -238,6 +239,7 @@ def add_execution_parsers(
             "README.md",
             "agent-environment.json",
             "agent-environment.yaml",
+            "framework-config.yaml",
         ],
         default="agent.py",
         help="Scaffold file to print",

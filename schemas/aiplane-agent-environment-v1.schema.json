@@ -60,6 +60,60 @@
     },
     "execution_boundary": {
       "type": "object"
+    },
+    "framework": {
+      "type": "object",
+      "required": [
+        "name",
+        "packages",
+        "config_format"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "packages": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "config_format": {
+          "const": "aiplane_agent_framework_starter_v1"
+        }
+      },
+      "additionalProperties": true
+    },
+    "readiness": {
+      "type": "object",
+      "required": [
+        "framework",
+        "ready",
+        "packages",
+        "checks"
+      ],
+      "properties": {
+        "framework": {
+          "type": "string"
+        },
+        "ready": {
+          "type": "boolean"
+        },
+        "packages": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "checks": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": true
+    },
+    "framework_config": {
+      "type": "string",
+      "minLength": 1
     }
   },
   "additionalProperties": true

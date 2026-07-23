@@ -340,6 +340,11 @@ def add_stack_parsers(
             action="store_true",
             help="Preview commands without executing them",
         )
+        lifecycle.add_argument(
+            "--yes",
+            action="store_true",
+            help="Confirm execution after reviewing --dry-run output",
+        )
     stacks_status = stacks_sub.add_parser(
         "status",
         help="Show stack runtime/orchestrator status",
@@ -482,16 +487,16 @@ def handle_stack_command(
                 print(json_dumps(payload, indent=2))
             return 0
         if args.stacks_command == "prepare":
-            print(json_dumps(manager.prepare(args.name, dry_run=args.dry_run), indent=2))
+            print(json_dumps(manager.prepare(args.name, dry_run=args.dry_run, yes=args.yes), indent=2))
             return 0
         if args.stacks_command == "start":
-            print(json_dumps(manager.start(args.name, dry_run=args.dry_run), indent=2))
+            print(json_dumps(manager.start(args.name, dry_run=args.dry_run, yes=args.yes), indent=2))
             return 0
         if args.stacks_command == "stop":
-            print(json_dumps(manager.stop(args.name, dry_run=args.dry_run), indent=2))
+            print(json_dumps(manager.stop(args.name, dry_run=args.dry_run, yes=args.yes), indent=2))
             return 0
         if args.stacks_command == "restart":
-            print(json_dumps(manager.restart(args.name, dry_run=args.dry_run), indent=2))
+            print(json_dumps(manager.restart(args.name, dry_run=args.dry_run, yes=args.yes), indent=2))
             return 0
         if args.stacks_command == "status":
             print(json_dumps(manager.status(args.name), indent=2))

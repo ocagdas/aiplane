@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from .boundaries import CommandRunner, SubprocessCommandRunner
+from .deployment_artifacts import render_deployment_artifacts
 from .models import Profile
 
 
@@ -67,6 +68,16 @@ class DeployManager:
                 "Use deploy plan/doctor for target-specific commands, remote tunnel plan for SSH access, and stacks endpoint-plan before sharing endpoints.",
             ],
         }
+
+    def render(self, name: str | None = None) -> dict[str, Any]:
+        target_name, target = self._target(name)
+        workflow = _workflow_for_target(target_name, target)
+        return render_deployment_artifacts(
+            target_name,
+            target,
+            workflow,
+            _workflow_tools(workflow, target),
+        )
 
     def plan(self, name: str | None = None) -> dict[str, Any]:
         target_name, target = self._target(name)

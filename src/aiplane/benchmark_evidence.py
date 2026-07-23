@@ -281,6 +281,10 @@ def _validate_run(raw: object, index: int) -> dict[str, Any]:
             raise ValueError(f"benchmark run {index} {field} must be non-negative")
         result[field] = value
     result["seed"] = _optional_int(raw.get("seed"), f"benchmark run {index} seed")
+    telemetry_source = raw.get("telemetry_source")
+    if telemetry_source is not None and (not isinstance(telemetry_source, str) or not telemetry_source.strip()):
+        raise ValueError(f"benchmark run {index} telemetry_source must be a non-empty string or null")
+    result["telemetry_source"] = telemetry_source
     result["metadata"] = _mapping(raw.get("metadata", {}), f"benchmark run {index} metadata")
     return result
 

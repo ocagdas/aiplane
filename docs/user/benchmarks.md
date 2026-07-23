@@ -146,6 +146,20 @@ aiplane models route --role chat --candidate MODEL_A --candidate MODEL_B
 
 Only evidence with declared comparability affects measured quality/performance components. Local smoke results and arbitrary scores remain visible context, not universal quality claims.
 
+## Compare Saved Measurements
+
+Compare saved or imported records across one dimension while holding the other recorded dimensions and the suite protocol constant:
+
+```bash
+aiplane benchmarks compare --by runtime
+aiplane benchmarks compare --by model --runtime ollama
+aiplane benchmarks compare --by machine --suite simple-python-codegen
+aiplane benchmarks compare --by quantization
+aiplane benchmarks compare --by context --model MODEL_ALIAS
+```
+
+Supported dimensions are `runtime`, `model`, `machine`, `quantization`, and `context`. A group reports leaders only when at least two distinct values are present and the suite declares explicit comparability metadata. Quality, performance, throughput, elapsed time, and TTFT remain separate. TTFT leadership uses only runs with a non-empty `telemetry_source`; estimated or provenance-free latency is still displayed as evidence but cannot win an exact-TTFT comparison. Invalid local records become warnings rather than hiding valid groups.
+
 ## What The Built-In Suite Measures
 
 The built-in benchmark set includes four small tasks:

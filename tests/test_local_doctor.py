@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+from unittest.mock import patch
 
 from .support import (
     IntegrationManager,
@@ -16,6 +17,7 @@ from .support import (
     redirect_stdout,
     unittest,
 )
+from aiplane.hardware import HardwareFit
 from aiplane.integration_contracts import ALL_INTEGRATION_TOOLS
 from aiplane.local_doctor import local_coding_doctor, local_coding_doctor_text
 
@@ -24,9 +26,58 @@ class LocalDoctorTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         super().setUpClass()
+        cls._ollama_probe = patch(
+            "aiplane.model_execution.ModelExecution._probe_ollama_backend",
+            return_value=(False, "synthetic Ollama endpoint unavailable", []),
+        )
+        cls._ollama_probe.start()
+        cls._hardware_probe = patch(
+            "aiplane.local_doctor.HardwareManager.active_config",
+            return_value={
+                "name": "synthetic-host",
+                "origin": "test_fixture",
+                "machine": {
+                    "name": "synthetic-host",
+                    "placement": "same_host",
+                    "cpu": {"architecture": "x86_64", "cores": 8, "threads": 16},
+                    "memory": {"ram_gb": 32, "unified_memory_gb": None},
+                    "gpu": {"vendor": "none", "count": 0, "vram_gb": 0, "total_vram_gb": 0},
+                    "accelerator_apis": ["cpu"],
+                    "os": "linux",
+                },
+            },
+        )
+        cls._hardware_probe.start()
+        cls._hardware_fit = patch(
+            "aiplane.local_doctor.HardwareManager.check_model_fit",
+            return_value=HardwareFit("synthetic-model", True, "fits synthetic host"),
+        )
+        cls._hardware_fit.start()
+        cls._environment_probe = patch(
+            "aiplane.local_doctor.ToolchainManager.environment_doctor",
+            return_value={
+                "summary": {
+                    "tools_checked": 1,
+                    "tools_installed": 1,
+                    "tools_missing_installable_by_aiplane": 0,
+                    "tools_missing_manual_or_platform_specific": 0,
+                    "runtime_prerequisites_checked": 1,
+                    "runtime_prerequisites_missing": 0,
+                }
+            },
+        )
+        cls._environment_probe.start()
         cls._baseline_profile = load_profile("local-dev", Path.cwd())
         cls._baseline_doctor_payload = local_coding_doctor(cls._baseline_profile)
         cls._baseline_doctor_text = local_coding_doctor_text(cls._baseline_doctor_payload)
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls._environment_probe.stop()
+        cls._hardware_fit.stop()
+        cls._hardware_probe.stop()
+        cls._ollama_probe.stop()
+        super().tearDownClass()
 
     @classmethod
     def _baseline_payload(cls) -> dict[str, object]:
@@ -221,15 +272,23 @@ class LocalDoctorTests(unittest.TestCase):
         self.assertIn("next steps:", output)
 
     def test_doctor_cli_outputs_text_and_json(self) -> None:
-        text_stdout = StringIO()
-        with redirect_stdout(text_stdout):
-            code = cli_main(["doctor", "--profile", "local-dev"])
-        self.assertIn(code, {0, 1, 2})
-        self.assertIn("aiplane doctor for profile local-dev", text_stdout.getvalue())
+        # Domain checks are exercised against the real doctor payload above.
+        # Reuse that result here so this test owns only CLI formatting and exit semantics.
+        with patch(
+            "aiplane.cli_public.local_coding_doctor",
+            return_value=self._baseline_payload(),
+        ) as doctor:
+            text_stdout = StringIO()
+            with redirect_stdout(text_stdout):
+                code = cli_main(["doctor", "--profile", "local-dev"])
+            self.assertIn(code, {0, 1, 2})
+            self.assertIn("aiplane doctor for profile local-dev", text_stdout.getvalue())
 
-        json_stdout = StringIO()
-        with redirect_stdout(json_stdout):
-            code = cli_main(["doctor", "--profile", "local-dev", "--format", "json"])
+            json_stdout = StringIO()
+            with redirect_stdout(json_stdout):
+                code = cli_main(["doctor", "--profile", "local-dev", "--format", "json"])
+
+        self.assertEqual(doctor.call_count, 2)
         self.assertIn(code, {0, 1, 2})
         payload = json.loads(json_stdout.getvalue())
         self.assertEqual(code, payload["exit_code"])

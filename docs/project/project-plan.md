@@ -102,6 +102,8 @@ Post-P0 runtime and agent-environment coverage is explicit and implemented at co
 
 Evidence/reproducibility contracts now include versioned JSON/YAML benchmark suites, repeated quality summaries, preview-first external measurement import, artifact locks, exact render-only external-runner launch manifests, and evidence-backed per-role routing with alternatives and policy constraints. Node REST scheduling and community benchmark exchange remain research gates rather than promises; they require user evidence plus authentication, privacy, poisoning/provenance, abuse, versioning, and maintenance decisions.
 
+The cloud/VM/workstation render, workflow-aware tool doctor, and six-runner packaging milestones are implementation-complete. Validation covers deterministic secret-free deployment families, contextual mandatory/alternative/optional readiness, truthful auto/Docker/Conda/native bundle modes, SHA-256 file evidence, and framework exports across six runners with three orchestrators. The final full suite passes 652 tests with 3 optional tests skipped and 23 subtests; Ruff format/lint, profile validation, required environment doctor JSON, target render, and runtime bundle command smokes pass. Live provider/platform checks remain separate evidence work and do not broaden Aiplane into an infrastructure or agent runner.
+
 ### Current Public Status
 
 High-level implemented areas:
@@ -114,17 +116,17 @@ High-level implemented areas:
 - integration role inspection, setup, and exports for Continue, Cline, Zed, Aider, OpenAI-compatible clients, and MCP client snippets, with setup planning supported helper install/start/pull actions and skipping unsupported source/runtime pull combinations;
 - starter agent app planning/export plus a versioned `skills/aiplane/SKILL.md` assistant workflow package;
 - MCP stdio server with read tools, provider ownership/status grouping, machine recommendation, stack list/show/plan/doctor, integration role/plan inspection, orchestrator list/show inspection, and narrow audited writes;
-- policy, approvals, secret redaction, and audit foundations.
+- policy decisions, expiring action-scoped local approvals/overrides, drift reporting, secret redaction, and audit foundations.
 
 Known in-progress areas:
 
 - richer managed-provider discovery and provider-specific live credential tests;
 - managed-service endpoint binding for stacks/orchestrator exports without mixing those models into self-managed runtime-fit checks;
-- stack role metadata is implemented for planner/coder/reviewer-style model bindings, including managed-service role endpoint binding and warning-level doctor checks for risky tool-policy/approval combinations; framework starter exports and MCP stack export read parity now exist, with deeper framework-specific templates still next; the first `aiplane` agent skill package documents safe assistant workflows and MCP usage;
-- remote execution and Docker-aware stack lifecycle;
+- stack role metadata is implemented for planner/coder/reviewer-style model bindings, including managed-service role endpoint binding and warning-level doctor checks for risky tool-policy/approval combinations; framework-specific topology/readiness starters and MCP stack export read parity now exist; the first `aiplane` agent skill package documents safe assistant workflows and MCP usage;
+- remote lifecycle execution and supported-platform live acceptance for Docker Model Runner; native same-host Docker Model Runner plan/prepare/start/stop/restart handling is implemented;
 - deploy workflow classification now separates local install, local VM, remote workstation/VM, cloud VM, and cloud Kubernetes boundaries with non-mutating `deploy workflow-plan`;
 - `deploy apply` now requires explicit `--yes`, and broad cloud apply remains intentionally out of scope until provider-specific guardrails are ready;
-- provider-specific IaC/playbook/template hardening;
+- live-provider review and provider-specific expansion beyond the implemented Azure/SSH/local render families;
 - broader deployment apply paths;
 - endpoint authentication/gateway planning now exists at stack level through endpoint auth/TLS/gateway metadata and `stacks endpoint-plan`; top-level `aiplane doctor` now gives a read-only local AI workflow stack readiness summary with selected endpoint readiness, capability, and hardware-fit details; richer runtime-agnostic chat/task UX beyond single-prompt execution remains planned;
 - versioned placement/scoring and benchmark evidence, quantization/context/KV-cache/runtime-aware assessment, repeat summaries, safe deterministic graders, and role comparison are implemented foundations; native TTFT/token capture, comparable local calibration, and deeper near-miss evidence remain ongoing;
@@ -147,12 +149,15 @@ python -m aiplane config format
 python -m aiplane hardware show --list-types
 python -m pytest -q
 python -m aiplane tools matrix
+python -m aiplane tools matrix --workflow cloud_vm
+python -m aiplane environment doctor --workflow local_runtime --format json
 python -m aiplane tools plan opentofu
 python -m aiplane agents templates
 python -m aiplane stacks list
 python -m aiplane models list
 python -m aiplane models clear-cache --dry-run
 python -m aiplane deploy workflow-plan --target azure_gpu_vm
+python -m aiplane deploy render --target azure_gpu_vm
 python -m aiplane deploy apply --target azure_gpu_vm
 python -m aiplane models refresh --provider huggingface --query text-to-video --dry-run --verbosity 2 --limit 2
 python -m pytest -q tests/test_models_providers.py tests/test_runtimes_execution.py tests/test_integrations_chat.py -k "models_list_and_defaults_support_grouping or managed_service_models_do_not_mix_into_runtime_groups or model_catalog_cloud_doctor_checks_env_var or runtime_catalog_maps_sources_and_models or integrations_export_continue_uses_planner_constraints"
@@ -248,10 +253,10 @@ The six-runner parity, workflow evidence integration, and render-only Kubernetes
 
 ### Next Useful Work
 
-1. Active P1 evidence gate: run the clean-machine onboarding and replay trials when maintainer time or external participants are available; do not claim P0 closure or external-beta readiness before then.
-2. P2 placement calibration: collect comparable evidence on representative NVIDIA, AMD, Intel, Apple, Windows and heterogeneous multi-GPU machines; harden MIG/NUMA details and calibrate resource overhead without changing the transparent scoring contract.
-3. P2 evidence calibration: exercise benchmark suites, measurement import, artifact/launch evidence, repeated quality, role routing, and native telemetry on materially different machines and runtimes; add streaming TTFT only where backend APIs expose an exact measurement.
-4. Active evidence follow-up: gather clean-machine Docker Model Runner results on supported Docker Desktop/Engine platforms. This host does not provide the Docker model command and therefore is not cross-platform live evidence.
+1. Active P1 evidence gate: run the clean-machine onboarding and replay trials with the [Field Evidence Collection Runbook](../user/evidence-collection.md) when maintainer time or external participants are available; do not claim P0 closure or external-beta readiness before then.
+2. P2 placement calibration: use the same runbook to collect comparable evidence on representative NVIDIA, AMD, Intel, Apple, Windows and heterogeneous multi-GPU machines; harden MIG/NUMA details and calibrate resource overhead without changing the transparent scoring contract.
+3. P2 evidence calibration: use the same runbook to exercise benchmark suites, measurement import, artifact/launch evidence, repeated quality, role routing, and native telemetry on materially different machines and runtimes; add streaming TTFT only where backend APIs expose an exact measurement.
+4. Active evidence follow-up: gather clean-machine Docker Model Runner results with the same runbook on supported Docker Desktop/Engine platforms. This host does not provide the Docker model command and therefore is not cross-platform live evidence.
 5. Release and adoption follow-up: publish an eligible immutable release with hosted verification evidence, and observe draft imports, contributor fixtures, and render-only Kubernetes artifacts before adding any apply service or node scheduling API.
 
 
@@ -305,8 +310,8 @@ The primary public surface is deliberately small. Detailed commands remain avail
 | Category | Commands | Public posture |
 | --- | --- | --- |
 | Core | `--version`, `discover`, `doctor`, `recommend`, `export`, `quickstart local-coding`, `profiles list/templates/create/repair/remove/bootstrap-local/show/validate`, `policy explain`, `audit tail`, `config templates/init/show/get/set/default-profile/format/verbosity` | Lead with these. They are the environment doctor, recommendation, policy, export, audit, and profile-management surface for the first successful workflow. |
-| Supporting | `profiles render/schema/archive/restore/compare/replay-check/drift`, `hardware show/templates/schema/active/use/set/discover/clear/doctor/recommend/export-machine`, `machines import/list/show/validate/recommend/discover/cache-list/cache-clear/azure-status/import-azure-sku/profile-remote-plan`, `runtimes map/list/sources/models/model/use/prerequisites/doctor/bundle/install/start/stop/pull/repull/remove/clear`, `providers list/show/models/test/diagnose/add/endpoint-types/enable/disable/remove/init-defaults/update-defaults/clear/doctor`, `models list/show/defaults/use/add/clone/remove/enable/disable/refresh/promote/clear-cache/catalog-cache/pull/test/benchmark/route`, `integrations list/roles/plan/setup/export`, `mcp manifest/serve`, `tools list/matrix/doctor/plan/export/install`, `environment show/list/active/use/plan/doctor`, `remote tunnel plan/start/status/stop` | Use after onboarding or when troubleshooting a specific runtime, endpoint, hardware, integration, MCP, benchmark, or environment readiness question. |
-| Experimental | `deploy list/show/workflow-plan/plan/doctor/apply --yes`, `orchestrators list/show/doctor/setup`, `stacks setup/list/show/plan/doctor/endpoint-plan/status/export/prepare/start/stop/restart`, `agents templates/plan/export`, `run`, `tool [--yes] TOOL [ARGS...]`, `chat`, `bridge list/exec`, `launch`, `session start` | Commands may exist for experiments and advanced users, but they should not lead README, demos, or beta onboarding. They must not block the external beta workflow. |
+| Supporting | `profiles render/schema/archive/restore/compare/replay-check/drift`, `hardware show/templates/schema/active/use/set/discover/clear/doctor/recommend/export-machine`, `machines import/list/show/validate/recommend/discover/cache-list/cache-clear/azure-status/import-azure-sku/profile-remote-plan`, `runtimes map/list/sources/models/model/use/prerequisites/doctor/bundle/install/start/stop/pull/repull/remove/clear`, `providers list/show/models/test/diagnose/add/endpoint-types/enable/disable/remove/init-defaults/update-defaults/clear/doctor`, `models list/show/defaults/use/add/clone/remove/enable/disable/refresh/promote/clear-cache/catalog-cache/pull/test/benchmark/route`, `integrations list/roles/plan/setup/export`, `mcp manifest/serve`, `tools list/matrix/doctor/plan/export/install`, `environment show/list/active/use/plan/doctor`, `remote tunnel plan/start/status/stop`, `policy list/drift`, `benchmarks list/doctor/plan/suite-validate/import/compare` | Use after onboarding or when troubleshooting a specific runtime, endpoint, hardware, integration, MCP, benchmark, or environment readiness question. |
+| Experimental | `deploy list/show/workflow-plan/plan/doctor/apply --yes`, `orchestrators list/show/doctor/setup`, `stacks setup/list/show/plan/doctor/endpoint-plan/status/export/prepare/start/stop/restart`, `agents templates/plan/manifest/export`, `policy grant/revoke`, `run`, `tool [--yes] TOOL [ARGS...]`, `chat`, `bridge list/exec`, `launch`, `session start` | Commands may exist for experiments and advanced users, but they should not lead README, demos, or beta onboarding. They must not block the external beta workflow. |
 
 | Area | Primary commands | Status | Notes |
 | --- | --- | --- | --- |
@@ -326,15 +331,15 @@ The primary public surface is deliberately small. Detailed commands remain avail
 | Runtimes | `runtimes map/list/capabilities/sources/models/model/use/prerequisites/doctor/bundle/artifact-lock/launch-manifest/install/start/stop/pull/repull/remove/clear/...` | Implemented / helper-dependent; six-runner contract complete | Lifecycle delegates to runtime helpers where supported; Ollama supports native and Docker substrate dry-run/start/install paths plus guarded pulled-model remove/clear, while TGI/LocalAI use Docker-backed helper paths. The capability contract covers Ollama, llama.cpp, MLX, Docker Model Runner, LM Studio, and vLLM across detection, installed/served-model inventory, alias/native identity, fit, health, endpoint export, and guarded or plan-only lifecycle, with limitations expressed per capability. Artifact locks and versioned external-runner launch manifests now render source/revision/checksum evidence, runtime requirements, context/device/parallelism settings, endpoint/health metadata, and previewed vendor commands without bundling credentials or runtime-owned weights; unresolved integrity fields remain explicit and incomplete. Managed-service model aliases are not runtime-fit candidates and are rejected by runtime assignment/bundling paths. `runtimes list` supports `--format text|json` with text as the lean default. |
 | Hardware | `hardware show/templates/schema/active/use/set/discover/clear/doctor/recommend/assess/scoring/export-machine` | Implemented / calibration ongoing | Discovery normalizes per-device identity, vendor/backend, total/free memory, drivers and bus evidence across Linux NVIDIA/AMD/Intel, Apple/Metal and Windows CIM sources, with explicit unresolved fields and homogeneous grouping. Topology is captured where supported. `assess` estimates weights, KV cache and runtime workspace with stated sources/assumptions, evaluates single-GPU, runtime-declared homogeneous multi-GPU, offload and CPU modes, and never treats summed inventory VRAM as automatically usable. Recommendations apply hard policy/runtime/placement gates, then order eligible local rows using versioned, component-level placement-readiness scoring with evidence coverage. Safe scoring extensions are data-only profile/model values. MIG/NUMA depth and cross-machine calibration remain ongoing. |
 | Machines | `machines import/list/show/validate/recommend/discover/cache-list/cache-clear/azure-status/import-azure-sku/profile-remote-plan` | Implemented / remote execution planned | Azure discovery has live/offline/cache paths, supports explicit filters (`--gpu-vendor`, `--min-cpu-cores`, `--min-ram-gb`, `--min-vram-gb`), includes per-candidate unit pricing when Azure retail price data is available, and streams redacted Azure command progress on stderr (`--verbosity 0` shows the active command with a 2s dot ticker, `--verbosity 1` logs each command plus redacted command outputs). |
-| Orchestrators | `orchestrators list/show/doctor/setup` | Catalog/readiness implemented | Stacks remain the operational binding point; stack role metadata and framework starter exports now capture planner/coder/reviewer-style bindings, while deeper framework-specific templates remain planned. |
-| Stacks | `stacks setup/list/show/plan/doctor/endpoint-plan/status/export/prepare/start/stop/restart` | Implemented / same-host execution first | Plan/doctor include preflight checks plus role model, role-policy, managed endpoint, endpoint TLS/auth/gateway, and risky tool-policy checks; managed-service endpoints can be represented for export/orchestrator use but are not self-managed runtime-fit candidates; optional orchestrator role metadata can bind reviewed model aliases to planner/coder/reviewer-style roles with approval, audit, limit, and tool-policy labels; export includes IDE/packaging artifacts plus framework starter metadata; remote/AKS execution remains guarded/planned. |
+| Orchestrators | `orchestrators list/show/doctor/setup` | Catalog/readiness implemented | Stacks remain the operational binding point; agent manifests and framework-specific topology/readiness starters capture reviewed role bindings without running agents. |
+| Stacks | `stacks setup/list/show/plan/doctor/endpoint-plan/status/export/prepare/start/stop/restart` | Implemented / same-host execution first | Plan/doctor include preflight, role-policy, managed endpoint, endpoint security, and risky tool-policy checks. Every executable lifecycle mutation requires `--yes`; remote/AKS actions remain plans. Docker Model Runner uses exact native commands, alias/native-id resolution, its conventional endpoint, and runtime evidence. Exports include IDE/packaging artifacts plus framework starters. |
 | Integrations | `integrations list/roles/plan/setup/export` | Implemented / hardening | Config/export first; no target tool files are edited. Tier-1 v1 now includes Codex named-profile TOML, canonical Copilot CLI JSON with POSIX/PowerShell renderers, and Copilot-in-VS-Code Custom Endpoint JSON alongside Continue, Aider, generic OpenAI-compatible, and generic MCP. Host-client plans expose alias/native model identity, API compatibility, token limits, tool-calling, and streaming metadata; known incompatibilities fail and unknowns warn. `setup` prepares only the selected runtime/model, `--from-plan` replays the saved decision, and raw secret values are never exported. |
 | Prompt execution + assistant launch/session | `run`, `tool [--yes] TOOL [ARGS...]`, `chat`, `bridge list/exec`, `launch`, `session start` | Implemented / hardening | `tool` enforces the profile allowlist and workspace boundary; risky tools require interactive approval or explicit per-invocation `--yes` and fail closed without a TTY. `run` sends one prompt through profile policy and currently supports Ollama, OpenAI-compatible chat completions, Azure OpenAI chat completions, and Anthropic Messages; unsupported protocols fail explicitly. `chat` now uses the same endpoint-backed protocol path by default for chat-capable aliases, can read `--prompt`/`--stdin` or an interactive TTY prompt loop, rejects non-chat-capable aliases clearly, and keeps Ollama's native `ollama run` path behind `--native-ollama`. `bridge` is a strict allowlisted runtime CLI relay (currently Ollama actions) with shorthand actions and no arbitrary shell passthrough. `launch` now renders and can execute thin, profile-driven wrappers for supported tools (`continue`, `ollama`, `aider`), applying the same integration and policy checks as export/setup workflows. `session start` persists minimal launch metadata plus transcript path and writes local audit events for session lifecycle traceability without implementing a chat product. |
-| Agents | `agents templates/plan/manifest/export` plus `skills/aiplane/SKILL.md` | Versioned manifest and scaffold guidance implemented | Prints non-mutating starter files and a schema-linked agent-environment manifest rendered from direct profile selection or stack YAML. It preserves multi-role identities, endpoints, policy, approvals, limits, audit labels, and credential references without secrets, writes, or agent execution. |
+| Agents | `agents templates/plan/manifest/export` plus `skills/aiplane/SKILL.md` | Versioned manifest and framework starter guidance implemented | Prints non-mutating starter files, a schema-linked agent-environment manifest, and framework-specific topology/readiness YAML for seven supported targets. It preserves multi-role identities, endpoints, policy, approvals, limits, audit labels, and credential references without secrets, writes, package installation, or agent execution. |
 | Remote | `remote tunnel plan/start/status/stop` | Implemented / guarded | SSH targets use strict DNS/IP, username, port, and credential-free HTTP(S) endpoint validation; option-like destinations fail before argv construction. Tunnel lifecycle uses collision-resistant versioned state and verifies process identity before signalling; stale/reused PIDs are never killed and malformed state fails closed. On Windows, lifecycle status/start/stop return `unsupported_platform` before process or state access; tunnel planning remains portable. |
 | Deploy | `deploy list/show/workflow-plan/plan/doctor/apply --yes` | Partial / guarded | `workflow-plan` classifies local install, local VM, remote workstation/VM, cloud VM, and cloud Kubernetes boundaries without mutation; Azure VM narrow apply requires explicit `--yes`; broad AKS/cloud apply remains planned. |
 | MCP | `mcp manifest/serve [--allow-writes]` | Implemented / guarded | The server is read-only by default; narrow writes require operator `--allow-writes` plus per-call `confirm=true`, with blocked/allowed/failed audit outcomes. Read tools exist; providers list supports status/runtime filters and ownership/runtime grouping; model list named-machine/current-machine filters, machines list/show/recommend, stacks list/show/plan/doctor/export, integrations roles/plan, and orchestrators list/show are exposed as safe read/planning tools; broad mutation and arbitrary local machine-file reads remain out of scope. |
-| Audit/policy | `audit tail`, `policy explain` | Implemented | Audit appends are IPC-serialized and fsynced; secret sanitation covers structured keys, command flags, token forms, and PEM values. Tool audit stores metadata instead of raw arguments, output, or exception messages. `audit tail` skips malformed or interrupted JSONL records, preserves valid-event limits, keeps stdout machine-readable, and emits metadata-only recovery warnings on stderr. Policy decisions remain explainable for `cloud_escalation`/`backend:cloud`, `provider:<name>`, and `model:<alias>` actions. |
+| Audit/policy | `audit tail`, `policy explain/list/grant/revoke/drift` | Implemented | Audit appends are IPC-serialized and fsynced; secret sanitation covers structured keys, command flags, token forms, and PEM values. Policy decisions are explainable for canonical tool/provider/model/backend actions. Ignored workspace-local grants are action-scoped, audited, expiring, require explicit confirmation, distinguish approval from override, report stale/expired drift, and fail closed on malformed state without rewriting profile policy. |
 
 ## Roadmap
 
@@ -850,7 +855,7 @@ P0.8 public profile schema v1 is implemented with external validation and canoni
 - Strict allowlisted runtime bridge commands (`bridge list/exec`) for delegating selected native runtime CLIs by shorthand action without exposing arbitrary shell passthrough.
 - Integration role inspection plus plan/setup/export for Continue, Cline, Zed, Aider, generic OpenAI-compatible clients, and MCP client snippets; setup can dry-run or execute supported helper install/start/pull actions for selected runtime/model aliases and skips unsupported source/runtime pull combinations with an explicit reason.
 - MCP stdio server with read tools and narrow guarded writes for model defaults, hardware selection, runtime preference, model refresh, and SSH tunnel lifecycle. Read/planning tools cover models, providers, hardware, machine recommendations, stack inspection/planning/doctor checks, integrations, orchestrators, runtime status, and tunnel plans.
-- Policy checks, approval handling, secret redaction, JSONL audit foundations, and shared JSON output ordering.
+- Policy checks, expiring action-scoped local approvals/overrides, drift reporting, secret redaction, JSONL audit foundations, and shared JSON output ordering.
 
 ### In Progress
 
@@ -859,7 +864,7 @@ P0.8 public profile schema v1 is implemented with external validation and canoni
 - Tool integrations: doctors, install previews, plans, and starter exports exist; provider-specific modules/playbooks/templates remain planned.
 - Azure deployment: planning, doctor checks, and narrow VM apply exist; broader AKS/cloud apply needs hardening before expansion.
 - MCP governance: read tools and audited narrow writes exist; broader write tools require explicit risk controls.
-- Benchmarking: versioned smoke/custom suites, repeat summaries, safe built-in graders, explicit opt-in command graders, external measurement import, and role comparison exist; native backend TTFT/token telemetry, cross-runtime comparison views, and sandboxed code execution remain planned.
+- Benchmarking: versioned smoke/custom suites, repeat summaries, safe built-in graders, explicit opt-in command graders, external measurement import, role comparison, and comparable saved-evidence views across runtime/model/machine/quantization/context exist; native backend TTFT/token telemetry remains adapter-dependent and sandboxed code execution remains planned.
 - IDE/CLI integration: Tier-1 print-only Codex, Copilot CLI, and Copilot-in-VS-Code exports now cover local and compatible managed endpoints; deeper Cursor, JetBrains, Windsurf, and Claude Code integration remains research/planned.
 
 ### Planned Milestones
@@ -883,7 +888,7 @@ P0.8 public profile schema v1 is implemented with external validation and canoni
 3. **Orchestrator and multi-agent workflow metadata** - Implemented / hardening
    - Stack setup can carry optional role metadata such as planner, coder, reviewer, researcher, tool-runner, and summarizer while preserving one primary lifecycle model for runtime install/pull/start actions.
    - Role metadata binds reviewed model aliases to provider/runtime or managed endpoint ownership plus tool policy, approval mode, limits, and audit labels; stack plan/doctor/status/export surface the metadata, and doctor warns on disabled role models, missing managed endpoints, and risky tool-policy/approval combinations.
-   - Framework starter exports now emit reviewed role/endpoint/tool/approval/audit metadata for LangGraph, CrewAI, AutoGen, Semantic Kernel, LlamaIndex Workflows, and OpenHands; next harden framework-specific templates where stable APIs justify it.
+   - Framework starter exports emit reviewed role/endpoint/tool/approval/audit metadata plus framework-specific topology and readiness for LangGraph, CrewAI, AutoGen, Semantic Kernel, LlamaIndex Workflows, OpenHands, and the simple OpenAI-compatible client. They remain render-only Aiplane metadata rather than claims of native framework project generation.
    - Completed: schema-linked agent-environment manifests render from direct profile selection or stack YAML, preserving model identities, endpoints, role bindings, tool policy, approvals, limits, audit labels, and credential references. JSON/YAML exports and the MCP read tool are secret-free and explicitly non-executing.
    - Validate agent-environment planning and export against the supported local runner matrix so Ollama, llama.cpp, MLX, Docker Model Runner, LM Studio, and vLLM endpoints can be selected where their protocol and model capabilities satisfy the target framework.
    - Keep `aiplane` as setup/config/policy/export, not the autonomous multi-agent runner.
@@ -905,33 +910,35 @@ P0.8 public profile schema v1 is implemented with external validation and canoni
    - Stack endpoint planning now records endpoint auth/TLS/gateway hints, surfaces `stacks endpoint-plan`, and feeds plan/doctor checks for public/shared endpoint readiness.
    - Stacks can bind managed-service model endpoints where the runtime field represents a hosted protocol or endpoint contract, while keeping those entries out of self-managed runtime fit checks.
    - Remote execution boundaries remain explicit for SSH/Azure/AKS stacks; non-local lifecycle commands still return plans rather than executing.
-   - Docker-aware stack lifecycle paths remain the next hardening area after same-host helper execution and endpoint planning.
+   - Docker-aware same-host stack lifecycle is implemented with explicit `--yes`, exact native `docker model` commands, alias-to-native-id resolution, the conventional engine endpoint, and runtime evidence in plan/status results. Remote execution and supported-platform live acceptance remain separate work.
    - Completed at contract and adapter level: Docker Model Runner detection, inventory, identity, fit inputs, health, endpoint export, benchmark, and guarded lifecycle use its native command boundary; supported-platform live acceptance remains open.
    - Maintain the implemented `runtimes capabilities` contract for Ollama, llama.cpp, MLX, Docker Model Runner, LM Studio, and vLLM. Track separately: platform detection, installed-model inventory, alias/native-ID resolution, model-fit assessment, health/readiness, endpoint export, benchmark support, and guarded install/pull/start/stop operations.
    - Close inspection and configuration gaps before adding mutation: first normalize discovery, inventory, identity mapping, fit, endpoint, and doctor behavior for all six runners; then add lifecycle helpers only where the vendor exposes a stable, documented, testable command or API.
    - Treat remote endpoints independently from local installation. Ollama, Docker Model Runner, LM Studio, llama-server, MLX servers, and vLLM may be used through configured endpoints even when their local lifecycle is unsupported on the current platform.
    - Completed: artifact-lock and external-runner launch-manifest contracts are integrated into pull previews, stack plan/doctor, benchmark records, replay comparisons, and lifecycle results. Keep vendor commands exact and previewable; do not reinterpret a launch plan as permission to install a runtime, bind a public port, or copy model weights.
 
-6. **Cloud, VM, and workstation workflow hardening** - Implemented foundation / in progress
+6. **Cloud, VM, and workstation workflow hardening** - Implementation complete / live-provider review ongoing
    - Use OpenTofu as the default provider-agnostic IaC target, Terraform as a compatible alternative, and Pulumi as an optional language-native IaC path.
-   - Harden Vagrant, Packer, Ansible, Dev Container, and IaC starter exports into provider-specific workflows.
+   - Completed: `deploy render` emits deterministic, schema-linked and checksummed target-specific families. Azure VM uses reviewed OpenTofu/Terraform-compatible HCL, an Azure Packer starter, Ansible inventory, and a baseline playbook; AKS emits Azure infrastructure HCL and delegates workload files to the existing Kubernetes renderer; SSH/local VM/local install paths emit Ansible, Vagrant, or Dev Container artifacts as appropriate.
    - Keep local install, local VM provisioning, remote VM provisioning, remote PC setup, and cloud provisioning distinct. `deploy workflow-plan` now exposes those boundaries and recommended tool ownership.
    - Keep mutating target bootstrap behind explicit confirmation; `deploy apply` requires `--yes` and broad cloud apply remains out of scope until provider-specific guardrails are ready.
    - Completed: render-only Kubernetes `ResourceClaim`, `Deployment`, `Service`, and Helm values are deterministic, secret-free, reviewable, schema-linked, and non-mutating. Applying generated artifacts remains a separate future capability behind explicit human review and approval.
    - Keep public demo paths focused on repeatable local, endpoint, MCP, stack, and Azure discovery workflows without unsafe mutation.
 
-7. **Tool/task matrix and setup doctor expansion** - In progress
+7. **Tool/task matrix and setup doctor expansion** - Implemented / requirements grow with integrations
    - Keep `environment doctor` as the default human setup check with text output.
    - Keep every external tool mapped to the workflows it enables, whether it is mandatory or optional, and whether `aiplane` can attempt installation.
    - Grow doctor scope as new tool families are integrated without turning optional workflows into mandatory prerequisites.
+   - Completed: `tools matrix --workflow` and `environment doctor --workflow` use explicit end-user workflow contracts. Mandatory tools, optional tools, and any-of alternatives are distinct, so unrelated workflows remain optional and cloud users need one reviewed IaC path rather than every supported IaC CLI.
    - Keep workflow-level readiness summaries in `tools matrix` useful for release review and demos.
 
 #### Later Expansion
 
-8. **Runtime packaging and deployment reproducibility** - Implemented contract / live evidence ongoing
+8. **Runtime packaging and deployment reproducibility** - Implementation complete / live-platform evidence separate
    - Six-runner capability coverage and MLX metadata/launch planning are implemented; live platform evidence and deeper vendor-specific tuning remain ongoing.
-   - Add deterministic compatibility fixtures and installed-wheel smoke checks for the six-runner matrix without requiring every runner on every CI host. Platform-specific live checks should supplement, not replace, synthetic contract coverage.
-   - Broaden tests for stack export content across runtime/orchestrator combinations.
+   - Completed: deterministic synthetic coverage exercises all six runners without requiring every vendor runtime on every CI host. Platform-specific live checks supplement, rather than replace, the contract suite.
+   - Completed at runtime-bundle boundary: auto mode resolves to an honest Docker, Conda, or native handoff per runner; unsupported substrate requests fail clearly; generated files are deterministic and checksummed. MLX does not claim Linux-container support, while Docker Model Runner and LM Studio do not claim standalone Docker/Conda packaging.
+   - Completed: deterministic stack framework export coverage crosses all six primary runners with LangGraph, CrewAI, and AutoGen bindings, while vendor-client live smoke remains a separate compatibility check.
    - Completed at render-contract level: runtime bundles include conventional ports, named cache mounts, explicit GPU selectors, environment/auth variable references, context and tensor-parallel settings, with validation that prevents embedded environment values.
    - Keep image builds, registry pushes, VM creation, and cloud apply explicit and previewable.
 
@@ -946,7 +953,7 @@ P0.8 public profile schema v1 is implemented with external validation and canoni
    - Implemented: versioned placement and scoring schemas keep hard compatibility, resource estimates, measured evidence, configured task suitability, policy, confidence, weights, contributions, missing-evidence coverage and declarative extensions distinct.
    - Implemented foundation: parameter/quantization weight estimates, architecture-aware KV cache, context, runtime workspace, single GPU, homogeneous multi-GPU, CPU offload and CPU-only modes produce assumptions, blockers and near-miss evidence. Artifact locks and more architecture metadata will improve precision.
    - Implemented: repeated suite runs and imported measurements preserve runtime/model settings, environment fingerprints, decoding, pass rate, robust summaries, uncertainty and comparability metadata. Native runner TTFT/token telemetry remains backend-dependent and unresolved where APIs do not expose it.
-   - Add inspectable local calibration plus comparison views across models, runtimes, machines, quantizations, and contexts; never require benchmark evidence for deterministic fallback behavior.
+   - Implemented: inspectable comparison views group saved evidence across models, runtimes, machines, quantizations, and contexts, emit leaders only for explicit comparable groups with at least two values, and require exact telemetry provenance for TTFT leaders. Benchmark evidence remains optional for deterministic fallback behavior.
    - Add near-miss explanations and confidence/provenance fields to recommendation and doctor output.
    - Keep role/task-quality evaluation separate from throughput and placement; prefer executable or schema-based custom graders, and label built-in keyword checks as smoke evidence.
    - Implemented: portable versioned JSON/YAML benchmark suites with deterministic validation and a safe grader allowlist. Command graders require an explicit suite opt-in and are documented as trusted local execution, not a sandbox.
@@ -977,7 +984,7 @@ P0.8 public profile schema v1 is implemented with external validation and canoni
 - Direct agent-to-agent runtime execution inside `aiplane`; near-term support should be config, stack binding, policy, and export for established orchestrator frameworks.
 - Broad cloud deployment apply for AKS/AWS/generic Kubernetes.
 - Production-grade API gateway/auth management for shared endpoints.
-- Native backend TTFT/token telemetry, cross-runtime comparison views, representative cross-machine calibration, and broader consumption of artifact/launch evidence by pull, stack, replay, and lifecycle helpers.
+- Native backend TTFT/token telemetry, representative cross-machine calibration, and broader consumption of artifact/launch evidence by pull, stack, replay, and lifecycle helpers.
 - Node REST scheduling API and community benchmark exchange remain research decisions, not committed product surfaces.
 - Arbitrary shell execution through MCP.
 
@@ -1122,10 +1129,10 @@ chat UI before the provider/session contracts are stable.
    - The MCP stdio server is implemented and should remain the first structured tool surface.
    - A local HTTP service should only be added if multiple clients need it.
 
-6. **Agent-to-agent setup and export - Partial / next hardening focus**
-   - Implemented today: orchestrator catalog/readiness, package/setup scaffolding, stack binding to an optional orchestrator, and starter agent exports.
-   - Next target shape: describe agent roles, model aliases, managed or self-managed endpoints, tool policies, approval modes, limits, and audit labels in profile/stack/orchestrator metadata.
-   - Export starter configuration for established orchestrator frameworks instead of running autonomous agent conversations inside `aiplane`.
+6. **Agent-to-agent setup and export - Implemented configuration foundation / live validation ongoing**
+   - Implemented today: orchestrator catalog/readiness, package/setup scaffolding, stack binding, schema-linked secret-free agent manifests, and framework-specific topology/readiness starter exports.
+   - Role bindings describe model aliases/native ids, managed or self-managed endpoints, tool policies, approval modes, limits, audit labels, and credential references without secret values.
+   - Export starter configuration for established orchestrator frameworks; live framework-version validation is ongoing, and autonomous agent execution remains outside `aiplane`.
    - Managed-service models are valid endpoint choices for this layer when the orchestrator can call them directly; they should not be treated as local runtime candidates.
 
 ### Integration Matrix
@@ -1146,8 +1153,8 @@ provisioners, model runtimes, or configuration-management engines.
 | Codex CLI / Claude Code / Copilot-style tools | Existing agentic CLI or IDE tools. | Possible launch wrappers and environment/config handoff only. | Planned/research. |
 | Ollama | Local/self-managed runtime and optional native CLI chat. | Install/update/start/stop/status/pull helpers; endpoint-backed `aiplane chat` by default, with `--native-ollama` delegating to `ollama run`. | Implemented for core flow. |
 | vLLM / llama.cpp / TGI / LocalAI / LM Studio | Self-managed model serving runtimes. | Runtime catalog, setup helpers where practical, endpoint export, stack lifecycle planning. | Partial/ongoing. |
-| LangGraph / CrewAI / AutoGen / OpenHands / Semantic Kernel / LlamaIndex Workflows | Agent/workflow orchestration frameworks on top of model endpoints, including future agent-to-agent role graphs. | Catalog/readiness metadata now; stack binding and package/export support; planned multi-agent role metadata; no custom agent runner yet. | Partial/ongoing. |
-| Docker / Compose | Reproducible local or VM-hosted runtime stacks. | Tool doctor/install hints, stack artifact export, future Docker-aware lifecycle execution. | Partial/ongoing. |
+| LangGraph / CrewAI / AutoGen / OpenHands / Semantic Kernel / LlamaIndex Workflows | Agent/workflow orchestration frameworks on top of model endpoints. | Catalog/readiness, role-aware stack binding, secret-free agent manifests, and framework-specific render-only starters; no custom agent runner. | Implemented configuration foundation / live validation ongoing. |
+| Docker / Compose | Reproducible local or VM-hosted runtime stacks. | Tool doctor/install hints, stack artifacts, Compose export, and native Docker Model Runner same-host lifecycle with explicit confirmation. | Implemented foundation / live validation ongoing. |
 | Azure CLI | Account, quota, SKU, VM/AKS discovery, and guarded Azure operations. | Tool doctor/install helper, CLI wrapper, profile-driven planning/apply for narrow VM flows. | Partial/ongoing. |
 | OpenTofu / Terraform | Repeatable VM/AKS infrastructure provisioning without reinventing IaC. | Generate variables/modules or starter plans, call official CLI, keep apply guarded. | Planned. |
 | kubectl / Helm | AKS/Kubernetes runtime deployment and inspection. | Tool doctor/install helper, generated manifests/charts or value files, guarded apply later. | Planned. |
@@ -1462,7 +1469,7 @@ Only after public verification and independent demonstrations:
 
 ## External Trial Evidence
 
-Use one sanitized JSON record for every P0 workflow rehearsal and independent-user trial. Copy [`trial-evidence/template.json`](trial-evidence/template.json), fill every field, and validate it before sharing:
+Use the [Field Evidence Collection Runbook](../user/evidence-collection.md) for the copy-paste capture procedure. Use one sanitized JSON record for every P0 workflow rehearsal and independent-user trial. Copy [`trial-evidence/template.json`](trial-evidence/template.json), fill every field, and validate it before sharing:
 
 ```bash
 python scripts/validate_trial_evidence.py path/to/trial.json

@@ -21,7 +21,7 @@ def add_deploy_remote_parsers(
         "deploy",
         "Plan/check/apply remote deployment targets",
         "Work with configured cloud/shared deployment targets. Apply is guarded and intentionally narrow.",
-        "Examples:\n  aiplane deploy list\n  aiplane deploy workflow-plan --target azure_gpu_vm\n  aiplane deploy plan --target aks_gpu_pool\n  aiplane deploy doctor --target aks_gpu_pool\n  aiplane deploy apply --target aks_gpu_pool --yes",
+        "Examples:\n  aiplane deploy list\n  aiplane deploy workflow-plan --target azure_gpu_vm\n  aiplane deploy render --target azure_gpu_vm\n  aiplane deploy plan --target aks_gpu_pool\n  aiplane deploy doctor --target aks_gpu_pool\n  aiplane deploy apply --target aks_gpu_pool --yes",
     )
     deploy_sub = deploy_cmd.add_subparsers(dest="deploy_command", required=True, metavar="command")
     deploy_list = deploy_sub.add_parser(
@@ -47,6 +47,15 @@ def add_deploy_remote_parsers(
     )
     profile_arg(deploy_workflow)
     deploy_workflow.add_argument("--target", help="Target name; defaults to profile target default")
+    deploy_render = deploy_sub.add_parser(
+        "render",
+        help="Render target-specific starter artifacts",
+        description="Render deterministic, secret-free IaC, image, VM, or host-configuration starters without applying them.",
+        formatter_class=formatter_class,
+    )
+    profile_arg(deploy_render)
+    deploy_render.add_argument("--target", help="Target name; defaults to profile target default")
+    deploy_render.add_argument("--file", help="Print one rendered file instead of the JSON artifact family")
     deploy_plan = deploy_sub.add_parser(
         "plan",
         help="Render deployment plan",
@@ -143,6 +152,14 @@ def handle_deploy_remote_command(
             payload = manager.show(args.target)
         elif args.deploy_command == "workflow-plan":
             payload = manager.workflow_plan(args.target)
+        elif args.deploy_command == "render":
+            payload = manager.render(args.target)
+            if args.file:
+                files = payload["files"]
+                if args.file not in files:
+                    raise ValueError(f"unknown rendered file: {args.file}; available: {', '.join(files)}")
+                print(files[args.file], end="")
+                return 0
         elif args.deploy_command == "plan":
             payload = manager.plan(args.target)
         elif args.deploy_command == "doctor":

@@ -5,8 +5,10 @@ import socket
 from typing import Any
 
 from .boundaries import CommandRunner, SubprocessCommandRunner
+from .agent_frameworks import render_framework_starter
 from .persistence import atomic_write_text
 from .config import dump_yaml, provider_helper_path
+from .docker_model_runner import DockerModelRunner
 from .env import EnvironmentManager
 from .integrations import IntegrationManager
 from .machines import MachineManager
@@ -260,12 +262,24 @@ class StackManager:
                 "mutates": False,
             },
         ]
+        if runtime == "docker_model_runner":
+            native_model = str(model.get("model") or "")
+            for step in steps:
+                if step.get("name") == "install or update runtime":
+                    step["command"] = DockerModelRunner.command("install", model=native_model)
+                elif step.get("name") == "pull model":
+                    step["command"] = DockerModelRunner.command("pull", model=native_model)
+                elif step.get("name") == "start runtime":
+                    step["command"] = DockerModelRunner.command("start", model=native_model)
+                if step.get("command") and step.get("mutates"):
+                    step["adapter"] = "docker_model_runner"
+
         if orchestrator:
             steps.insert(
                 1,
                 {
                     "name": "prepare orchestrator environment",
-                    "command": ["aiplane", "stacks", "prepare", name],
+                    "command": ["aiplane", "stacks", "prepare", name, "--yes"],
                     "mutates": True,
                 },
             )
@@ -449,17 +463,17 @@ class StackManager:
             }
         raise ValueError(f"unknown stack export artifact: {artifact}")
 
-    def prepare(self, name: str, dry_run: bool = False) -> dict[str, Any]:
-        return self._lifecycle(name, "prepare", dry_run=dry_run)
+    def prepare(self, name: str, dry_run: bool = False, yes: bool = False) -> dict[str, Any]:
+        return self._lifecycle(name, "prepare", dry_run=dry_run, yes=yes)
 
-    def start(self, name: str, dry_run: bool = False) -> dict[str, Any]:
-        return self._lifecycle(name, "start", dry_run=dry_run)
+    def start(self, name: str, dry_run: bool = False, yes: bool = False) -> dict[str, Any]:
+        return self._lifecycle(name, "start", dry_run=dry_run, yes=yes)
 
-    def stop(self, name: str, dry_run: bool = False) -> dict[str, Any]:
-        return self._lifecycle(name, "stop", dry_run=dry_run)
+    def stop(self, name: str, dry_run: bool = False, yes: bool = False) -> dict[str, Any]:
+        return self._lifecycle(name, "stop", dry_run=dry_run, yes=yes)
 
-    def restart(self, name: str, dry_run: bool = False) -> dict[str, Any]:
-        return self._lifecycle(name, "restart", dry_run=dry_run)
+    def restart(self, name: str, dry_run: bool = False, yes: bool = False) -> dict[str, Any]:
+        return self._lifecycle(name, "restart", dry_run=dry_run, yes=yes)
 
     def status(self, name: str) -> dict[str, Any]:
         stack = self._stack(name)
@@ -469,7 +483,11 @@ class StackManager:
             "name": name,
             "orchestrator": orchestrator or None,
             "runtime": runtime,
+            "runtime_substrate": RuntimeCatalog(self.profile).helper_substrate(
+                runtime, str(stack.get("runtime_substrate") or "") or None
+            ),
             "model": stack.get("model"),
+            "runtime_evidence": RuntimeCatalog(self.profile).evidence_bundle(runtime, str(stack.get("model") or "")),
             "machine": stack.get("machine"),
             "limits": stack.get("limits", {}),
             "tools": stack.get("tools", {}),
@@ -665,8 +683,8 @@ class StackManager:
     def _role_checks(self, roles: object) -> list[dict[str, Any]]:
         return self._role_planner()._role_checks(roles)
 
-    def _lifecycle(self, name: str, action: str, dry_run: bool = False) -> dict[str, Any]:
-        return StackLifecycle(self)._lifecycle(name, action, dry_run)
+    def _lifecycle(self, name: str, action: str, dry_run: bool = False, yes: bool = False) -> dict[str, Any]:
+        return StackLifecycle(self)._lifecycle(name, action, dry_run, yes)
 
     def deploy(self, name: str, yes: bool = False) -> dict[str, Any]:
         return StackLifecycle(self).deploy(name, yes)
@@ -853,30 +871,7 @@ def _is_local_endpoint(endpoint: str) -> bool:
 
 
 def _framework_starter_config(framework: str, metadata: dict[str, Any]) -> str:
-    payload = {
-        "generated_by": "aiplane stacks export",
-        "kind": "orchestrator_framework_starter",
-        "framework": framework,
-        "stack": metadata.get("name"),
-        "profile": metadata.get("profile"),
-        "orchestrator": metadata.get("orchestrator") or framework,
-        "primary": {
-            "model": metadata.get("model"),
-            "runtime": metadata.get("runtime"),
-            "endpoint": metadata.get("endpoint"),
-            "machine": metadata.get("machine"),
-        },
-        "roles": metadata.get("roles", {}),
-        "limits": metadata.get("limits", {}),
-        "tools": metadata.get("tools", {}),
-        "approval_mode": metadata.get("approval_mode") or "ask",
-        "audit_label": metadata.get("audit_label") or metadata.get("name"),
-        "notes": [
-            "Review and adapt this starter config to the target framework API.",
-            "aiplane does not run autonomous agent workflows from this export.",
-        ],
-    }
-    return dump_yaml(payload)
+    return render_framework_starter(framework, metadata)
 
 
 def _merge_bundle_content(
@@ -1034,6 +1029,8 @@ def _default_endpoint(runtime: str) -> str:
         return str(provider_default.get("endpoint"))
     if runtime == "ollama":
         return "http://localhost:11434/v1"
+    if runtime == "docker_model_runner":
+        return "http://localhost:12434/engines/v1"
     if runtime == "vllm":
         return "http://localhost:8000/v1"
     if runtime == "llamacpp":

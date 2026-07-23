@@ -64,6 +64,7 @@ script-files = ["scripts/provider_helper.sh", "scripts/ollama_helper.sh"]
   "schemas/aiplane-runtime-bundle-v1.schema.json",
   "schemas/aiplane-agent-environment-v1.schema.json",
   "schemas/aiplane-kubernetes-artifacts-v1.schema.json",
+  "schemas/aiplane-deployment-artifacts-v1.schema.json",
 ]
 "profile-templates/local-dev" = [
   "profile-templates/local-dev/approvals.yaml",

@@ -15,7 +15,7 @@ from .models import AuditEvent, Profile
 from .platform_support import detect_host_platform
 from .policy import PolicyEngine
 from .runtime_catalog import RuntimeCatalog
-from .tool_catalog import CORE_TOOLCHAIN, TOOLCHAIN, TOOL_WORKFLOWS
+from .tool_catalog import CORE_TOOLCHAIN, TOOLCHAIN, TOOL_WORKFLOWS, WORKFLOW_REQUIREMENTS
 
 
 class ToolExecutor:
@@ -148,16 +148,33 @@ class ToolchainManager:
     def list(self) -> list[dict[str, object]]:
         return [self._tool_row(name) for name in sorted(TOOLCHAIN)]
 
-    def matrix(self) -> dict[str, object]:
+    def matrix(self, workflow: str | None = None) -> dict[str, object]:
+        if workflow is not None and workflow not in WORKFLOW_REQUIREMENTS:
+            choices = ", ".join(sorted(WORKFLOW_REQUIREMENTS))
+            raise ValueError(f"unknown workflow: {workflow}; available: {choices}")
+        if workflow is None:
+            source_rows = self.list()
+        else:
+            spec = WORKFLOW_REQUIREMENTS[workflow]
+            selected_tools = list(
+                dict.fromkeys(
+                    [
+                        *[str(value) for value in spec.get("required", [])],
+                        *[str(value) for group in spec.get("any_of", []) for value in group],
+                        *[str(value) for value in spec.get("optional", [])],
+                    ]
+                )
+            )
+            source_rows = [self._tool_row(name) for name in selected_tools]
         rows = []
-        for row in self.list():
+        for row in source_rows:
             name = str(row["name"])
-            workflow = TOOL_WORKFLOWS.get(name, {})
+            tool_workflow = TOOL_WORKFLOWS.get(name, {})
             rows.append(
                 {
                     "name": name,
                     "category": row.get("category"),
-                    "task": workflow.get("task") or row.get("category"),
+                    "task": tool_workflow.get("task") or row.get("category"),
                     "needed_for": row.get("needed_for", []),
                     "requirement": row.get("requirement"),
                     "installed": row.get("installed"),
@@ -194,9 +211,16 @@ class ToolchainManager:
                     "missing_tools": [str(row["name"]) for row in missing],
                 }
             )
+        rows_by_name = {str(row["name"]): row for row in rows}
+        task_workflows = [
+            self._workflow_readiness(name, rows_by_name)
+            for name in sorted(WORKFLOW_REQUIREMENTS)
+            if workflow is None or name == workflow
+        ]
         return {
             "name": "tools_matrix",
             "profile": self.profile.name,
+            "selected_workflow": workflow,
             "summary": {
                 "tools": len(rows),
                 "mandatory": sum(1 for row in rows if row.get("requirement") == "mandatory"),
@@ -209,7 +233,50 @@ class ToolchainManager:
                 "workflows_needing_setup": sum(1 for row in workflows if row.get("readiness") == "needs_setup"),
             },
             "workflows": workflows,
+            "task_workflows": task_workflows,
             "categories": categories,
+        }
+
+    def _workflow_readiness(
+        self,
+        name: str,
+        known_rows: dict[str, dict[str, object]] | None = None,
+    ) -> dict[str, object]:
+        spec = WORKFLOW_REQUIREMENTS[name]
+        required = [str(value) for value in spec.get("required", [])]
+        any_of = [[str(value) for value in group] for group in spec.get("any_of", [])]
+        optional = [str(value) for value in spec.get("optional", [])]
+        names = list(dict.fromkeys([*required, *(item for group in any_of for item in group), *optional]))
+        known_rows = known_rows or {}
+        rows = {tool: dict(known_rows.get(tool) or self._tool_row(tool)) for tool in names}
+        for tool, row in rows.items():
+            row["catalog_requirement"] = row.get("requirement")
+            if tool in required:
+                row["requirement"] = "mandatory"
+            elif any(tool in group for group in any_of):
+                row["requirement"] = "alternative"
+            else:
+                row["requirement"] = "optional"
+        missing_required = [tool for tool in required if not rows[tool]["installed"]]
+        unsatisfied = [group for group in any_of if not any(rows[tool]["installed"] for tool in group)]
+        ready = not missing_required and not unsatisfied
+        next_actions = []
+        for tool in missing_required:
+            next_actions.append(f"aiplane tools install {tool} --dry-run")
+        for group in unsatisfied:
+            next_actions.append("install one of: " + ", ".join(group))
+        return {
+            "name": name,
+            "summary": spec.get("summary"),
+            "readiness": "ready" if ready else "needs_setup",
+            "required": required,
+            "required_any_of": any_of,
+            "optional": optional,
+            "runtimes": list(spec.get("runtimes", [])),
+            "missing_required": missing_required,
+            "unsatisfied_alternatives": unsatisfied,
+            "next_actions": next_actions,
+            "tools": [rows[tool] for tool in names],
         }
 
     def tool_status(self, name: str) -> dict[str, object]:
@@ -219,17 +286,44 @@ class ToolchainManager:
         self,
         include_optional: bool = True,
         progress: Callable[[str], None] | None = None,
+        workflow: str | None = None,
     ) -> dict[str, object]:
-        tool_names = sorted(TOOLCHAIN) if include_optional else CORE_TOOLCHAIN
+        workflow_readiness = None
+        if workflow is not None:
+            if workflow not in WORKFLOW_REQUIREMENTS:
+                choices = ", ".join(sorted(WORKFLOW_REQUIREMENTS))
+                raise ValueError(f"unknown workflow: {workflow}; available: {choices}")
+            spec = WORKFLOW_REQUIREMENTS[workflow]
+            required = [str(value) for value in spec.get("required", [])]
+            alternatives = [str(value) for group in spec.get("any_of", []) for value in group]
+            optional = [str(value) for value in spec.get("optional", [])] if include_optional else []
+            tool_names = list(dict.fromkeys([*required, *alternatives, *optional]))
+        else:
+            tool_names = sorted(TOOLCHAIN) if include_optional else CORE_TOOLCHAIN
         rows = []
         for name in tool_names:
             if progress:
                 progress(f"checking tool {name}")
-            rows.append(self._tool_row(name))
+            row = self._tool_row(name)
+            if workflow is not None:
+                spec = WORKFLOW_REQUIREMENTS[workflow]
+                if name in spec.get("required", []):
+                    row["requirement"] = "mandatory"
+                elif any(name in group for group in spec.get("any_of", [])):
+                    row["requirement"] = "alternative"
+                else:
+                    row["requirement"] = "optional"
+            rows.append(row)
+        if workflow is not None:
+            workflow_readiness = self._workflow_readiness(
+                workflow,
+                {str(row["name"]): row for row in rows},
+            )
         runtime_rows = _runtime_prerequisite_rows(
             self.profile,
             include_optional=include_optional,
             progress=progress,
+            runtimes=(list(WORKFLOW_REQUIREMENTS[workflow].get("runtimes", [])) if workflow else None),
         )
         installable_missing = [row for row in rows if not row["installed"] and row.get("install_mode") == "automated"]
         manual_missing = [row for row in rows if not row["installed"] and row.get("install_mode") != "automated"]
@@ -238,6 +332,8 @@ class ToolchainManager:
         return {
             "name": "environment_doctor",
             "profile": self.profile.name,
+            "workflow": workflow,
+            "workflow_readiness": workflow_readiness,
             "active_environment": EnvironmentManager(self.profile).show(),
             "platform": _platform_info(),
             "summary": {
@@ -488,15 +584,25 @@ variable "vm_name" {
   default = "aiplane-ubuntu-dev"
 }
 
+variable "ssh_username" {
+  type    = string
+  default = "ubuntu"
+}
+
+variable "ssh_password" {
+  type      = string
+  sensitive = true
+}
+
 source "virtualbox-iso" "ubuntu" {
   vm_name       = var.vm_name
   guest_os_type = "Ubuntu_64"
   # Fill in ISO URL/checksum or replace this builder with azure-arm, amazon-ebs, googlecompute, etc.
   iso_url       = "file:///path/to/ubuntu.iso"
   iso_checksum  = "sha256:replace-me"
-  ssh_username  = "ubuntu"
-  ssh_password  = "ubuntu"
-  shutdown_command = "echo 'ubuntu' | sudo -S shutdown -P now"
+  ssh_username  = var.ssh_username
+  ssh_password  = var.ssh_password
+  shutdown_command = "sudo shutdown -P now"
 }
 
 build {
@@ -596,15 +702,20 @@ def _runtime_prerequisite_rows(
     profile: Profile,
     include_optional: bool,
     progress: Callable[[str], None] | None = None,
+    runtimes: list[str] | None = None,
 ) -> list[dict[str, object]]:
     catalog = RuntimeCatalog(profile)
-    runtimes = ["ollama", "vllm", "tgi", "transformers", "localai"] if include_optional else ["ollama", "vllm"]
-    runtimes = [
-        *runtimes,
-        *_default_model_runtimes(profile, include_gui=include_optional),
+    selected_runtimes = (
+        (["ollama", "vllm", "tgi", "transformers", "localai"] if include_optional else ["ollama", "vllm"])
+        if runtimes is None
+        else runtimes
+    )
+    selected_runtimes = [
+        *selected_runtimes,
+        *(_default_model_runtimes(profile, include_gui=include_optional) if runtimes is None else []),
     ]
     rows: list[dict[str, object]] = []
-    for runtime in dict.fromkeys(runtimes):
+    for runtime in dict.fromkeys(selected_runtimes):
         if progress:
             progress(f"checking runtime prerequisite {runtime}")
         payload = catalog.prerequisites(runtime)

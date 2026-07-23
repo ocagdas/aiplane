@@ -5,8 +5,10 @@ from typing import Any
 
 from .boundaries import CommandRunner
 from .config import project_root, provider_helper_path
+from .docker_model_runner import DockerModelRunner
 from .env import EnvironmentManager
 from .machines import MachineManager
+from .model_catalog import ModelCatalog
 from .models import Profile
 from .orchestrators import OrchestratorCatalog
 from .runtime_catalog import RuntimeCatalog
@@ -29,7 +31,7 @@ class StackLifecycle:
     def plan(self, name: str) -> dict[str, Any]:
         return self.manager.plan(name)
 
-    def _lifecycle(self, name: str, action: str, dry_run: bool = False) -> dict[str, Any]:
+    def _lifecycle(self, name: str, action: str, dry_run: bool = False, yes: bool = False) -> dict[str, Any]:
         stack = self._stack(name)
         runtime = str(stack.get("runtime") or "")
         model = str(stack.get("model") or "")
@@ -43,13 +45,19 @@ class StackLifecycle:
         except ValueError as exc:
             runtime_evidence = {"contract_version": "1.0", "available": False, "reason": str(exc)}
         executable, reason = self._lifecycle_executable(stack)
-        if dry_run or not executable:
+        if dry_run or not executable or not yes:
+            confirmation_reason = "stack lifecycle changes require --yes after reviewing --dry-run output"
             return {
                 "name": name,
                 "action": action,
                 "dry_run": dry_run,
-                "status": "planned" if dry_run else "planned_not_executed",
-                "reason": None if executable else reason,
+                "status": "planned"
+                if dry_run
+                else "planned_not_executed"
+                if not executable
+                else "confirmation_required",
+                "reason": None if dry_run else reason if not executable else confirmation_reason,
+                "requires_yes": executable and not dry_run and not yes,
                 "execution_mode": "same_host" if executable else "planned_remote",
                 "runtime_substrate": runtime_substrate,
                 "endpoint_security": self.endpoint_plan(name),
@@ -114,6 +122,16 @@ class StackLifecycle:
         orchestrator: str,
         runtime_substrate: str,
     ) -> list[dict[str, Any]]:
+        if runtime == "docker_model_runner":
+            native_model = str(ModelCatalog(self.profile).show(model).get("model") or "")
+            if action == "prepare":
+                commands = [
+                    self._docker_model_command("install runtime", "install", native_model),
+                    self._docker_model_command("pull model", "pull", native_model),
+                ]
+            else:
+                commands = [self._docker_model_command(f"{action} runtime", action, native_model)]
+            return commands
         if action == "prepare":
             commands = [
                 self._runtime_helper_command("install runtime", runtime, "install", model, runtime_substrate),
@@ -143,6 +161,14 @@ class StackLifecycle:
         if action in {"start", "stop", "restart"}:
             return [self._runtime_helper_command(f"{action} runtime", runtime, action, model, runtime_substrate)]
         raise ValueError(f"unknown stack lifecycle action: {action}")
+
+    def _docker_model_command(self, name: str, action: str, model: str) -> dict[str, Any]:
+        return {
+            "name": name,
+            "command": DockerModelRunner.command(action, model=model),
+            "cwd": str(self.profile.workspace),
+            "adapter": "docker_model_runner",
+        }
 
     def _runtime_helper_command(
         self, name: str, runtime: str, action: str, model: str, runtime_substrate: str

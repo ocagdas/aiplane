@@ -1039,6 +1039,7 @@ def refresh_cli_payload(result: dict[str, object], verbosity: int) -> dict[str, 
                     "model_changes_count": row.get("model_changes_count"),
                     "changes": row.get("changes", {}),
                     "error": row.get("error"),
+                    "diagnostics": row.get("diagnostics"),
                 }
             )
     payload.pop("results", None)

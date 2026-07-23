@@ -40,7 +40,8 @@ These are the public-first, inspect-first commands for onboarding before advance
 - Export MCP client config snippets for VS Code MCP clients, Continue, Cline-style MCP clients, and generic `mcpServers` clients.
 - Serve an MCP adapter so tools can query `aiplane` for profiles, providers, models, recommendations, hardware, integrations, and guarded profile changes.
 - Render SSH tunnel plans and guarded start/stop commands for remote self-managed endpoints.
-- Render runtime bundle plans for Dockerfiles and Conda environment files without building or applying them.
+- Render checksummed runtime bundles using only the Docker, Conda, or native handoff modes each of the six primary runners actually supports, without building, starting, or applying them.
+- Render schema-linked Azure VM/AKS, remote-host, local-VM, and Dev Container starter artifact families without applying infrastructure.
 
 ## Common Terms
 

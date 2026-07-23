@@ -161,12 +161,24 @@ def test_public_evidence_schemas_are_declared_for_packaging() -> None:
         "aiplane-benchmark-measurements-v1.schema.json",
         "aiplane-artifact-lock-v1.schema.json",
         "aiplane-runtime-launch-v1.schema.json",
+        "aiplane-runtime-bundle-v1.schema.json",
+        "aiplane-agent-environment-v1.schema.json",
+        "aiplane-deployment-artifacts-v1.schema.json",
     ]
     packaging = (root / "pyproject.toml").read_text(encoding="utf-8")
     for name in names:
         payload = json.loads((root / "schemas" / name).read_text(encoding="utf-8"))
         assert payload["$schema"] == "https://json-schema.org/draft/2020-12/schema"
         assert name in packaging
+
+    measurements = json.loads(
+        (root / "schemas" / "aiplane-benchmark-measurements-v1.schema.json").read_text(encoding="utf-8")
+    )
+    run_properties = measurements["properties"]["runs"]["items"]["properties"]
+    assert run_properties["telemetry_source"]["type"] == ["string", "null"]
+
+    agent = json.loads((root / "schemas" / "aiplane-agent-environment-v1.schema.json").read_text(encoding="utf-8"))
+    assert {"framework", "readiness", "framework_config"} <= set(agent["properties"])
 
 
 def test_benchmark_contract_cli_validates_and_previews_import(tmp_path: Path) -> None:
