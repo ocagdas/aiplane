@@ -225,9 +225,10 @@ class IntegrationChatTests(unittest.TestCase):
 
     def test_integrations_setup_progress_rejects_windows_execution(self) -> None:
         manager = IntegrationManager(load_profile("local-dev", Path.cwd()))
+        cwd = Path.cwd()
         with patch("aiplane.integrations.os.name", "nt"):
             with self.assertRaisesRegex(RuntimeError, "unsupported on Windows"):
-                manager._run_with_progress(["echo", "ignored"], cwd=Path.cwd(), label="setup: test")
+                manager._run_with_progress(["echo", "ignored"], cwd=cwd, label="setup: test")
 
     def test_integrations_setup_progress_requires_pipes(self) -> None:
         class PipeLessProcess:
