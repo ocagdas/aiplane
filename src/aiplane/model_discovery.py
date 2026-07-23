@@ -5,7 +5,7 @@ from typing import Any
 from .model_resources import number_or_none as _number_or_none
 
 
-def preferred_runtime_for_source(provider_name: str) -> str:
+def _preferred_runtime_for_source(provider_name: str) -> str:
     if provider_name == "ollama":
         return "ollama"
     if provider_name == "huggingface":
@@ -33,7 +33,7 @@ def preferred_runtime_for_discovered_roles(provider_name: str, roles: list[str])
         if provider_name in {"azure_speech", "elevenlabs"}:
             return provider_name
         return "transformers"
-    return preferred_runtime_for_source(provider_name)
+    return _preferred_runtime_for_source(provider_name)
 
 
 def supported_runtimes_for_discovered_roles(roles: list[str]) -> list[str]:
