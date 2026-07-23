@@ -1014,8 +1014,10 @@ def _read_message(stream) -> dict[str, Any] | None:
     if content_length is None:
         raise ValueError("missing Content-Length header")
     body = stream.read(content_length)
-    if not body:
-        return None
+    if len(body) != content_length:
+        raise ValueError("unexpected EOF while reading message body")
+    if content_length == 0:
+        raise ValueError("invalid Content-Length header: value must be greater than zero")
     return json.loads(body.decode("utf-8"))
 
 
