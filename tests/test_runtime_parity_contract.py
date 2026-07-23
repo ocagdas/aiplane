@@ -136,3 +136,45 @@ def test_openai_compatible_backend_preserves_zero_completion_tokens() -> None:
     result = backend.chat("model", "hello")
     assert result.telemetry["prompt_tokens"] == 3
     assert result.telemetry["output_tokens"] == 0
+
+
+def test_six_runner_bundle_modes_are_truthful_and_reproducible() -> None:
+    profile = load_profile("local-dev", Path.cwd())
+    alias = "provider-code-large-vllm"
+    model = dict(profile.models["models"][alias])
+    model["supported_runtimes"] = list(PARITY_RUNTIMES)
+    profile.models["models"][alias] = model
+    catalog = RuntimeCatalog(profile)
+    expected = {
+        "ollama": "docker",
+        "vllm": "docker",
+        "llamacpp": "native",
+        "mlx": "conda",
+        "docker_model_runner": "native",
+        "lmstudio": "native",
+    }
+    for runtime, mode in expected.items():
+        first = catalog.bundle_plan(runtime, alias, mode="auto")
+        second = catalog.bundle_plan(runtime, alias, mode="auto")
+        assert first == second
+        assert first["mode"] == mode
+        assert first["selected_file"] in first["files"]
+        assert set(first["checksums"]) == set(first["files"])
+    assert "Dockerfile" not in catalog.bundle_plan("mlx", alias, mode="auto")["files"]
+    assert set(catalog.bundle_plan("docker_model_runner", alias)["files"]) == {"runtime-launch.json"}
+
+
+def test_six_runner_bundle_rejects_misleading_substrates() -> None:
+    profile = load_profile("local-dev", Path.cwd())
+    alias = "provider-code-large-vllm"
+    model = dict(profile.models["models"][alias])
+    model["supported_runtimes"] = ["mlx", "docker_model_runner", "lmstudio"]
+    profile.models["models"][alias] = model
+    catalog = RuntimeCatalog(profile)
+    for runtime in ["mlx", "docker_model_runner", "lmstudio"]:
+        try:
+            catalog.bundle_plan(runtime, alias, mode="docker")
+        except ValueError as exc:
+            assert "does not support" in str(exc)
+        else:
+            raise AssertionError(f"{runtime} unexpectedly emitted a Docker bundle")

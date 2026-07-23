@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from aiplane.agents import AgentManager
+from aiplane.runtime_parity import PARITY_RUNTIMES
 
 from .support import (
     MachineManager,
@@ -905,3 +906,50 @@ class StackOrchestratorTests(unittest.TestCase):
         self.assertEqual(result["status"], "planned_not_executed")
         self.assertIn("same-host/local", result["reason"])
         run.assert_not_called()
+
+
+def test_framework_exports_preserve_six_runner_orchestrator_bindings() -> None:
+    source = load_profile("local-dev", Path.cwd())
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        models = json.loads(json.dumps(source.models))
+        alias = "fixture-analysis-small"
+        models["models"][alias]["supported_runtimes"] = list(PARITY_RUNTIMES)
+        profile = Profile(
+            name="tmp",
+            root=root,
+            workspace=Path.cwd(),
+            hardware=json.loads(json.dumps(source.hardware)),
+            backends=source.backends,
+            repository=source.repository,
+            tools=source.tools,
+            approvals=source.approvals,
+            environment=source.environment,
+            models=models,
+            targets=source.targets,
+            orchestrators=source.orchestrators,
+        )
+        exported_machine = MachineManager(profile).export_machine("local_box")
+        machine_path = root / "local_box.json"
+        machine_path.write_text(json.dumps(exported_machine), encoding="utf-8")
+        MachineManager(profile).import_file(machine_path)
+        stacks = StackManager(profile)
+        for runtime in PARITY_RUNTIMES:
+            for orchestrator in ["langgraph", "crewai", "autogen"]:
+                name = f"{runtime}-{orchestrator}".replace("_", "-")
+                stacks.setup(
+                    name,
+                    orchestrator=orchestrator,
+                    runtime=runtime,
+                    model=alias,
+                    machine="local_box",
+                    access="same_host",
+                )
+                exported = stacks.export(orchestrator, name)
+                payload = parse_yaml(exported["content"])
+                assert exported["runtime"] == runtime
+                assert exported["orchestrator"] == orchestrator
+                assert payload["framework"] == orchestrator
+                assert payload["roles"]["primary"]["runtime"] == runtime
+                assert payload["roles"]["primary"]["model_alias"] == alias
+                assert payload["execution_boundary"]["runs_agents"] is False

@@ -108,6 +108,8 @@ aiplane doctor --format json
 aiplane environment doctor --required-only
 aiplane environment doctor --required-only --format json
 aiplane tools matrix
+aiplane tools matrix --workflow cloud_vm
+aiplane environment doctor --workflow local_runtime --format json
 ```
 
 - [ ] Preview does not install runtimes or pull models.
@@ -272,7 +274,9 @@ Use the runtime selected with `CHAT_ALIAS`:
 aiplane runtimes artifact-lock --model "$CHAT_ALIAS"
 aiplane runtimes launch-manifest "$RUNTIME" --model "$CHAT_ALIAS"
 aiplane runtimes launch-manifest vllm --model "$CHAT_ALIAS" --host 0.0.0.0 --port 8000 --context-tokens 8192 --gpu-device 0 --tensor-parallel 1
-aiplane runtimes bundle "$RUNTIME" --model "$CHAT_ALIAS" --mode docker --format json
+aiplane runtimes bundle "$RUNTIME" --model "$CHAT_ALIAS" --mode auto --format json
+aiplane runtimes bundle "$RUNTIME" --model "$CHAT_ALIAS" --mode auto --format selected-file
+# Run when the selected runner supports Docker (for example Ollama or vLLM):
 aiplane runtimes bundle "$RUNTIME" --model "$CHAT_ALIAS" --mode docker --cache-volume manual-model-cache --gpu-device all --env HF_HOME --auth-env HF_TOKEN
 ```
 
@@ -549,6 +553,25 @@ Send a valid MCP initialize request from an MCP client, inspect the tool list, t
 - [ ] Grants are action-scoped, expiring, ignored workspace-local JSON; grant and revoke events are audited.
 - [ ] `policy drift` reports expired or stale grants, and malformed local state fails closed.
 - [ ] Audit output redacts secrets.
+
+
+## 18A. Render deployment starters without applying them
+
+**Read-only:**
+
+```bash
+aiplane deploy workflow-plan --target azure_gpu_vm
+aiplane deploy render --target azure_gpu_vm
+aiplane deploy render --target azure_gpu_vm --file main.tf
+aiplane deploy render --target aks_gpu_pool
+aiplane deploy render --target gpu_workstation_ssh
+```
+
+- [ ] Each JSON family is schema-linked, `render_only: true`, `apply_supported: false`, and checksummed.
+- [ ] Azure VM output includes `main.tf`, `aiplane.pkr.hcl`, `inventory.ini`, and `playbook.yml`.
+- [ ] AKS output points workload rendering to `stacks render-kubernetes`; it does not run `kubectl` or an IaC apply.
+- [ ] SSH workstation output uses only the configured host/user/port and contains no credential value.
+- [ ] Repeating a render produces byte-identical JSON and file content.
 
 ## 19. Failure and safety checks
 

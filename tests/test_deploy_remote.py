@@ -368,3 +368,63 @@ class DeployRemoteTests(unittest.TestCase):
             self.assertEqual(stopped["status"], "stopped")
             self.assertEqual(inspector.terminated, [12345])
             self.assertFalse(Path(started["state_file"]).exists())
+
+
+def test_deploy_render_is_deterministic_secret_free_and_schema_linked() -> None:
+    profile = load_profile("local-dev", Path.cwd())
+    manager = DeployManager(profile)
+    first = manager.render("azure_gpu_vm")
+    second = manager.render("azure_gpu_vm")
+    assert first == second
+    assert first["$schema"] == "schemas/aiplane-deployment-artifacts-v1.schema.json"
+    assert first["render_only"] is True
+    assert first["apply_supported"] is False
+    assert {"main.tf", "aiplane.pkr.hcl", "inventory.ini", "playbook.yml"} <= set(first["files"])
+    serialized = json.dumps(first).lower()
+    assert "client_secret" not in serialized
+    assert "private_key" not in serialized
+    for name, content in first["files"].items():
+        import hashlib
+
+        assert first["checksums"][name] == hashlib.sha256(content.encode()).hexdigest()
+
+
+def test_deploy_render_cli_can_print_one_artifact() -> None:
+    stdout = StringIO()
+    with _isolated_profiles_dir() as profiles_dir, redirect_stdout(stdout):
+        code = cli_main(
+            [
+                "--profiles-dir",
+                str(profiles_dir),
+                "deploy",
+                "render",
+                "--target",
+                "aks_gpu_pool",
+                "--file",
+                "main.tf",
+            ]
+        )
+    assert code == 0
+    assert 'provider "azurerm"' in stdout.getvalue()
+    assert "kubectl apply" not in stdout.getvalue()
+
+
+def test_deploy_render_rejects_inventory_injection() -> None:
+    source = load_profile("local-dev", Path.cwd())
+    targets = json.loads(json.dumps(source.targets))
+    targets["targets"]["gpu_workstation_ssh"]["ssh"]["user"] = "operator\nmalicious=true"
+    profile = Profile(
+        name="tmp",
+        root=source.root,
+        workspace=source.workspace,
+        hardware=source.hardware,
+        backends=source.backends,
+        repository=source.repository,
+        tools=source.tools,
+        approvals=source.approvals,
+        environment=source.environment,
+        models=source.models,
+        targets=targets,
+    )
+    with unittest.TestCase().assertRaisesRegex(ValueError, "unsupported inventory characters"):
+        DeployManager(profile).render("gpu_workstation_ssh")

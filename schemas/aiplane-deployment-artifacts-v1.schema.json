@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aiplane.dev/schemas/deployment-artifacts/v1",
+  "title": "aiplane deployment artifact family",
+  "type": "object",
+  "required": ["$schema", "schema_version", "record_type", "render_only", "apply_supported", "review_required", "target", "workflow", "files", "checksums"],
+  "properties": {
+    "$schema": {"const": "schemas/aiplane-deployment-artifacts-v1.schema.json"},
+    "schema_version": {"const": "1.0"},
+    "record_type": {"const": "deployment_artifacts"},
+    "render_only": {"const": true},
+    "apply_supported": {"const": false},
+    "review_required": {"const": true},
+    "target": {"type": "string", "minLength": 1},
+    "target_type": {"type": "string"},
+    "workflow": {"enum": ["local_install", "local_vm", "remote_workstation", "remote_vm", "cloud_vm", "cloud_kubernetes"]},
+    "tool_owners": {"type": "array", "items": {"type": "string"}},
+    "files": {"type": "object", "additionalProperties": {"type": "string"}, "minProperties": 1},
+    "checksums": {"type": "object", "additionalProperties": {"type": "string", "pattern": "^[a-f0-9]{64}$"}},
+    "next_commands": {"type": "array", "items": {"type": "string"}},
+    "notes": {"type": "array", "items": {"type": "string"}}
+  },
+  "additionalProperties": false
+}

@@ -24,7 +24,7 @@ def add_setup_parsers(
         "environment",
         "Show, check, or plan native/venv/conda/docker execution",
         "Inspect the active execution environment, check prerequisite tools, or render how a command would run in that mode.",
-        "Examples:\n  aiplane environment list\n  aiplane environment active\n  aiplane environment doctor\n  aiplane environment use venv\n  aiplane environment plan python -m unittest",
+        "Examples:\n  aiplane environment list\n  aiplane environment active\n  aiplane environment doctor\n  aiplane environment doctor --workflow local_runtime\n  aiplane environment use venv\n  aiplane environment plan python -m unittest",
     )
     env_sub = environment.add_subparsers(dest="environment_command", required=True, metavar="command")
     env_show = env_sub.add_parser(
@@ -86,6 +86,10 @@ def add_setup_parsers(
         "--required-only",
         action="store_true",
         help="Only check a minimal required set instead of optional benchmark/cloud tools",
+    )
+    env_doctor.add_argument(
+        "--workflow",
+        help="Check only tools and runtimes relevant to one end-user workflow",
     )
     env_doctor.add_argument(
         "--format",
@@ -206,7 +210,7 @@ def add_setup_parsers(
         "tools",
         "Check and install external prerequisite CLIs",
         "Inspect and install the small external toolchain aiplane can use for cloud, container, Kubernetes, and remote operations.",
-        "Examples:\n  aiplane tools doctor\n  aiplane tools matrix\n  aiplane tools doctor azure-cli\n  aiplane tools plan vagrant\n  aiplane tools export opentofu\n  aiplane tools install opentofu --dry-run\n  aiplane tools install azure-cli",
+        "Examples:\n  aiplane tools doctor\n  aiplane tools matrix\n  aiplane tools matrix --workflow cloud_vm\n  aiplane tools doctor azure-cli\n  aiplane tools plan vagrant\n  aiplane tools export opentofu\n  aiplane tools install opentofu --dry-run\n  aiplane tools install azure-cli",
     )
     tools_sub = tools_cmd.add_subparsers(dest="tools_command", required=True, metavar="command")
     tools_list = tools_sub.add_parser(
@@ -223,6 +227,10 @@ def add_setup_parsers(
         formatter_class=formatter_class,
     )
     profile_arg(tools_matrix)
+    tools_matrix.add_argument(
+        "--workflow",
+        help="Limit tools and readiness to an end-user workflow, such as cloud_vm, cloud_kubernetes, local_vm, or local_runtime",
+    )
     tools_doctor = tools_sub.add_parser(
         "doctor",
         help="Check external toolchain health",
@@ -297,7 +305,7 @@ def handle_setup_command(
         elif args.tools_command == "doctor":
             payload = manager.doctor(args.name)
         elif args.tools_command == "matrix":
-            payload = manager.matrix()
+            payload = manager.matrix(args.workflow)
         elif args.tools_command == "plan":
             payload = manager.plan(args.name)
         elif args.tools_command == "export":
@@ -357,7 +365,9 @@ def handle_setup_command(
     elif args.environment_command == "doctor":
         progress = progress_factory()
         payload = ToolchainManager(profile).environment_doctor(
-            include_optional=not args.required_only, progress=progress
+            include_optional=not args.required_only,
+            progress=progress,
+            workflow=args.workflow,
         )
         progress("")
         if resolve_format(args.format, profile=effective_profile, path=config_path) == "text":

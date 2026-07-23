@@ -163,6 +163,7 @@ def test_public_evidence_schemas_are_declared_for_packaging() -> None:
         "aiplane-runtime-launch-v1.schema.json",
         "aiplane-runtime-bundle-v1.schema.json",
         "aiplane-agent-environment-v1.schema.json",
+        "aiplane-deployment-artifacts-v1.schema.json",
     ]
     packaging = (root / "pyproject.toml").read_text(encoding="utf-8")
     for name in names:

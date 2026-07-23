@@ -102,6 +102,8 @@ Post-P0 runtime and agent-environment coverage is explicit and implemented at co
 
 Evidence/reproducibility contracts now include versioned JSON/YAML benchmark suites, repeated quality summaries, preview-first external measurement import, artifact locks, exact render-only external-runner launch manifests, and evidence-backed per-role routing with alternatives and policy constraints. Node REST scheduling and community benchmark exchange remain research gates rather than promises; they require user evidence plus authentication, privacy, poisoning/provenance, abuse, versioning, and maintenance decisions.
 
+The cloud/VM/workstation render, workflow-aware tool doctor, and six-runner packaging milestones are implementation-complete. Validation covers deterministic secret-free deployment families, contextual mandatory/alternative/optional readiness, truthful auto/Docker/Conda/native bundle modes, SHA-256 file evidence, and framework exports across six runners with three orchestrators. The final full suite passes 652 tests with 3 optional tests skipped and 23 subtests; Ruff format/lint, profile validation, required environment doctor JSON, target render, and runtime bundle command smokes pass. Live provider/platform checks remain separate evidence work and do not broaden Aiplane into an infrastructure or agent runner.
+
 ### Current Public Status
 
 High-level implemented areas:
@@ -124,7 +126,7 @@ Known in-progress areas:
 - remote lifecycle execution and supported-platform live acceptance for Docker Model Runner; native same-host Docker Model Runner plan/prepare/start/stop/restart handling is implemented;
 - deploy workflow classification now separates local install, local VM, remote workstation/VM, cloud VM, and cloud Kubernetes boundaries with non-mutating `deploy workflow-plan`;
 - `deploy apply` now requires explicit `--yes`, and broad cloud apply remains intentionally out of scope until provider-specific guardrails are ready;
-- provider-specific IaC/playbook/template hardening;
+- live-provider review and provider-specific expansion beyond the implemented Azure/SSH/local render families;
 - broader deployment apply paths;
 - endpoint authentication/gateway planning now exists at stack level through endpoint auth/TLS/gateway metadata and `stacks endpoint-plan`; top-level `aiplane doctor` now gives a read-only local AI workflow stack readiness summary with selected endpoint readiness, capability, and hardware-fit details; richer runtime-agnostic chat/task UX beyond single-prompt execution remains planned;
 - versioned placement/scoring and benchmark evidence, quantization/context/KV-cache/runtime-aware assessment, repeat summaries, safe deterministic graders, and role comparison are implemented foundations; native TTFT/token capture, comparable local calibration, and deeper near-miss evidence remain ongoing;
@@ -147,12 +149,15 @@ python -m aiplane config format
 python -m aiplane hardware show --list-types
 python -m pytest -q
 python -m aiplane tools matrix
+python -m aiplane tools matrix --workflow cloud_vm
+python -m aiplane environment doctor --workflow local_runtime --format json
 python -m aiplane tools plan opentofu
 python -m aiplane agents templates
 python -m aiplane stacks list
 python -m aiplane models list
 python -m aiplane models clear-cache --dry-run
 python -m aiplane deploy workflow-plan --target azure_gpu_vm
+python -m aiplane deploy render --target azure_gpu_vm
 python -m aiplane deploy apply --target azure_gpu_vm
 python -m aiplane models refresh --provider huggingface --query text-to-video --dry-run --verbosity 2 --limit 2
 python -m pytest -q tests/test_models_providers.py tests/test_runtimes_execution.py tests/test_integrations_chat.py -k "models_list_and_defaults_support_grouping or managed_service_models_do_not_mix_into_runtime_groups or model_catalog_cloud_doctor_checks_env_var or runtime_catalog_maps_sources_and_models or integrations_export_continue_uses_planner_constraints"
@@ -912,26 +917,28 @@ P0.8 public profile schema v1 is implemented with external validation and canoni
    - Treat remote endpoints independently from local installation. Ollama, Docker Model Runner, LM Studio, llama-server, MLX servers, and vLLM may be used through configured endpoints even when their local lifecycle is unsupported on the current platform.
    - Completed: artifact-lock and external-runner launch-manifest contracts are integrated into pull previews, stack plan/doctor, benchmark records, replay comparisons, and lifecycle results. Keep vendor commands exact and previewable; do not reinterpret a launch plan as permission to install a runtime, bind a public port, or copy model weights.
 
-6. **Cloud, VM, and workstation workflow hardening** - Implemented foundation / in progress
+6. **Cloud, VM, and workstation workflow hardening** - Implementation complete / live-provider review ongoing
    - Use OpenTofu as the default provider-agnostic IaC target, Terraform as a compatible alternative, and Pulumi as an optional language-native IaC path.
-   - Harden Vagrant, Packer, Ansible, Dev Container, and IaC starter exports into provider-specific workflows.
+   - Completed: `deploy render` emits deterministic, schema-linked and checksummed target-specific families. Azure VM uses reviewed OpenTofu/Terraform-compatible HCL, an Azure Packer starter, Ansible inventory, and a baseline playbook; AKS emits Azure infrastructure HCL and delegates workload files to the existing Kubernetes renderer; SSH/local VM/local install paths emit Ansible, Vagrant, or Dev Container artifacts as appropriate.
    - Keep local install, local VM provisioning, remote VM provisioning, remote PC setup, and cloud provisioning distinct. `deploy workflow-plan` now exposes those boundaries and recommended tool ownership.
    - Keep mutating target bootstrap behind explicit confirmation; `deploy apply` requires `--yes` and broad cloud apply remains out of scope until provider-specific guardrails are ready.
    - Completed: render-only Kubernetes `ResourceClaim`, `Deployment`, `Service`, and Helm values are deterministic, secret-free, reviewable, schema-linked, and non-mutating. Applying generated artifacts remains a separate future capability behind explicit human review and approval.
    - Keep public demo paths focused on repeatable local, endpoint, MCP, stack, and Azure discovery workflows without unsafe mutation.
 
-7. **Tool/task matrix and setup doctor expansion** - In progress
+7. **Tool/task matrix and setup doctor expansion** - Implemented / requirements grow with integrations
    - Keep `environment doctor` as the default human setup check with text output.
    - Keep every external tool mapped to the workflows it enables, whether it is mandatory or optional, and whether `aiplane` can attempt installation.
    - Grow doctor scope as new tool families are integrated without turning optional workflows into mandatory prerequisites.
+   - Completed: `tools matrix --workflow` and `environment doctor --workflow` use explicit end-user workflow contracts. Mandatory tools, optional tools, and any-of alternatives are distinct, so unrelated workflows remain optional and cloud users need one reviewed IaC path rather than every supported IaC CLI.
    - Keep workflow-level readiness summaries in `tools matrix` useful for release review and demos.
 
 #### Later Expansion
 
-8. **Runtime packaging and deployment reproducibility** - Implemented contract / live evidence ongoing
+8. **Runtime packaging and deployment reproducibility** - Implementation complete / live-platform evidence separate
    - Six-runner capability coverage and MLX metadata/launch planning are implemented; live platform evidence and deeper vendor-specific tuning remain ongoing.
-   - Add deterministic compatibility fixtures and installed-wheel smoke checks for the six-runner matrix without requiring every runner on every CI host. Platform-specific live checks should supplement, not replace, synthetic contract coverage.
-   - Broaden tests for stack export content across runtime/orchestrator combinations.
+   - Completed: deterministic synthetic coverage exercises all six runners without requiring every vendor runtime on every CI host. Platform-specific live checks supplement, rather than replace, the contract suite.
+   - Completed at runtime-bundle boundary: auto mode resolves to an honest Docker, Conda, or native handoff per runner; unsupported substrate requests fail clearly; generated files are deterministic and checksummed. MLX does not claim Linux-container support, while Docker Model Runner and LM Studio do not claim standalone Docker/Conda packaging.
+   - Completed: deterministic stack framework export coverage crosses all six primary runners with LangGraph, CrewAI, and AutoGen bindings, while vendor-client live smoke remains a separate compatibility check.
    - Completed at render-contract level: runtime bundles include conventional ports, named cache mounts, explicit GPU selectors, environment/auth variable references, context and tensor-parallel settings, with validation that prevents embedded environment values.
    - Keep image builds, registry pushes, VM creation, and cloud apply explicit and previewable.
 

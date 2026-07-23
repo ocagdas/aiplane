@@ -304,6 +304,9 @@ Security reporting is documented in [SECURITY.md](SECURITY.md). The tested trust
 - `scripts/provider_helper.sh`: thin runtime operation dispatcher used by the CLI.
 - `aiplane environment plan`: renders how a command would run under current profile context.
 - `aiplane environment doctor` and `aiplane tools doctor`: first checks when setup quality looks off.
+- `aiplane tools matrix --workflow cloud_vm`: focused mandatory/alternative/optional readiness for a real setup path.
+- `aiplane deploy render --target azure_gpu_vm`: checksummed, secret-free target artifacts for review without applying infrastructure.
+- `aiplane runtimes bundle RUNNER --model ALIAS --mode auto`: an honest Docker, Conda, or native handoff for the selected runner.
 
 More detail:
 

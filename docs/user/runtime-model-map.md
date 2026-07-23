@@ -311,12 +311,16 @@ The manifest is versioned, JSON, render-only, and secret-free. It records artifa
 
 ## Reproducible runtime bundles
 
-Render a versioned Docker or Conda packaging plan without building, pulling, or starting anything:
+Render a versioned container, Conda, or native launch handoff without building, pulling, or starting anything:
 
 ```bash
 aiplane runtimes bundle vllm --model MODEL_ALIAS --mode docker --cache-volume hf-cache --gpu-device 0 --gpu-device 1 --env HF_HOME --auth-env HF_TOKEN --context-tokens 32768 --tensor-parallel 2
 aiplane runtimes bundle ollama --model MODEL_ALIAS --format dockerfile
+aiplane runtimes bundle mlx --model MODEL_ALIAS --mode auto --format selected-file
+aiplane runtimes bundle docker_model_runner --model MODEL_ALIAS --mode native --format launch-json
 ```
+
+`--mode auto` is the default and selects a truthful runner-specific substrate. Ollama defaults to its vendor container; vLLM supports Docker, Conda, and native handoff; llama.cpp defaults to native and can also render a container starter; MLX supports Conda/native and deliberately emits no Linux Dockerfile; Docker Model Runner and LM Studio emit native launch handoffs only because pretending they are standalone images or Conda environments would be misleading. Every emitted file has a SHA-256 checksum in the JSON contract. `--format selected-file` prints the resolved artifact.
 
 Docker plans use the runtime's conventional port, optional named cache volume, explicit GPU selectors, and environment-variable names. Named stacks can persist `--runtime-substrate docker`; plan and lifecycle previews then forward that exact substrate to the guarded runtime helper. `--env` and `--auth-env` accept names only, never embedded values. The JSON contract is linked to `schemas/aiplane-runtime-bundle-v1.schema.json` and remains render-only.
 
@@ -445,7 +449,7 @@ aiplane integrations export continue --select-best --runtime ollama
 
 `plan` explains the selected provider/source, runtime, endpoint, native model id, and role-capability scores. `setup --dry-run` previews runtime helper actions, including helper install where supported, runtime start, and model pull. `setup` can run those supported helper actions through the existing provider helper scripts. `export` prints the Continue/Cline/Zed/Aider config payload.
 
-`runtimes bundle` is different: it renders Dockerfile/Conda/JSON packaging plans and does not install runtimes, start services, or download weights. For a runnable local task, use `integrations setup ... --dry-run` then `integrations setup ...`; for a reusable named model/runtime/machine binding, use `stacks setup`, `stacks prepare --dry-run`, `stacks prepare`, and `stacks start`.
+`runtimes bundle` is different: it renders supported Dockerfile/Conda/native JSON packaging and handoff plans and does not install runtimes, start services, or download weights. For a runnable local task, use `integrations setup ... --dry-run` then `integrations setup ...`; for a reusable named model/runtime/machine binding, use `stacks setup`, `stacks prepare --dry-run`, `stacks prepare`, and `stacks start`.
 
 Model aliases live in the selected profile catalog (`models.yaml` for profile-owned entries and `models.discovered.yaml` for discovery cache entries). Each alias maps to a provider/source-native model id in its `model` field. For Ollama, helper commands resolve the alias to that native id and run `ollama pull <model-id>` or `ollama run <model-id>`. The downloaded files remain in Ollama's own store: native Ollama uses its normal local model store, while Docker substrate uses the configured Docker volume mounted at `/root/.ollama` inside the container. `aiplane` records the mapping and delegates storage to the runtime; it does not copy weights into the profile directory.
 

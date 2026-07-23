@@ -11,9 +11,13 @@
     "runtime",
     "model",
     "mode",
+    "requested_mode",
     "files",
     "settings",
-    "commands"
+    "commands",
+    "selected_file",
+    "checksums",
+    "supported_modes"
   ],
   "properties": {
     "$schema": {
@@ -37,11 +41,16 @@
     "mode": {
       "enum": [
         "docker",
-        "conda"
+        "conda",
+        "native"
       ]
     },
     "files": {
-      "type": "object"
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "minProperties": 1
     },
     "settings": {
       "type": "object"
@@ -51,6 +60,38 @@
       "items": {
         "type": "string"
       }
+    },
+    "requested_mode": {
+      "enum": [
+        "auto",
+        "docker",
+        "conda",
+        "native"
+      ]
+    },
+    "supported_modes": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "docker",
+          "conda",
+          "native"
+        ]
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "selected_file": {
+      "type": "string",
+      "minLength": 1
+    },
+    "checksums": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      },
+      "minProperties": 1
     }
   },
   "additionalProperties": true

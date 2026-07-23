@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import hashlib
 import importlib.util
+import json
 import os
 import platform
 import re
@@ -242,7 +244,7 @@ class RuntimeCatalog:
         self,
         runtime: str,
         model_name: str,
-        mode: str = "docker",
+        mode: str = "auto",
         *,
         cache_volume: str | None = None,
         gpu_devices: list[str] | None = None,
@@ -253,8 +255,15 @@ class RuntimeCatalog:
     ) -> dict[str, Any]:
         if runtime not in RUNTIME_DEFINITIONS:
             raise ValueError(f"unknown runtime: {runtime}")
-        if mode not in {"docker", "conda"}:
-            raise ValueError("mode must be docker or conda")
+        if mode not in {"auto", "docker", "conda", "native"}:
+            raise ValueError("mode must be auto, docker, conda, or native")
+        requested_mode = mode
+        support = _bundle_support(runtime)
+        if mode == "auto":
+            mode = str(support["default"])
+        if mode not in support["modes"]:
+            supported_modes = ", ".join(support["modes"])
+            raise ValueError(f"runtime {runtime!r} does not support {mode!r} bundles; supported: {supported_modes}")
         model = self._model(model_name)
         if self._model_ownership(model) == "managed_service":
             raise ValueError(
@@ -277,11 +286,26 @@ class RuntimeCatalog:
             context_tokens=context_tokens,
             tensor_parallel=tensor_parallel,
         )
-        files = {
-            "Dockerfile": _dockerfile_for_runtime(runtime, model_id),
-            "environment.yaml": _conda_yaml_for_runtime(runtime),
+        files: dict[str, str] = {}
+        if "docker" in support["modes"]:
+            files["Dockerfile"] = _dockerfile_for_runtime(runtime, model_id)
+        if "conda" in support["modes"]:
+            files["environment.yaml"] = _conda_yaml_for_runtime(runtime)
+        launch = None
+        if "native" in support["modes"]:
+            launch = render_launch_manifest(
+                runtime,
+                model_name,
+                model,
+                context_tokens=context_tokens,
+                gpu_devices=gpu_devices,
+                tensor_parallel=tensor_parallel,
+            )
+            files["runtime-launch.json"] = json.dumps(launch, indent=2, sort_keys=True) + "\n"
+        selected_file = {"docker": "Dockerfile", "conda": "environment.yaml", "native": "runtime-launch.json"}[mode]
+        checksums = {
+            filename: hashlib.sha256(content.encode("utf-8")).hexdigest() for filename, content in files.items()
         }
-        selected_file = "Dockerfile" if mode == "docker" else "environment.yaml"
         return {
             "$schema": "schemas/aiplane-runtime-bundle-v1.schema.json",
             "schema_version": "1.0",
@@ -291,13 +315,17 @@ class RuntimeCatalog:
             "runtime": runtime,
             "model": model_name,
             "model_id": model_id,
+            "requested_mode": requested_mode,
             "mode": mode,
+            "supported_modes": support["modes"],
             "selected_file": selected_file,
             "files": files,
+            "checksums": checksums,
             "settings": settings,
-            "commands": _bundle_commands(runtime, model_name, mode, selected_file, settings),
+            "commands": _bundle_commands(runtime, model_name, mode, selected_file, settings, launch),
             "notes": [
-                "This is a render-only reproducibility plan; it does not build images, create environments, or pull model weights.",
+                "This is a render-only reproducibility plan; it does not build images, create environments, start processes, or pull model weights.",
+                str(support["note"]),
                 "GPU devices, cache volumes, environment references, auth references, context, and tensor parallelism are rendered only when explicitly supplied.",
                 "Environment and auth values are never embedded; the generated command references variable names for the operator to populate.",
             ],
@@ -569,6 +597,51 @@ class RuntimeCatalog:
         return "managed_service" if provider_name in PROVIDER_ENDPOINT_DEFAULTS else "self_managed"
 
 
+_PARITY_BUNDLE_SUPPORT: dict[str, dict[str, object]] = {
+    "ollama": {
+        "default": "docker",
+        "modes": ["docker", "native"],
+        "note": "Ollama is packaged as its vendor container or handed off to its native CLI.",
+    },
+    "vllm": {
+        "default": "docker",
+        "modes": ["docker", "conda", "native"],
+        "note": "vLLM supports container, Python environment, and native launch handoffs.",
+    },
+    "llamacpp": {
+        "default": "native",
+        "modes": ["docker", "native"],
+        "note": "llama.cpp needs a reviewed native binary or container build; a fake Python environment is not emitted.",
+    },
+    "mlx": {
+        "default": "conda",
+        "modes": ["conda", "native"],
+        "note": "MLX is an Apple-platform Python/native workflow; a Linux Dockerfile is not emitted.",
+    },
+    "docker_model_runner": {
+        "default": "native",
+        "modes": ["native"],
+        "note": "Docker Model Runner is a Docker host feature, not a separate image or Conda environment.",
+    },
+    "lmstudio": {
+        "default": "native",
+        "modes": ["native"],
+        "note": "LM Studio is GUI/native managed; the bundle records only its reviewed CLI handoff.",
+    },
+}
+
+
+def _bundle_support(runtime: str) -> dict[str, object]:
+    return _PARITY_BUNDLE_SUPPORT.get(
+        runtime,
+        {
+            "default": "docker",
+            "modes": ["docker", "conda"],
+            "note": "This runtime retains the generic container and Python-environment starter contract.",
+        },
+    )
+
+
 def _dockerfile_for_runtime(runtime: str, model_id: str) -> str:
     if runtime == "ollama":
         return (
@@ -691,7 +764,12 @@ def _bundle_settings(
 
 
 def _bundle_commands(
-    runtime: str, model_name: str, mode: str, selected_file: str, settings: dict[str, Any]
+    runtime: str,
+    model_name: str,
+    mode: str,
+    selected_file: str,
+    settings: dict[str, Any],
+    launch: dict[str, Any] | None = None,
 ) -> list[str]:
     if mode == "docker":
         tag = f"aiplane-{runtime}-{model_name}:local"
@@ -717,10 +795,15 @@ def _bundle_commands(
             shlex.join(["docker", "build", "-t", tag, "-f", selected_file, "."]),
             shlex.join(run),
         ]
-    return [
-        f"conda env create -f {selected_file}",
-        f"conda activate aiplane-{runtime}",
-    ]
+    if mode == "conda":
+        return [
+            f"conda env create -f {selected_file}",
+            f"conda activate aiplane-{runtime}",
+        ]
+    if not launch:
+        raise ValueError(f"native launch handoff is unavailable for runtime: {runtime}")
+    command = launch.get("launch", {}).get("command", [])
+    return ["review runtime-launch.json", shlex.join([str(value) for value in command])]
 
 
 def _diagram(include_gui: bool = False) -> str:

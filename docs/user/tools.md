@@ -57,9 +57,10 @@ Check the full prerequisite set and inspect the workflow matrix:
 ```bash
 aiplane tools doctor
 aiplane tools matrix
+aiplane tools matrix --workflow cloud_vm
 ```
 
-`tools matrix` groups every known external tool by workflow category and shows what it enables, whether it is mandatory or optional, whether `aiplane` can attempt installation, and whether `tools plan`/`tools export` starter artifacts are available. It also includes workflow-level readiness summaries so release review and demos can quickly see which categories are complete, partially ready, or still need setup on the current machine.
+`tools matrix` preserves tool-category summaries and adds explicit end-user workflow readiness for local runtime/container/VM, remote workstation, cloud VM/Kubernetes, quality, and benchmark paths. Required alternatives are evaluated as any-of groups, so a cloud workflow needs one of OpenTofu, Terraform, or Pulumi rather than all three. `--workflow` focuses the task workflow result and returns exact missing requirements and next actions. The category view groups every known external tool and shows what it enables, whether it is mandatory or optional, whether `aiplane` can attempt installation, and whether `tools plan`/`tools export` starter artifacts are available. It also includes workflow-level readiness summaries so release review and demos can quickly see which categories are complete, partially ready, or still need setup on the current machine.
 
 Check the active aiplane execution environment and group missing tools by whether
 `aiplane` can attempt an install or whether manual/platform-specific work is
@@ -69,9 +70,11 @@ needed:
 aiplane environment doctor
 aiplane environment doctor --required-only
 aiplane environment doctor --format json
+aiplane environment doctor --workflow local_runtime
+aiplane environment doctor --workflow cloud_kubernetes --required-only
 ```
 
-`environment doctor` is the general setup check. It reports:
+`environment doctor` is the general setup check. With `--workflow`, it checks only the required, alternative, and (unless `--required-only` is used) optional tools for that path; local-runtime workflow checks also cover all six primary runner prerequisites. It reports:
 
 - the active `aiplane` execution environment;
 - installed and missing external CLIs;

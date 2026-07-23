@@ -16,6 +16,9 @@ aiplane deploy workflow-plan --target aks_gpu_pool
 aiplane deploy plan --target aks_gpu_pool
 aiplane deploy doctor --target aks_gpu_pool
 aiplane deploy workflow-plan --target azure_gpu_vm
+aiplane deploy render --target azure_gpu_vm
+aiplane deploy render --target azure_gpu_vm --file main.tf
+aiplane deploy render --target aks_gpu_pool --file main.tf
 aiplane deploy plan --target azure_gpu_vm
 aiplane deploy doctor --target azure_gpu_vm
 ```
@@ -27,18 +30,20 @@ aiplane deploy apply --target aks_gpu_pool --yes
 aiplane deploy apply --target azure_gpu_vm --yes
 ```
 
-Run `workflow-plan`, `plan`, and `doctor` first. `workflow-plan` classifies the target as local install, local VM, remote workstation/VM, cloud VM, or cloud Kubernetes and shows which external tools own each phase. `apply` requires `--yes` and only runs the narrow mutating steps shown in the plan.
+Run `workflow-plan`, `render`, `plan`, and `doctor` first. `render` emits a schema-linked, checksummed, secret-free artifact family for review: Azure VM targets include OpenTofu/Terraform-compatible HCL, an Azure Packer starter, Ansible inventory, and a playbook; AKS targets include Azure-specific infrastructure HCL and directs operators to `stacks render-kubernetes` for workload artifacts. It never calls an external tool or applies a file. Use `--file NAME` to print one artifact.
+
+`workflow-plan` classifies the target as local install, local VM, remote workstation/VM, cloud VM, or cloud Kubernetes and shows which external tools own each phase. `apply` requires `--yes` and only runs the narrow mutating steps shown in the plan.
 For AKS this currently means bootstrap steps such as loading cluster credentials
 and creating the target namespace. For Azure VM targets this means Azure CLI
 resource creation steps such as resource group creation, VM creation, and
-optional SSH port opening. Runtime manifests for Ollama/vLLM model serving are a
-later step.
+optional SSH port opening. Render Kubernetes runtime workloads separately with
+`aiplane stacks render-kubernetes`; that command also remains non-mutating.
 
 ## Machine Import Is Not Provisioning
 
 `aiplane machines import` and `aiplane machines import-azure-sku` only register machine profiles for planning and recommendation. They do not create Azure resources.
 
-Use `aiplane deploy workflow-plan`, `aiplane deploy plan`, and `aiplane deploy doctor` to classify, render, and check provisioning steps. Guarded Azure VM apply is available for the narrow create path shown in the plan. AKS apply is currently limited to narrow bootstrap steps. Stack deployment is automatic only for same-host/local runtime lifecycle steps.
+Use `aiplane deploy workflow-plan`, `aiplane deploy render`, `aiplane deploy plan`, and `aiplane deploy doctor` to classify, render, and check provisioning steps. Guarded Azure VM apply is available for the narrow create path shown in the plan. AKS apply is currently limited to narrow bootstrap steps. Stack deployment is automatic only for same-host/local runtime lifecycle steps.
 
 ## Target Configuration
 

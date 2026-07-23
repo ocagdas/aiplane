@@ -276,6 +276,15 @@ class EnvironmentToolBenchmarkTests(unittest.TestCase):
         self.assertIn("terraform {", output)
         self.assertIn("tofu plan", output)
 
+        stdout = StringIO()
+        with redirect_stdout(stdout):
+            code = cli_main(["tools", "export", "packer"])
+        self.assertEqual(code, 0)
+        output = stdout.getvalue()
+        self.assertIn("sensitive = true", output)
+        self.assertIn("ssh_password  = var.ssh_password", output)
+        self.assertNotIn('ssh_password  = "ubuntu"', output)
+
     def test_environment_doctor_cli_groups_installable_tools(self) -> None:
         stdout = StringIO()
         stderr = StringIO()
@@ -414,3 +423,69 @@ class EnvironmentToolBenchmarkTests(unittest.TestCase):
         self.assertEqual(result["environment_mode"], "system")
         self.assertEqual(result["results"][0]["evaluation"]["type"], "command")
         self.assertIn("command", result["results"][0]["evaluation"])
+
+
+def test_workflow_matrix_treats_iac_tools_as_alternatives() -> None:
+    profile = load_profile("local-dev", Path.cwd())
+
+    def fake_row(_manager, name: str) -> dict[str, object]:
+        return {
+            "name": name,
+            "category": "fixture",
+            "needed_for": [],
+            "requirement": "optional",
+            "installed": name in {"azure-cli", "openssh-client", "opentofu"},
+            "install_mode": "manual",
+            "installable_by_aiplane": False,
+        }
+
+    with patch.object(tools_module.ToolchainManager, "_tool_row", autospec=True, side_effect=fake_row):
+        payload = tools_module.ToolchainManager(profile).matrix("cloud_vm")
+    assert payload["summary"]["tools"] == 7
+    assert {row["name"] for category in payload["categories"] for row in category["tools"]} == {
+        "azure-cli",
+        "openssh-client",
+        "opentofu",
+        "terraform",
+        "pulumi",
+        "packer",
+        "ansible",
+    }
+    workflow = payload["task_workflows"][0]
+    assert workflow["readiness"] == "ready"
+    assert workflow["required_any_of"] == [["opentofu", "terraform", "pulumi"]]
+    assert workflow["unsatisfied_alternatives"] == []
+    requirements = {row["name"]: row["requirement"] for row in workflow["tools"]}
+    assert requirements["azure-cli"] == "mandatory"
+    assert requirements["opentofu"] == "alternative"
+    assert requirements["packer"] == "optional"
+
+
+def test_environment_doctor_can_focus_on_one_workflow() -> None:
+    profile = load_profile("local-dev", Path.cwd())
+
+    def fake_row(_manager, name: str) -> dict[str, object]:
+        return {
+            "name": name,
+            "category": "fixture",
+            "description": name,
+            "needed_for": [],
+            "requirement": "optional",
+            "installed": True,
+            "install_mode": "manual",
+            "installable_by_aiplane": False,
+        }
+
+    with (
+        patch.object(tools_module.ToolchainManager, "_tool_row", autospec=True, side_effect=fake_row),
+        patch.object(tools_module, "_runtime_prerequisite_rows", return_value=[]),
+    ):
+        payload = tools_module.ToolchainManager(profile).environment_doctor(
+            workflow="cloud_kubernetes",
+            include_optional=False,
+        )
+    assert payload["workflow"] == "cloud_kubernetes"
+    assert payload["workflow_readiness"]["readiness"] == "ready"
+    checked = {row["name"] for row in payload["installed"]}
+    assert checked == {"azure-cli", "kubectl", "opentofu", "terraform", "pulumi"}
+    assert "helm" not in checked

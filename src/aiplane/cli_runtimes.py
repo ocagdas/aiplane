@@ -151,13 +151,14 @@ def add_runtimes_parser(
     runtimes_bundle = runtimes_sub.add_parser(
         "bundle",
         help="Render runtime bundle files",
-        description="Render a Dockerfile or Conda environment plan for a selected runtime/model. This does not build images, create environments, or pull weights.",
+        description="Render a supported container, Conda, or native launch handoff for a selected runtime/model. This does not build, create, start, or pull anything.",
         formatter_class=formatter_class,
         epilog=(
             "Examples:\n"
             "  aiplane runtimes bundle vllm --model MODEL_ALIAS --mode docker --format dockerfile\n"
             "  aiplane runtimes bundle transformers --model MODEL_ALIAS --mode conda --format conda-yaml\n"
-            "  aiplane runtimes bundle ollama --model MODEL_ALIAS --format json"
+            "  aiplane runtimes bundle ollama --model MODEL_ALIAS --format json\n"
+            "  aiplane runtimes bundle mlx --model MODEL_ALIAS --mode auto --format selected-file"
         ),
     )
     profile_arg(runtimes_bundle)
@@ -172,9 +173,9 @@ def add_runtimes_parser(
     )
     runtimes_bundle.add_argument(
         "--mode",
-        choices=["docker", "conda"],
-        default="docker",
-        help="Bundle target mode to plan",
+        choices=["auto", "docker", "conda", "native"],
+        default="auto",
+        help="Bundle target mode; auto selects a truthful runner-specific default",
     )
     runtimes_bundle.add_argument("--cache-volume", help="Named Docker volume for the runtime model cache")
     runtimes_bundle.add_argument(
@@ -188,9 +189,9 @@ def add_runtimes_parser(
     runtimes_bundle.add_argument("--tensor-parallel", type=int, help="Planned tensor-parallel size")
     runtimes_bundle.add_argument(
         "--format",
-        choices=["json", "dockerfile", "conda-yaml"],
+        choices=["json", "selected-file", "dockerfile", "conda-yaml", "launch-json"],
         default="json",
-        help="Output the whole JSON plan or only one rendered file",
+        help="Output the whole JSON plan, its selected file, or a named artifact type",
     )
     artifact_lock_parser = runtimes_sub.add_parser(
         "artifact-lock",
@@ -338,10 +339,20 @@ def handle_runtimes_command(
                 context_tokens=args.context_tokens,
                 tensor_parallel=args.tensor_parallel,
             )
-            if args.format == "dockerfile":
-                print(plan["files"]["Dockerfile"], end="")
-            elif args.format == "conda-yaml":
-                print(plan["files"]["environment.yaml"], end="")
+            format_files = {
+                "dockerfile": "Dockerfile",
+                "conda-yaml": "environment.yaml",
+                "launch-json": "runtime-launch.json",
+            }
+            if args.format == "selected-file":
+                print(plan["files"][plan["selected_file"]], end="")
+            elif args.format in format_files:
+                filename = format_files[args.format]
+                if filename not in plan["files"]:
+                    raise ValueError(
+                        f"{filename} is unavailable for runtime {args.runtime!r}; supported modes: {', '.join(plan['supported_modes'])}"
+                    )
+                print(plan["files"][filename], end="")
             else:
                 print(json_dumps(plan, indent=2))
             return 0
