@@ -51,9 +51,19 @@ def _files(target_name: str, target: dict[str, Any], workflow: str) -> dict[str,
 
 def _commands(workflow: str) -> list[str]:
     if workflow in {"cloud_vm", "cloud_kubernetes"}:
-        return ["tofu init", "tofu validate", "tofu plan"]
+        return [
+            "tofu init",
+            "tofu validate",
+            "tofu plan",
+            "terraform init",
+            "terraform validate",
+            "terraform plan",
+        ]
     if workflow in {"remote_workstation", "remote_vm"}:
-        return ["ansible-inventory -i inventory.ini --list", "ansible-playbook -i inventory.ini playbook.yml --check"]
+        return [
+            "ansible-inventory -i inventory.ini --list",
+            "ansible-playbook -i inventory.ini playbook.yml --check",
+        ]
     if workflow == "local_vm":
         return ["vagrant validate", "vagrant up --provision-with ansible"]
     return ["devcontainer up --workspace-folder ."]
