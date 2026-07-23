@@ -600,17 +600,35 @@ def parse_yaml(text: str) -> dict[str, Any]:
 
     while index < len(lines):
         raw = lines[index]
+        line_number = index + 1
         index += 1
         if not raw.strip() or raw.lstrip().startswith("#"):
             continue
         indent = len(raw) - len(raw.lstrip(" "))
         stripped = raw.strip()
+        if stripped.startswith("---") or stripped.startswith("..."):
+            raise ValueError(
+                f"unsupported YAML document marker at line {line_number}; use a single mapping document without ---/..."
+            )
+        if stripped.startswith("-") and (len(stripped) == 1 or stripped[1].isspace() or stripped[1] == "#"):
+            raise ValueError(
+                f"unsupported YAML dash-list syntax at line {line_number}; use inline lists like [item1, item2]"
+            )
         if ":" not in stripped:
-            raise ValueError(f"invalid YAML line: {raw}")
+            raise ValueError(
+                f"unsupported YAML subset at line {line_number}: expected a mapping entry in the form key: value"
+            )
 
         key, value = stripped.split(":", 1)
         key = key.strip()
         value = value.strip()
+        if value.startswith(("|", ">")):
+            raise ValueError(
+                f"unsupported YAML block scalar at line {line_number}; use a quoted single-line scalar"
+            )
+            raise ValueError(
+                f"unsupported YAML anchor/alias/tag syntax at line {line_number}; use plain scalars and mappings"
+            )
         while stack and indent <= stack[-1][0]:
             stack.pop()
         parent = stack[-1][1]

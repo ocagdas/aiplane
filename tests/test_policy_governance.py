@@ -195,6 +195,18 @@ def test_policy_grant_revoke_round_trip_is_atomic_json(tmp_path: Path) -> None:
         assert store.list() == []
 
 
+def test_policy_grant_revoke_raises_on_invariant_violation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    with _isolated_test_profile(workspace=tmp_path) as profile:
+        store = PolicyGrantStore(profile)
+
+        def broken_atomic_update(path, update):
+            return {"schema_version": "1.0", "profile": profile.name, "grants": []}
+
+        monkeypatch.setattr("aiplane.policy_state.atomic_update_json", broken_atomic_update)
+        with pytest.raises(RuntimeError, match="invariant violated"):
+            store.revoke("grant-unknown")
+
+
 def test_policy_grant_list_drift_and_revoke_cli(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     with _isolated_profiles_dir() as profiles_dir:

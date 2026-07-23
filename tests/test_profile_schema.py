@@ -3,6 +3,8 @@ from __future__ import annotations
 import copy
 import json
 
+import pytest
+
 from aiplane.cli import main as cli_main
 from aiplane.config import create_profile, dump_yaml, load_profile, parse_yaml
 from aiplane.profile_schema import (
@@ -144,3 +146,23 @@ def test_profile_validation_rejects_invalid_placement_scoring(tmp_path, capsys) 
 
     assert "$.hardware.placement_scoring" in failed
     assert "between 0 and 1" in failed["$.hardware.placement_scoring"]["detail"]
+
+
+def test_parse_yaml_rejects_dash_list_syntax_with_actionable_error() -> None:
+    with pytest.raises(ValueError, match="dash-list syntax at line 2"):
+        parse_yaml("models:\n  - fixture-chat-small\n")
+
+
+def test_parse_yaml_rejects_document_markers_with_actionable_error() -> None:
+    with pytest.raises(ValueError, match="document marker at line 1"):
+        parse_yaml("---\nmodels: {}\n")
+
+
+def test_parse_yaml_rejects_block_scalars_with_actionable_error() -> None:
+    with pytest.raises(ValueError, match="block scalar at line 2"):
+        parse_yaml("notes:\n  text: |\n")
+
+
+def test_parse_yaml_rejects_block_scalars_with_indent_indicator() -> None:
+    with pytest.raises(ValueError, match="block scalar at line 2"):
+        parse_yaml("notes:\n  text: |2\n")

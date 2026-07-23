@@ -226,6 +226,8 @@ Results:
 
 Provider discovery and model import now has an implemented foundation: structural shipped model templates, discovery-backed add/promote/clone flows, refresh next-step guidance, machine-derived `models list` filtering, OpenAI-compatible `/v1/models` discovery, Azure OpenAI deployment discovery, ElevenLabs voice discovery, and structured managed-provider refresh failures for missing live catalog configuration. Remaining work in that area is richer provider-specific live discovery and credential tests where provider APIs justify dedicated adapters.
 
+Recent hardening updates close the highest-priority safety findings from the July 2026 review: MCP stdio framing now fails through a controlled protocol path on malformed `Content-Length`, integration setup progress execution now explicitly blocks Windows mutation attempts instead of crashing in `select.select`, production `assert` guards in integration/policy state paths are replaced by explicit runtime invariants, profile-archive exclusion manifests accept older compatible payloads through a versioned contract, and YAML subset parser failures now provide line-specific unsupported-construct diagnostics. `model_catalog.py` discovery-role/runtime helper responsibilities are split into a focused module so the architectural line-cap contract has more headroom.
+
 The roadmap milestones are now grouped into three bands:
 
 - **Post-Merge Foundation**: architecture/codebase cleanup, MCP and agent skill hardening, and orchestrator-backed multi-agent workflow metadata.

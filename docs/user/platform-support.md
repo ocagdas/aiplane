@@ -7,6 +7,7 @@ Aiplane separates portable inspection/configuration features from host-mutating 
 | Install/run the Python CLI | Supported | Supported | Supported | Supported | Supported |
 | Profile validation, policy, recommendation, and exports | Supported | Supported | Supported | Supported | Supported |
 | Generic runtime/endpoint/tool detection | Supported | Supported | Supported | Supported | Supported |
+| `integrations setup --yes` helper execution | Supported | Best effort on supported helper hosts | Unsupported; use `--dry-run` planning and apply changes in the owning Linux/macOS environment | Unsupported; use `--dry-run` planning and apply changes in Linux | Unsupported; use `--dry-run` planning and apply changes in Linux/macOS |
 | Linux procfs, `lspci`, ROCm, and Linux GPU discovery probes | Supported | Supported where tools exist | Inspection only | Skipped | Skipped |
 | Helper-managed runtime install/update | Supported | Unsupported; use vendor installer | Unsupported; use vendor installer inside the chosen WSL/native boundary | Unsupported; use vendor installer | Unsupported; use vendor installer |
 | Bash repository setup helper | Supported | Best effort, not a promised mutation path | Best effort for development | Not a platform-native installer | Not a platform-native installer |

@@ -10,6 +10,7 @@ from aiplane.config import CONFIG_FILES, create_profile
 from aiplane.profile_archive import (
     EXCLUDED_PROFILE_STATE,
     PROFILE_ARCHIVE_KIND,
+    PROFILE_ARCHIVE_EXCLUSION_CONTRACT_VERSION,
     PROFILE_ARCHIVE_VERSION,
     archive_profile,
     load_profile_archive,
@@ -42,6 +43,7 @@ def test_archive_is_deterministic_checksummed_and_explicitly_excludes_machine_st
     included = {entry["path"] for entry in archive["manifest"]["included"]}
     assert set(CONFIG_FILES.values()) <= included
     assert "model-providers.yaml" in included
+    assert archive["manifest"]["excluded_contract_version"] == PROFILE_ARCHIVE_EXCLUSION_CONTRACT_VERSION
     assert archive["manifest"]["excluded"] == list(EXCLUDED_PROFILE_STATE)
     archived_paths = {entry["path"] for entry in archive["files"]}
     assert archived_paths.isdisjoint({"models.discovered.yaml", "model-providers.user.yaml", ".models.yaml.lock"})
@@ -137,6 +139,31 @@ def test_restore_rejects_tampered_checksums_and_unsupported_paths(tmp_path: Path
     with pytest.raises(ValueError, match="unsupported path"):
         restore_profile_archive(archive_path, name="traversal", profiles_dir=profiles_dir, yes=True)
     assert not (tmp_path / "outside.yaml").exists()
+
+
+def test_restore_accepts_older_exclusion_manifest_rows(tmp_path: Path) -> None:
+    profiles_dir, _ = _profile_fixture(tmp_path)
+    archive_path = tmp_path / "source.aiplane-profile.json"
+    archive_profile("source", archive_path, profiles_dir=profiles_dir)
+    payload = json.loads(archive_path.read_text(encoding="utf-8"))
+    payload["manifest"]["excluded"] = payload["manifest"]["excluded"][:-1]
+    payload["manifest"].pop("excluded_contract_version", None)
+    archive_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    restored = restore_profile_archive(archive_path, name="restored", profiles_dir=profiles_dir, yes=True)
+    assert restored["restored"]
+
+
+def test_restore_rejects_exclusion_manifest_reason_mismatch(tmp_path: Path) -> None:
+    profiles_dir, _ = _profile_fixture(tmp_path)
+    archive_path = tmp_path / "source.aiplane-profile.json"
+    archive_profile("source", archive_path, profiles_dir=profiles_dir)
+    payload = json.loads(archive_path.read_text(encoding="utf-8"))
+    payload["manifest"]["excluded"][0]["reason"] = "unexpected"
+    archive_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="reason mismatch"):
+        restore_profile_archive(archive_path, name="restored", profiles_dir=profiles_dir, yes=True)
 
 
 def test_profiles_archive_and_restore_cli_contract(tmp_path: Path, capsys) -> None:

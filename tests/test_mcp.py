@@ -13,6 +13,7 @@ from .support import (
     Profile,
     ProviderModelsResult,
     ProviderRegistry,
+    StringIO,
     StackManager,
     _read_message,
     _write_message,
@@ -659,6 +660,54 @@ class McpTests(unittest.TestCase):
         _write_message(stream, message)
         stream.seek(0)
         self.assertEqual(_read_message(stream), message)
+
+    def test_mcp_stdio_message_framing_rejects_missing_content_length(self) -> None:
+        with self.assertRaisesRegex(ValueError, "missing Content-Length"):
+            _read_message(BytesIO(b"Content-Type: application/json\r\n\r\n{}"))
+
+    def test_mcp_stdio_message_framing_rejects_empty_content_length(self) -> None:
+        with self.assertRaisesRegex(ValueError, "empty value"):
+            _read_message(BytesIO(b"Content-Length:\r\n\r\n"))
+
+    def test_mcp_stdio_message_framing_rejects_non_integer_content_length(self) -> None:
+        with self.assertRaisesRegex(ValueError, "must be an integer"):
+            _read_message(BytesIO(b"Content-Length: abc\r\n\r\n"))
+
+    def test_mcp_stdio_message_framing_rejects_zero_content_length(self) -> None:
+        with self.assertRaisesRegex(ValueError, "greater than zero"):
+            _read_message(BytesIO(b"Content-Length: 0\r\n\r\n"))
+
+    def test_mcp_stdio_message_framing_rejects_truncated_body(self) -> None:
+        with self.assertRaisesRegex(ValueError, "unexpected EOF"):
+            _read_message(BytesIO(b"Content-Length: 5\r\n\r\n{}"))
+
+    def test_mcp_serve_stdio_handles_malformed_header_without_traceback(self) -> None:
+        class _In:
+            def __init__(self, payload: bytes):
+                self.buffer = BytesIO(payload)
+
+        stderr = StringIO()
+        with (
+            patch.object(mcp_module.sys, "stdin", _In(b"Content-Length: bad\r\n\r\n")),
+            patch.object(mcp_module.sys, "stderr", stderr),
+        ):
+            code = mcp_module.serve_stdio(Path.cwd())
+        self.assertEqual(code, 2)
+        self.assertIn("framing error", stderr.getvalue())
+
+    def test_mcp_serve_stdio_handles_zero_content_length_without_traceback(self) -> None:
+        class _In:
+            def __init__(self, payload: bytes):
+                self.buffer = BytesIO(payload)
+
+        stderr = StringIO()
+        with (
+            patch.object(mcp_module.sys, "stdin", _In(b"Content-Length: 0\r\n\r\n")),
+            patch.object(mcp_module.sys, "stderr", stderr),
+        ):
+            code = mcp_module.serve_stdio(Path.cwd())
+        self.assertEqual(code, 2)
+        self.assertIn("framing error", stderr.getvalue())
 
     def test_mcp_safe_render_contracts_match_cli_services(self) -> None:
         server = AiplaneMcpServer(Path.cwd())
