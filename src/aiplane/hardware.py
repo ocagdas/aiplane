@@ -462,7 +462,10 @@ class HardwareManager:
 def _nearest_miss(rows: list[dict[str, Any]]) -> dict[str, Any] | None:
     if not rows:
         return None
-    row = rows[0]
+    row = sorted(
+        rows,
+        key=lambda item: (-float(item.get("selection_score", 0.0) or 0.0), str(item.get("name") or "")),
+    )[0]
     name = str(row.get("name") or "")
     return {
         "name": name,
