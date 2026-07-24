@@ -34,7 +34,15 @@ def test_nvidia_discovery_preserves_devices_groups_free_memory_and_topology(monk
                 "0, RTX 6000 Ada, 49140, 45000, GPU-a, 0000:01:00.0, 8.9, 555.42\n"
                 "1, RTX 6000 Ada, 49140, 44000, GPU-b, 0000:02:00.0, 8.9, 555.42"
             ),
-            ("nvidia-smi", "topo", "-m"): "        GPU0 GPU1\nGPU0   X NV4\nGPU1 NV4 X",
+            (
+                "nvidia-smi",
+                "topo",
+                "-m",
+            ): "        GPU0 GPU1 CPU Affinity NUMA Affinity\nGPU0   X NV4 0-31 0\nGPU1 NV4 X 32-63 1",
+            (
+                "nvidia-smi",
+                "-L",
+            ): "GPU 0: RTX 6000 Ada (UUID: GPU-a)\n  MIG 1g.5gb Device 0: (UUID: MIG-a)\nGPU 1: RTX 6000 Ada (UUID: GPU-b)",
         }
     )
     monkeypatch.setattr(
@@ -50,6 +58,9 @@ def test_nvidia_discovery_preserves_devices_groups_free_memory_and_topology(monk
     assert found["gpu_groups"][0]["total_vram_gb"] == pytest.approx(95.98, abs=0.01)
     assert found["topology"]["state"] == "detected"
     assert any(link["connection"] == "NV4" for link in found["topology"]["links"])
+    assert found["gpus"][0]["numa_node"] == "0"
+    assert found["gpus"][0]["partitioned"] is True
+    assert found["topology"]["partitions"]["instances"][0]["uuid"] == "MIG-a"
 
 
 def test_apple_and_windows_discovery_use_platform_specific_sources() -> None:

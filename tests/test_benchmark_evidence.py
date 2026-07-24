@@ -8,6 +8,8 @@ from pathlib import Path
 import pytest
 
 from aiplane.benchmark_evidence import (
+    export_calibration_bundle,
+    import_calibration_bundle,
     import_measurement_record,
     summarize_runs,
     validate_measurement_record,
@@ -180,6 +182,32 @@ def test_calibration_plan_cli_is_read_only_and_requires_a_configured_model() -> 
     assert payload["calibration"]["status"] == "controlled"
 
 
+def test_calibration_bundle_round_trips_only_controlled_records(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    root = workspace / ".aiplane" / "benchmarks"
+    root.mkdir(parents=True)
+    controlled = _measurement()
+    controlled["calibration"] = {
+        "status": "controlled",
+        "run_mode": "warm",
+        "context_tokens": 8192,
+        "concurrency": 1,
+        "warmup_runs": 1,
+        "power_mode": "performance",
+    }
+    (root / "controlled.json").write_text(json.dumps(controlled), encoding="utf-8")
+    (root / "uncontrolled.json").write_text(json.dumps(_measurement()), encoding="utf-8")
+    bundle_path = tmp_path / "out" / "calibration.json"
+
+    exported = export_calibration_bundle(workspace, bundle_path, dry_run=False)
+    assert exported["record_count"] == 1
+    assert bundle_path.exists()
+    restored = tmp_path / "restored"
+    imported = import_calibration_bundle(restored, bundle_path, dry_run=False)
+    assert imported["record_count"] == 1
+    assert len(imported["destinations"]) == 1
+
+
 def test_measurement_contract_rejects_secrets_and_invalid_scores() -> None:
     secret = _measurement()
     secret["provenance"] = {"source": "user_lab", "api_key": "not-allowed-here"}
@@ -232,6 +260,16 @@ def test_public_evidence_schemas_are_declared_for_packaging() -> None:
 
     agent = json.loads((root / "schemas" / "aiplane-agent-environment-v1.schema.json").read_text(encoding="utf-8"))
     assert {"framework", "readiness", "framework_config"} <= set(agent["properties"])
+
+
+def test_calibration_bundle_cli_previews_export_and_import(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    bundle = tmp_path / "calibration.json"
+    stdout = StringIO()
+    with redirect_stdout(stdout):
+        code = cli_main(["benchmarks", "calibration-export", str(bundle), "--profile", "local-dev"])
+    assert code == 0
+    assert json.loads(stdout.getvalue())["written"] is False
 
 
 def test_benchmark_contract_cli_validates_and_previews_import(tmp_path: Path) -> None:

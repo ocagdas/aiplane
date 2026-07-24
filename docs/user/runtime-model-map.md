@@ -269,6 +269,17 @@ Grouping meanings:
 
 ## Single-Prompt Execution Protocols
 
+For a non-mutating capacity assessment of one configured model and runtime:
+
+```bash
+aiplane runtimes capacity-plan ollama --model MODEL_ALIAS --context-tokens 8192
+```
+
+The plan keeps profile-configured candidates distinct from runtime-owned installed
+or served inventory. It renders fit, context, parallelism, and offload guidance;
+it never applies those settings. Use `runtimes list-runtime-models` only when the
+selected runner exposes its own inventory command.
+
 `aiplane run`, `aiplane chat`, `aiplane models test`, and code task commands use profile-owned model aliases and provider endpoint metadata. They do not install runtimes, pull weights, or run a coding agent. They currently execute against these protocols:
 
 - `ollama_api`: local or configured Ollama endpoint.

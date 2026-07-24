@@ -130,6 +130,7 @@ aiplane benchmarks calibration-plan --model "$CHAT_ALIAS" --runtime "$RUNTIME" -
 ```
 
 - [ ] The plan identifies context, concurrency, warm-up, power-mode, hardware, and telemetry provenance requirements.
+- [ ] `calibration-export` previews a portable bundle containing controlled records only; `calibration-import --yes` succeeds only after checksum and provenance validation.
 - [ ] It prints preview-first measurement import commands and does not write a benchmark record.
 - [ ] Any controlled record with `ttft_ms` records a non-empty telemetry source; do not substitute total elapsed time.
 
@@ -144,6 +145,7 @@ aiplane hardware active
 aiplane hardware doctor
 aiplane hardware scoring
 aiplane hardware recommend
+aiplane runtimes capacity-plan ollama --model MODEL_ALIAS --context-tokens 8192
 aiplane hardware export-machine --name manual-host > manual-host.machine.yaml
 aiplane machines list
 aiplane machines recommend

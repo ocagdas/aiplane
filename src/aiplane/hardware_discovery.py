@@ -115,7 +115,15 @@ def _nvidia(runner: CommandRunner) -> tuple[list[dict[str, Any]], dict[str, Any]
                 "source": "nvidia-smi",
             }
         )
-    return devices, _nvidia_topology(runner, len(devices))
+    topology = _nvidia_topology(runner, len(devices))
+    topology["partitions"] = _nvidia_partitions(runner)
+    affinity = topology.get("affinity", {})
+    for device in devices:
+        details = affinity.get(f"GPU{device['index']}", {}) if isinstance(affinity, dict) else {}
+        device["numa_node"] = details.get("numa_node")
+        device["cpu_affinity"] = details.get("cpu_affinity")
+        device["partitioned"] = bool(topology["partitions"].get("by_parent", {}).get(device.get("uuid")))
+    return devices, topology
 
 
 def _nvidia_topology(runner: CommandRunner, count: int) -> dict[str, Any]:
@@ -127,11 +135,37 @@ def _nvidia_topology(runner: CommandRunner, count: int) -> dict[str, Any]:
     lines = text.splitlines()
     headers = [item for item in lines[0].split() if item.startswith("GPU")]
     links = []
+    affinity: dict[str, dict[str, Any]] = {}
     for row in (line.split() for line in lines[1:] if line.strip().startswith("GPU")):
         for target, connection in zip(headers, row[1:]):
             if row[0] != target and connection not in {"X", "N/A"}:
                 links.append({"source": row[0], "target": target, "connection": connection})
-    return {"state": "detected", "links": links, "source": "nvidia-smi topo -m"}
+        trailing = row[len(headers) + 1 :]
+        if trailing:
+            affinity[row[0]] = {"cpu_affinity": trailing[0], "numa_node": trailing[1] if len(trailing) > 1 else None}
+    return {"state": "detected", "links": links, "affinity": affinity, "source": "nvidia-smi topo -m"}
+
+
+def _nvidia_partitions(runner: CommandRunner) -> dict[str, Any]:
+    text = _run(runner, ["nvidia-smi", "-L"])
+    if not text:
+        return {"state": "unresolved", "instances": [], "by_parent": {}}
+    parent: str | None = None
+    instances = []
+    by_parent: dict[str, list[dict[str, str]]] = {}
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("GPU ") and "UUID:" in stripped:
+            parent = stripped.split("UUID:", 1)[1].rstrip(")").strip()
+        elif stripped.startswith("MIG ") and "UUID:" in stripped and parent:
+            instance = {
+                "profile": stripped.split(" Device", 1)[0],
+                "uuid": stripped.split("UUID:", 1)[1].rstrip(")").strip(),
+                "parent_uuid": parent,
+            }
+            instances.append(instance)
+            by_parent.setdefault(parent, []).append(instance)
+    return {"state": "detected", "instances": instances, "by_parent": by_parent}
 
 
 def _amd(runner: CommandRunner) -> list[dict[str, Any]]:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import re
@@ -187,6 +188,95 @@ def calibration_plan(
             "Comparison leaders are emitted only for records with matching basis, suite comparability metadata, and controlled calibration.",
         ],
     }
+
+
+def export_calibration_bundle(workspace: Path, output: Path, *, dry_run: bool = True) -> dict[str, Any]:
+    root = workspace / ".aiplane" / "benchmarks"
+    records: list[dict[str, Any]] = []
+    warnings: list[dict[str, str]] = []
+    for path in sorted(root.glob("*.json")) if root.exists() else []:
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(raw, dict) or raw.get("record_type") != "benchmark_measurements":
+                continue
+            record = validate_measurement_record(raw, source=str(path))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+            warnings.append({"path": str(path), "reason": str(exc)})
+            continue
+        if record["calibration"]["status"] == "controlled":
+            record.pop("source_path", None)
+            records.append(record)
+    bundle = {
+        "contract_version": CONTRACT_VERSION,
+        "record_type": "benchmark_calibration_bundle",
+        "records": records,
+        "checksums": [_record_checksum(record) for record in records],
+        "notes": [
+            "Contains only controlled, provenance-bearing benchmark records.",
+            "Credentials, local paths, and uncalibrated smoke records are excluded.",
+        ],
+    }
+    _reject_secret_material(bundle, "benchmark calibration bundle")
+    result = {
+        "name": "benchmark_calibration_export",
+        "dry_run": dry_run,
+        "output": str(output),
+        "record_count": len(records),
+        "warnings": warnings,
+        "bundle": bundle,
+    }
+    if not dry_run:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        atomic_write_text(output, json.dumps(bundle, indent=2, sort_keys=True))
+        result["written"] = True
+    else:
+        result["written"] = False
+    return result
+
+
+def import_calibration_bundle(workspace: Path, path: Path, *, dry_run: bool = True) -> dict[str, Any]:
+    payload = _read_mapping(path)
+    if (
+        payload.get("contract_version") != CONTRACT_VERSION
+        or payload.get("record_type") != "benchmark_calibration_bundle"
+    ):
+        raise ValueError("benchmark calibration bundle has an unsupported contract")
+    raw_records = payload.get("records")
+    checksums = payload.get("checksums")
+    if not isinstance(raw_records, list) or not isinstance(checksums, list) or len(raw_records) != len(checksums):
+        raise ValueError("benchmark calibration bundle records and checksums must be matching lists")
+    records = [
+        validate_measurement_record(record, source=str(path)) for record in raw_records if isinstance(record, dict)
+    ]
+    for record in records:
+        record.pop("source_path", None)
+    if len(records) != len(raw_records) or any(record["calibration"]["status"] != "controlled" for record in records):
+        raise ValueError("benchmark calibration bundle may contain only controlled records")
+    if [_record_checksum(record) for record in records] != checksums:
+        raise ValueError("benchmark calibration bundle checksum mismatch")
+    _reject_secret_material(payload, "benchmark calibration bundle")
+    root = workspace / ".aiplane" / "benchmarks"
+    destinations = []
+    if not dry_run:
+        root.mkdir(parents=True, exist_ok=True)
+        for index, record in enumerate(records, start=1):
+            name = "".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in record["model_name"])
+            destination = root / f"calibration-{index:03d}-{name}.json"
+            atomic_write_text(destination, json.dumps(record, indent=2, sort_keys=True))
+            destinations.append(str(destination))
+    return {
+        "name": "benchmark_calibration_import",
+        "dry_run": dry_run,
+        "source": str(path),
+        "record_count": len(records),
+        "written": not dry_run,
+        "destinations": destinations,
+    }
+
+
+def _record_checksum(record: dict[str, Any]) -> str:
+    canonical = json.dumps(record, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return "sha256:" + hashlib.sha256(canonical).hexdigest()
 
 
 def import_measurement_record(

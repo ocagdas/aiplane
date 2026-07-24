@@ -177,6 +177,23 @@ not infer TTFT from elapsed time.
 }
 ```
 
+## Portable Calibration Bundles
+
+Export only controlled, provenance-bearing records into a checksum-protected JSON
+bundle. Preview is the default; neither command contacts a provider or changes a
+runtime.
+
+```bash
+aiplane benchmarks calibration-export calibration.json
+aiplane benchmarks calibration-export calibration.json --yes
+aiplane benchmarks calibration-import calibration.json
+aiplane benchmarks calibration-import calibration.json --yes
+```
+
+Export excludes uncalibrated smoke records and local source paths. Import checks
+the bundle checksum and rejects uncontrolled records or secret-bearing material
+before writing to the ignored local benchmark cache.
+
 ## Compare Saved Measurements
 
 Compare saved or imported records across one dimension while holding the other recorded dimensions and the suite protocol constant:

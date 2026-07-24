@@ -279,6 +279,17 @@ Implemented: benchmark records now distinguish uncontrolled local smoke evidence
 
 Focused picker, benchmark evidence, and comparison validation passes 52 tests plus 7 subtests. Full-suite and field-evidence execution remain follow-up validation work.
 
+### Remaining In-Repository Capability Milestones
+
+Implemented: controlled calibration records can now be exported and imported as checksum-protected, portable bundles. Export is preview-first, excludes uncalibrated smoke records and local source paths, and rejects secrets; import validates checksums and controlled-record requirements before writing ignored local cache data.
+
+Implemented: `runtimes capacity-plan RUNTIME --model MODEL_ALIAS` renders a non-mutating local placement/capacity plan with explicit configured-inventory versus runtime-owned-inventory boundaries. It does not assert that configured model metadata means model weights are installed or served.
+
+Implemented: NVIDIA discovery now captures topology links, CPU/NUMA affinity where the vendor topology table exposes it, and MIG instance identity/parent relationships. Placement continues to reject implicit summed-VRAM assumptions.
+Implemented: `examples/offline-demo/` supplies a reviewed, credential-free named-machine fixture for no-network demos and reproducible planning; it is explicitly not live hardware evidence.
+
+Remaining: add further exact telemetry only for endpoint formats with published native timing semantics, deepen AMD/Intel/Apple topology sources where available, and execute physical-machine field evidence. Those remain external/runtime-dependent validation rather than an automatic CLI action.
+
 ### Installation-Channel Validation
 
 The Ubuntu, macOS, and Windows install jobs build a wheel on the hosted runner and exercise the installed `aiplane` executable through real `pip`, `pipx`, and `uv` lifecycles in isolated temporary roots. Each channel receives one full behavioral check (bootstrap, profile validation, exports, MCP stdio, recommendation, policy, and actual-platform safety checks), followed by a post-replacement smoke that verifies wheel identity, packaged templates, the persisted profile, and MCP manifest before uninstall cleanup. The matrix does not install model runtimes, open SSH tunnels, contact providers, or launch IDE clients; those remain explicit field-evidence checks. Synthetic platform unit tests stay in the main automated suite rather than adding a redundant dependency-install step to every operating-system installer job.
@@ -289,9 +300,9 @@ The earlier provider, endpoint, runner-manifest, Codex configuration, and test-i
 
 1. **Exact native telemetry adapters** — extend runner-specific, provenance-labelled TTFT and token capture only where an endpoint exposes exact measurements; preserve nulls rather than estimates. Ollama load/prompt/decode telemetry is implemented.
 2. **Topology and partition discovery** — improve vendor-specific MIG/partition, NUMA, interconnect, and memory-domain reporting, with unresolved facts kept explicit and no summed-VRAM fit assumption.
-3. **Portable calibration bundles** — compile sanitized, versioned local benchmark/calibration evidence into reviewable import/export bundles; the controlled collection plan and import contract are implemented, while portable bundle export remains next.
-4. **Installed-model capacity plans** — normalize installed/served model inventory across supported local runners and render runtime-specific context, parallelism, cache, and offload guidance without applying settings.
-5. **Offline catalog and hardware simulation fixtures** — provide a reviewed, versioned fallback catalog and reproducible named-machine simulation fixtures for demos, CI, and no-network planning; live provider catalogs remain authoritative when available.
+3. **Portable calibration bundles** — completed: sanitized, versioned, checksum-protected controlled calibration records export/import through preview-first commands; keep sharing opt-in and do not introduce a hosted exchange.
+4. **Installed-model capacity plans** — foundation implemented: render runtime-specific placement/context/parallelism/offload guidance while keeping profile-configured candidates distinct from runtime-owned inventory. Next, normalize live installed/served inventory across each supported local runner.
+5. **Offline catalog and hardware simulation fixtures** — named-machine fixture implemented. Next, add a reviewed versioned fallback catalog and an explicit simulation loader for demos, CI, and no-network planning; live provider catalogs remain authoritative when available.
 
 Each milestone must retain CLI/MCP read-plan boundaries, secret-free artifacts, deterministic fixtures, and explicit external-evidence follow-up.
 
