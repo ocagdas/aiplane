@@ -165,6 +165,9 @@ def add_hardware_machine_parsers(
     hardware_recommend.add_argument("--runtime", help="Evaluate placement for one runtime")
     hardware_recommend.add_argument("--context-tokens", type=int, help="Requested inference context")
     hardware_recommend.add_argument("--score-profile", help="Named placement-scoring profile")
+    hardware_recommend.add_argument(
+        "--role", action="append", default=[], help="Limit recommendations to one or more model roles"
+    )
     hardware_assess = hardware_sub.add_parser(
         "assess",
         help="Explain placement and scoring for one model",
@@ -456,6 +459,7 @@ def handle_hardware_machine_command(
                         runtime=args.runtime,
                         context_tokens=args.context_tokens,
                         score_profile=args.score_profile,
+                        roles=args.role,
                     ),
                     indent=2,
                 )

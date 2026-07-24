@@ -26,6 +26,7 @@ aiplane hardware doctor --model MODEL_ALIAS
 aiplane hardware recommend
 aiplane hardware recommend --runtime ollama --context-tokens 32768
 aiplane hardware recommend --score-profile throughput --include-not-recommended
+aiplane hardware recommend --role chat --role analysis
 aiplane hardware assess MODEL_ALIAS --runtime ollama --context-tokens 32768
 aiplane hardware scoring
 aiplane hardware export-machine --name local_box > local_box.machine.yaml
@@ -59,7 +60,7 @@ aiplane hardware export-machine --name local_box > local_box.machine.yaml
   readiness score. Use `--runtime`, `--context-tokens`, and
   `--score-profile` to make those assumptions explicit. Models that fail a
   hard policy, runtime, or placement gate are hidden by default; use
-  `--include-not-recommended` for the full diagnostic list.
+  `--include-not-recommended` for the full diagnostic list. Repeat `--role` to limit the result to task roles.
   JSON output retains versioned provenance for model, machine, discovery,
   runtime, policy, benchmark sample count, and unresolved evidence.
 - `assess`: explains one model's weight, KV-cache and workspace estimates,
@@ -216,6 +217,20 @@ the selected template to the nearest match. Use a
 named template when you want runs, deployment plans, or integration exports to
 be tied to an intended target such as a CPU laptop, NVIDIA workstation, AMD
 unified-memory workstation, cloud GPU VM, or AKS GPU pool.
+
+## Concise Current-Machine Recommendation
+
+For the fastest read-only local choice, use the public command:
+
+```bash
+aiplane recommend --intent coding
+aiplane recommend --intent chat
+aiplane recommend --intent reasoning --format json
+```
+
+The `balanced`, `coding`, `chat`, `reasoning`, `quality`, and `throughput` intents make role filters and scoring profile explicit. Text output names the best local alias, explains the decision, and gives an exact Continue export command. When the recommended runtime is not available, it instead gives a dry-run setup command; it never starts, installs, or pulls a runtime itself. JSON includes requested roles, a calibration summary of saved local benchmark records, per-model runtime guidance, and the nearest hidden blocker. Benchmark records remain context only and do not override policy, local-fit, or placement gates.
+
+`hardware discover` also returns a `confidence` summary that separates detected from unresolved CPU, memory, and GPU-inventory facts. Missing vendor tooling lowers confidence rather than being inferred; it does not suggest that re-running the same probe will fill those fields.
 
 ## Model Recommendation Criteria
 

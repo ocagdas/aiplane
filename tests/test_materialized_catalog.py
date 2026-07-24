@@ -93,6 +93,9 @@ def test_materialized_catalog_rebuilds_when_sources_change_or_cache_is_corrupt(t
         first_catalog = ModelCatalog(profile)
         assert first_catalog.filter({"properties": {"quantization": "q4"}})
         first_status = first_catalog.materialized_status()
+        assert first_status["freshness"] == "current"
+        assert first_status["generated_at"]
+        assert first_status["provenance"]["secret_policy"] == "secret-bearing properties are excluded"
 
         _write_discovered_model(profile.root, quantization="q8")
         second_catalog = ModelCatalog(profile)
@@ -105,6 +108,21 @@ def test_materialized_catalog_rebuilds_when_sources_change_or_cache_is_corrupt(t
         recovered = ModelCatalog(profile).filter({"name": "ollama-synthetic-chat"})
         assert [row["name"] for row in recovered] == ["ollama-synthetic-chat"]
         assert json.loads(second_catalog.materialized.path.read_text(encoding="utf-8"))["schema_version"] == "1.0"
+        stale = ModelCatalog(profile).materialized_status()
+        assert stale["freshness"] == "current"
+
+
+def test_materialized_catalog_treats_pre_provenance_cache_as_stale(tmp_path: Path) -> None:
+    with _isolated_test_profile(workspace=tmp_path) as profile:
+        _write_discovered_model(profile.root)
+        catalog = ModelCatalog(profile)
+        catalog.filter({"name": "ollama-synthetic-chat"})
+        payload = json.loads(catalog.materialized.path.read_text(encoding="utf-8"))
+        payload.pop("generated_at")
+        catalog.materialized.path.write_text(json.dumps(payload), encoding="utf-8")
+        status = ModelCatalog(profile).materialized_status()
+        assert status["freshness"] == "stale_or_incompatible"
+        assert status["next_command"] == "aiplane models catalog-cache rebuild"
 
 
 def test_refresh_write_generates_materialized_catalog(tmp_path: Path) -> None:

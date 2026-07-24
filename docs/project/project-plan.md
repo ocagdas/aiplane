@@ -106,7 +106,7 @@ Runtime compatibility, workflow readiness, and bundle contract hardening are imp
 
 Deployment rendering now reports scaffold readiness and unresolved inputs, selects OpenTofu, Terraform, or Pulumi explicitly, and does not recommend apply/up commands for incomplete artifacts. OpenTofu/Terraform emit matching HCL validation; Pulumi emits a genuine Python project family with preview guidance. Local-VM targets select VirtualBox, libvirt, Hyper-V, or VMware Desktop; readiness checks the provider capability and required plugin before reporting ready, and render/tool exports preserve that selection. Live provider/platform checks remain separate evidence work and do not broaden Aiplane into an infrastructure or agent runner.
 
-Maintenance validation for this contract slice passes 755 tests with 9 optional skips and 29 subtests in 17.34 seconds using the configured four-worker gate. The focused schema, Vagrant-provider, documentation, MCP, profile, and tunnel gate passes 136 tests. Repository-wide Ruff format/lint, profile validation, required-only doctor checks, disposable rendering, and diff hygiene pass. The opt-in official-tool validator gate passes its available Ansible check and explicitly skips five checks whose tools or usable provider are absent on the review host.
+Maintenance validation for this contract slice passes 753 tests with 9 optional skips and 29 subtests in 17.04 seconds using the configured four-worker gate. The focused schema, Vagrant-provider, documentation, MCP, profile, and tunnel gate passes 136 tests. Repository-wide Ruff format/lint, profile validation, required-only doctor checks, disposable rendering, and diff hygiene pass. The opt-in official-tool validator gate passes its available Ansible check and explicitly skips five checks whose tools or usable provider are absent on the review host.
 
 Recent maintenance hardening rejects symlinked profile directories, preserves standard YAML single-quote escaping, bounds MCP headers as well as bodies, and validates MCP tool arguments against the published schemas before dispatch. Regression coverage also checks both long manual/evidence runbooks for balanced code fences, current opt-in performance commands, and real top-level CLI commands.
 
@@ -259,21 +259,29 @@ The repeatable benchmark and runtime-evidence milestone is implementation-comple
 
 The six-runner parity, workflow evidence integration, and render-only Kubernetes family milestones are implementation-complete. The Kubernetes compiler emits schema-linked ResourceClaim, Deployment, Service, and Helm values; consumes the reviewed launch command/health path; includes DRA count, resource quantities, probes, cache storage, and baseline container security controls; and remains secret-free with no apply path. The manual acceptance path is consolidated in [Manual Test Checklist](../user/manual-test-checklist.md). Validation passes 603 tests with 3 opt-in performance tests skipped; Ruff format/lint, profile validation, and required-only environment doctor checks in text and JSON pass.
 
-### Recommendation Clarity Roadmap
+### Recommendation and Readiness Clarity Milestones
 
-**Short term — implemented in this milestone:** make the first local-model
-answer faster without adding a new scoring formula or runtime mutation.
-`aiplane recommend --intent` now exposes stable `balanced`, `coding`, `chat`,
-`reasoning`, `quality`, and `throughput` presets over existing role and
-placement-scoring contracts. Its text output leads with the best local choice,
-reason, exact export command, and one inspectable nearest blocker/remedy.
+The following five developer-preview clarity milestones are implemented and remain read-only:
 
-**Long term — evidence-gated:** add an opt-in local calibration capture path
-that writes versioned local evidence only; evaluate a compact optional seeded
-artifact index only after measuring freshness, package-size, licensing, and
-maintenance cost; and add vendor/topology field evidence before expanding
-hardware claims. Do not turn these into shared benchmark upload, implicit model
-acquisition, a runtime, a generic UI platform, or a deployment control plane.
+1. **Intent-aware recommendations:** `aiplane recommend --intent` offers balanced, coding, chat, reasoning, quality, and throughput presets; role filters and score-profile selection are explicit in JSON.
+2. **Calibration visibility:** recommendation results report which local benchmark records exist, state that they are context only, and give the exact benchmark command when no local measurement is present.
+3. **Catalog freshness/provenance:** the ignored materialized catalog records generation time; `models catalog-cache status` distinguishes current, missing, and stale/incompatible cache state and states safe inputs and rebuild guidance.
+4. **Hardware confidence and runtime readiness:** discovery labels detected versus unresolved core facts; each local recommendation has a truthful runtime-ready/preparation next command without starting anything.
+5. **Client compatibility summaries:** integration plans provide a renderability state and structured endpoint/client verification warnings alongside existing target-specific checks.
+
+Focused hardware, materialized-catalog, and integration validation passes 83 tests plus 20 subtests. The full suite passes 758 tests with 9 optional skips and 29 subtests in 81.26 seconds; Ruff format/lint and representative public catalog, recommendation, and integration CLI checks pass.
+
+### Capability-Gap Closure Roadmap
+
+The earlier provider, endpoint, runner-manifest, Codex configuration, and test-isolation foundations are verified as implemented in the current branch. They are not re-opened as duplicate milestones. The next **in-repository** milestones are deliberately narrower than the external evidence gate:
+
+1. **Exact native telemetry adapters** — add runner-specific, provenance-labelled TTFT, token, and throughput capture only where an endpoint exposes an exact measurement; preserve nulls rather than estimates.
+2. **Topology and partition discovery** — improve vendor-specific MIG/partition, NUMA, interconnect, and memory-domain reporting, with unresolved facts kept explicit and no summed-VRAM fit assumption.
+3. **Portable calibration bundles** — compile sanitized, versioned local benchmark/calibration evidence into reviewable import/export bundles; keep sharing opt-in and do not introduce a hosted exchange.
+4. **Installed-model capacity plans** — normalize installed/served model inventory across supported local runners and render runtime-specific context, parallelism, cache, and offload guidance without applying settings.
+5. **Offline catalog and hardware simulation fixtures** — provide a reviewed, versioned fallback catalog and reproducible named-machine simulation fixtures for demos, CI, and no-network planning; live provider catalogs remain authoritative when available.
+
+Each milestone must retain CLI/MCP read-plan boundaries, secret-free artifacts, deterministic fixtures, and explicit external-evidence follow-up.
 
 ### Next Useful Work
 

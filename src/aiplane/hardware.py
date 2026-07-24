@@ -228,6 +228,7 @@ class HardwareManager:
     def discover(self) -> dict[str, Any]:
         discovered = discover_hardware(self.command_runner, self.host_platform)
         discovered["closest_profiles"] = self._closest_profiles(discovered)
+        discovered["confidence"] = _hardware_discovery_confidence(discovered)
         return discovered
 
     def scoring(self) -> dict[str, Any]:
@@ -317,12 +318,11 @@ class HardwareManager:
             "remote_or_cloud": [],
         }
         benchmark_summaries = _latest_benchmark_summaries(self.profile.workspace)
-        requested_roles = {str(role) for role in roles or []}
-
+        requested_roles = sorted({str(role).strip() for role in (roles or []) if str(role).strip()})
         for row in catalog.models().items():
             name, model = row
             model_roles = {str(role) for role in model.get("roles", []) if isinstance(role, str)}
-            if requested_roles and not (model_roles & requested_roles):
+            if requested_roles and not model_roles.intersection(requested_roles):
                 continue
             payload = dict(model)
             payload["name"] = name
@@ -419,6 +419,12 @@ class HardwareManager:
                 "contract": "placement_readiness",
                 "hard_eligibility_gate": True,
             },
+            "requested_roles": requested_roles,
+            "calibration": _calibration_summary(
+                benchmark_summaries,
+                requested_roles,
+                set(catalog.models()),
+            ),
             "models": ordered_groups,
             "hidden": (
                 {
@@ -711,6 +717,7 @@ def _recommendation_payload(
         }
         payload["runtime_compatibility_score"] = float(runtime_compatibility.get("compatibility_score", 0.0) or 0.0)
         payload["runtime_recommendation"] = runtime_compatibility.get("recommended_runtime")
+        payload["runtime_guidance"] = _runtime_guidance(payload["name"], runtime_compatibility)
     else:
         payload["runtime_compatibility_score"] = 0.0
         payload["runtime_recommendation"] = None
@@ -744,6 +751,57 @@ def _recommendation_payload(
         benchmark_summary,
     )
     return payload
+
+
+def _hardware_discovery_confidence(discovered: dict[str, Any]) -> dict[str, Any]:
+    facts = {
+        "cpu_count": discovered.get("cpu_count"),
+        "memory_gb": discovered.get("memory_gb"),
+        "gpu_inventory": discovered.get("gpus"),
+    }
+    resolved = [name for name, value in facts.items() if value is not None]
+    unresolved = [name for name, value in facts.items() if value is None]
+    level = "high" if len(resolved) == len(facts) else "partial" if resolved else "low"
+    return {
+        "level": level,
+        "resolved_facts": resolved,
+        "unresolved_facts": unresolved,
+        "summary": f"{len(resolved)}/{len(facts)} core local hardware facts were detected",
+        "next_command": None,
+    }
+
+
+def _calibration_summary(
+    benchmark_summaries: dict[str, dict[str, Any]],
+    requested_roles: list[str],
+    known_model_names: set[str],
+) -> dict[str, Any]:
+    measured = sorted(name for name in benchmark_summaries if name in known_model_names)
+    return {
+        "measured_model_count": len(measured),
+        "measured_models": measured,
+        "role_filter": requested_roles,
+        "ranking_use": "context_only_not_used_for_ranking",
+        "next_command": "aiplane models benchmark MODEL_ALIAS --task all" if not measured else None,
+    }
+
+
+def _runtime_guidance(model_name: Any, compatibility: dict[str, Any]) -> dict[str, Any]:
+    runtime = compatibility.get("recommended_runtime")
+    state = str(compatibility.get("state") or "not_applicable")
+    if not runtime:
+        return {"state": state, "ready": False, "next_command": None}
+    if compatibility.get("available_runtimes"):
+        return {
+            "state": state,
+            "ready": True,
+            "next_command": f"aiplane integrations export continue --model {model_name}",
+        }
+    return {
+        "state": state,
+        "ready": False,
+        "next_command": f"aiplane integrations setup continue --model {model_name} --runtime {runtime} --dry-run",
+    }
 
 
 def _recommendation_run_provenance(
