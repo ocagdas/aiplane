@@ -110,6 +110,27 @@ class HardwareMachineTests(unittest.TestCase):
         self.assertLessEqual(len(discovered["closest_profiles"]), 3)
         self.assertTrue(all("name" in row for row in discovered["closest_profiles"]))
 
+    def test_hardware_discover_reports_confidence(self) -> None:
+        profile = load_profile("local-dev", Path.cwd())
+        confidence = HardwareManager(profile).discover()["confidence"]
+        self.assertIn(confidence["level"], {"high", "partial", "low"})
+        self.assertEqual(
+            sorted(confidence["resolved_facts"] + confidence["unresolved_facts"]),
+            ["cpu_count", "gpu_inventory", "memory_gb"],
+        )
+
+    def test_hardware_recommend_filters_roles_and_explains_runtime_readiness(self) -> None:
+        profile = load_profile("local-dev", Path.cwd())
+        result = HardwareManager(profile).recommend(roles=["chat"], include_not_recommended=True)
+        self.assertEqual(result["requested_roles"], ["chat"])
+        self.assertIn("calibration", result)
+        rows = [row for group in result["models"].values() for row in group]
+        self.assertTrue(rows)
+        self.assertTrue(all("chat" in profile.models["models"].get(row["name"], {}).get("roles", []) for row in rows))
+        local = next(row for row in rows if row["runtime_compatibility"]["state"] != "not_applicable")
+        self.assertIn("runtime_guidance", local)
+        self.assertIn("next_command", local["runtime_guidance"])
+
     def test_hardware_closest_profiles_excludes_zero_score_gpu_templates(self) -> None:
         profile = load_profile("local-dev", Path.cwd())
         manager = HardwareManager(profile)
@@ -235,6 +256,19 @@ class HardwareMachineTests(unittest.TestCase):
         )
         scores = [row["selection_score"] for row in result["models"]["recommended"]]
         self.assertEqual(scores, sorted(scores, reverse=True))
+
+    def test_public_recommend_intent_is_recorded_and_text_has_next_action(self) -> None:
+        stdout = StringIO()
+        with redirect_stdout(stdout):
+            code = cli_main(["recommend", "--intent", "chat", "--format", "json", "--profile", "local-dev"])
+        self.assertEqual(code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["intent"], "chat")
+        self.assertEqual(payload["requested_roles"], ["chat"])
+
+        text = cli_presenters._public_recommend_text(payload)
+        self.assertIn("aiplane recommend (chat)", text)
+        self.assertIn("best local choice:", text)
 
     def test_hardware_recommend_includes_runtime_and_policy_metadata(self) -> None:
         profile = load_profile("local-dev", Path.cwd())

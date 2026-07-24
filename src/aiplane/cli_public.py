@@ -10,6 +10,16 @@ from .hardware import HardwareManager
 from .local_doctor import local_coding_doctor, local_coding_doctor_text
 
 
+_RECOMMENDATION_INTENTS = {
+    "balanced": ([], "balanced"),
+    "coding": (["autocomplete", "completion", "generation", "refactor"], "balanced"),
+    "chat": (["chat"], "balanced"),
+    "reasoning": (["analysis", "reasoning"], "quality_evidence"),
+    "quality": ([], "quality_evidence"),
+    "throughput": ([], "throughput"),
+}
+
+
 def add_public_parsers(
     subparsers: Any,
     *,
@@ -39,13 +49,19 @@ def add_public_parsers(
         "recommend",
         "Recommend models for this machine",
         "Rank local model aliases against the active hardware selection, runtime compatibility, and policy. This command is read-only.",
-        "Examples:\n  aiplane recommend\n  aiplane recommend --include-not-recommended\n  aiplane recommend --format json",
+        "Examples:\n  aiplane recommend\n  aiplane recommend --intent coding\n  aiplane recommend --include-not-recommended\n  aiplane recommend --format json",
     )
     profile_arg(recommend_cmd)
     recommend_cmd.add_argument(
         "--include-not-recommended",
         action="store_true",
         help="Include models rejected by hardware, runtime, or policy constraints",
+    )
+    recommend_cmd.add_argument(
+        "--intent",
+        choices=sorted(_RECOMMENDATION_INTENTS),
+        default="balanced",
+        help="Apply a role/ranking preset; balanced is the default",
     )
     recommend_cmd.add_argument(
         "--format",
@@ -278,7 +294,13 @@ def handle_public_command(
 
     if args.command == "recommend":
         profile = load_profile(effective_profile, workspace, profiles_dir=profiles_dir)
-        payload = HardwareManager(profile).recommend(include_not_recommended=args.include_not_recommended)
+        roles, score_profile = _RECOMMENDATION_INTENTS[args.intent]
+        payload = HardwareManager(profile).recommend(
+            include_not_recommended=args.include_not_recommended,
+            roles=roles,
+            score_profile=score_profile,
+        )
+        payload["intent"] = args.intent
         output_format = resolve_output_format(
             args.format,
             profile=effective_profile,

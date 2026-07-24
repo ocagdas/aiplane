@@ -360,6 +360,8 @@ aiplane integrations export continue-mcp
 
 `setup` is available for Continue and single-model endpoint tools (`cline`, `zed`, `aider`, `openai-compatible`, `codex`, `copilot-cli`, and `copilot-vscode`). It prepares the selected runtime/model where helpers exist, but it still does not edit the target tool's configuration file.
 
+Every `integrations plan` result includes a `compatibility` summary. `compatible` means the selected configuration can be rendered from known contracts; `warnings` lists unknown tool-calling, streaming, context, or runtime facts that still need endpoint/client verification. It does not contact the endpoint or start a runtime.
+
 ## Agent Applications
 
 An agent application is the code that owns the prompt, state, tools, and model-call loop. `aiplane` does not become that agent; it selects and documents the endpoint/model the agent code should call, then prints a starter scaffold you can review.

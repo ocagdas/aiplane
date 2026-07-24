@@ -343,8 +343,7 @@ aiplane models catalog-cache rebuild
 aiplane models catalog-cache clear
 ```
 
-`models clear-cache` clears provider discovery data. `models catalog-cache
-clear` clears only the derived query cache; the next normal query rebuilds it.
+`models catalog-cache status` reports `freshness` (`current`, `missing`, or `stale_or_incompatible`), the cache generation time when current, its source-input provenance, and the exact rebuild command. `models clear-cache` clears provider discovery data. `models catalog-cache clear` clears only the derived query cache; the next normal query rebuilds it.
 
 Compact text output places the Aiplane `ALIAS` beside the provider-native
 `MODEL`, so commands such as `models show`, `models promote`, `models pull`, and

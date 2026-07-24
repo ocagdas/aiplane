@@ -189,7 +189,10 @@ aiplane models list --property quantization=q4 --min-benchmark-score 50 --sort-b
 aiplane models list --group-by runtime --format json
 aiplane models list --catalog-cache off --format json > full-scan.json
 aiplane models list --catalog-cache rebuild --format json > indexed.json
+aiplane models catalog-cache status
 ```
+
+- [ ] Cache status reports freshness, generation time when current, safe input provenance, and a rebuild command when missing or stale.
 
 - [ ] Text output places alias and native id adjacent.
 - [ ] `--identity alias` and `--identity model` emit one selected identity per line.
@@ -207,6 +210,17 @@ AIPLANE_RUN_PERFORMANCE=1 python -m pytest -q tests/performance/test_catalog_que
 - [ ] Results are treated as host-local regression evidence, not a universal speed claim.
 
 ## 7. Select and inspect a compatible chat alias
+
+```bash
+aiplane recommend --intent coding
+aiplane recommend --intent chat --format json
+aiplane hardware discover
+```
+
+- [ ] Recommendation text names one best local alias or clearly reports none, plus an export/prepare next action.
+- [ ] JSON preserves intent, requested roles, calibration context, runtime guidance, and nearest hidden blocker without treating catalog scores as benchmark measurements.
+- [ ] Hardware discovery includes confidence with resolved and unresolved core facts.
+- [ ] `aiplane integrations plan continue` includes a renderability status and any endpoint/client verification warnings without writing configuration.
 
 Choose one alias from the preceding output and substitute it below:
 

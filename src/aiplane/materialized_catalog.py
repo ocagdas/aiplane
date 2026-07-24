@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
@@ -77,6 +78,8 @@ class MaterializedCatalog:
             return None
         if payload.get("input_digest") != expected_digest:
             return None
+        if not isinstance(payload.get("generated_at"), str) or not payload["generated_at"].strip():
+            return None
         if not isinstance(payload.get("rows"), list) or not isinstance(payload.get("indexes"), dict):
             return None
         return payload
@@ -135,6 +138,7 @@ class MaterializedCatalog:
             "schema_version": CATALOG_CACHE_SCHEMA_VERSION,
             "enrichment_version": CATALOG_ENRICHMENT_VERSION,
             "input_digest": input_digest,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
             "row_count": len(materialized_rows),
             "rows": materialized_rows,
             "indexes": indexes,
@@ -187,6 +191,7 @@ def materialized_metadata(
         "path": str(path),
         "schema_version": payload.get("schema_version"),
         "input_digest": payload.get("input_digest"),
+        "generated_at": payload.get("generated_at"),
         "rows": payload.get("row_count", len(payload.get("rows", []))),
         "rebuilt": rebuilt,
         "persisted": persisted,

@@ -259,6 +259,30 @@ The repeatable benchmark and runtime-evidence milestone is implementation-comple
 
 The six-runner parity, workflow evidence integration, and render-only Kubernetes family milestones are implementation-complete. The Kubernetes compiler emits schema-linked ResourceClaim, Deployment, Service, and Helm values; consumes the reviewed launch command/health path; includes DRA count, resource quantities, probes, cache storage, and baseline container security controls; and remains secret-free with no apply path. The manual acceptance path is consolidated in [Manual Test Checklist](../user/manual-test-checklist.md). Validation passes 603 tests with 3 opt-in performance tests skipped; Ruff format/lint, profile validation, and required-only environment doctor checks in text and JSON pass.
 
+### Recommendation and Readiness Clarity Milestones
+
+The following five developer-preview clarity milestones are implemented and remain read-only:
+
+1. **Intent-aware recommendations:** `aiplane recommend --intent` offers balanced, coding, chat, reasoning, quality, and throughput presets; role filters and score-profile selection are explicit in JSON.
+2. **Calibration visibility:** recommendation results report which local benchmark records exist, state that they are context only, and give the exact benchmark command when no local measurement is present.
+3. **Catalog freshness/provenance:** the ignored materialized catalog records generation time; `models catalog-cache status` distinguishes current, missing, and stale/incompatible cache state and states safe inputs and rebuild guidance.
+4. **Hardware confidence and runtime readiness:** discovery labels detected versus unresolved core facts; each local recommendation has a truthful runtime-ready/preparation next command without starting anything.
+5. **Client compatibility summaries:** integration plans provide a renderability state and structured endpoint/client verification warnings alongside existing target-specific checks.
+
+Focused hardware, materialized-catalog, and integration validation passes 83 tests plus 20 subtests. The full suite passes 758 tests with 9 optional skips and 29 subtests in 81.26 seconds; Ruff format/lint and representative public catalog, recommendation, and integration CLI checks pass.
+
+### Capability-Gap Closure Roadmap
+
+The earlier provider, endpoint, runner-manifest, Codex configuration, and test-isolation foundations are verified as implemented in the current branch. They are not re-opened as duplicate milestones. The next **in-repository** milestones are deliberately narrower than the external evidence gate:
+
+1. **Exact native telemetry adapters** — add runner-specific, provenance-labelled TTFT, token, and throughput capture only where an endpoint exposes an exact measurement; preserve nulls rather than estimates.
+2. **Topology and partition discovery** — improve vendor-specific MIG/partition, NUMA, interconnect, and memory-domain reporting, with unresolved facts kept explicit and no summed-VRAM fit assumption.
+3. **Portable calibration bundles** — compile sanitized, versioned local benchmark/calibration evidence into reviewable import/export bundles; keep sharing opt-in and do not introduce a hosted exchange.
+4. **Installed-model capacity plans** — normalize installed/served model inventory across supported local runners and render runtime-specific context, parallelism, cache, and offload guidance without applying settings.
+5. **Offline catalog and hardware simulation fixtures** — provide a reviewed, versioned fallback catalog and reproducible named-machine simulation fixtures for demos, CI, and no-network planning; live provider catalogs remain authoritative when available.
+
+Each milestone must retain CLI/MCP read-plan boundaries, secret-free artifacts, deterministic fixtures, and explicit external-evidence follow-up.
+
 ### Next Useful Work
 
 1. Active P1 evidence gate: run the clean-machine onboarding and replay trials with the [Field Evidence Collection Runbook](../user/evidence-collection.md) when maintainer time or external participants are available; do not claim P0 closure or external-beta readiness before then.

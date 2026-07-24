@@ -445,13 +445,23 @@ class ModelCatalog:
         input_digest = self.materialized.input_digest(self.config, self.store.generated_path, benchmark_root)
         payload = self.materialized.load(input_digest)
         if payload is None:
+            available = self.materialized.path.is_file()
             return {
                 "path": str(self.materialized.path),
-                "available": self.materialized.path.is_file(),
+                "available": available,
                 "current": False,
                 "schema_version": "1.0",
+                "freshness": "stale_or_incompatible" if available else "missing",
+                "next_command": "aiplane models catalog-cache rebuild",
             }
-        return materialized_metadata(self.materialized.path, payload, rebuilt=False, persisted=True)
+        result = materialized_metadata(self.materialized.path, payload, rebuilt=False, persisted=True)
+        result["freshness"] = "current"
+        result["provenance"] = {
+            "inputs": ["models.yaml", "models.discovered.yaml", ".aiplane/benchmarks/*.json"],
+            "enrichment_version": payload.get("enrichment_version"),
+            "secret_policy": "secret-bearing properties are excluded",
+        }
+        return result
 
     def clear_materialized(self) -> dict[str, Any]:
         removed = self.materialized.clear()

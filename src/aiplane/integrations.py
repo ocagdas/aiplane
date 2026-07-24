@@ -225,6 +225,12 @@ class IntegrationManager:
                 "profile": self.profile.name,
                 "required_roles": self._required_roles(tool),
                 "selection": {},
+                "compatibility": {
+                    "status": "compatible",
+                    "warnings": [],
+                    "renderable": True,
+                    "next_command": "aiplane integrations export " + tool,
+                },
                 "provenance": evidence_provenance(
                     [evidence_source("integration_contract", "generated", "integration_contracts", value=tool)],
                     method="mcp_contract_export",
@@ -330,6 +336,7 @@ class IntegrationManager:
                 "offline": bool(offline),
             },
             "selection": selection,
+            "compatibility": self._plan_compatibility(tool, selection),
             "provenance": self._plan_provenance(selection, constraints, overrides, endpoint),
             "notes": [
                 "plan prints the model/runtime/endpoint decision; it does not write IDE config or start runtimes",
@@ -469,6 +476,28 @@ class IntegrationManager:
                 "setup uses runtime helpers where available; dry-run previews delegated commands",
                 "setup does not edit IDE config; run integrations export after setup succeeds",
             ],
+        }
+
+    def _plan_compatibility(self, tool: str, selection: dict[str, dict[str, Any]]) -> dict[str, Any]:
+        warnings: list[dict[str, str]] = []
+        for role, row in selection.items():
+            for warning in (
+                row.get("compatibility_warnings", []) if isinstance(row.get("compatibility_warnings"), list) else []
+            ):
+                warnings.append({"role": role, "model": str(row.get("name") or ""), "message": str(warning)})
+            if not row.get("runtime") and tool not in MCP_EXPORT_TOOLS:
+                warnings.append(
+                    {
+                        "role": role,
+                        "model": str(row.get("name") or ""),
+                        "message": "No local runtime was selected; verify the managed endpoint or provider configuration.",
+                    }
+                )
+        return {
+            "status": "warnings" if warnings else "compatible",
+            "warnings": warnings,
+            "renderable": True,
+            "next_command": "aiplane integrations export " + tool,
         }
 
     def _plan_provenance(

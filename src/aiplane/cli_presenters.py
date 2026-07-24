@@ -416,19 +416,31 @@ def _public_discover_text(payload: dict[str, object]) -> str:
 
 def _public_recommend_text(payload: dict[str, object]) -> str:
     models = payload.get("models") if isinstance(payload.get("models"), dict) else {}
-    lines = ["aiplane recommend", "recommended:"]
+    intent = str(payload.get("intent") or "balanced")
     recommended = models.get("recommended", []) if isinstance(models, dict) else []
-    if recommended:
-        for row in recommended[:8]:
-            if not isinstance(row, dict):
-                continue
-            lines.append(f"- {row.get('name')}: {row.get('reason')}")
-    else:
-        lines.append("- none")
     usable = models.get("usable", []) if isinstance(models, dict) else []
     remote = models.get("remote_or_cloud", []) if isinstance(models, dict) else []
+    lines = [f"aiplane recommend ({intent})"]
+    first = next((row for row in recommended if isinstance(row, dict)), None)
+    if first is not None:
+        lines.extend(
+            [
+                f"best local choice: {first.get('name')} (selection score: {float(first.get('selection_score', 0.0) or 0.0):.2f})",
+                f"why: {first.get('reason')}",
+                f"next command: aiplane integrations export continue --model {first.get('name')}",
+            ]
+        )
+        guidance = first.get("runtime_guidance") if isinstance(first.get("runtime_guidance"), dict) else {}
+        if guidance.get("next_command") and not guidance.get("ready"):
+            lines.append(f"runtime preparation: {guidance['next_command']}")
+    else:
+        lines.append("best local choice: none")
+    hidden = payload.get("hidden") if isinstance(payload.get("hidden"), dict) else {}
+    nearest = hidden.get("nearest_miss") if isinstance(hidden.get("nearest_miss"), dict) else None
+    if nearest:
+        lines.append(f"nearest blocker: {nearest.get('name')}: {nearest.get('reason')}")
+        lines.append(f"inspect/remedy: {nearest.get('remediation')}")
     lines.append(f"usable: {len(usable)}; remote_or_cloud: {len(remote)}")
-    lines.append("next command: aiplane export continue")
     return "\n".join(lines)
 
 

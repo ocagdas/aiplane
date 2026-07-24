@@ -779,6 +779,13 @@ class IntegrationChatTests(unittest.TestCase):
         self.assertIn("aider --model openai/", output)
         self.assertIn("OPENAI_API_BASE", output)
 
+    def test_mcp_plan_has_the_same_compatibility_summary_contract(self) -> None:
+        with _isolated_test_profile() as profile:
+            plan = IntegrationManager(profile).plan("continue-mcp")
+        self.assertEqual(plan["compatibility"]["status"], "compatible")
+        self.assertTrue(plan["compatibility"]["renderable"])
+        self.assertEqual(plan["compatibility"]["warnings"], [])
+
     def test_host_client_plan_reports_api_compatibility_and_rejects_foreign_flags(self) -> None:
         with _isolated_test_profile() as profile:
             manager = IntegrationManager(profile)
@@ -790,6 +797,8 @@ class IntegrationChatTests(unittest.TestCase):
         self.assertEqual(selected["compatibility_warnings"], [])
         self.assertEqual(selected["name"], "fixture-chat-small")
         self.assertEqual(selected["model"], "provider-chat-small:8b")
+        self.assertEqual(plan["compatibility"]["status"], "compatible")
+        self.assertTrue(plan["compatibility"]["renderable"])
 
     def test_host_client_exports_are_cross_platform_and_secret_safe(self) -> None:
         with _isolated_test_profile() as profile:
