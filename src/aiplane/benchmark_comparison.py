@@ -54,6 +54,7 @@ def compare_benchmarks(
                 "dimension": by,
                 "basis": basis,
                 "comparable": bool(row["suite"].get("comparability")),
+                "calibrated": row["calibration"].get("status") == "controlled",
                 "rows": [],
             },
         )
@@ -62,7 +63,18 @@ def compare_benchmarks(
     result_groups = []
     for group in groups.values():
         group["rows"].sort(key=lambda row: (str(row.get(by) or ""), row["created_at"], row["path"]))
-        group["comparison_ready"] = group["comparable"] and len({str(row.get(by)) for row in group["rows"]}) >= 2
+        group["comparison_ready"] = (
+            group["comparable"] and group["calibrated"] and len({str(row.get(by)) for row in group["rows"]}) >= 2
+        )
+        group["comparison_blockers"] = [
+            blocker
+            for blocker, applies in (
+                ("suite has no explicit comparability contract", not group["comparable"]),
+                ("records do not declare controlled calibration", not group["calibrated"]),
+                (f"fewer than two distinct {by} values", len({str(row.get(by)) for row in group["rows"]}) < 2),
+            )
+            if applies
+        ]
         group["leaders"] = _leaders(group["rows"]) if group["comparison_ready"] else {}
         result_groups.append(group)
     result_groups.sort(key=lambda group: group["id"])
@@ -82,7 +94,7 @@ def compare_benchmarks(
         "groups": result_groups,
         "warnings": warnings,
         "notes": [
-            "Rows are comparable only when the suite declares comparability and the displayed basis matches.",
+            "Leaders require matching displayed basis, an explicit suite comparability contract, and controlled calibration metadata.",
             "Quality, throughput, latency, placement, and policy remain separate; no universal score is calculated.",
             "TTFT leaders use only samples carrying explicit native telemetry provenance.",
         ],
@@ -146,6 +158,7 @@ def _row(path: Path, record: dict[str, Any]) -> dict[str, Any]:
             "ttft_exact_samples": len(exact_ttft),
             "average_exact_ttft_ms": round(sum(exact_ttft) / len(exact_ttft), 4) if exact_ttft else None,
         },
+        "calibration": record.get("calibration", {"status": "uncontrolled"}),
         "environment": {
             "fingerprint": environment.get("fingerprint"),
             "hardware": hardware,
@@ -167,6 +180,7 @@ def _comparison_basis(row: dict[str, Any], dimension: str) -> dict[str, Any]:
             "comparability": row["suite"].get("comparability"),
         },
         "decoding": row.get("decoding", {}),
+        "calibration": row.get("calibration", {}),
         "dimensions": dimensions,
     }
 

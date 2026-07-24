@@ -49,8 +49,10 @@
           "quality_score",
           "performance_score",
           "elapsed_ms",
+          "load_duration_ms",
           "ttft_ms",
           "prompt_tokens",
+          "prompt_tokens_per_second",
           "output_tokens",
           "tokens_per_second"
         ]

@@ -7,6 +7,7 @@ from urllib.parse import urlsplit
 
 from .integrations import IntegrationManager
 from .policy import PolicyEngine
+from .runtime_specs import runtime_spec
 
 
 def _launch_plan(
@@ -108,7 +109,6 @@ def _launch_plan(
 
 
 def _codex_oss_endpoint_is_local(runtime: str, endpoint: str) -> bool:
-    expected_ports = {"ollama": 11434, "lmstudio": 1234}
     try:
         parsed = urlsplit(endpoint)
         port = parsed.port
@@ -117,7 +117,7 @@ def _codex_oss_endpoint_is_local(runtime: str, endpoint: str) -> bool:
     return (
         parsed.scheme == "http"
         and parsed.hostname in {"localhost", "127.0.0.1", "::1"}
-        and port == expected_ports[runtime]
+        and port == runtime_spec(runtime).port
     )
 
 

@@ -17,7 +17,7 @@ def _record(runtime: str, *, quality: float, ttft: float, source: str | None) ->
         "quality_score": quality,
         "performance_score": None,
         "elapsed_ms": 100,
-        "ttft_ms": ttft,
+        "ttft_ms": ttft if source else None,
         "prompt_tokens": 10,
         "output_tokens": 20,
         "tokens_per_second": 40,
@@ -52,6 +52,14 @@ def _record(runtime: str, *, quality: float, ttft: float, source: str | None) ->
             "software": {},
         },
         "decoding": {"temperature": 0, "seed": 7},
+        "calibration": {
+            "status": "controlled",
+            "run_mode": "warm",
+            "context_tokens": 8192,
+            "concurrency": 1,
+            "warmup_runs": 1,
+            "power_mode": "performance",
+        },
         "runs": [run],
         "provenance": {"source": "test_lab"},
     }
@@ -106,6 +114,23 @@ def test_suite_without_comparability_never_produces_leaders(tmp_path: Path) -> N
 
     assert group["comparable"] is False
     assert group["comparison_ready"] is False
+    assert group["leaders"] == {}
+
+
+def test_uncontrolled_records_are_visible_but_cannot_claim_comparison_leaders(tmp_path: Path) -> None:
+    first = _record("ollama", quality=70, ttft=20, source="native")
+    second = _record("vllm", quality=80, ttft=10, source="native")
+    first["calibration"] = {"status": "uncontrolled"}
+    second["calibration"] = {"status": "uncontrolled"}
+    with _isolated_test_profile(workspace=tmp_path) as profile:
+        root = tmp_path / ".aiplane" / "benchmarks"
+        root.mkdir(parents=True)
+        (root / "first.json").write_text(json.dumps(first), encoding="utf-8")
+        (root / "second.json").write_text(json.dumps(second), encoding="utf-8")
+        group = compare_benchmarks(profile, by="runtime")["groups"][0]
+
+    assert group["comparison_ready"] is False
+    assert "records do not declare controlled calibration" in group["comparison_blockers"]
     assert group["leaders"] == {}
 
 

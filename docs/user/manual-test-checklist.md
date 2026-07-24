@@ -105,6 +105,7 @@ aiplane quickstart local-coding --dry-run --no-discovery --format json
 aiplane discover
 aiplane doctor
 aiplane doctor --format json
+aiplane pick --intent chat --format json
 aiplane environment doctor --required-only
 aiplane environment doctor --required-only --format json
 aiplane tools matrix
@@ -116,7 +117,21 @@ aiplane environment doctor --workflow local_runtime --format json
 - [ ] JSON stdout parses without progress text contamination.
 - [ ] Discover output labels detected, configured, generated, and unresolved provenance.
 - [ ] Doctor findings include stable identifiers, severity, reason, impact, and remediation metadata.
+- [ ] `pick` is read-only; when a local choice exists it displays its alias, provider-native model ID, and a pull preview before any mutating command.
 - [ ] Required environment checks pass, or each failure gives a concrete remedy.
+
+## 3.1 Controlled benchmark calibration plan
+
+**Read-only:** after selecting a configured alias, render the protocol before
+collecting any cross-model or cross-runtime timing evidence.
+
+```bash
+aiplane benchmarks calibration-plan --model "$CHAT_ALIAS" --runtime "$RUNTIME" --repeats 5
+```
+
+- [ ] The plan identifies context, concurrency, warm-up, power-mode, hardware, and telemetry provenance requirements.
+- [ ] It prints preview-first measurement import commands and does not write a benchmark record.
+- [ ] Any controlled record with `ttft_ms` records a non-empty telemetry source; do not substitute total elapsed time.
 
 ## 4. Hardware discovery and machine evidence
 
@@ -411,7 +426,8 @@ aiplane benchmarks import path/to/measurements.json --dry-run
 
 - [ ] Smoke scores are scoped to the named/versioned suite and are not presented as universal quality.
 - [ ] Benchmark records include runtime evidence.
-- [ ] Native prompt/output token counts, elapsed time, TTFT, and throughput appear only when the runtime exposes them; unavailable values remain null.
+- [ ] Native prompt/output token counts, elapsed time, load duration, prompt-evaluation throughput, TTFT, and decode throughput appear only when the runtime exposes them; unavailable values remain null.
+- [ ] Ollama load duration and prompt-evaluation throughput remain separate from TTFT; no non-streaming timing is labelled as first-token latency.
 - [ ] Comparison leaders appear only for at least two distinct values under explicit suite comparability metadata.
 - [ ] TTFT leaders contain a non-empty telemetry source; provenance-free TTFT cannot become a leader.
 - [ ] Quality, performance, throughput, elapsed time, and TTFT remain separate rather than collapsing into a universal score.

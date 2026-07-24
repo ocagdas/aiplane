@@ -146,6 +146,37 @@ aiplane models route --role chat --candidate MODEL_A --candidate MODEL_B
 
 Only evidence with declared comparability affects measured quality/performance components. Local smoke results and arbitrary scores remain visible context, not universal quality claims.
 
+## Controlled Real-Machine Calibration
+
+A smoke run is useful local evidence, but it is not automatically comparable
+performance evidence. Generate a read-only protocol before collecting a
+cross-model or cross-runtime comparison:
+
+```bash
+aiplane benchmarks calibration-plan --model MODEL_ALIAS --runtime ollama --repeats 5
+```
+
+Record the exact model revision/quantization, runtime version, host fingerprint,
+GPU/VRAM state, context length, concurrency, warm-up policy, and power mode.
+Hold prompts, decoding, context, concurrency, thermal state, and power mode
+steady across candidates. The plan prints the dry-run, measured-run, preview
+import, and confirmed-import commands; it does not execute them.
+
+Imported controlled records declare the following metadata. `ttft_ms` in a
+controlled record must name its native or harness telemetry source; Aiplane will
+not infer TTFT from elapsed time.
+
+```json
+"calibration": {
+  "status": "controlled",
+  "run_mode": "warm",
+  "context_tokens": 8192,
+  "concurrency": 1,
+  "warmup_runs": 1,
+  "power_mode": "performance"
+}
+```
+
 ## Compare Saved Measurements
 
 Compare saved or imported records across one dimension while holding the other recorded dimensions and the suite protocol constant:
@@ -158,7 +189,7 @@ aiplane benchmarks compare --by quantization
 aiplane benchmarks compare --by context --model MODEL_ALIAS
 ```
 
-Supported dimensions are `runtime`, `model`, `machine`, `quantization`, and `context`. A group reports leaders only when at least two distinct values are present and the suite declares explicit comparability metadata. Quality, performance, throughput, elapsed time, and TTFT remain separate. TTFT leadership uses only runs with a non-empty `telemetry_source`; estimated or provenance-free latency is still displayed as evidence but cannot win an exact-TTFT comparison. Invalid local records become warnings rather than hiding valid groups.
+Supported dimensions are `runtime`, `model`, `machine`, `quantization`, and `context`. A group reports leaders only when at least two distinct values are present, the suite declares explicit comparability metadata, and every row declares matching controlled calibration conditions. Quality, performance, throughput, elapsed time, and TTFT remain separate. TTFT leadership uses only runs with a non-empty `telemetry_source`; estimated or provenance-free latency is still displayed as evidence but cannot win an exact-TTFT comparison. Invalid local records become warnings rather than hiding valid groups.
 
 ## What The Built-In Suite Measures
 

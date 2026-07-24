@@ -83,6 +83,13 @@ def test_suite_contract_is_versioned_and_command_evaluators_are_opt_in() -> None
         validate_suite(command_suite)
 
 
+def test_suite_accepts_native_load_and_prompt_throughput_metrics() -> None:
+    suite = validate_suite(
+        _suite(metrics=["load_duration_ms", "prompt_tokens_per_second", "tokens_per_second"]), source="test"
+    )
+    assert suite["metrics"] == ["load_duration_ms", "prompt_tokens_per_second", "tokens_per_second"]
+
+
 def test_runner_repeats_suite_and_records_uncertainty(tmp_path: Path) -> None:
     profile = load_profile("local-dev", tmp_path)
     result = BenchmarkRunner(profile).run(
@@ -125,6 +132,52 @@ def test_user_measurement_import_is_preview_first_and_preserves_provenance(tmp_p
     written = import_measurement_record(workspace, source, dry_run=False)
     assert written["written"] is True
     assert Path(written["destination"]).exists()
+
+
+def test_controlled_measurement_requires_reproducible_conditions_and_ttft_provenance() -> None:
+    controlled = _measurement()
+    controlled["calibration"] = {
+        "status": "controlled",
+        "run_mode": "warm",
+        "context_tokens": 8192,
+        "concurrency": 1,
+        "warmup_runs": 1,
+        "power_mode": "performance",
+    }
+    controlled["runs"][0]["ttft_ms"] = 42
+    controlled["runs"][0]["telemetry_source"] = "native_runtime"
+    record = validate_measurement_record(controlled)
+    assert record["calibration"]["status"] == "controlled"
+
+    missing_source = _measurement()
+    missing_source["calibration"] = controlled["calibration"]
+    missing_source["runs"][0]["ttft_ms"] = 42
+    with pytest.raises(ValueError, match="telemetry_source"):
+        validate_measurement_record(missing_source)
+
+
+def test_calibration_plan_cli_is_read_only_and_requires_a_configured_model() -> None:
+    stdout = StringIO()
+    with redirect_stdout(stdout):
+        code = cli_main(
+            [
+                "benchmarks",
+                "calibration-plan",
+                "--model",
+                "fixture-analysis-small",
+                "--runtime",
+                "ollama",
+                "--repeats",
+                "5",
+                "--profile",
+                "local-dev",
+            ]
+        )
+    assert code == 0
+    payload = json.loads(stdout.getvalue())
+    assert payload["record_type"] == "benchmark_calibration_plan"
+    assert payload["commands"][0].endswith("--dry-run")
+    assert payload["calibration"]["status"] == "controlled"
 
 
 def test_measurement_contract_rejects_secrets_and_invalid_scores() -> None:

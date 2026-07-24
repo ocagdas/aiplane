@@ -143,14 +143,18 @@ aiplane config show
 
 ## Core onboarding flow
 
-Four read-only commands take you from "what is here?" to usable configuration:
+The core read-only path takes you from "what is here?" to usable configuration:
 
 ```bash
 aiplane discover
 aiplane doctor
-aiplane recommend
-aiplane export continue
+aiplane pick --intent chat       # one local choice plus safe next actions
+aiplane export continue --model MODEL_ALIAS
 ```
+
+Use `aiplane recommend` when you want the full ranked explanation, including
+usable, remote, and blocked alternatives. `pick` never pulls a model, starts a
+runtime, or changes defaults; it prints the exact preview-first commands.
 
 Use the selected model alias with another supported client when needed:
 
@@ -218,6 +222,9 @@ aiplane hardware assess DISCOVERED_ALIAS --runtime ollama --context-tokens 32768
 aiplane models promote DISCOVERED_ALIAS --as local_chat --dry-run
 aiplane models promote DISCOVERED_ALIAS --as local_chat
 aiplane models use chat_model local_chat
+
+# Or, after a configured local alias exists, select it with the concise guided path.
+aiplane pick --intent chat --runtime ollama
 
 # 5. Preview and perform supported runtime/model preparation.
 aiplane integrations setup codex --model local_chat --runtime ollama --dry-run

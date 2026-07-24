@@ -78,6 +78,37 @@ def add_public_parsers(
         help="Output format. Text is human-readable; JSON is for scripts.",
     )
 
+    pick_cmd = command_factory(
+        subparsers,
+        "pick",
+        "Pick a local model and show the next safe actions",
+        "Select the strongest locally suitable configured model for one intent and print explicit, review-first pull, default, and chat commands. This command is read-only and never pulls weights or starts a runtime.",
+        "Examples:\n  aiplane pick\n  aiplane pick --intent chat\n  aiplane pick --runtime ollama --format json",
+    )
+    profile_arg(pick_cmd)
+    pick_cmd.add_argument(
+        "--intent",
+        choices=sorted(_RECOMMENDATION_INTENTS),
+        default="chat",
+        help="Selection preset; chat is the default for the shortest local-model path",
+    )
+    pick_cmd.add_argument(
+        "--runtime",
+        help="Require one local runtime, such as ollama or vllm",
+    )
+    pick_cmd.add_argument(
+        "--limit",
+        type=int,
+        default=3,
+        help="Maximum locally suitable alternatives to show (default: 3)",
+    )
+    pick_cmd.add_argument(
+        "--format",
+        choices=["text", "json"],
+        default=None,
+        help="Output format. Text is human-readable; JSON is for scripts.",
+    )
+
     export_cmd = command_factory(
         subparsers,
         "export",
@@ -234,6 +265,73 @@ def add_public_parsers(
     )
 
 
+def build_model_pick(
+    recommendation: dict[str, object],
+    *,
+    profile: str,
+    intent_name: str,
+    runtime_filter: str | None,
+    limit: int,
+) -> dict[str, object]:
+    """Reduce a full recommendation to one locally runnable choice and next steps."""
+    if limit < 1:
+        raise ValueError("pick limit must be at least 1")
+    models = recommendation.get("models")
+    groups = models if isinstance(models, dict) else {}
+    candidates: list[tuple[str, dict[str, object]]] = []
+    for tier in ("recommended", "usable"):
+        rows = groups.get(tier, []) if isinstance(groups, dict) else []
+        for row in rows:
+            if isinstance(row, dict):
+                candidates.append((tier, row))
+    alternatives = [
+        {
+            "tier": tier,
+            "alias": row.get("name"),
+            "model": row.get("model"),
+            "provider": row.get("provider"),
+            "runtime": row.get("runtime_recommendation"),
+            "selection_score": row.get("selection_score"),
+            "reason": row.get("reason"),
+        }
+        for tier, row in candidates[:limit]
+    ]
+    selected = alternatives[0] if alternatives else None
+    commands: list[str] = []
+    if selected and isinstance(selected.get("alias"), str):
+        alias = selected["alias"]
+        runtime = selected.get("runtime") if isinstance(selected.get("runtime"), str) else None
+        pull = f"aiplane models pull {alias} --profile {profile}"
+        if runtime:
+            pull += f" --for-runtime {runtime}"
+        commands = [
+            pull + " --dry-run",
+            pull,
+            f"aiplane models use chat_model {alias} --profile {profile}",
+            f"aiplane chat --model {alias} --profile {profile}",
+        ]
+    hidden = recommendation.get("hidden") if isinstance(recommendation.get("hidden"), dict) else {}
+    return {
+        "contract_version": "1.0",
+        "record_type": "model_pick",
+        "profile": profile,
+        "intent": intent_name,
+        "runtime_filter": runtime_filter,
+        "selection": selected,
+        "alternatives": alternatives,
+        "commands": commands,
+        "empty_reason": None
+        if selected
+        else "no locally suitable configured model matched the requested intent and runtime",
+        "nearest_blocker": hidden.get("nearest_miss"),
+        "next_diagnostic": None if selected else "aiplane recommend --include-not-recommended --profile " + profile,
+        "notes": [
+            "The picker is read-only. Review the pull preview before downloading model weights.",
+            "The selected alias is profile-owned; the provider-native model id is included separately for traceability.",
+        ],
+    }
+
+
 def _quickstart_progress() -> Callable[[str], None]:
     started = False
     width = 0
@@ -262,6 +360,7 @@ def handle_public_command(
     discover: Callable[[object], dict[str, object]],
     discover_text: Callable[[dict[str, object]], str],
     recommend_text: Callable[[dict[str, object]], str],
+    model_pick_text: Callable[[dict[str, object]], str],
     print_export: Callable[[argparse.Namespace, object], None],
     doctor_exit_code: Callable[[dict[str, object]], int],
 ) -> int | None:
@@ -326,6 +425,35 @@ def handle_public_command(
             print(json_dumps(payload, indent=2, sort_keys=True))
         else:
             print(recommend_text(payload))
+        return 0
+
+    if args.command == "pick":
+        profile = load_profile(effective_profile, workspace, profiles_dir=profiles_dir)
+        intent = _RECOMMENDATION_INTENTS[args.intent]
+        roles = list(intent["roles"])
+        recommendation = HardwareManager(profile).recommend(
+            runtime=args.runtime,
+            roles=roles or None,
+            score_profile=str(intent["score_profile"]),
+        )
+        payload = build_model_pick(
+            recommendation,
+            profile=effective_profile,
+            intent_name=args.intent,
+            runtime_filter=args.runtime,
+            limit=args.limit,
+        )
+        output_format = resolve_output_format(
+            args.format,
+            profile=effective_profile,
+            command="pick",
+            path=local_config_path(),
+            default="text",
+        )
+        if output_format == "json":
+            print(json_dumps(payload, indent=2, sort_keys=True))
+        else:
+            print(model_pick_text(payload))
         return 0
 
     if args.command == "export":

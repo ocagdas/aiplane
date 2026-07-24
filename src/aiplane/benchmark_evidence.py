@@ -21,8 +21,10 @@ METRICS = {
     "quality_score",
     "performance_score",
     "elapsed_ms",
+    "load_duration_ms",
     "ttft_ms",
     "prompt_tokens",
+    "prompt_tokens_per_second",
     "output_tokens",
     "tokens_per_second",
 }
@@ -100,10 +102,17 @@ def validate_measurement_record(payload: dict[str, Any], *, source: str = "inlin
     if kind not in SUITE_KINDS:
         raise ValueError(f"benchmark measurement suite kind must be one of: {', '.join(sorted(SUITE_KINDS))}")
     comparability = _validate_comparability(suite.get("comparability"))
+    calibration = _validate_calibration(payload.get("calibration"))
     raw_runs = payload.get("runs")
     if not isinstance(raw_runs, list) or not raw_runs:
         raise ValueError("benchmark measurement runs must be a non-empty list")
     runs = [_validate_run(run, index) for index, run in enumerate(raw_runs)]
+    if calibration["status"] == "controlled":
+        unprovenanced_ttft = [
+            run["task"] for run in runs if run.get("ttft_ms") is not None and not run.get("telemetry_source")
+        ]
+        if unprovenanced_ttft:
+            raise ValueError("controlled calibration requires telemetry_source for every ttft_ms measurement")
     provenance = _mapping(payload.get("provenance"), "benchmark measurement provenance")
     _required_text(provenance, "source", "benchmark measurement provenance")
     record = {
@@ -122,6 +131,7 @@ def validate_measurement_record(payload: dict[str, Any], *, source: str = "inlin
         },
         "runtime": _mapping(payload.get("runtime", {}), "benchmark measurement runtime"),
         "environment": _validate_environment(payload.get("environment", {})),
+        "calibration": calibration,
         "decoding": _validate_decoding(payload.get("decoding", {})),
         "runs": runs,
         "summary": summarize_runs(runs, kind=kind, comparable=bool(comparability)),
@@ -131,6 +141,52 @@ def validate_measurement_record(payload: dict[str, Any], *, source: str = "inlin
     record["benchmark_kind"] = record["summary"]["benchmark_kind"]
     _reject_secret_material(record, "benchmark measurement")
     return record
+
+
+def calibration_plan(
+    *,
+    model_name: str,
+    runtime: str,
+    repeats: int,
+    profile: str,
+) -> dict[str, Any]:
+    if repeats < 2 or repeats > 100:
+        raise ValueError("calibration plan repeats must be between 2 and 100")
+    if not runtime.strip():
+        raise ValueError("calibration plan runtime is required")
+    command = f"aiplane models benchmark {model_name} --repeats {repeats} --profile {profile}"
+    return {
+        "contract_version": CONTRACT_VERSION,
+        "record_type": "benchmark_calibration_plan",
+        "profile": profile,
+        "model_name": model_name,
+        "runtime": runtime,
+        "repeats": repeats,
+        "calibration": {
+            "status": "controlled",
+            "run_mode": "cold or warm",
+            "context_tokens": "record the effective context length",
+            "concurrency": "record the request concurrency",
+            "warmup_runs": "record discarded warm-up runs",
+            "power_mode": "record the OS/GPU power mode",
+        },
+        "steps": [
+            "Record the exact model revision/quantization, runtime version, host fingerprint, and GPU/VRAM state.",
+            "Keep prompts, decoding, context, concurrency, power mode, and thermal state stable across candidates.",
+            "Run and save a baseline measurement after the chosen warm-up or cold-start procedure.",
+            "Copy results into a provenance-bearing measurement record, add controlled calibration metadata, then preview import.",
+        ],
+        "commands": [
+            command + " --dry-run",
+            command,
+            "aiplane benchmarks import MEASUREMENT.json --profile " + profile,
+            "aiplane benchmarks import MEASUREMENT.json --yes --profile " + profile,
+        ],
+        "notes": [
+            "Aiplane does not infer TTFT from total elapsed time. Controlled records carrying ttft_ms must name their telemetry source.",
+            "Comparison leaders are emitted only for records with matching basis, suite comparability metadata, and controlled calibration.",
+        ],
+    }
 
 
 def import_measurement_record(
@@ -170,6 +226,10 @@ def summarize_runs(runs: list[dict[str, Any]], *, kind: str, comparable: bool) -
     performance = [value for value in performance if value is not None]
     elapsed = [_finite(run.get("elapsed_ms")) for run in runs]
     elapsed = [value for value in elapsed if value is not None]
+    load_duration = [_finite(run.get("load_duration_ms")) for run in runs]
+    load_duration = [value for value in load_duration if value is not None]
+    prompt_throughput = [_finite(run.get("prompt_tokens_per_second")) for run in runs]
+    prompt_throughput = [value for value in prompt_throughput if value is not None]
     ttft = [_finite(run.get("ttft_ms")) for run in runs]
     ttft = [value for value in ttft if value is not None]
     throughput = [_finite(run.get("tokens_per_second")) for run in runs]
@@ -195,6 +255,10 @@ def summarize_runs(runs: list[dict[str, Any]], *, kind: str, comparable: bool) -
         "performance_stdev": _stdev(performance),
         "average_elapsed_ms": _mean(elapsed),
         "median_elapsed_ms": _median(elapsed),
+        "average_load_duration_ms": _mean(load_duration),
+        "median_load_duration_ms": _median(load_duration),
+        "average_prompt_tokens_per_second": _mean(prompt_throughput),
+        "median_prompt_tokens_per_second": _median(prompt_throughput),
         "average_ttft_ms": _mean(ttft),
         "median_ttft_ms": _median(ttft),
         "average_tokens_per_second": _mean(throughput),
@@ -239,6 +303,7 @@ def benchmark_record_from_runs(
         },
         "runtime": runtime,
         "environment": environment,
+        "calibration": {"status": "uncontrolled"},
         "decoding": suite.get("decoding", {}),
         "dry_run": dry_run,
         "runs": runs,
@@ -351,6 +416,37 @@ def _validate_comparability(raw: object) -> dict[str, Any] | None:
         "protocol": str(value.get("protocol") or ""),
         "requirements": _string_list(value.get("requirements", []), "benchmark comparability requirements"),
     }
+
+
+def _validate_calibration(raw: object) -> dict[str, Any]:
+    value = _mapping(raw, "benchmark measurement calibration")
+    status = str(value.get("status") or "uncontrolled")
+    if status not in {"uncontrolled", "controlled"}:
+        raise ValueError("benchmark calibration status must be uncontrolled or controlled")
+    if status == "uncontrolled":
+        return {"status": status}
+    run_mode = str(value.get("run_mode") or "")
+    if run_mode not in {"cold", "warm", "mixed"}:
+        raise ValueError("controlled benchmark calibration run_mode must be cold, warm, or mixed")
+    result = {
+        "status": status,
+        "run_mode": run_mode,
+        "context_tokens": _bounded_int(
+            value.get("context_tokens"), "controlled benchmark calibration context_tokens", minimum=1
+        ),
+        "concurrency": _bounded_int(
+            value.get("concurrency"), "controlled benchmark calibration concurrency", minimum=1
+        ),
+        "warmup_runs": _bounded_int(
+            value.get("warmup_runs"), "controlled benchmark calibration warmup_runs", minimum=0
+        ),
+        "power_mode": _required_text(value, "power_mode", "controlled benchmark calibration"),
+    }
+    if "batch_size" in value:
+        result["batch_size"] = _bounded_int(
+            value["batch_size"], "controlled benchmark calibration batch_size", minimum=1
+        )
+    return result
 
 
 def _validate_environment(raw: object) -> dict[str, Any]:

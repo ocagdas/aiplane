@@ -4,7 +4,7 @@ import argparse
 
 
 COMMAND_TIERS = (
-    ("Core workflow", ("discover", "doctor", "recommend", "export", "quickstart")),
+    ("Core workflow", ("discover", "doctor", "pick", "recommend", "export", "quickstart")),
     (
         "Advanced and supporting",
         (

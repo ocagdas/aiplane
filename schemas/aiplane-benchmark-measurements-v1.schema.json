@@ -128,6 +128,13 @@
             ],
             "minimum": 0
           },
+          "load_duration_ms": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0
+          },
           "ttft_ms": {
             "type": [
               "number",
@@ -138,6 +145,13 @@
           "prompt_tokens": {
             "type": [
               "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "prompt_tokens_per_second": {
+            "type": [
+              "number",
               "null"
             ],
             "minimum": 0
@@ -175,6 +189,44 @@
         "source": {
           "type": "string",
           "minLength": 1
+        }
+      }
+    },
+    "calibration": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "enum": [
+            "uncontrolled",
+            "controlled"
+          ]
+        },
+        "run_mode": {
+          "enum": [
+            "cold",
+            "warm",
+            "mixed"
+          ]
+        },
+        "context_tokens": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "concurrency": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "warmup_runs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "power_mode": {
+          "type": "string",
+          "minLength": 1
+        },
+        "batch_size": {
+          "type": "integer",
+          "minimum": 1
         }
       }
     }

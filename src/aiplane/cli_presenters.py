@@ -440,6 +440,33 @@ def _public_recommend_text(payload: dict[str, object]) -> str:
     return "\n".join(lines)
 
 
+def _model_pick_text(payload: dict[str, object]) -> str:
+    selection = payload.get("selection") if isinstance(payload.get("selection"), dict) else None
+    lines = [f"aiplane pick ({payload.get('intent', 'chat')})"]
+    if selection is None:
+        lines.append("local choice: none")
+        lines.append(f"why: {payload.get('empty_reason')}")
+        if payload.get("next_diagnostic"):
+            lines.append(f"next diagnostic: {payload.get('next_diagnostic')}")
+        return "\n".join(lines)
+    lines.extend(
+        [
+            f"local choice: {selection.get('alias')} ({selection.get('tier')}; selection score: {selection.get('selection_score')})",
+            f"provider-native model: {selection.get('model')}",
+            f"runtime: {selection.get('runtime') or 'choose during setup'}",
+            f"why: {selection.get('reason')}",
+            "next safe actions:",
+        ]
+    )
+    lines.extend(f"  {command}" for command in payload.get("commands", []) if isinstance(command, str))
+    alternatives = payload.get("alternatives") if isinstance(payload.get("alternatives"), list) else []
+    if len(alternatives) > 1:
+        lines.append(
+            "alternatives: " + ", ".join(str(row.get("alias")) for row in alternatives[1:] if isinstance(row, dict))
+        )
+    return "\n".join(lines)
+
+
 def _quickstart_local_coding_text(payload: dict[str, object]) -> str:
     bootstrap = payload.get("bootstrap") if isinstance(payload.get("bootstrap"), dict) else {}
     doctor = payload.get("doctor") if isinstance(payload.get("doctor"), dict) else None

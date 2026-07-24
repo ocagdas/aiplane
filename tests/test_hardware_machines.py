@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from aiplane import cli_presenters
+from aiplane.cli_public import build_model_pick
 
 from .support import (
     HardwareManager,
@@ -280,6 +281,49 @@ class HardwareMachineTests(unittest.TestCase):
         self.assertIn("next command: aiplane export continue --model", rendered)
         self.assertIn("nearest blocker:", rendered)
         self.assertIn("inspect/remedy: aiplane recommend --include-not-recommended", rendered)
+
+    def test_model_pick_emits_profile_alias_and_review_first_actions(self) -> None:
+        recommendation = {
+            "models": {
+                "recommended": [
+                    {
+                        "name": "fixture-chat-small",
+                        "model": "provider-chat:1b",
+                        "provider": "ollama",
+                        "runtime_recommendation": "ollama",
+                        "selection_score": 91.5,
+                        "reason": "fits the selected machine",
+                    }
+                ],
+                "usable": [],
+            },
+            "hidden": {},
+        }
+        picked = build_model_pick(
+            recommendation,
+            profile="local-dev",
+            intent_name="chat",
+            runtime_filter="ollama",
+            limit=3,
+        )
+        self.assertEqual(picked["selection"]["alias"], "fixture-chat-small")
+        self.assertEqual(picked["selection"]["model"], "provider-chat:1b")
+        self.assertEqual(
+            picked["commands"][0],
+            "aiplane models pull fixture-chat-small --profile local-dev --for-runtime ollama --dry-run",
+        )
+        self.assertEqual(picked["commands"][-1], "aiplane chat --model fixture-chat-small --profile local-dev")
+
+    def test_model_pick_exposes_a_diagnostic_when_no_local_choice_exists(self) -> None:
+        picked = build_model_pick(
+            {"models": {"recommended": [], "usable": []}, "hidden": {"nearest_miss": {"name": "too-large"}}},
+            profile="local-dev",
+            intent_name="chat",
+            runtime_filter=None,
+            limit=1,
+        )
+        self.assertIsNone(picked["selection"])
+        self.assertEqual(picked["next_diagnostic"], "aiplane recommend --include-not-recommended --profile local-dev")
 
     def test_hardware_recommend_includes_runtime_and_policy_metadata(self) -> None:
         profile = load_profile("local-dev", Path.cwd())
