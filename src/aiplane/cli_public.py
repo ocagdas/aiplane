@@ -10,6 +10,24 @@ from .hardware import HardwareManager
 from .local_doctor import local_coding_doctor, local_coding_doctor_text
 
 
+_RECOMMENDATION_INTENTS: dict[str, dict[str, object]] = {
+    "balanced": {"roles": (), "score_profile": "balanced", "description": "balanced local suitability"},
+    "coding": {
+        "roles": ("autocomplete", "completion", "generation", "refactor"),
+        "score_profile": "balanced",
+        "description": "coding-capable local models",
+    },
+    "chat": {"roles": ("chat",), "score_profile": "balanced", "description": "chat-capable local models"},
+    "reasoning": {
+        "roles": ("analysis", "reasoning"),
+        "score_profile": "quality_evidence",
+        "description": "analysis and reasoning models",
+    },
+    "quality": {"roles": (), "score_profile": "quality_evidence", "description": "quality-evidence priority"},
+    "throughput": {"roles": (), "score_profile": "throughput", "description": "throughput priority"},
+}
+
+
 def add_public_parsers(
     subparsers: Any,
     *,
@@ -39,13 +57,19 @@ def add_public_parsers(
         "recommend",
         "Recommend models for this machine",
         "Rank local model aliases against the active hardware selection, runtime compatibility, and policy. This command is read-only.",
-        "Examples:\n  aiplane recommend\n  aiplane recommend --include-not-recommended\n  aiplane recommend --format json",
+        "Examples:\n  aiplane recommend\n  aiplane recommend --intent coding\n  aiplane recommend --intent throughput --format json\n  aiplane recommend --include-not-recommended",
     )
     profile_arg(recommend_cmd)
     recommend_cmd.add_argument(
         "--include-not-recommended",
         action="store_true",
         help="Include models rejected by hardware, runtime, or policy constraints",
+    )
+    recommend_cmd.add_argument(
+        "--intent",
+        choices=sorted(_RECOMMENDATION_INTENTS),
+        default="balanced",
+        help="Read-only selection preset: balanced, coding, chat, reasoning, quality, or throughput",
     )
     recommend_cmd.add_argument(
         "--format",
@@ -278,7 +302,19 @@ def handle_public_command(
 
     if args.command == "recommend":
         profile = load_profile(effective_profile, workspace, profiles_dir=profiles_dir)
-        payload = HardwareManager(profile).recommend(include_not_recommended=args.include_not_recommended)
+        intent = _RECOMMENDATION_INTENTS[args.intent]
+        roles = list(intent["roles"])
+        payload = HardwareManager(profile).recommend(
+            include_not_recommended=args.include_not_recommended,
+            roles=roles or None,
+            score_profile=str(intent["score_profile"]),
+        )
+        payload["intent"] = {
+            "name": args.intent,
+            "description": intent["description"],
+            "roles": roles,
+            "score_profile": intent["score_profile"],
+        }
         output_format = resolve_output_format(
             args.format,
             profile=effective_profile,

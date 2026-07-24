@@ -416,19 +416,27 @@ def _public_discover_text(payload: dict[str, object]) -> str:
 
 def _public_recommend_text(payload: dict[str, object]) -> str:
     models = payload.get("models") if isinstance(payload.get("models"), dict) else {}
-    lines = ["aiplane recommend", "recommended:"]
+    intent = payload.get("intent") if isinstance(payload.get("intent"), dict) else {}
     recommended = models.get("recommended", []) if isinstance(models, dict) else []
-    if recommended:
-        for row in recommended[:8]:
-            if not isinstance(row, dict):
-                continue
-            lines.append(f"- {row.get('name')}: {row.get('reason')}")
-    else:
-        lines.append("- none")
     usable = models.get("usable", []) if isinstance(models, dict) else []
     remote = models.get("remote_or_cloud", []) if isinstance(models, dict) else []
+    candidates = recommended or usable
+    lines = [f"aiplane recommend ({intent.get('name', 'balanced')})"]
+    if candidates and isinstance(candidates[0], dict):
+        best = candidates[0]
+        label = "best local choice" if recommended else "best usable local choice"
+        lines.append(f"{label}: {best.get('name')} (selection score: {best.get('selection_score', 'n/a')})")
+        lines.append(f"why: {best.get('reason')}")
+        lines.append(f"next command: aiplane export continue --model {best.get('name')}")
+    else:
+        lines.append("best local choice: none")
+        lines.append("next command: aiplane recommend --include-not-recommended")
+    hidden = payload.get("hidden") if isinstance(payload.get("hidden"), dict) else {}
+    nearest_miss = hidden.get("nearest_miss") if isinstance(hidden.get("nearest_miss"), dict) else None
+    if nearest_miss:
+        lines.append(f"nearest blocker: {nearest_miss.get('name')}: {nearest_miss.get('reason')}")
+        lines.append(f"inspect/remedy: {nearest_miss.get('remediation')}")
     lines.append(f"usable: {len(usable)}; remote_or_cloud: {len(remote)}")
-    lines.append("next command: aiplane export continue")
     return "\n".join(lines)
 
 

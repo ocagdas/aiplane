@@ -189,6 +189,8 @@ aiplane models list --property quantization=q4 --min-benchmark-score 50 --sort-b
 aiplane models list --group-by runtime --format json
 aiplane models list --catalog-cache off --format json > full-scan.json
 aiplane models list --catalog-cache rebuild --format json > indexed.json
+aiplane recommend --intent coding --format text
+aiplane recommend --intent throughput --format json
 ```
 
 - [ ] Text output places alias and native id adjacent.

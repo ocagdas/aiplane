@@ -106,7 +106,7 @@ Runtime compatibility, workflow readiness, and bundle contract hardening are imp
 
 Deployment rendering now reports scaffold readiness and unresolved inputs, selects OpenTofu, Terraform, or Pulumi explicitly, and does not recommend apply/up commands for incomplete artifacts. OpenTofu/Terraform emit matching HCL validation; Pulumi emits a genuine Python project family with preview guidance. Local-VM targets select VirtualBox, libvirt, Hyper-V, or VMware Desktop; readiness checks the provider capability and required plugin before reporting ready, and render/tool exports preserve that selection. Live provider/platform checks remain separate evidence work and do not broaden Aiplane into an infrastructure or agent runner.
 
-Maintenance validation for this contract slice passes 753 tests with 9 optional skips and 29 subtests in 17.04 seconds using the configured four-worker gate. The focused schema, Vagrant-provider, documentation, MCP, profile, and tunnel gate passes 136 tests. Repository-wide Ruff format/lint, profile validation, required-only doctor checks, disposable rendering, and diff hygiene pass. The opt-in official-tool validator gate passes its available Ansible check and explicitly skips five checks whose tools or usable provider are absent on the review host.
+Maintenance validation for this contract slice passes 755 tests with 9 optional skips and 29 subtests in 17.34 seconds using the configured four-worker gate. The focused schema, Vagrant-provider, documentation, MCP, profile, and tunnel gate passes 136 tests. Repository-wide Ruff format/lint, profile validation, required-only doctor checks, disposable rendering, and diff hygiene pass. The opt-in official-tool validator gate passes its available Ansible check and explicitly skips five checks whose tools or usable provider are absent on the review host.
 
 Recent maintenance hardening rejects symlinked profile directories, preserves standard YAML single-quote escaping, bounds MCP headers as well as bodies, and validates MCP tool arguments against the published schemas before dispatch. Regression coverage also checks both long manual/evidence runbooks for balanced code fences, current opt-in performance commands, and real top-level CLI commands.
 
@@ -258,6 +258,22 @@ The model-catalog materialization milestone is also implementation-complete. Ref
 The repeatable benchmark and runtime-evidence milestone is implementation-complete. Versioned JSON/YAML suites, deterministic validation, repeat statistics and uncertainty, safe built-in graders, explicitly opted-in trusted command graders, preview-first external measurement import, data-only scoring extensions, artifact locks, render-only runtime launch manifests, and evidence-backed role comparisons are available. Pull previews, benchmark records, stack plan/doctor, replay comparison, and stack lifecycle share those contracts. Ollama native duration/token/throughput fields and OpenAI-compatible usage counters populate benchmark evidence when exposed; TTFT and other unavailable metrics remain null. Cross-machine calibration and complete artifact integrity still depend on external evidence rather than inference.
 
 The six-runner parity, workflow evidence integration, and render-only Kubernetes family milestones are implementation-complete. The Kubernetes compiler emits schema-linked ResourceClaim, Deployment, Service, and Helm values; consumes the reviewed launch command/health path; includes DRA count, resource quantities, probes, cache storage, and baseline container security controls; and remains secret-free with no apply path. The manual acceptance path is consolidated in [Manual Test Checklist](../user/manual-test-checklist.md). Validation passes 603 tests with 3 opt-in performance tests skipped; Ruff format/lint, profile validation, and required-only environment doctor checks in text and JSON pass.
+
+### Recommendation Clarity Roadmap
+
+**Short term — implemented in this milestone:** make the first local-model
+answer faster without adding a new scoring formula or runtime mutation.
+`aiplane recommend --intent` now exposes stable `balanced`, `coding`, `chat`,
+`reasoning`, `quality`, and `throughput` presets over existing role and
+placement-scoring contracts. Its text output leads with the best local choice,
+reason, exact export command, and one inspectable nearest blocker/remedy.
+
+**Long term — evidence-gated:** add an opt-in local calibration capture path
+that writes versioned local evidence only; evaluate a compact optional seeded
+artifact index only after measuring freshness, package-size, licensing, and
+maintenance cost; and add vendor/topology field evidence before expanding
+hardware claims. Do not turn these into shared benchmark upload, implicit model
+acquisition, a runtime, a generic UI platform, or a deployment control plane.
 
 ### Next Useful Work
 
