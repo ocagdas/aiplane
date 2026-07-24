@@ -190,10 +190,11 @@ aiplane models list --group-by runtime --format json
 aiplane models list --catalog-cache off --format json > full-scan.json
 aiplane models list --catalog-cache rebuild --format json > indexed.json
 aiplane models catalog-cache status
+aiplane recommend --intent coding --format text
+aiplane recommend --intent throughput --format json
 ```
 
 - [ ] Cache status reports freshness, generation time when current, safe input provenance, and a rebuild command when missing or stale.
-
 - [ ] Text output places alias and native id adjacent.
 - [ ] `--identity alias` and `--identity model` emit one selected identity per line.
 - [ ] Runtime, role, property, benchmark, provider, parameter, hardware, vendor, and accelerator filters behave independently and in combination.

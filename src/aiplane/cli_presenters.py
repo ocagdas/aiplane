@@ -416,30 +416,26 @@ def _public_discover_text(payload: dict[str, object]) -> str:
 
 def _public_recommend_text(payload: dict[str, object]) -> str:
     models = payload.get("models") if isinstance(payload.get("models"), dict) else {}
-    intent = str(payload.get("intent") or "balanced")
+    intent = payload.get("intent") if isinstance(payload.get("intent"), dict) else {}
     recommended = models.get("recommended", []) if isinstance(models, dict) else []
     usable = models.get("usable", []) if isinstance(models, dict) else []
     remote = models.get("remote_or_cloud", []) if isinstance(models, dict) else []
-    lines = [f"aiplane recommend ({intent})"]
-    first = next((row for row in recommended if isinstance(row, dict)), None)
-    if first is not None:
-        lines.extend(
-            [
-                f"best local choice: {first.get('name')} (selection score: {float(first.get('selection_score', 0.0) or 0.0):.2f})",
-                f"why: {first.get('reason')}",
-                f"next command: aiplane integrations export continue --model {first.get('name')}",
-            ]
-        )
-        guidance = first.get("runtime_guidance") if isinstance(first.get("runtime_guidance"), dict) else {}
-        if guidance.get("next_command") and not guidance.get("ready"):
-            lines.append(f"runtime preparation: {guidance['next_command']}")
+    candidates = recommended or usable
+    lines = [f"aiplane recommend ({intent.get('name', 'balanced')})"]
+    if candidates and isinstance(candidates[0], dict):
+        best = candidates[0]
+        label = "best local choice" if recommended else "best usable local choice"
+        lines.append(f"{label}: {best.get('name')} (selection score: {best.get('selection_score', 'n/a')})")
+        lines.append(f"why: {best.get('reason')}")
+        lines.append(f"next command: aiplane export continue --model {best.get('name')}")
     else:
         lines.append("best local choice: none")
+        lines.append("next command: aiplane recommend --include-not-recommended")
     hidden = payload.get("hidden") if isinstance(payload.get("hidden"), dict) else {}
-    nearest = hidden.get("nearest_miss") if isinstance(hidden.get("nearest_miss"), dict) else None
-    if nearest:
-        lines.append(f"nearest blocker: {nearest.get('name')}: {nearest.get('reason')}")
-        lines.append(f"inspect/remedy: {nearest.get('remediation')}")
+    nearest_miss = hidden.get("nearest_miss") if isinstance(hidden.get("nearest_miss"), dict) else None
+    if nearest_miss:
+        lines.append(f"nearest blocker: {nearest_miss.get('name')}: {nearest_miss.get('reason')}")
+        lines.append(f"inspect/remedy: {nearest_miss.get('remediation')}")
     lines.append(f"usable: {len(usable)}; remote_or_cloud: {len(remote)}")
     return "\n".join(lines)
 

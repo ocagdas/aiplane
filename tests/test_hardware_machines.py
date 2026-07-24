@@ -257,18 +257,29 @@ class HardwareMachineTests(unittest.TestCase):
         scores = [row["selection_score"] for row in result["models"]["recommended"]]
         self.assertEqual(scores, sorted(scores, reverse=True))
 
-    def test_public_recommend_intent_is_recorded_and_text_has_next_action(self) -> None:
+    def test_public_recommend_intent_filters_roles_and_records_preset(self) -> None:
         stdout = StringIO()
         with redirect_stdout(stdout):
-            code = cli_main(["recommend", "--intent", "chat", "--format", "json", "--profile", "local-dev"])
+            code = cli_main(["recommend", "--intent", "coding", "--format", "json", "--profile", "local-dev"])
         self.assertEqual(code, 0)
         payload = json.loads(stdout.getvalue())
-        self.assertEqual(payload["intent"], "chat")
-        self.assertEqual(payload["requested_roles"], ["chat"])
+        self.assertEqual(payload["intent"]["name"], "coding")
+        self.assertEqual(payload["intent"]["score_profile"], "balanced")
+        requested_roles = set(payload["intent"]["roles"])
+        rows = [row for group in payload["models"].values() for row in group]
+        self.assertTrue(rows)
+        self.assertTrue(all(requested_roles.intersection(row["roles"]) for row in rows))
 
-        text = cli_presenters._public_recommend_text(payload)
-        self.assertIn("aiplane recommend (chat)", text)
-        self.assertIn("best local choice:", text)
+    def test_public_recommend_text_surfaces_choice_and_nearest_remedy(self) -> None:
+        stdout = StringIO()
+        with redirect_stdout(stdout):
+            code = cli_main(["recommend", "--intent", "coding", "--format", "text", "--profile", "local-dev"])
+        self.assertEqual(code, 0)
+        rendered = stdout.getvalue()
+        self.assertIn("best local choice", rendered)
+        self.assertIn("next command: aiplane export continue --model", rendered)
+        self.assertIn("nearest blocker:", rendered)
+        self.assertIn("inspect/remedy: aiplane recommend --include-not-recommended", rendered)
 
     def test_hardware_recommend_includes_runtime_and_policy_metadata(self) -> None:
         profile = load_profile("local-dev", Path.cwd())

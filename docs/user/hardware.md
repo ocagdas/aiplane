@@ -253,6 +253,24 @@ smoke-test pass counts and catalog capability metadata are never relabeled as
 measured quality. The shipped `balanced`, `quality_evidence`, and
 `throughput` profiles live under `placement_scoring` in `hardware.yaml`.
 
+For a concise current-machine recommendation, use the public read-only command.
+Intent presets select existing roles and scoring profiles; they do not introduce
+an opaque scoring formula or start/pull a runtime:
+
+```bash
+aiplane recommend
+aiplane recommend --intent coding
+aiplane recommend --intent chat
+aiplane recommend --intent reasoning
+aiplane recommend --intent quality --format json
+aiplane recommend --intent throughput --format json
+```
+
+Text output names the best local choice, explains why, prints the exact export
+command, and includes one nearest blocked candidate. Use
+`--include-not-recommended` to inspect the complete rejected list and its
+recorded reasons.
+
 Teams can add reviewed external results without executable plugins:
 
 ```yaml

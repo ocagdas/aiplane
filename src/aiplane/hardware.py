@@ -318,11 +318,10 @@ class HardwareManager:
             "remote_or_cloud": [],
         }
         benchmark_summaries = _latest_benchmark_summaries(self.profile.workspace)
-
         requested_roles = sorted({str(role).strip() for role in (roles or []) if str(role).strip()})
         for row in catalog.models().items():
             name, model = row
-            model_roles = {str(role) for role in model.get("roles", []) if str(role)}
+            model_roles = {str(role) for role in model.get("roles", []) if isinstance(role, str)}
             if requested_roles and not model_roles.intersection(requested_roles):
                 continue
             payload = dict(model)
@@ -385,14 +384,7 @@ class HardwareManager:
             recommendation["selection_score"] = score["selection_score"]
             groups[level].append(recommendation)
 
-        ordered_groups: dict[str, list[dict[str, Any]]] = {
-            "recommended": groups["recommended"],
-            "usable": groups["usable"],
-            "remote_or_cloud": groups["remote_or_cloud"],
-        }
-        if include_not_recommended:
-            ordered_groups["not_recommended"] = groups["not_recommended"]
-        for rows in ordered_groups.values():
+        for rows in groups.values():
             rows.sort(
                 key=lambda item: (
                     -item.get("selection_score", 0.0),
@@ -402,6 +394,13 @@ class HardwareManager:
                     item.get("name", ""),
                 )
             )
+        ordered_groups: dict[str, list[dict[str, Any]]] = {
+            "recommended": groups["recommended"],
+            "usable": groups["usable"],
+            "remote_or_cloud": groups["remote_or_cloud"],
+        }
+        if include_not_recommended:
+            ordered_groups["not_recommended"] = groups["not_recommended"]
 
         criteria = {
             "recommended": "meets configured recommended RAM/VRAM targets, has policy approval, and is compatible with local runtime options",
@@ -431,7 +430,7 @@ class HardwareManager:
                 {
                     "not_recommended_count": len(groups["not_recommended"]),
                     "hint": "pass --include-not-recommended to show models that do not fit this hardware, runtime, or policy",
-                    "nearest_miss": _nearest_recommendation_miss(groups["not_recommended"]),
+                    "nearest_miss": _nearest_miss(groups["not_recommended"]),
                 }
                 if not include_not_recommended
                 else {}
@@ -458,6 +457,21 @@ class HardwareManager:
                 }
             )
         return sorted(scored, key=lambda item: item["score"], reverse=True)[:3]
+
+
+def _nearest_miss(rows: list[dict[str, Any]]) -> dict[str, Any] | None:
+    if not rows:
+        return None
+    row = sorted(
+        rows,
+        key=lambda item: (-float(item.get("selection_score", 0.0) or 0.0), str(item.get("name") or "")),
+    )[0]
+    name = str(row.get("name") or "")
+    return {
+        "name": name,
+        "reason": row.get("reason") or "does not meet the active local constraints",
+        "remediation": "aiplane recommend --include-not-recommended",
+    }
 
 
 def _machine_from_active(active: dict[str, Any], discovered: dict[str, Any]) -> dict[str, Any]:
@@ -693,6 +707,7 @@ def _recommendation_payload(
         "min_vram_gb": model.get("min_vram_gb"),
         "recommended_vram_gb": model.get("recommended_vram_gb"),
         "reason": reason,
+        "roles": sorted(str(role) for role in model.get("roles", []) if isinstance(role, str)),
     }
     if runtime_compatibility:
         payload["runtime_compatibility"] = {
@@ -771,19 +786,6 @@ def _calibration_summary(
         "role_filter": requested_roles,
         "ranking_use": "context_only_not_used_for_ranking",
         "next_command": "aiplane models benchmark MODEL_ALIAS --task all" if not measured else None,
-    }
-
-
-def _nearest_recommendation_miss(rows: list[dict[str, Any]]) -> dict[str, Any] | None:
-    if not rows:
-        return None
-    row = sorted(rows, key=lambda item: (-float(item.get("selection_score", 0.0) or 0.0), str(item.get("name") or "")))[
-        0
-    ]
-    return {
-        "name": row.get("name"),
-        "reason": row.get("reason"),
-        "remediation": "aiplane recommend --include-not-recommended",
     }
 
 
