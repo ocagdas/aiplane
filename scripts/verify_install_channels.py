@@ -214,8 +214,8 @@ def verify_platform_contracts(cli, *, system: str) -> None:
             raise RuntimeError("unsupported SSH lifecycle did not fail with unsupported_platform")
 
 
-def verify_cli(command: Path, *, env: dict[str, str], workspace: Path) -> None:
-    workspace.mkdir(parents=True)
+def _installed_cli(command: Path, *, env: dict[str, str], workspace: Path):
+    workspace.mkdir(parents=True, exist_ok=True)
     profiles = workspace / "profiles"
     isolated_env = env.copy()
     isolated_env.pop("AIPLANE_CONFIG", None)
@@ -224,6 +224,39 @@ def verify_cli(command: Path, *, env: dict[str, str], workspace: Path) -> None:
 
     def cli(*arguments: str, expected: tuple[int, ...] = (0,)) -> subprocess.CompletedProcess[str]:
         return run([str(command), *arguments], env=isolated_env, cwd=workspace, expected=expected)
+
+    return cli, isolated_env
+
+
+def verify_replacement_cli(command: Path, *, env: dict[str, str], workspace: Path) -> None:
+    """Prove a replacement executable still loads persisted profile and package assets."""
+    cli, _isolated_env = _installed_cli(command, env=env, workspace=workspace)
+    version = cli("--version").stdout
+    if "aiplane " not in version or "install_type: wheel" not in version:
+        raise RuntimeError("replacement executable is not the installed wheel")
+    if cli("profiles", "templates").stdout.splitlines() != ["local-dev"]:
+        raise RuntimeError("replacement executable cannot load packaged profile templates")
+    # The full verification adds a local-file model fixture.  It intentionally
+    # produces a provider validation warning after a fresh process starts, so
+    # preserve the non-zero validation result while asserting that the
+    # persisted profile and its selected model are still readable.
+    validation = json.loads(cli("profiles", "validate", "local-dev", expected=(0, 1)).stdout)
+    checks = {check.get("name"): check for check in validation.get("checks", [])}
+    required_checks = (
+        "schema:hardware",
+        "schema:models",
+        "model_default:chat_model",
+        "contract:model_model:portable_smoke",
+    )
+    if validation.get("name") != "local-dev" or not all(checks.get(name, {}).get("ok") for name in required_checks):
+        raise RuntimeError("replacement executable cannot read the persisted profile")
+    manifest = json.loads(cli("mcp", "manifest").stdout)
+    if manifest.get("name") != "aiplane-mcp" or manifest.get("transport") != "stdio":
+        raise RuntimeError("replacement executable cannot render the MCP manifest")
+
+
+def verify_cli(command: Path, *, env: dict[str, str], workspace: Path) -> None:
+    cli, isolated_env = _installed_cli(command, env=env, workspace=workspace)
 
     help_output = cli("--help").stdout
     if "environment doctor and configuration compiler" not in help_output:
@@ -295,9 +328,10 @@ def verify_pip(wheel: Path, root: Path) -> None:
     command = executable(bin_dir)
     env = os.environ.copy()
     run([str(python), "-m", "pip", "install", "--no-deps", str(wheel)], env=env)
-    verify_cli(command, env=env, workspace=root / "pip-before")
+    workspace = root / "pip-workspace"
+    verify_cli(command, env=env, workspace=workspace)
     run([str(python), "-m", "pip", "install", "--no-deps", "--force-reinstall", str(wheel)], env=env)
-    verify_cli(command, env=env, workspace=root / "pip-after")
+    verify_replacement_cli(command, env=env, workspace=workspace)
     run([str(python), "-m", "pip", "uninstall", "-y", PACKAGE], env=env)
     if command.exists():
         raise RuntimeError("pip uninstall left the aiplane executable behind")
@@ -310,10 +344,11 @@ def verify_pipx(wheel: Path, root: Path) -> None:
     env.update({"PIPX_HOME": str(home), "PIPX_BIN_DIR": str(bin_dir)})
     command = executable(bin_dir)
     run([sys.executable, "-m", "pipx", "install", str(wheel)], env=env)
-    verify_cli(command, env=env, workspace=root / "pipx-before")
+    workspace = root / "pipx-workspace"
+    verify_cli(command, env=env, workspace=workspace)
     run([sys.executable, "-m", "pipx", "uninstall", PACKAGE], env=env)
     run([sys.executable, "-m", "pipx", "install", str(wheel)], env=env)
-    verify_cli(command, env=env, workspace=root / "pipx-after")
+    verify_replacement_cli(command, env=env, workspace=workspace)
     run([sys.executable, "-m", "pipx", "uninstall", PACKAGE], env=env)
     if command.exists():
         raise RuntimeError("pipx uninstall left the aiplane executable behind")
@@ -326,9 +361,10 @@ def verify_uv(wheel: Path, root: Path) -> None:
     env.update({"UV_TOOL_DIR": str(tool_dir), "UV_TOOL_BIN_DIR": str(bin_dir)})
     command = executable(bin_dir)
     run(["uv", "tool", "install", str(wheel)], env=env)
-    verify_cli(command, env=env, workspace=root / "uv-before")
+    workspace = root / "uv-workspace"
+    verify_cli(command, env=env, workspace=workspace)
     run(["uv", "tool", "install", "--force", str(wheel)], env=env)
-    verify_cli(command, env=env, workspace=root / "uv-after")
+    verify_replacement_cli(command, env=env, workspace=workspace)
     run(["uv", "tool", "uninstall", PACKAGE], env=env)
     if command.exists():
         raise RuntimeError("uv tool uninstall left the aiplane executable behind")
@@ -357,7 +393,7 @@ def main() -> int:
         validators = {"pip": verify_pip, "pipx": verify_pipx, "uv": verify_uv}
         for channel in channels:
             validators[channel](wheel, root)
-            print(f"{channel}: install, verification, upgrade/replacement, and uninstall passed")
+            print(f"{channel}: full install verification, replacement smoke, and uninstall passed")
     return 0
 
 

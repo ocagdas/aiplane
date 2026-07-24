@@ -318,7 +318,7 @@ def add_execution_parsers(
         "launch",
         "Launch a configured assistant tool",
         "Launch a configured assistant tool with profile-driven model selection.",
-        "Examples:\n  aiplane launch --tool aider --model fixture-chat-small\n  aiplane launch --tool ollama --app vscode\n  aiplane launch --tool continue --model fixture-chat-small --dry-run",
+        "Examples:\n  aiplane launch --tool aider --model fixture-chat-small\n  aiplane launch --tool ollama --app vscode\n  aiplane launch --tool codex --model fixture-chat-small --dry-run\n  aiplane launch --tool continue --model fixture-chat-small --dry-run",
     )
     launch_cmd.add_argument(
         "--tool",
@@ -346,7 +346,7 @@ def add_execution_parsers(
         "session",
         "Track a minimal model session",
         "Create thin, local session metadata for model-facing tooling without implementing a custom chat UI.",
-        "Examples:\n  aiplane session start --tool aider --model fixture-chat-small\n  aiplane session start --tool ollama --app vscode --transcript /tmp/session.log\n  aiplane session start --tool continue --model fixture-chat-small --dry-run",
+        "Examples:\n  aiplane session start --tool aider --model fixture-chat-small\n  aiplane session start --tool ollama --app vscode --transcript /tmp/session.log\n  aiplane session start --tool codex --model fixture-chat-small --dry-run\n  aiplane session start --tool continue --model fixture-chat-small --dry-run",
     )
     session_sub = session_cmd.add_subparsers(dest="session_command", required=True, metavar="command")
     session_start = session_sub.add_parser(

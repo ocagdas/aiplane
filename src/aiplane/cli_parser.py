@@ -48,7 +48,7 @@ BRIDGE_ACTIONS: dict[str, dict[str, object]] = {
     },
 }
 
-LAUNCH_TOOLS = ("aider", "continue", "ollama")
+LAUNCH_TOOLS = ("aider", "codex", "continue", "ollama")
 
 
 def _command(subparsers, name: str, help_text: str, description: str, epilog: str | None = None):

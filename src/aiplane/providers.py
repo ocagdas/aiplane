@@ -581,7 +581,7 @@ class ProviderRegistry:
             "has_api_key": bool(api_key),
         }
         auth = provider_config.get("auth") if isinstance(provider_config.get("auth"), dict) else {}
-        auth_required = bool(auth.get("required", True))
+        auth_required = bool(auth.get("required", name != "ollama"))
         if auth_required and not api_key:
             result["reason"] = (
                 f"missing credential {credential_ref}"
@@ -591,6 +591,24 @@ class ProviderRegistry:
             return result
 
         try:
+            if name == "ollama" or str(provider_config.get("endpoint_family") or "") == "ollama":
+                endpoint = endpoint or "http://localhost:11434"
+                url = f"{endpoint}/api/tags"
+                payload = self._json_get(url, timeout=timeout_seconds)
+                models = payload.get("models") if isinstance(payload, dict) else None
+                result.update(
+                    {
+                        "ok": isinstance(models, list),
+                        "endpoint": endpoint,
+                        "method": "ollama_tags",
+                        "url": url,
+                        "items_seen": len(models) if isinstance(models, list) else None,
+                    }
+                )
+                if not result["ok"]:
+                    result["reason"] = "unexpected Ollama tags response"
+                return result
+
             if name == "azure_openai":
                 if not endpoint:
                     result["reason"] = "missing Azure OpenAI endpoint"

@@ -156,6 +156,10 @@ Start with a bounded preview. Network-backed providers are optional.
 aiplane providers list
 aiplane providers diagnose
 aiplane providers diagnose openai
+# Optional live local-runtime check; reads Ollama /api/tags and never sends credentials.
+aiplane providers test ollama
+# Optional managed-provider check after configuring a credential reference; never prints its value.
+aiplane providers test anthropic
 aiplane runtimes sources
 aiplane models refresh --provider ollama --limit 20 --dry-run --verbosity 2
 aiplane models refresh --provider huggingface --query text-generation --limit 20 --dry-run --verbosity 2
@@ -169,6 +173,8 @@ aiplane models refresh --provider huggingface --query text-generation --limit 10
 ```
 
 - [ ] Preview identifies its source and proposed changes.
+- [ ] `providers test ollama` reports the configured endpoint, `ollama_tags` method, and model count when Ollama is reachable; an unreachable endpoint fails without exposing credentials.
+- [ ] A managed-provider test runs only after its credential reference is configured and reports the reference/env-var name, never its value.
 - [ ] Refresh reports added/updated/unchanged counts.
 - [ ] The enriched materialized catalog is regenerated automatically.
 - [ ] No API keys, authorization headers, or credential values appear in generated catalog data.
@@ -424,6 +430,8 @@ aiplane integrations plan continue --select-best --runtime "$RUNTIME"
 aiplane integrations setup continue --chat "$CHAT_ALIAS" --runtime "$RUNTIME" --dry-run
 aiplane integrations export continue --chat "$CHAT_ALIAS"
 aiplane integrations export codex --model "$CHAT_ALIAS"
+# Safe preview only: available for Codex built-in local Ollama or LM Studio providers.
+aiplane launch --tool codex --model "$CHAT_ALIAS" --dry-run
 aiplane integrations export copilot-cli --model "$CHAT_ALIAS"
 aiplane integrations export copilot-vscode --model "$CHAT_ALIAS"
 aiplane integrations export openai-compatible --model "$CHAT_ALIAS" --endpoint http://localhost:11434/v1
@@ -436,6 +444,7 @@ Use `integrations <subcommand> --help` if a target needs role-specific flags in 
 - [ ] Secret fields are environment-variable references or placeholders, never credential values.
 - [ ] Managed endpoints can be exported when their provider, protocol, and credential reference are configured.
 - [ ] Codex custom providers use a supported OpenAI-compatible protocol; provider/auth changes target user-level configuration when required by the host client.
+- [ ] The Codex launch preview emits `codex --oss --local-provider ollama|lmstudio --model NATIVE_ID` only for a selected local OSS runtime at its loopback endpoint; remote or custom endpoints are rejected with an export-first explanation and are never written to Codex configuration.
 
 ## 14. Agent and orchestrator planning
 
