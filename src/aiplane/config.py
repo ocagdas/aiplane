@@ -724,6 +724,10 @@ def _split_inline_list(value: str, line_number: int) -> list[str]:
             item = "".join(current).strip()
             if not item:
                 raise ValueError(f"unsupported empty inline-list item at line {line_number}")
+            if item.startswith(("&", "*", "!")):
+                raise ValueError(
+                    f"unsupported YAML anchor/alias/tag syntax at line {line_number}; use plain scalars and mappings"
+                )
             items.append(item)
             current = []
             index += 1
@@ -735,6 +739,10 @@ def _split_inline_list(value: str, line_number: int) -> list[str]:
     item = "".join(current).strip()
     if not item:
         raise ValueError(f"unsupported empty inline-list item at line {line_number}")
+    if item.startswith(("&", "*", "!")):
+        raise ValueError(
+            f"unsupported YAML anchor/alias/tag syntax at line {line_number}; use plain scalars and mappings"
+        )
     items.append(item)
     return items
 
