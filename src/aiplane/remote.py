@@ -11,6 +11,7 @@ from typing import Any, Protocol
 
 from .boundaries import CommandRunner, SubprocessCommandRunner
 from .models import Profile
+from .persistence import file_lock
 from .platform_support import HostPlatform, detect_host_platform
 from .network_validation import (
     ssh_forward_host,
@@ -213,41 +214,56 @@ class RemoteManager:
             raise PermissionError(
                 "remote tunnel start is mutating; run remote tunnel plan first or use the CLI start command when ready"
             )
-        status = self.tunnel_status(name)
-        if status["state"] == "invalid":
-            raise RuntimeError(f"tunnel state is invalid; inspect or remove {status['state_file']}")
-        if status["running"]:
-            return {"target": name, "status": "already_running", **status}
-
         plan = self.tunnel_plan(name)
         if not plan["tool_available"]:
             raise RuntimeError("ssh is not available on PATH")
 
         state_file = self._state_file(name)
         log_file = self._log_file(name)
-        state_file.parent.mkdir(parents=True, exist_ok=True)
-        with log_file.open("ab") as log:
-            process = self.command_runner.popen(
-                plan["command"],
-                cwd=self.profile.workspace,
-                stdout=log,
-                stderr=log,
-                start_new_session=True,
-            )
-        identity = self.process_inspector.capture(process.pid)
-        if identity is None:
-            terminate = getattr(process, "terminate", None)
-            if callable(terminate):
-                terminate()
-            raise RuntimeError("could not capture SSH process identity; tunnel was terminated and state was not saved")
-        state = {
-            "version": _STATE_VERSION,
-            "target": name,
-            "pid": process.pid,
-            "identity": identity,
-            "command": plan["command"],
-        }
-        _write_state(state_file, state)
+        with file_lock(state_file):
+            try:
+                state = _read_state(state_file, expected_target=name)
+            except ValueError as exc:
+                raise RuntimeError(f"tunnel state is invalid; inspect or remove {state_file}") from exc
+            if state is not None and self.process_inspector.matches(int(state["pid"]), state["identity"]):
+                return {
+                    "target": name,
+                    "status": "already_running",
+                    "running": True,
+                    "pid": state["pid"],
+                    "state": "running",
+                    "state_file": str(state_file),
+                    "endpoint": plan["endpoint"],
+                    "command": plan["command"],
+                }
+
+            state_file.parent.mkdir(parents=True, exist_ok=True)
+            with log_file.open("ab") as log:
+                process = self.command_runner.popen(
+                    plan["command"],
+                    cwd=self.profile.workspace,
+                    stdout=log,
+                    stderr=log,
+                    start_new_session=True,
+                )
+            identity = self.process_inspector.capture(process.pid)
+            if identity is None:
+                _terminate_process(process)
+                raise RuntimeError(
+                    "could not capture SSH process identity; tunnel was terminated and state was not saved"
+                )
+            state = {
+                "version": _STATE_VERSION,
+                "target": name,
+                "pid": process.pid,
+                "identity": identity,
+                "command": plan["command"],
+            }
+            try:
+                _write_state(state_file, state)
+            except OSError as exc:
+                _terminate_process(process)
+                raise RuntimeError("could not persist SSH tunnel state; tunnel was terminated") from exc
         return {
             "target": name,
             "status": "started",
@@ -266,21 +282,22 @@ class RemoteManager:
         if not yes:
             raise PermissionError("remote tunnel stop is mutating; use the CLI stop command when ready")
         state_file = self._state_file(name)
-        try:
-            state = _read_state(state_file, expected_target=name)
-        except ValueError as exc:
-            raise RuntimeError(f"tunnel state is invalid; refusing to signal any process: {exc}") from exc
-        if state is None:
-            return {"target": name, "status": "not_running", "state_file": str(state_file)}
+        with file_lock(state_file):
+            try:
+                state = _read_state(state_file, expected_target=name)
+            except ValueError as exc:
+                raise RuntimeError(f"tunnel state is invalid; refusing to signal any process: {exc}") from exc
+            if state is None:
+                return {"target": name, "status": "not_running", "state_file": str(state_file)}
 
-        pid = int(state["pid"])
-        stopped = self.process_inspector.terminate_if_matches(pid, state["identity"])
-        status = "stopped" if stopped else "stale_or_reused_state_removed"
-        try:
-            state_file.unlink()
-        except FileNotFoundError:
-            pass
-        return {"target": name, "status": status, "pid": pid, "state_file": str(state_file)}
+            pid = int(state["pid"])
+            stopped = self.process_inspector.terminate_if_matches(pid, state["identity"])
+            status = "stopped" if stopped else "stale_or_reused_state_removed"
+            try:
+                state_file.unlink()
+            except FileNotFoundError:
+                pass
+            return {"target": name, "status": status, "pid": pid, "state_file": str(state_file)}
 
     def _unsupported_lifecycle(self, name: str, action: str) -> dict[str, Any] | None:
         if self.host_platform.ssh_tunnel_lifecycle_supported:
@@ -390,6 +407,12 @@ def _write_state(path: Path, state: dict[str, Any]) -> None:
                 temporary.unlink()
             except FileNotFoundError:
                 pass
+
+
+def _terminate_process(process: object) -> None:
+    terminate = getattr(process, "terminate", None)
+    if callable(terminate):
+        terminate()
 
 
 def _state_name(value: str) -> str:

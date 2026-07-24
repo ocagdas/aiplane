@@ -36,7 +36,7 @@ The current read tools are:
 - `aiplane.integrations.export`
 - `aiplane.integrations.roles` and `aiplane.integrations.plan`
 - `aiplane.orchestrators.list` and `aiplane.orchestrators.show`
-- `aiplane.runtimes.status` and render-only `aiplane.runtimes.bundle`
+- `aiplane.runtimes.status` and render-only `aiplane.runtimes.bundle`; bundle mode supports `auto`, `docker`, `conda`, and `native` when the selected runtime supports it.
 - render-only `aiplane.agents.manifest`
 - `aiplane.remote.tunnel.plan`
 - `aiplane.remote.tunnel.status`
@@ -50,7 +50,7 @@ Write tools execute through the same managers as the CLI. Where a tool supports 
 - `aiplane.remote.tunnel.start`: start a configured SSH tunnel in the background.
 - `aiplane.remote.tunnel.stop`: stop a helper-started SSH tunnel.
 
-All tools return JSON as both text content and structured MCP content where supported by the client. Mutating tools call the same internal managers as the CLI; they do not bypass profile validation, policy boundaries, or filesystem scoping.
+All tools return JSON as both text content and structured MCP content where supported by the client. Mutating tools call the same internal managers as the CLI; they do not bypass profile validation, policy boundaries, or filesystem scoping. The stdio server rejects malformed non-object JSON-RPC messages, invalid tool arguments (with JSON-RPC `-32602`), oversized header blocks, and frames larger than 1 MiB before reading their bodies.
 
 New CLI features are not automatically MCP tools. MCP coverage is reviewed during pre-PR cleanup and recurring synchronization checkpoints, not continuously after every feature and not at every regular milestone. Useful inspection, planning, recommendation, and config export features can be mirrored into MCP, while host mutation, downloads, installs, cloud apply, secret writes, and broad shell execution stay CLI-only or deferred until they have explicit guardrails and audit behavior.
 

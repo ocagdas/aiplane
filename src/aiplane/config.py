@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 import os
 import shutil
 import sys
 from typing import Any
 
-from .persistence import atomic_update_yaml, atomic_write_text
+from .persistence import atomic_update_yaml
 from .models import Profile
 
 
@@ -150,6 +151,11 @@ def get_command_output_format(command: str, path: Path | str | None = None) -> s
     return _validate_output_format(value)
 
 
+def _update_local_config(path: Path, transform) -> Path:
+    atomic_update_yaml(path, transform)
+    return path
+
+
 def set_output_format(
     value: str,
     *,
@@ -158,28 +164,29 @@ def set_output_format(
     path: Path | str | None = None,
 ) -> Path:
     _validate_output_format(value)
-    config_path = local_config_path(path)
-    config = load_local_config(config_path)
     if profile is not None and command is not None:
         raise ValueError("set_output_format accepts profile or command, but not both")
     if profile:
         _validate_profile_name(profile)
-        profile_formats = config.get(OUTPUT_FORMAT_PROFILE_OVERRIDES_KEY, {})
-        if not isinstance(profile_formats, dict):
-            raise ValueError(f"{OUTPUT_FORMAT_PROFILE_OVERRIDES_KEY} must be a mapping")
-        profile_formats[profile] = value
-        config[OUTPUT_FORMAT_PROFILE_OVERRIDES_KEY] = profile_formats
-    elif command:
-        command_formats = config.get(OUTPUT_FORMAT_COMMAND_OVERRIDES_KEY, {})
-        if not isinstance(command_formats, dict):
-            raise ValueError(f"{OUTPUT_FORMAT_COMMAND_OVERRIDES_KEY} must be a mapping")
-        command_formats[command] = value
-        config[OUTPUT_FORMAT_COMMAND_OVERRIDES_KEY] = command_formats
-    else:
-        config[OUTPUT_FORMAT_CONFIG_KEY] = value
-    config_path.parent.mkdir(parents=True, exist_ok=True)
-    atomic_write_text(config_path, dump_yaml(config))
-    return config_path
+
+    def update(config: dict[str, Any]) -> dict[str, Any]:
+        if profile:
+            profile_formats = config.get(OUTPUT_FORMAT_PROFILE_OVERRIDES_KEY, {})
+            if not isinstance(profile_formats, dict):
+                raise ValueError(f"{OUTPUT_FORMAT_PROFILE_OVERRIDES_KEY} must be a mapping")
+            profile_formats[profile] = value
+            config[OUTPUT_FORMAT_PROFILE_OVERRIDES_KEY] = profile_formats
+        elif command:
+            command_formats = config.get(OUTPUT_FORMAT_COMMAND_OVERRIDES_KEY, {})
+            if not isinstance(command_formats, dict):
+                raise ValueError(f"{OUTPUT_FORMAT_COMMAND_OVERRIDES_KEY} must be a mapping")
+            command_formats[command] = value
+            config[OUTPUT_FORMAT_COMMAND_OVERRIDES_KEY] = command_formats
+        else:
+            config[OUTPUT_FORMAT_CONFIG_KEY] = value
+        return config
+
+    return _update_local_config(local_config_path(path), update)
 
 
 def clear_output_format(
@@ -190,31 +197,28 @@ def clear_output_format(
 ) -> Path:
     if profile is not None and command is not None:
         raise ValueError("clear_output_format accepts profile or command, but not both")
-    config_path = local_config_path(path)
-    config = load_local_config(config_path)
-    if profile is None:
-        if command is None:
-            config.pop(OUTPUT_FORMAT_CONFIG_KEY, None)
-            config_path.parent.mkdir(parents=True, exist_ok=True)
-            atomic_write_text(config_path, dump_yaml(config))
-            return config_path
-        command_formats = config.get(OUTPUT_FORMAT_COMMAND_OVERRIDES_KEY, {})
-        if not isinstance(command_formats, dict):
-            command_formats = {}
-        if command in command_formats:
-            command_formats.pop(command)
-        config[OUTPUT_FORMAT_COMMAND_OVERRIDES_KEY] = command_formats
-    else:
+    if profile:
         _validate_profile_name(profile)
-        profile_formats = config.get(OUTPUT_FORMAT_PROFILE_OVERRIDES_KEY, {})
-        if not isinstance(profile_formats, dict):
-            profile_formats = {}
-        if profile in profile_formats:
-            profile_formats.pop(profile)
-        config[OUTPUT_FORMAT_PROFILE_OVERRIDES_KEY] = profile_formats
-    config_path.parent.mkdir(parents=True, exist_ok=True)
-    atomic_write_text(config_path, dump_yaml(config))
-    return config_path
+
+    def update(config: dict[str, Any]) -> dict[str, Any]:
+        if profile is None:
+            if command is None:
+                config.pop(OUTPUT_FORMAT_CONFIG_KEY, None)
+            else:
+                command_formats = config.get(OUTPUT_FORMAT_COMMAND_OVERRIDES_KEY, {})
+                if not isinstance(command_formats, dict):
+                    command_formats = {}
+                command_formats.pop(command, None)
+                config[OUTPUT_FORMAT_COMMAND_OVERRIDES_KEY] = command_formats
+        else:
+            profile_formats = config.get(OUTPUT_FORMAT_PROFILE_OVERRIDES_KEY, {})
+            if not isinstance(profile_formats, dict):
+                profile_formats = {}
+            profile_formats.pop(profile, None)
+            config[OUTPUT_FORMAT_PROFILE_OVERRIDES_KEY] = profile_formats
+        return config
+
+    return _update_local_config(local_config_path(path), update)
 
 
 def resolve_output_format(
@@ -272,28 +276,29 @@ def set_output_verbosity(
     path: Path | str | None = None,
 ) -> Path:
     verbosity = _validate_output_verbosity(value)
-    config_path = local_config_path(path)
-    config = load_local_config(config_path)
     if profile is not None and command is not None:
         raise ValueError("set_output_verbosity accepts profile or command, but not both")
     if profile:
         _validate_profile_name(profile)
-        profile_verbosity = config.get(OUTPUT_VERBOSITY_PROFILE_OVERRIDES_KEY, {})
-        if not isinstance(profile_verbosity, dict):
-            raise ValueError(f"{OUTPUT_VERBOSITY_PROFILE_OVERRIDES_KEY} must be a mapping")
-        profile_verbosity[profile] = verbosity
-        config[OUTPUT_VERBOSITY_PROFILE_OVERRIDES_KEY] = profile_verbosity
-    elif command:
-        command_verbosity = config.get(OUTPUT_VERBOSITY_COMMAND_OVERRIDES_KEY, {})
-        if not isinstance(command_verbosity, dict):
-            raise ValueError(f"{OUTPUT_VERBOSITY_COMMAND_OVERRIDES_KEY} must be a mapping")
-        command_verbosity[command] = verbosity
-        config[OUTPUT_VERBOSITY_COMMAND_OVERRIDES_KEY] = command_verbosity
-    else:
-        config[OUTPUT_VERBOSITY_CONFIG_KEY] = verbosity
-    config_path.parent.mkdir(parents=True, exist_ok=True)
-    atomic_write_text(config_path, dump_yaml(config))
-    return config_path
+
+    def update(config: dict[str, Any]) -> dict[str, Any]:
+        if profile:
+            profile_verbosity = config.get(OUTPUT_VERBOSITY_PROFILE_OVERRIDES_KEY, {})
+            if not isinstance(profile_verbosity, dict):
+                raise ValueError(f"{OUTPUT_VERBOSITY_PROFILE_OVERRIDES_KEY} must be a mapping")
+            profile_verbosity[profile] = verbosity
+            config[OUTPUT_VERBOSITY_PROFILE_OVERRIDES_KEY] = profile_verbosity
+        elif command:
+            command_verbosity = config.get(OUTPUT_VERBOSITY_COMMAND_OVERRIDES_KEY, {})
+            if not isinstance(command_verbosity, dict):
+                raise ValueError(f"{OUTPUT_VERBOSITY_COMMAND_OVERRIDES_KEY} must be a mapping")
+            command_verbosity[command] = verbosity
+            config[OUTPUT_VERBOSITY_COMMAND_OVERRIDES_KEY] = command_verbosity
+        else:
+            config[OUTPUT_VERBOSITY_CONFIG_KEY] = verbosity
+        return config
+
+    return _update_local_config(local_config_path(path), update)
 
 
 def clear_output_verbosity(
@@ -304,32 +309,28 @@ def clear_output_verbosity(
 ) -> Path:
     if profile is not None and command is not None:
         raise ValueError("clear_output_verbosity accepts profile or command, but not both")
-    config_path = local_config_path(path)
-    config = load_local_config(config_path)
-    if profile is None:
-        if command is None:
-            config.pop(OUTPUT_VERBOSITY_CONFIG_KEY, None)
-            config_path.parent.mkdir(parents=True, exist_ok=True)
-            atomic_write_text(config_path, dump_yaml(config))
-            return config_path
-        command_verbosity = config.get(OUTPUT_VERBOSITY_COMMAND_OVERRIDES_KEY, {})
-        if not isinstance(command_verbosity, dict):
-            command_verbosity = {}
-        if command in command_verbosity:
-            command_verbosity.pop(command)
-        config[OUTPUT_VERBOSITY_COMMAND_OVERRIDES_KEY] = command_verbosity
-    else:
+    if profile:
         _validate_profile_name(profile)
-        profile_verbosity = config.get(OUTPUT_VERBOSITY_PROFILE_OVERRIDES_KEY, {})
-        if not isinstance(profile_verbosity, dict):
-            profile_verbosity = {}
-        if profile in profile_verbosity:
-            profile_verbosity.pop(profile)
-        config[OUTPUT_VERBOSITY_PROFILE_OVERRIDES_KEY] = profile_verbosity
 
-    config_path.parent.mkdir(parents=True, exist_ok=True)
-    atomic_write_text(config_path, dump_yaml(config))
-    return config_path
+    def update(config: dict[str, Any]) -> dict[str, Any]:
+        if profile is None:
+            if command is None:
+                config.pop(OUTPUT_VERBOSITY_CONFIG_KEY, None)
+            else:
+                command_verbosity = config.get(OUTPUT_VERBOSITY_COMMAND_OVERRIDES_KEY, {})
+                if not isinstance(command_verbosity, dict):
+                    command_verbosity = {}
+                command_verbosity.pop(command, None)
+                config[OUTPUT_VERBOSITY_COMMAND_OVERRIDES_KEY] = command_verbosity
+        else:
+            profile_verbosity = config.get(OUTPUT_VERBOSITY_PROFILE_OVERRIDES_KEY, {})
+            if not isinstance(profile_verbosity, dict):
+                profile_verbosity = {}
+            profile_verbosity.pop(profile, None)
+            config[OUTPUT_VERBOSITY_PROFILE_OVERRIDES_KEY] = profile_verbosity
+        return config
+
+    return _update_local_config(local_config_path(path), update)
 
 
 def resolve_output_verbosity(
@@ -422,7 +423,7 @@ def list_profile_templates() -> list[str]:
     root = profile_templates_root()
     if not root.exists():
         return []
-    return sorted(path.name for path in root.iterdir() if path.is_dir())
+    return sorted(path.name for path in root.iterdir() if path.is_dir() and not path.is_symlink())
 
 
 def create_profile(
@@ -436,7 +437,7 @@ def create_profile(
     missing = [filename for filename in CONFIG_FILES.values() if not (source / filename).exists()]
     if missing:
         raise ValueError(f"profile template {template!r} is missing: {', '.join(missing)}")
-    destination = profiles_root(profiles_dir) / name
+    destination = _profile_path(name, profiles_dir)
     if destination.exists():
         if not overwrite:
             raise ValueError(f"profile already exists: {name}")
@@ -453,7 +454,7 @@ def remove_profile(
     profiles_dir: Path | str | None = None,
 ) -> dict[str, Any]:
     _validate_profile_name(name)
-    destination = profiles_root(profiles_dir) / name
+    destination = _profile_path(name, profiles_dir)
     if not destination.is_dir():
         raise ValueError(f"unknown profile: {name}")
     preview = dry_run or not yes
@@ -478,7 +479,7 @@ def repair_profile(
 ) -> dict[str, Any]:
     _validate_profile_name(name)
     source = _profile_template_path(template)
-    destination = profiles_root(profiles_dir) / name
+    destination = _profile_path(name, profiles_dir)
     if not destination.is_dir():
         raise ValueError(f"unknown profile: {name}")
     requested = files or list(CONFIG_FILES.values())
@@ -522,6 +523,20 @@ def _validate_profile_name(name: str) -> None:
         raise ValueError("profile name must be a simple directory name")
 
 
+def _profile_path(name: str, profiles_dir: Path | str | None = None) -> Path:
+    """Return a profile path only when it remains inside the configured root."""
+    _validate_profile_name(name)
+    root = profiles_root(profiles_dir)
+    path = root / name
+    if path.is_symlink():
+        raise ValueError(f"profile {name!r} must not be a symlink")
+    try:
+        path.resolve().relative_to(root.resolve())
+    except ValueError as exc:
+        raise ValueError(f"profile {name!r} escapes the configured profiles directory") from exc
+    return path
+
+
 def _profile_template_path(template: str) -> Path:
     if not template or template in {".", ".."} or "/" in template or "\\" in template:
         raise ValueError("profile template name must be a simple directory name")
@@ -535,11 +550,12 @@ def list_profiles(profiles_dir: Path | str | None = None) -> list[str]:
     root = profiles_root(profiles_dir)
     if not root.exists():
         return []
-    return sorted(path.name for path in root.iterdir() if path.is_dir())
+    return sorted(path.name for path in root.iterdir() if path.is_dir() and not path.is_symlink())
 
 
 def resolve_profile_name(name: str | None = None, profiles_dir: Path | str | None = None) -> str:
     if name:
+        _validate_profile_name(name)
         return name
     profiles = list_profiles(profiles_dir)
     configured = default_profile()
@@ -559,7 +575,7 @@ def resolve_profile_name(name: str | None = None, profiles_dir: Path | str | Non
 
 
 def load_profile(name: str, workspace: Path | None = None, profiles_dir: Path | str | None = None) -> Profile:
-    root = profiles_root(profiles_dir) / name
+    root = _profile_path(name, profiles_dir)
     if not root.is_dir():
         raise ValueError(f"unknown profile: {name}")
 
@@ -623,9 +639,8 @@ def parse_yaml(text: str) -> dict[str, Any]:
         key = key.strip()
         value = value.strip()
         if value.startswith(("|", ">")):
-            raise ValueError(
-                f"unsupported YAML block scalar at line {line_number}; use a quoted single-line scalar"
-            )
+            raise ValueError(f"unsupported YAML block scalar at line {line_number}; use a quoted single-line scalar")
+        if value.startswith(("&", "*", "!")):
             raise ValueError(
                 f"unsupported YAML anchor/alias/tag syntax at line {line_number}; use plain scalars and mappings"
             )
@@ -642,7 +657,7 @@ def parse_yaml(text: str) -> dict[str, Any]:
         if value == "[]":
             parent[key] = []
         elif value.startswith("[") and value.endswith("]"):
-            parent[key] = [_parse_scalar(item.strip()) for item in value[1:-1].split(",") if item.strip()]
+            parent[key] = [_parse_scalar(item) for item in _split_inline_list(value[1:-1], line_number)]
         else:
             parent[key] = _parse_scalar(value)
 
@@ -650,18 +665,86 @@ def parse_yaml(text: str) -> dict[str, Any]:
 
 
 def _parse_scalar(value: str) -> Any:
+    if value.startswith(("'", '"')) and not (
+        (value.startswith("'") and value.endswith("'")) or (value.startswith('"') and value.endswith('"'))
+    ):
+        raise ValueError("unterminated quoted YAML scalar")
     if value in {"true", "True"}:
         return True
     if value in {"false", "False"}:
         return False
     if value in {"null", "None"}:
         return None
-    if (value.startswith('"') and value.endswith('"')) or (value.startswith("'") and value.endswith("'")):
-        return value[1:-1]
+    if value.startswith('"') and value.endswith('"'):
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError as exc:
+            raise ValueError("invalid double-quoted YAML scalar") from exc
+        if not isinstance(parsed, str):
+            raise ValueError("quoted YAML scalar must be a string")
+        return parsed
+    if value.startswith("'") and value.endswith("'"):
+        return value[1:-1].replace("''", "'")
     try:
         return int(value)
     except ValueError:
         return value
+
+
+def _split_inline_list(value: str, line_number: int) -> list[str]:
+    if not value.strip():
+        return []
+    items: list[str] = []
+    current: list[str] = []
+    quote: str | None = None
+    escaped = False
+    index = 0
+    while index < len(value):
+        character = value[index]
+        if quote is not None:
+            current.append(character)
+            if quote == "'" and character == "'" and index + 1 < len(value) and value[index + 1] == "'":
+                current.append(value[index + 1])
+                index += 2
+                continue
+            if escaped:
+                escaped = False
+            elif quote == '"' and character == "\\":
+                escaped = True
+            elif character == quote:
+                quote = None
+            index += 1
+            continue
+        if character in {"'", '"'}:
+            quote = character
+            current.append(character)
+            index += 1
+            continue
+        if character == ",":
+            item = "".join(current).strip()
+            if not item:
+                raise ValueError(f"unsupported empty inline-list item at line {line_number}")
+            if item.startswith(("&", "*", "!")):
+                raise ValueError(
+                    f"unsupported YAML anchor/alias/tag syntax at line {line_number}; use plain scalars and mappings"
+                )
+            items.append(item)
+            current = []
+            index += 1
+            continue
+        current.append(character)
+        index += 1
+    if quote is not None:
+        raise ValueError(f"unterminated quoted inline-list item at line {line_number}")
+    item = "".join(current).strip()
+    if not item:
+        raise ValueError(f"unsupported empty inline-list item at line {line_number}")
+    if item.startswith(("&", "*", "!")):
+        raise ValueError(
+            f"unsupported YAML anchor/alias/tag syntax at line {line_number}; use plain scalars and mappings"
+        )
+    items.append(item)
+    return items
 
 
 def dump_yaml(data: dict[str, Any]) -> str:
@@ -698,6 +781,9 @@ def _format_scalar(value: Any) -> str:
         or text in {"null", "true", "false", "None", "True", "False"}
         or ":" in text
         or "#" in text
+        or "," in text
+        or "\\" in text
+        or text.startswith(("&", "*", "!", "[", "{", "- ", "'", '"'))
     ):
-        return repr(text)
+        return json.dumps(text, ensure_ascii=False)
     return text

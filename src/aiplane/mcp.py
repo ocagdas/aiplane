@@ -216,6 +216,10 @@ WRITE_TOOLS: list[dict[str, Any]] = [
 
 
 MUTATING_TOOL_NAMES = {str(tool["name"]) for tool in WRITE_TOOLS if tool.get("mutates")}
+_MAX_MCP_MESSAGE_BYTES = 1_048_576
+_MAX_MCP_HEADER_BYTES = 16_384
+_MAX_MCP_HEADER_LINE_BYTES = 8_192
+_MAX_MCP_HEADER_COUNT = 32
 _WRITE_CONFIRM_PROPERTY = {
     "type": "boolean",
     "default": False,
@@ -484,7 +488,7 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
             "profile": {"type": "string"},
             "runtime": {"type": "string"},
             "model": {"type": "string"},
-            "mode": {"type": "string", "enum": ["docker", "conda"], "default": "docker"},
+            "mode": {"type": "string", "enum": ["auto", "docker", "conda", "native"], "default": "auto"},
             "cache_volume": {"type": "string"},
             "gpu_devices": {"type": "array", "items": {"type": "string"}},
             "environment": {"type": "array", "items": {"type": "string"}},
@@ -639,10 +643,14 @@ class AiplaneMcpServer:
         self.profiles_dir = profiles_dir
         self.allow_writes = allow_writes
 
-    def handle_message(self, message: dict[str, Any]) -> dict[str, Any] | None:
-        method = message.get("method")
+    def handle_message(self, message: Any) -> dict[str, Any] | None:
+        if not isinstance(message, dict):
+            return _error(None, -32600, "invalid request: JSON-RPC message must be an object")
         request_id = message.get("id")
+        method = message.get("method")
         try:
+            if not isinstance(method, str):
+                return _error(request_id, -32600, "invalid request: method must be a string")
             if method == "initialize":
                 return _result(request_id, self._initialize_result())
             if method == "notifications/initialized":
@@ -652,13 +660,22 @@ class AiplaneMcpServer:
             if method == "tools/list":
                 return _result(request_id, {"tools": self._tools()})
             if method == "tools/call":
-                params = _dict(message.get("params"))
-                name = str(params.get("name") or "")
-                arguments = _dict(params.get("arguments"))
+                params = message.get("params")
+                if not isinstance(params, dict):
+                    return _error(request_id, -32602, "invalid params: tools/call params must be an object")
+                name = params.get("name")
+                if not isinstance(name, str) or not name:
+                    return _error(request_id, -32602, "invalid params: tool name must be a non-empty string")
+                arguments = params.get("arguments", {})
+                if not isinstance(arguments, dict):
+                    return _error(request_id, -32602, "invalid params: tool arguments must be an object")
+                _validate_tool_arguments(name, arguments)
                 return _result(request_id, _tool_content(self.call_tool(name, arguments)))
             if request_id is None:
                 return None
             return _error(request_id, -32601, f"method not found: {method}")
+        except _InvalidToolArguments as exc:
+            return _error(request_id, -32602, f"invalid params: {exc}")
         except Exception as exc:  # noqa: BLE001 - JSON-RPC errors should be returned to the client.
             if request_id is None:
                 return None
@@ -827,7 +844,7 @@ class AiplaneMcpServer:
             return RuntimeCatalog(profile).bundle_plan(
                 str(arguments.get("runtime") or ""),
                 str(arguments.get("model") or ""),
-                mode=str(arguments.get("mode") or "docker"),
+                mode=str(arguments.get("mode") or "auto"),
                 cache_volume=str(arguments.get("cache_volume") or "") or None,
                 gpu_devices=_string_list(arguments.get("gpu_devices")),
                 environment=_string_list(arguments.get("environment")),
@@ -993,15 +1010,27 @@ def serve_stdio(
 
 def _read_message(stream) -> dict[str, Any] | None:
     content_length = None
+    header_bytes = 0
+    header_count = 0
     while True:
-        line = stream.readline()
+        line = stream.readline(_MAX_MCP_HEADER_LINE_BYTES + 1)
         if line == b"":
             return None
+        header_bytes += len(line)
+        if header_bytes > _MAX_MCP_HEADER_BYTES:
+            raise ValueError(f"MCP headers exceed {_MAX_MCP_HEADER_BYTES} bytes")
+        if len(line) > _MAX_MCP_HEADER_LINE_BYTES:
+            raise ValueError(f"MCP header line exceeds {_MAX_MCP_HEADER_LINE_BYTES} bytes")
         if line in {b"\r\n", b"\n"}:
             break
+        header_count += 1
+        if header_count > _MAX_MCP_HEADER_COUNT:
+            raise ValueError(f"MCP headers exceed {_MAX_MCP_HEADER_COUNT} lines")
         header = line.decode("ascii", errors="replace").strip()
         key, _, value = header.partition(":")
         if key.lower() == "content-length":
+            if content_length is not None:
+                raise ValueError("invalid Content-Length header: duplicate value")
             raw_length = value.strip()
             if not raw_length:
                 raise ValueError("invalid Content-Length header: empty value")
@@ -1011,12 +1040,73 @@ def _read_message(stream) -> dict[str, Any] | None:
                 raise ValueError("invalid Content-Length header: must be an integer") from exc
             if content_length <= 0:
                 raise ValueError("invalid Content-Length header: value must be greater than zero")
+            if content_length > _MAX_MCP_MESSAGE_BYTES:
+                raise ValueError(f"invalid Content-Length header: value exceeds {_MAX_MCP_MESSAGE_BYTES} bytes")
     if content_length is None:
         raise ValueError("missing Content-Length header")
     body = stream.read(content_length)
     if len(body) != content_length:
         raise ValueError("unexpected EOF while reading message body")
     return json.loads(body.decode("utf-8"))
+
+
+def _validate_tool_arguments(name: str, arguments: dict[str, Any]) -> None:
+    schema = TOOL_SCHEMAS.get(name)
+    if schema is None:
+        raise _InvalidToolArguments(f"unknown tool: {name}")
+    _validate_schema_value(arguments, schema, "arguments")
+
+
+class _InvalidToolArguments(ValueError):
+    pass
+
+
+def _validate_schema_value(value: Any, schema: dict[str, Any], path: str) -> None:
+    expected_type = schema.get("type")
+    if expected_type == "object":
+        if not isinstance(value, dict):
+            raise _InvalidToolArguments(f"{path} must be an object")
+        properties = schema.get("properties", {})
+        required = schema.get("required", [])
+        additional = schema.get("additionalProperties", True)
+        for key in required:
+            if key not in value:
+                raise _InvalidToolArguments(f"{path}.{key} is required")
+        if additional is False:
+            unexpected = sorted(set(value) - set(properties))
+            if unexpected:
+                raise _InvalidToolArguments(f"{path}.{unexpected[0]} is not supported")
+        for key, child in value.items():
+            child_schema = properties.get(key)
+            if isinstance(child_schema, dict):
+                _validate_schema_value(child, child_schema, f"{path}.{key}")
+            elif isinstance(additional, dict):
+                _validate_schema_value(child, additional, f"{path}.{key}")
+    elif expected_type == "array":
+        if not isinstance(value, list):
+            raise _InvalidToolArguments(f"{path} must be an array")
+        item_schema = schema.get("items")
+        if isinstance(item_schema, dict):
+            for index, item in enumerate(value):
+                _validate_schema_value(item, item_schema, f"{path}[{index}]")
+    elif expected_type == "string" and not isinstance(value, str):
+        raise _InvalidToolArguments(f"{path} must be a string")
+    elif expected_type == "boolean" and not isinstance(value, bool):
+        raise _InvalidToolArguments(f"{path} must be a boolean")
+    elif expected_type == "integer" and (not isinstance(value, int) or isinstance(value, bool)):
+        raise _InvalidToolArguments(f"{path} must be an integer")
+    elif expected_type == "number" and (not isinstance(value, (int, float)) or isinstance(value, bool)):
+        raise _InvalidToolArguments(f"{path} must be a number")
+
+    if "enum" in schema and value not in schema["enum"]:
+        raise _InvalidToolArguments(f"{path} must be one of: {', '.join(str(item) for item in schema['enum'])}")
+    try:
+        if "minimum" in schema and value < schema["minimum"]:
+            raise _InvalidToolArguments(f"{path} must be at least {schema['minimum']}")
+        if "maximum" in schema and value > schema["maximum"]:
+            raise _InvalidToolArguments(f"{path} must be at most {schema['maximum']}")
+    except TypeError as exc:
+        raise _InvalidToolArguments(f"{path} has an invalid type") from exc
 
 
 def _write_message(stream, message: dict[str, Any]) -> None:

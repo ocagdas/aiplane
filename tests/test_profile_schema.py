@@ -4,9 +4,10 @@ import copy
 import json
 
 import pytest
+from jsonschema import Draft202012Validator, ValidationError
 
 from aiplane.cli import main as cli_main
-from aiplane.config import create_profile, dump_yaml, load_profile, parse_yaml
+from aiplane.config import create_profile, dump_yaml, list_profiles, load_profile, parse_yaml
 from aiplane.profile_schema import (
     PROFILE_SCHEMA_ID,
     PROFILE_SCHEMA_VERSION,
@@ -166,3 +167,69 @@ def test_parse_yaml_rejects_block_scalars_with_actionable_error() -> None:
 def test_parse_yaml_rejects_block_scalars_with_indent_indicator() -> None:
     with pytest.raises(ValueError, match="block scalar at line 2"):
         parse_yaml("notes:\n  text: |2\n")
+
+
+def test_load_profile_rejects_traversal_names(tmp_path) -> None:
+    profiles = tmp_path / "profiles"
+    create_profile("outside", profiles_dir=tmp_path)
+
+    with pytest.raises(ValueError, match="simple directory name"):
+        load_profile("../outside", tmp_path, profiles_dir=profiles)
+
+
+def test_load_profile_rejects_symlinked_profile_roots(tmp_path) -> None:
+    profiles = tmp_path / "profiles"
+    create_profile("external", profiles_dir=tmp_path)
+    profiles.mkdir()
+    try:
+        (profiles / "linked").symlink_to(tmp_path / "external", target_is_directory=True)
+    except OSError as exc:
+        pytest.skip(f"symlink creation is unavailable: {exc}")
+
+    assert list_profiles(profiles) == []
+    with pytest.raises(ValueError, match="must not be a symlink"):
+        load_profile("linked", tmp_path, profiles_dir=profiles)
+
+
+@pytest.mark.parametrize(
+    "document",
+    [
+        {"value": "both ' and \" :"},
+        {"value": "backslash\\ and: hash #"},
+        {"values": ["comma,inside", "plain", "x:y"]},
+    ],
+)
+def test_yaml_dump_round_trips_quoted_scalars_and_inline_lists(document: dict[str, object]) -> None:
+    assert parse_yaml(dump_yaml(document)) == document
+
+
+def test_parse_yaml_preserves_standard_single_quote_escaping() -> None:
+    assert parse_yaml("title: 'it''s valid YAML'\n") == {"title": "it's valid YAML"}
+    assert parse_yaml("items: ['it''s, valid', plain]\n") == {"items": ["it's, valid", "plain"]}
+
+
+@pytest.mark.parametrize("value", ["&shared value", "*shared", "!custom value"])
+def test_parse_yaml_rejects_anchors_aliases_and_tags(value: str) -> None:
+    with pytest.raises(ValueError, match="anchor/alias/tag syntax at line 1"):
+        parse_yaml(f"value: {value}\n")
+
+
+def test_parse_yaml_rejects_malformed_inline_lists() -> None:
+    with pytest.raises(ValueError, match="empty inline-list item at line 1"):
+        parse_yaml("values: [one,,two]\n")
+    with pytest.raises(ValueError, match="unterminated quoted inline-list item at line 1"):
+        parse_yaml('values: ["one,two]\n')
+
+
+def test_public_profile_schema_validates_canonical_documents_and_rejects_invalid_ones(tmp_path) -> None:
+    profiles = tmp_path / "profiles"
+    create_profile("schema-instance", profiles_dir=profiles)
+    profile = load_profile("schema-instance", tmp_path, profiles_dir=profiles)
+    schema = load_profile_schema()
+    document = canonical_profile(profile)
+
+    Draft202012Validator(schema).validate(document)
+    invalid = copy.deepcopy(document)
+    invalid["models"]["models"] = {"broken": {"model": "", "provider": "ollama"}}
+    with pytest.raises(ValidationError):
+        Draft202012Validator(schema).validate(invalid)

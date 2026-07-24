@@ -200,7 +200,7 @@ aiplane models list --catalog-cache rebuild --format json > indexed.json
 Optional on-demand catalog performance evidence:
 
 ```bash
-AIPLANE_RUN_CATALOG_BENCHMARKS=1 python -m pytest -q tests/test_catalog_query_performance.py
+AIPLANE_RUN_PERFORMANCE=1 python -m pytest -q tests/performance/test_catalog_query_performance.py
 ```
 
 - [ ] The 1k, 10k, and 100k cases run only when opted in.
@@ -642,7 +642,7 @@ python -m ruff check src tests
 Optional synthetic catalog benchmark and installed-tool artifact validation:
 
 ```bash
-AIPLANE_RUN_CATALOG_BENCHMARKS=1 python -m pytest -q tests/test_catalog_query_performance.py
+AIPLANE_RUN_PERFORMANCE=1 python -m pytest -q tests/performance/test_catalog_query_performance.py
 AIPLANE_RUN_EXTERNAL_VALIDATORS=1 python -m pytest -q tests/test_external_artifact_validation.py -rs
 ```
 

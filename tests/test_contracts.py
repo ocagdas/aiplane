@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from pathlib import Path
+import argparse
 import re
 import tomllib
 import warnings
 
+from aiplane.cli_parser import build_parser
 from aiplane.integration_contracts import ALL_INTEGRATION_TOOLS, required_roles
 from aiplane.mcp import TOOL_SCHEMAS, mcp_manifest
 from aiplane.model_resources import (
@@ -205,6 +207,22 @@ def test_user_workflow_indexes_have_sequential_numbering() -> None:
             section = text.split(f"## {heading}\n", 1)[1].split("\n## ", 1)[0]
             actual = [int(value) for value in re.findall(r"(?m)^(\d+)\. ", section)]
             assert actual == expected, (path, heading, actual)
+
+
+def test_manual_and_evidence_runbooks_use_real_top_level_commands() -> None:
+    parser = build_parser()
+    subcommands = next(action.choices for action in parser._actions if isinstance(action, argparse._SubParsersAction))
+    for path in (Path("docs/user/manual-test-checklist.md"), Path("docs/user/evidence-collection.md")):
+        text = path.read_text(encoding="utf-8")
+        assert text.count("```") % 2 == 0, path
+        commands = re.findall(r"(?:aiplane|python -m aiplane) ([a-z][a-z-]*)", text)
+        assert commands, path
+        assert all(command in subcommands for command in commands), (path, commands)
+    for path in (Path("docs/user/manual-test-checklist.md"), Path("docs/user/evidence-collection.md")):
+        assert (
+            "AIPLANE_RUN_PERFORMANCE=1 python -m pytest -q tests/performance/test_catalog_query_performance.py"
+            in path.read_text(encoding="utf-8")
+        )
 
 
 def test_public_onboarding_links_and_code_fences_are_valid() -> None:

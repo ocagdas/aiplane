@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 import tempfile
+import threading
 
 import pytest
 
@@ -120,3 +121,57 @@ def test_state_names_are_collision_resistant_and_state_is_versioned_json(monkeyp
         assert state["pid"] == 4242
         assert state["identity"] == inspector.identity
         assert not list(Path(started["state_file"]).parent.glob("*.tmp"))
+
+
+def test_concurrent_tunnel_starts_launch_only_one_process(monkeypatch) -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        inspector = FakeInspector()
+        process = FakeProcess()
+        manager = _manager(Path(tmp), inspector, process)
+        calls = 0
+        calls_lock = threading.Lock()
+        original_popen = manager.command_runner.popen
+
+        def counted_popen(command: list[str], **kwargs):
+            nonlocal calls
+            with calls_lock:
+                calls += 1
+            return original_popen(command, **kwargs)
+
+        monkeypatch.setattr(manager.command_runner, "popen", counted_popen)
+        monkeypatch.setattr("aiplane.remote.shutil.which", lambda _: "/usr/bin/ssh")
+        barrier = threading.Barrier(3)
+        results: list[dict[str, object]] = []
+
+        def start() -> None:
+            barrier.wait()
+            results.append(manager.tunnel_start("gpu_workstation_ssh", yes=True))
+
+        threads = [threading.Thread(target=start) for _ in range(2)]
+        for thread in threads:
+            thread.start()
+        barrier.wait()
+        for thread in threads:
+            thread.join(timeout=3)
+
+        assert not any(thread.is_alive() for thread in threads)
+        assert calls == 1
+        assert sorted(result["status"] for result in results) == ["already_running", "started"]
+
+
+def test_start_terminates_tunnel_when_state_write_fails(monkeypatch) -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        inspector = FakeInspector()
+        process = FakeProcess()
+        manager = _manager(Path(tmp), inspector, process)
+        monkeypatch.setattr("aiplane.remote.shutil.which", lambda _: "/usr/bin/ssh")
+
+        def fail_write(*_args, **_kwargs) -> None:
+            raise OSError("disk full")
+
+        monkeypatch.setattr("aiplane.remote._write_state", fail_write)
+        with pytest.raises(RuntimeError, match="could not persist SSH tunnel state"):
+            manager.tunnel_start("gpu_workstation_ssh", yes=True)
+
+        assert process.terminated
+        assert not manager._state_file("gpu_workstation_ssh").exists()
