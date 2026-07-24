@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+from aiplane.cli_launch_support import _launch_plan
+
 from .support import (
     AuditLogger,
     Path,
@@ -87,6 +89,31 @@ class BridgeCliTests(unittest.TestCase):
         self.assertEqual(payload["tool"], "continue")
         self.assertEqual(payload["command"], ["continue"])
         self.assertEqual(payload["selection"]["name"], "fixture-chat-small")
+
+    def test_launch_dry_run_generates_codex_oss_command(self) -> None:
+        stdout = StringIO()
+        with redirect_stdout(stdout):
+            code = cli_main(["launch", "--tool", "codex", "--model", "fixture-chat-small", "--dry-run"])
+        self.assertEqual(code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["tool"], "codex")
+        self.assertEqual(
+            payload["command"],
+            ["codex", "--oss", "--local-provider", "ollama", "--model", "provider-chat-small:8b"],
+        )
+
+    def test_launch_codex_rejects_non_oss_runtime(self) -> None:
+        profile = load_profile("local-dev", Path.cwd())
+        profile.models["providers"]["vllm"]["supported_apis"] = ["responses"]
+        profile.models["models"]["provider-code-large-vllm"]["enabled"] = True
+        with self.assertRaisesRegex(ValueError, "built-in local OSS providers"):
+            _launch_plan(profile, "codex", model="provider-code-large-vllm")
+
+    def test_launch_codex_rejects_remote_ollama_endpoint(self) -> None:
+        profile = load_profile("local-dev", Path.cwd())
+        profile.models["providers"]["ollama"]["endpoint"] = "http://remote.example:11434/v1"
+        with self.assertRaisesRegex(ValueError, "loopback endpoints"):
+            _launch_plan(profile, "codex", model="fixture-chat-small")
 
     def test_launch_dry_run_generates_ollama_launch_command(self) -> None:
         stdout = StringIO()
@@ -212,6 +239,18 @@ class BridgeCliTests(unittest.TestCase):
         self.assertEqual(payload["name"], "session_start")
         self.assertEqual(payload["tool"], "continue")
         self.assertEqual(payload["model"], "fixture-chat-small")
+
+    def test_session_start_codex_dry_run_keeps_oss_command_metadata(self) -> None:
+        stdout = StringIO()
+        with redirect_stdout(stdout):
+            code = cli_main(["session", "start", "--tool", "codex", "--model", "fixture-chat-small", "--dry-run"])
+        self.assertEqual(code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["tool"], "codex")
+        self.assertEqual(
+            payload["launch"]["command"],
+            ["codex", "--oss", "--local-provider", "ollama", "--model", "provider-chat-small:8b"],
+        )
 
     def test_session_start_writes_record_and_audit(self) -> None:
         with tempfile.TemporaryDirectory() as workspace:

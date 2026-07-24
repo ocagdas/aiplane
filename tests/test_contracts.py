@@ -225,6 +225,19 @@ def test_manual_and_evidence_runbooks_use_real_top_level_commands() -> None:
         )
 
 
+def test_provider_and_codex_validation_instructions_match_safe_contracts() -> None:
+    manual = Path("docs/user/manual-test-checklist.md").read_text(encoding="utf-8")
+    evidence = Path("docs/user/evidence-collection.md").read_text(encoding="utf-8")
+
+    assert "aiplane providers test ollama" in manual
+    assert "ollama_tags" in manual
+    assert 'aiplane launch --tool codex --model "$CHAT_ALIAS" --dry-run' in manual
+    assert "Codex built-in local Ollama or LM Studio providers" in manual
+    assert "loopback endpoint" in manual
+    assert "run_capture 12-provider-ollama aiplane providers test ollama" in evidence
+    assert "run_capture 24-codex-launch aiplane launch --tool codex --model local_chat --dry-run" in evidence
+
+
 def test_public_onboarding_links_and_code_fences_are_valid() -> None:
     for path in PUBLIC_ONBOARDING_DOCS:
         text = path.read_text(encoding="utf-8")
@@ -299,7 +312,9 @@ def test_install_channels_and_release_workflows_are_explicit() -> None:
     for channel in ("pip", "pipx", "uv"):
         assert f"def verify_{channel}" in validator
     assert "python scripts/verify_install_channels.py dist" in ci
-    assert "tests/test_platform_support.py" in ci
+    assert "verify_platform_contracts" in validator
+    assert "Validate real pip, pipx, and uv installed-wheel lifecycles" in ci
+    assert "tests/test_platform_support.py" not in ci
     for portable_command in ("profiles", "hardware", "recommend", "policy", "integrations"):
         assert f'"{portable_command}"' in validator
     assert "unsupported_platform" in validator

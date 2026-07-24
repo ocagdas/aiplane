@@ -19,7 +19,7 @@ The PR UI displays **CI / Release gate**. The ruleset check value is the job nam
 
 ## Pull-request validation
 
-PRs run the quality gate, supported-Python packaging checks, and Linux/macOS/Windows installed-wheel lifecycle checks. They must not change package versions in `pyproject.toml` or `src/aiplane/__init__.py`; CI rejects those edits before merge.
+PRs run the quality gate, supported-Python packaging checks, and Linux/macOS/Windows installed-wheel lifecycle checks. On each hosted operating system, the matrix builds the wheel and invokes its installed `aiplane` executable through real `pip`, `pipx`, and `uv` lifecycles in isolated homes. Each channel performs one full clean-workspace behavior check, then a focused replacement smoke before uninstall; the smoke confirms the wheel identity, packaged templates, persisted profile, and MCP manifest without repeating the expensive exports and MCP stdio exchange. The jobs do not install model runtimes, open SSH tunnels, contact providers, or launch IDE clients. Those are deliberate field-evidence checks, not a claim made by packaging CI. They must not change package versions in `pyproject.toml` or `src/aiplane/__init__.py`; CI rejects those edits before merge.
 
 Two PRs created from the same `main` version do not conflict solely because the first merge causes a patch bump. A second PR that did not modify the version lines retains the newer `main` value when merged. It needs updating only for a real conflict or because the branch-current rule requires it.
 

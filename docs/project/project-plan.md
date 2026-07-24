@@ -271,6 +271,10 @@ The following five developer-preview clarity milestones are implemented and rema
 
 Focused hardware, materialized-catalog, and integration validation passes 83 tests plus 20 subtests. The full suite passes 758 tests with 9 optional skips and 29 subtests in 81.26 seconds; Ruff format/lint and representative public catalog, recommendation, and integration CLI checks pass.
 
+### Installation-Channel Validation
+
+The Ubuntu, macOS, and Windows install jobs build a wheel on the hosted runner and exercise the installed `aiplane` executable through real `pip`, `pipx`, and `uv` lifecycles in isolated temporary roots. Each channel receives one full behavioral check (bootstrap, profile validation, exports, MCP stdio, recommendation, policy, and actual-platform safety checks), followed by a post-replacement smoke that verifies wheel identity, packaged templates, the persisted profile, and MCP manifest before uninstall cleanup. The matrix does not install model runtimes, open SSH tunnels, contact providers, or launch IDE clients; those remain explicit field-evidence checks. Synthetic platform unit tests stay in the main automated suite rather than adding a redundant dependency-install step to every operating-system installer job.
+
 ### Capability-Gap Closure Roadmap
 
 The earlier provider, endpoint, runner-manifest, Codex configuration, and test-isolation foundations are verified as implemented in the current branch. They are not re-opened as duplicate milestones. The next **in-repository** milestones are deliberately narrower than the external evidence gate:
@@ -891,7 +895,7 @@ P0.8 public profile schema v1 is implemented with external validation and canoni
 
 ### In Progress
 
-- Provider discovery: offline readiness diagnostics, Anthropic `/v1/models`, OpenAI-compatible optional-auth local gateways, Azure OpenAI deployments, ElevenLabs voices, Ollama, Hugging Face, NVIDIA-scoped repos, GGUF, structural templates, and reviewed import flows are implemented. New specialist APIs remain adapter-by-adapter work.
+- Provider discovery: offline readiness diagnostics, Anthropic `/v1/models`, OpenAI-compatible optional-auth local gateways, Azure OpenAI deployments, ElevenLabs voices, Ollama, Hugging Face, NVIDIA-scoped repos, GGUF, structural templates, reviewed import flows, and an unauthenticated Ollama `/api/tags` connection check are implemented. New specialist APIs remain adapter-by-adapter work.
 - Runtime and stack lifecycle: versioned bundles render only settings supported by the selected runtime/mode; unsupported cache, GPU, environment/auth, context, or tensor-parallel options fail instead of being ignored. Stacks persist an explicit native/Docker runtime substrate and forward it through plan and guarded lifecycle helper commands; remote execution and production service management remain early. Single-prompt execution is protocol-based for Ollama/OpenAI-compatible/Azure OpenAI/Anthropic, while richer chat/task UX remains planned.
 - Tool integrations: doctors, install previews, plans, and starter exports exist; provider-specific modules/playbooks/templates remain planned.
 - Azure deployment: planning, doctor checks, and narrow VM apply exist; broader AKS/cloud apply needs hardening before expansion.
@@ -1143,9 +1147,9 @@ chat UI before the provider/session contracts are stable.
 
 2. **CLI wrapper commands - Implemented / hardening**
    - Implemented: `aiplane chat`, which resolves a chat-capable profile alias and uses configured endpoints by default; `--native-ollama` delegates Ollama-runnable aliases to `ollama run <model>`.
-   - Implemented: `aiplane launch --tool continue`, `aiplane launch --tool ollama`, and `aiplane launch --tool aider` wrappers for selected profile entries, provider/runtime constraints, and policy checks.
+   - Implemented: `aiplane launch --tool continue`, `aiplane launch --tool ollama`, and `aiplane launch --tool aider` wrappers for selected profile entries, provider/runtime constraints, and policy checks. `aiplane launch --tool codex` delegates only to Codex built-in OSS mode for a selected Ollama or LM Studio alias; other endpoint choices remain export-only.
    - Implemented: `aiplane session start` for minimal session metadata/audit records, transcript path defaults, and handoff-friendly state.
-   - Planned: wrappers for Codex/Cursor/Claude Code or other stable CLIs where support is explicit.
+   - Planned: wrappers for Cursor/Claude Code or other stable CLIs where support is explicit.
 
 3. **Thin `aiplane session` layer - Implemented / hardening**
    - Implemented as minimal handoff state in `session start` records: selected model, launch command, transcript path, and local audit event.

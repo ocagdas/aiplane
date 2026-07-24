@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import uuid
+from urllib.parse import urlsplit
 
 from .integrations import IntegrationManager
 from .policy import PolicyEngine
@@ -86,7 +87,38 @@ def _launch_plan(
             "command": ["continue"],
         }
 
+    if tool == "codex":
+        runtime = str(selected.get("runtime") or "")
+        endpoint = str(selected.get("endpoint") or "")
+        if runtime not in {"ollama", "lmstudio"} or not _codex_oss_endpoint_is_local(runtime, endpoint):
+            raise ValueError(
+                "Codex launch supports only its built-in local OSS providers (ollama or lmstudio) at their "
+                "loopback endpoints; use aiplane integrations export codex to configure another reviewed endpoint."
+            )
+        model_id = str(selected.get("model") or "")
+        if not model_id:
+            raise ValueError("selected model has no model id")
+        return {
+            "tool": tool,
+            "selection": selected,
+            "command": ["codex", "--oss", "--local-provider", runtime, "--model", model_id],
+        }
+
     raise ValueError(f"unsupported launch tool: {tool}")
+
+
+def _codex_oss_endpoint_is_local(runtime: str, endpoint: str) -> bool:
+    expected_ports = {"ollama": 11434, "lmstudio": 1234}
+    try:
+        parsed = urlsplit(endpoint)
+        port = parsed.port
+    except ValueError:
+        return False
+    return (
+        parsed.scheme == "http"
+        and parsed.hostname in {"localhost", "127.0.0.1", "::1"}
+        and port == expected_ports[runtime]
+    )
 
 
 def _new_session_id() -> str:

@@ -617,6 +617,27 @@ class ProviderRegistryTests(unittest.TestCase):
         self.assertFalse(credential["ok"])
         self.assertEqual(credential["detail"], "reference not found")
 
+    def test_ollama_connection_test_uses_tags_endpoint_without_credentials(self) -> None:
+        profile = load_profile("local-dev", Path.cwd())
+
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def read(self):
+                return json.dumps({"models": [{"name": "qwen3:8b"}]}).encode("utf-8")
+
+        with patch("aiplane.boundaries.urlopen", return_value=FakeResponse()) as opened:
+            result = ProviderRegistry(profile).test_connection("ollama")
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["method"], "ollama_tags")
+        self.assertEqual(result["items_seen"], 1)
+        self.assertFalse(result["has_api_key"])
+        self.assertEqual(opened.call_args.args[0].full_url, "http://localhost:11434/api/tags")
+
     def test_anthropic_catalog_discovery_uses_models_api(self) -> None:
         profile = load_profile("local-dev", Path.cwd())
         payload = {

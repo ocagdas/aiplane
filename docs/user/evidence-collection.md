@@ -87,6 +87,7 @@ Public release URLs, immutable tags, hosted Linux/macOS/Windows jobs, attestatio
 run_capture 10-create aiplane profiles create evidence-local --template local-dev
 run_capture 11-validate aiplane profiles validate evidence-local
 run_capture 12-runtime-doctor aiplane runtimes doctor ollama
+run_capture 12-provider-ollama aiplane providers test ollama
 run_capture 13-refresh aiplane models refresh --provider ollama
 run_capture 14-models aiplane models list --runtime ollama --role chat --identity both
 ~~~
@@ -103,11 +104,12 @@ run_capture 21-discover aiplane discover
 run_capture 22-doctor aiplane doctor
 run_capture 23-recommend aiplane recommend
 run_capture 24-codex aiplane export codex --model local_chat
+run_capture 24-codex-launch aiplane launch --tool codex --model local_chat --dry-run
 run_capture 25-copilot-cli aiplane export copilot-cli --model local_chat --format json --offline
 run_capture 26-copilot-vscode aiplane export copilot-vscode --model local_chat
 ~~~
 
-Expect provenance, actionable findings, transparent fit reasons, and alias plus provider model identity. Exports print configuration; they do not edit or launch clients.
+Expect provenance, actionable findings, transparent fit reasons, and alias plus provider model identity. `providers test ollama` reads the local `/api/tags` endpoint without credentials. The Codex launch capture is preview-only and is valid only for a selected Ollama or LM Studio alias at its loopback endpoint; it emits no Codex config changes. Other exports print configuration; they do not edit or launch clients.
 
 ## 4. P0 local-only replay
 

@@ -82,15 +82,14 @@ jobs:
         uses: astral-sh/setup-uv@v8.3.2
 
       - name: Install packaging tools
-        run: python -m pip install pipx pytest setuptools==83.0.0
-
-      - name: Validate synthetic platform contracts
-        run: python -m pytest -q tests/test_platform_support.py
+        env:
+          PIP_DISABLE_PIP_VERSION_CHECK: "1"
+        run: python -m pip install --no-input pipx setuptools==83.0.0
 
       - name: Build wheel artifact
         run: python -m pip wheel . --no-deps --no-build-isolation --wheel-dir dist
 
-      - name: Validate pip, pipx, and uv tool lifecycle
+      - name: Validate real pip, pipx, and uv installed-wheel lifecycles
         run: python scripts/verify_install_channels.py dist
 
   release-gate:
