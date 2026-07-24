@@ -94,24 +94,35 @@ class OllamaBackend:
         prompt_tokens = body.get("prompt_eval_count")
         output_tokens = body.get("eval_count")
         eval_duration_ns = body.get("eval_duration")
-        tokens_per_second = None
-        if (
-            isinstance(output_tokens, (int, float))
-            and isinstance(eval_duration_ns, (int, float))
-            and eval_duration_ns > 0
-        ):
-            tokens_per_second = round(float(output_tokens) / (float(eval_duration_ns) / 1_000_000_000), 3)
+        prompt_eval_duration_ns = body.get("prompt_eval_duration")
+        load_duration_ns = body.get("load_duration")
+        tokens_per_second = _tokens_per_second(output_tokens, eval_duration_ns)
+        prompt_tokens_per_second = _tokens_per_second(prompt_tokens, prompt_eval_duration_ns)
         telemetry = {
             "elapsed_ms": round(float(body["total_duration"]) / 1_000_000, 3)
             if isinstance(body.get("total_duration"), (int, float))
             else None,
+            "load_duration_ms": _nanoseconds_to_milliseconds(load_duration_ns),
             "ttft_ms": None,
             "prompt_tokens": prompt_tokens,
+            "prompt_tokens_per_second": prompt_tokens_per_second,
             "output_tokens": output_tokens,
             "tokens_per_second": tokens_per_second,
             "source": "ollama_native_response",
         }
         return BackendResult(self.name, str(message.get("content", "")), False, telemetry)
+
+
+def _tokens_per_second(tokens: object, duration_ns: object) -> float | None:
+    if not isinstance(tokens, (int, float)) or not isinstance(duration_ns, (int, float)) or duration_ns <= 0:
+        return None
+    return round(float(tokens) / (float(duration_ns) / 1_000_000_000), 3)
+
+
+def _nanoseconds_to_milliseconds(value: object) -> float | None:
+    if not isinstance(value, (int, float)):
+        return None
+    return round(float(value) / 1_000_000, 3)
 
 
 class OpenAICompatibleBackend:
@@ -167,8 +178,10 @@ class OpenAICompatibleBackend:
         usage = body.get("usage") if isinstance(body.get("usage"), dict) else {}
         telemetry = {
             "elapsed_ms": None,
+            "load_duration_ms": None,
             "ttft_ms": None,
             "prompt_tokens": usage.get("prompt_tokens"),
+            "prompt_tokens_per_second": None,
             "output_tokens": (
                 usage.get("completion_tokens")
                 if usage.get("completion_tokens") is not None

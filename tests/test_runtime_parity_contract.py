@@ -117,6 +117,8 @@ def test_ollama_backend_preserves_native_token_and_duration_fields() -> None:
                 "prompt_eval_count": 12,
                 "eval_count": 8,
                 "eval_duration": 400_000_000,
+                "prompt_eval_duration": 600_000_000,
+                "load_duration": 125_000_000,
                 "total_duration": 750_000_000,
             }
         )
@@ -124,8 +126,10 @@ def test_ollama_backend_preserves_native_token_and_duration_fields() -> None:
     result = backend.chat("model", "hello")
     assert result.telemetry == {
         "elapsed_ms": 750.0,
+        "load_duration_ms": 125.0,
         "ttft_ms": None,
         "prompt_tokens": 12,
+        "prompt_tokens_per_second": 20.0,
         "output_tokens": 8,
         "tokens_per_second": 20.0,
         "source": "ollama_native_response",

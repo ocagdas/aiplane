@@ -4,7 +4,7 @@ import argparse
 from pathlib import Path
 from typing import Any, Callable
 
-from .benchmark_evidence import import_measurement_record, load_suite
+from .benchmark_evidence import calibration_plan, import_measurement_record, load_suite
 from .benchmark_comparison import DIMENSIONS, compare_benchmarks
 from .benchmark_tools import BenchmarkToolManager
 from .config import load_profile
@@ -191,6 +191,20 @@ def add_setup_parsers(
         help="Write the validated record under .aiplane/benchmarks",
     )
 
+    benchmarks_calibration = benchmarks_sub.add_parser(
+        "calibration-plan",
+        help="Render a controlled real-machine benchmark protocol",
+        description="Render an explicit, non-mutating benchmark calibration protocol and commands. It does not claim that an ordinary smoke run is comparable evidence.",
+        formatter_class=formatter_class,
+        allow_abbrev=False,
+    )
+    profile_arg(benchmarks_calibration)
+    benchmarks_calibration.add_argument("--model", required=True, help="Configured model alias to measure")
+    benchmarks_calibration.add_argument("--runtime", required=True, help="Runtime used for the measurement")
+    benchmarks_calibration.add_argument(
+        "--repeats", type=int, default=5, help="Measured repetitions after warm-up (2-100; default: 5)"
+    )
+
     benchmarks_compare = benchmarks_sub.add_parser(
         "compare",
         help="Compare saved benchmark records without collapsing metrics",
@@ -332,6 +346,16 @@ def handle_setup_command(
             payload = manager.plan(args.name, model=args.model, endpoint=args.endpoint, spec=args.spec)
         elif args.benchmarks_command == "suite-validate":
             payload = load_suite(Path(args.path).resolve())
+        elif args.benchmarks_command == "calibration-plan":
+            from .model_catalog import ModelCatalog
+
+            ModelCatalog(profile).show(args.model)
+            payload = calibration_plan(
+                model_name=args.model,
+                runtime=args.runtime,
+                repeats=args.repeats,
+                profile=profile.name,
+            )
         elif args.benchmarks_command == "compare":
             payload = compare_benchmarks(
                 profile,

@@ -29,6 +29,7 @@ from .cli_presenters import (
     _AzCommandReporter,
     _environment_doctor_text,
     _hardware_show_text,
+    _model_pick_text,
     _public_discover_text,
     _public_recommend_text,
     _quickstart_local_coding_text,
@@ -169,6 +170,7 @@ def _main(argv: list[str] | None = None) -> int:
         discover=_public_discover,
         discover_text=_public_discover_text,
         recommend_text=_public_recommend_text,
+        model_pick_text=_model_pick_text,
         print_export=_print_public_export,
         doctor_exit_code=_doctor_exit_code,
     )

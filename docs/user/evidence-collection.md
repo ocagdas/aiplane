@@ -102,7 +102,9 @@ run_capture 18-runtime-status aiplane runtimes status ollama
 run_capture 20-quickstart aiplane quickstart local-coding --dry-run
 run_capture 21-discover aiplane discover
 run_capture 22-doctor aiplane doctor
+run_capture 23-pick aiplane pick --intent chat --runtime ollama
 run_capture 23-recommend aiplane recommend
+run_capture 23-calibration-plan aiplane benchmarks calibration-plan --model local_chat --runtime ollama --repeats 5
 run_capture 24-codex aiplane export codex --model local_chat
 run_capture 24-codex-launch aiplane launch --tool codex --model local_chat --dry-run
 run_capture 25-copilot-cli aiplane export copilot-cli --model local_chat --format json --offline
@@ -234,7 +236,7 @@ run_capture 86-balanced aiplane models route --role chat --candidate local_chat 
 run_capture 87-throughput aiplane models route --role chat --candidate local_chat --runtime ollama --context-tokens 8192 --score-profile throughput
 ~~~
 
-Review plans and prepare endpoints before live commands. Preserve nulls when exact telemetry such as TTFT is unavailable; do not estimate. Record cold/warm state and failures. User measurements and scoring extensions must identify provenance; trusted command graders require explicit opt-in.
+Review plans and prepare endpoints before live commands. Preserve nulls when exact telemetry such as TTFT is unavailable; do not estimate. Ollama load and prompt-evaluation timings are native response fields, not substitutes for TTFT. Record cold/warm state and failures. User measurements and scoring extensions must identify provenance; trusted command graders require explicit opt-in.
 
 The optional query benchmark measures catalog performance, not model quality:
 

@@ -18,9 +18,9 @@ Use this path for first onboarding. It avoids advanced concepts and keeps every 
    Profile interchange: [public profile schema v1](profile-schema.md)
    Mutates state: no.
    Verifiable outcome: contract-v1 findings include stable IDs, severity, reason, impact, affected resources, remediation/mutation/dry-run metadata, and authoritative exit codes.
-4. [Recommend](hardware.md#hardware-aware-model-recommendations)
+4. [Pick or recommend a model](hardware.md#guided-local-model-pick)
    Mutates state: no.
-   Verifiable outcome: model rows are grouped into recommended, usable, remote/cloud, or not recommended with rationale.
+   Verifiable outcome: `pick` shows one profile alias, its provider-native model identity, and preview-first pull/default/chat commands; `recommend` shows the complete ranked diagnostic rows.
 5. [Export](integrations.md)
    Mutates state: no; exports print configuration snippets and do not edit IDE files.
    Verifiable outcome: Continue, Aider, Cline, Zed, OpenAI-compatible, or MCP config is printed.
@@ -32,8 +32,9 @@ aiplane quickstart local-coding --dry-run
 aiplane quickstart local-coding
 aiplane discover
 aiplane doctor
-aiplane recommend
-aiplane export continue
+aiplane pick --intent chat
+aiplane export continue --model MODEL_ALIAS
+# Use `aiplane recommend` for the full ranked diagnosis.
 ```
 
 For release, demo, or acceptance testing, use the [installation-to-feature manual test checklist](manual-test-checklist.md). It labels read-only, preview, mutating, optional-runtime, and render-only checks and records expected outcomes. To collect sanitized, shareable P0, replay, hardware, benchmark, and optional Docker Model Runner evidence, follow the [Field Evidence Collection Runbook](evidence-collection.md).
@@ -79,8 +80,9 @@ Read these when you need to customize the environment model or automate team wor
 ```bash
 aiplane discover
 aiplane doctor
+aiplane pick --intent chat
 aiplane recommend
-aiplane export continue
+aiplane export continue --model MODEL_ALIAS
 aiplane quickstart local-coding
 ```
 

@@ -253,6 +253,25 @@ smoke-test pass counts and catalog capability metadata are never relabeled as
 measured quality. The shipped `balanced`, `quality_evidence`, and
 `throughput` profiles live under `placement_scoring` in `hardware.yaml`.
 
+## Guided Local Model Pick
+
+For the shortest local chat path, use `pick`. It uses the same hardware, policy,
+runtime, and scoring gates as `recommend`, but presents one selected profile alias
+and a small list of exact next commands. It never downloads weights, changes a
+model default, starts a runtime, or edits an integration.
+
+```bash
+aiplane pick
+aiplane pick --intent chat
+aiplane pick --runtime ollama --format json
+```
+
+The output always shows the Aiplane alias beside the provider-native model ID.
+Review the first `models pull ... --dry-run` command before the mutating pull;
+then set the displayed alias as `chat_model` and start the endpoint-backed chat.
+If no local option is suitable, `pick` gives a full `recommend
+--include-not-recommended` diagnostic rather than falling back to a remote model.
+
 For a concise current-machine recommendation, use the public read-only command.
 Intent presets select existing roles and scoring profiles; they do not introduce
 an opaque scoring formula or start/pull a runtime:
