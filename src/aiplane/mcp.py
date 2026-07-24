@@ -1092,13 +1092,18 @@ def _validate_schema_value(value: Any, schema: dict[str, Any], path: str) -> Non
         raise _InvalidToolArguments(f"{path} must be a boolean")
     elif expected_type == "integer" and (not isinstance(value, int) or isinstance(value, bool)):
         raise _InvalidToolArguments(f"{path} must be an integer")
+    elif expected_type == "number" and (not isinstance(value, (int, float)) or isinstance(value, bool)):
+        raise _InvalidToolArguments(f"{path} must be a number")
 
     if "enum" in schema and value not in schema["enum"]:
         raise _InvalidToolArguments(f"{path} must be one of: {', '.join(str(item) for item in schema['enum'])}")
-    if "minimum" in schema and value < schema["minimum"]:
-        raise _InvalidToolArguments(f"{path} must be at least {schema['minimum']}")
-    if "maximum" in schema and value > schema["maximum"]:
-        raise _InvalidToolArguments(f"{path} must be at most {schema['maximum']}")
+    try:
+        if "minimum" in schema and value < schema["minimum"]:
+            raise _InvalidToolArguments(f"{path} must be at least {schema['minimum']}")
+        if "maximum" in schema and value > schema["maximum"]:
+            raise _InvalidToolArguments(f"{path} must be at most {schema['maximum']}")
+    except TypeError as exc:
+        raise _InvalidToolArguments(f"{path} has an invalid type") from exc
 
 
 def _write_message(stream, message: dict[str, Any]) -> None:
