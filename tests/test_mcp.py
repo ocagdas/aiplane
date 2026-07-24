@@ -62,6 +62,33 @@ class McpTests(unittest.TestCase):
         self.assertIn("aiplane.models.list", names)
         self.assertIn("inputSchema", tools[0])
 
+    def test_mcp_rejects_invalid_tool_params_against_advertised_schema(self) -> None:
+        server = AiplaneMcpServer(Path.cwd())
+        cases = [
+            {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": []},
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "tools/call",
+                "params": {"name": "aiplane.docs.read", "arguments": {"path": "docs/user/mcp.md", "extra": True}},
+            },
+            {
+                "jsonrpc": "2.0",
+                "id": 3,
+                "method": "tools/call",
+                "params": {"name": "aiplane.docs.read", "arguments": {"path": "docs/user/mcp.md", "start": "one"}},
+            },
+        ]
+        for request in cases:
+            response = server.handle_message(request)
+            self.assertEqual(response["error"]["code"], -32602)
+
+    def test_mcp_framing_rejects_oversized_or_duplicate_headers(self) -> None:
+        with self.assertRaisesRegex(ValueError, "header line exceeds"):
+            _read_message(BytesIO(b"X: " + b"x" * 9000))
+        with self.assertRaisesRegex(ValueError, "duplicate value"):
+            _read_message(BytesIO(b"Content-Length: 2\r\nContent-Length: 2\r\n\r\n{}"))
+
     def test_mcp_server_calls_read_only_tool(self) -> None:
         server = AiplaneMcpServer(Path.cwd())
         response = server.handle_message(
@@ -680,6 +707,31 @@ class McpTests(unittest.TestCase):
     def test_mcp_stdio_message_framing_rejects_truncated_body(self) -> None:
         with self.assertRaisesRegex(ValueError, "unexpected EOF"):
             _read_message(BytesIO(b"Content-Length: 5\r\n\r\n{}"))
+
+    def test_mcp_rejects_non_object_json_rpc_messages_without_crashing(self) -> None:
+        response = AiplaneMcpServer(Path.cwd()).handle_message([])
+
+        self.assertEqual(response["error"]["code"], -32600)
+        self.assertIn("must be an object", response["error"]["message"])
+
+    def test_mcp_rejects_profile_traversal_before_loading_a_profile(self) -> None:
+        server = AiplaneMcpServer(Path.cwd())
+
+        with self.assertRaisesRegex(ValueError, "simple directory name"):
+            server.call_tool("aiplane.models.list", {"profile": "../outside"})
+
+    def test_mcp_rejects_oversized_message_before_reading_body(self) -> None:
+        oversized = mcp_module._MAX_MCP_MESSAGE_BYTES + 1
+        with self.assertRaisesRegex(ValueError, "exceeds"):
+            _read_message(BytesIO(f"Content-Length: {oversized}\r\n\r\n".encode("ascii")))
+
+    def test_mcp_runtime_bundle_schema_matches_runtime_modes(self) -> None:
+        server = AiplaneMcpServer(Path.cwd())
+        bundle_tool = next(tool for tool in server._tools() if tool["name"] == "aiplane.runtimes.bundle")
+        mode = bundle_tool["inputSchema"]["properties"]["mode"]
+
+        self.assertEqual(mode["default"], "auto")
+        self.assertEqual(mode["enum"], ["auto", "docker", "conda", "native"])
 
     def test_mcp_serve_stdio_handles_malformed_header_without_traceback(self) -> None:
         class _In:

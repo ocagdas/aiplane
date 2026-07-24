@@ -792,7 +792,9 @@ def _bundle_settings(
     cache_target = spec.cache_target if spec else _GENERIC_CACHE_TARGETS.get(runtime)
     return {
         "port": port,
-        "container_port": (spec.container_port if spec else _DOCKER_CONTAINER_PORTS.get(runtime)) if mode == "docker" else None,
+        "container_port": (spec.container_port if spec else _DOCKER_CONTAINER_PORTS.get(runtime))
+        if mode == "docker"
+        else None,
         "cache": {"volume": cache_volume, "target": cache_target} if cache_volume else None,
         "gpu_devices": devices,
         "environment": list(dict.fromkeys(env_names)),

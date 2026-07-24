@@ -4,7 +4,7 @@
 
 This handoff records the detailed review of deployment rendering, workflow readiness, runtime packaging, stack exports, schemas, and tests, together with the maintenance implementation status.
 
-The maintenance worktree passes 716 tests with 9 optional skips and 29 subtests in 16.86 seconds using the configured four-worker gate, plus repository-wide Ruff formatting/lint, profile validation, CLI acceptance checks, and diff hygiene. The opt-in official-tool gate passes the available Ansible check and explicitly skips five checks whose tools or usable provider are absent. The remaining live-evidence gaps are listed explicitly below.
+The maintenance worktree passes 748 tests with 9 optional skips and 29 subtests in 17.57 seconds using the configured four-worker gate, plus repository-wide Ruff formatting/lint, profile validation, CLI acceptance checks, and diff hygiene. The opt-in official-tool gate passes the available Ansible check and explicitly skips five checks whose tools or usable provider are absent. The remaining live-evidence gaps are listed explicitly below.
 
 ## Guardrails
 
@@ -57,6 +57,14 @@ Also completed in the final maintenance follow-up:
 - Task 9: target-level Vagrant provider selection now covers VirtualBox, libvirt, Hyper-V, and VMware Desktop; provider executable/capability and plugin checks gate local-VM readiness; provider-specific plans, renders, tool exports, schema invariants, and synthetic tests are implemented.
 - JSON Schema validation now uses a pinned Draft 2020-12 validator. Official-tool checks for HCL, Packer, Ansible, Pulumi, and Vagrant are isolated behind `AIPLANE_RUN_EXTERNAL_VALIDATORS=1`; missing tools or unusable providers skip explicitly.
 - Shared deployment/runtime fixture helpers remove repeated profile construction and artifact materialization while preserving behavioral assertions.
+
+Also completed in the review-hardening follow-up:
+
+- Profile selection rejects traversal names at both resolution and load boundaries; YAML parsing now rejects anchors/aliases/tags and losslessly round-trips emitted quoted scalars and inline lists.
+- Tunnel start/stop transitions are serialized with the existing cross-process lock, and a tunnel is terminated if its state cannot be persisted.
+- MCP rejects non-object JSON-RPC messages, bounds framed messages to 1 MiB, and exposes every supported runtime bundle mode.
+- Output format/verbosity changes use transactional YAML updates; canonical profile instances are checked against the public Draft 2020-12 schema in tests.
+- User/project guidance now uses executable performance benchmark commands and records the passing formatter gate.
 
 Outstanding:
 

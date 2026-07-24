@@ -13,7 +13,7 @@ The repository schema is [`schemas/aiplane-profile-v1.schema.json`](../../schema
 
 ## Validation
 
-`aiplane profiles validate PROFILE` checks the v1 structure plus profile cross-references. Every result includes a canonical JSON path and a remediation. Validation does not modify the profile.
+`aiplane profiles validate PROFILE` applies Aiplane's built-in v1 structural and cross-reference contract. The public JSON Schema remains the portable external-validation contract for rendered documents; CI validates canonical instances against it. Every CLI result includes a canonical JSON path and a remediation. Validation does not modify the profile.
 
 ```bash
 aiplane profiles validate local-dev
@@ -21,7 +21,7 @@ aiplane profiles validate local-dev
 
 ## Recommendation-critical model contracts
 
-Schema v1 validates the model fields already consumed by fit checks, runtime selection, and recommendations. Every configured model alias must have a non-empty provider and provider-native model ID. When present, `enabled` and `local` must be booleans; RAM, VRAM, and parameter values must be finite non-negative numbers; role/runtime/accelerator lists must contain unique non-empty strings; and recommended RAM/VRAM cannot be lower than the corresponding minimum.
+The built-in v1 contract validates the model fields already consumed by fit checks, runtime selection, and recommendations; the public schema expresses the matching portable structural requirements. Every configured model alias must have a non-empty provider and provider-native model ID. When present, `enabled` and `local` must be booleans; RAM, VRAM, and parameter values must be finite non-negative numbers; role/runtime/accelerator lists must contain unique non-empty strings; and recommended RAM/VRAM cannot be lower than the corresponding minimum.
 
 A default role may be explicitly set to `null` to mean “not selected.” A non-null default must resolve to a configured alias. These checks prevent strings such as `"yes"` from silently behaving as true and prevent contradictory thresholds from influencing fit or ranking.
 
@@ -45,7 +45,7 @@ There is no implicit merge of editable profile directories today. These rules de
 
 ## YAML parser subset limits
 
-Aiplane keeps profile loading dependency-free with a built-in YAML subset parser. Supported inputs are nested mappings, scalars, and inline lists (`[a, b]`).
+Aiplane keeps profile loading dependency-free with a built-in YAML subset parser. Supported inputs are nested mappings, scalars, and inline lists (`[a, b]`). Inline-list values containing commas, quotes, or backslashes must be quoted; standard YAML single quotes use doubled apostrophes (`its`), and Aiplane emits JSON-style double quotes whenever it writes such values. Profile names are simple directory names and cannot contain path separators or traversal segments. A profile directory must be a real child of the configured profiles root; profile symlinks are rejected.
 
 Unsupported YAML constructs are rejected with line-specific errors:
 

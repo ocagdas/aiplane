@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import threading
+
 from .support import (
     Path,
     StringIO,
@@ -401,3 +403,38 @@ class LocalConfigTests(unittest.TestCase):
             payload = json.loads(stdout.getvalue())
             self.assertIsNone(payload["command_verbosity"])
             self.assertEqual(payload["resolved_verbosity"], 0)
+
+    def test_output_preferences_are_transactional_under_concurrent_updates(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config_path = Path(tmp) / "config.yaml"
+            barrier = threading.Barrier(3)
+            errors: list[BaseException] = []
+
+            def set_preference(callback) -> None:
+                try:
+                    barrier.wait()
+                    callback()
+                except BaseException as exc:  # pragma: no cover - asserted below
+                    errors.append(exc)
+
+            threads = [
+                threading.Thread(
+                    target=set_preference,
+                    args=(lambda: agent_config.set_output_format("json", profile="local-dev", path=config_path),),
+                ),
+                threading.Thread(
+                    target=set_preference,
+                    args=(lambda: agent_config.set_output_verbosity(2, command="models list", path=config_path),),
+                ),
+            ]
+            for thread in threads:
+                thread.start()
+            barrier.wait()
+            for thread in threads:
+                thread.join(timeout=3)
+
+            self.assertFalse(errors)
+            self.assertFalse(any(thread.is_alive() for thread in threads))
+            config = load_local_config(config_path)
+            self.assertEqual(config["profile_formats"]["local-dev"], "json")
+            self.assertEqual(config["command_verbosity"]["models list"], 2)

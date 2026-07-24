@@ -237,7 +237,7 @@ Review plans and prepare endpoints before live commands. Preserve nulls when exa
 The optional query benchmark measures catalog performance, not model quality:
 
 ~~~bash
-(cd .. && python -m pytest -q tests/performance/test_catalog_query_performance.py --run-performance)
+AIPLANE_RUN_PERFORMANCE=1 python -m pytest -q tests/performance/test_catalog_query_performance.py
 ~~~
 
 ## 9. Optional Docker Model Runner evidence
