@@ -45,7 +45,7 @@ There is no implicit merge of editable profile directories today. These rules de
 
 ## YAML parser subset limits
 
-Aiplane keeps profile loading dependency-free with a built-in YAML subset parser. Supported inputs are nested mappings, scalars, and inline lists (`[a, b]`). Inline-list values containing commas, quotes, or backslashes must be quoted; standard YAML single quotes use doubled apostrophes (`its`), and Aiplane emits JSON-style double quotes whenever it writes such values. Profile names are simple directory names and cannot contain path separators or traversal segments. A profile directory must be a real child of the configured profiles root; profile symlinks are rejected.
+Aiplane keeps profile loading dependency-free with a built-in YAML subset parser. Supported inputs are nested mappings, scalars, and inline lists (`[a, b]`). Inline-list values containing commas, quotes, or backslashes must be quoted; standard YAML single quotes use doubled apostrophes (`it''s`), and Aiplane emits JSON-style double quotes whenever it writes such values. Profile names are simple directory names and cannot contain path separators or traversal segments. A profile directory must be a real child of the configured profiles root; profile symlinks are rejected.
 
 Unsupported YAML constructs are rejected with line-specific errors:
 
