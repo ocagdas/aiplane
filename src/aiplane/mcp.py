@@ -1068,10 +1068,11 @@ def _validate_schema_value(value: Any, schema: dict[str, Any], path: str) -> Non
             raise _InvalidToolArguments(f"{path} must be an object")
         properties = schema.get("properties", {})
         required = schema.get("required", [])
+        additional = schema.get("additionalProperties", True)
         for key in required:
             if key not in value:
                 raise _InvalidToolArguments(f"{path}.{key} is required")
-        if schema.get("additionalProperties") is False:
+        if additional is False:
             unexpected = sorted(set(value) - set(properties))
             if unexpected:
                 raise _InvalidToolArguments(f"{path}.{unexpected[0]} is not supported")
@@ -1079,6 +1080,8 @@ def _validate_schema_value(value: Any, schema: dict[str, Any], path: str) -> Non
             child_schema = properties.get(key)
             if isinstance(child_schema, dict):
                 _validate_schema_value(child, child_schema, f"{path}.{key}")
+            elif isinstance(additional, dict):
+                _validate_schema_value(child, additional, f"{path}.{key}")
     elif expected_type == "array":
         if not isinstance(value, list):
             raise _InvalidToolArguments(f"{path} must be an array")
