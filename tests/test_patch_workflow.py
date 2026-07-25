@@ -98,6 +98,18 @@ def test_apply_returns_validation_failure_without_attempting_mutation(tmp_path: 
     assert len(runner.commands) == 1
 
 
+def test_apply_returns_apply_failed_when_git_rejects_patch_during_apply(tmp_path: Path) -> None:
+    patch = tmp_path / "changes.patch"
+    patch.write_text(_PATCH, encoding="utf-8")
+    runner = _Runner(0, 1)
+
+    result = _manager(tmp_path, runner).apply(patch, yes=True)
+
+    assert result["status"] == "apply_failed"
+    assert result["mutates"] is False
+    assert len(runner.commands) == 2
+
+
 def test_apply_respects_local_write_policy_before_mutating(tmp_path: Path) -> None:
     patch = tmp_path / "changes.patch"
     patch.write_text(_PATCH, encoding="utf-8")
