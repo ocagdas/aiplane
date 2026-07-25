@@ -301,6 +301,7 @@ class StackManager:
                     "mutates": False,
                 },
             )
+        role_plan = self._role_plan(stack, endpoint)
         return {
             "name": name,
             "orchestrator": orchestrator or None,
@@ -321,11 +322,11 @@ class StackManager:
             "endpoint_security": self.endpoint_plan(name),
             "limits": stack.get("limits", {}),
             "tools": stack.get("tools", {}),
-            "roles": self._role_plan(stack, endpoint),
+            "roles": role_plan,
             "control_enforcement": (
                 framework_control_enforcement(
                     orchestrator,
-                    self._role_plan(stack, endpoint),
+                    role_plan,
                     str(stack.get("approval_mode") or "ask"),
                 )
                 if orchestrator

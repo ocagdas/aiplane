@@ -130,7 +130,7 @@ def framework_control_enforcement(
             "detail": "Audit labels support correlation but do not create framework execution audit events.",
         },
     }
-    requested = [name for name, control in controls.items() if control["requested"]]
+    requested = [key for key, control in controls.items() if control["requested"]]
     return {
         "framework": name,
         "enforcement_ready": not requested,

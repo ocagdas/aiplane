@@ -93,6 +93,13 @@ class AgentSelection:
 
 _MAX_JOB_FILE_BYTES = 1_048_576
 _MAX_TASK_CHARS = 10_000
+_CONTROL_ENFORCEMENT_REQUIRED_KEYS = (
+    "framework",
+    "enforcement_ready",
+    "requires_runtime_enforcement",
+    "controls",
+    "summary",
+)
 
 
 def _canonical_sha256(value: object) -> str:
@@ -719,8 +726,13 @@ def _validate_environment(payload: object) -> list[str]:
     roles = payload.get("roles")
     if not isinstance(roles, dict) or not roles:
         errors.append("roles must be a non-empty object")
-    if not isinstance(payload.get("control_enforcement"), dict):
+    ce = payload.get("control_enforcement")
+    if not isinstance(ce, dict):
         errors.append("control_enforcement must be an object")
+    else:
+        for key in _CONTROL_ENFORCEMENT_REQUIRED_KEYS:
+            if key not in ce:
+                errors.append(f"control_enforcement missing required key {key!r}")
     if not isinstance(payload.get("execution_boundary"), dict):
         errors.append("execution_boundary must be an object")
     return errors
@@ -767,8 +779,13 @@ def _validate_job(payload: object) -> list[str]:
         for key in ("name", "profile", "source_stack", "orchestrator", "sha256")
     ):
         errors.append("environment must identify name, profile, source_stack, orchestrator, and sha256")
-    if not isinstance(payload.get("control_enforcement"), dict):
+    ce = payload.get("control_enforcement")
+    if not isinstance(ce, dict):
         errors.append("control_enforcement must be an object")
+    else:
+        for key in _CONTROL_ENFORCEMENT_REQUIRED_KEYS:
+            if key not in ce:
+                errors.append(f"control_enforcement missing required key {key!r}")
     if not isinstance(payload.get("execution_boundary"), dict):
         errors.append("execution_boundary must be an object")
     return errors
