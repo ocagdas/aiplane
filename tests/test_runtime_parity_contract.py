@@ -359,3 +359,14 @@ def test_profile_runtime_endpoint_override_drives_bundle_and_launch_ports() -> N
     assert "-p 9001:8000" in bundle["commands"][1]
     assert launch["launch"]["port"] == 9001
     assert launch["endpoint"]["base_url"] == "http://127.0.0.1:9001/v1"
+
+
+def test_runtime_capacity_plan_keeps_configured_and_runtime_owned_inventory_distinct(tmp_path: Path) -> None:
+    from aiplane.config import load_profile
+    from aiplane.runtime_catalog import RuntimeCatalog
+
+    profile = load_profile("local-dev", tmp_path)
+    payload = RuntimeCatalog(profile).capacity_plan("ollama", "fixture-analysis-small", context_tokens=4096)
+    assert payload["record_type"] == "runtime_capacity_plan"
+    assert payload["model"]["alias"] == "fixture-analysis-small"
+    assert "configured inventory" in " ".join(payload["notes"]).lower()

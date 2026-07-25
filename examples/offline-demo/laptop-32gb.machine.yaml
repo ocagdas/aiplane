@@ -1,0 +1,13 @@
+name: offline-laptop-32gb
+machine:
+  placement: local
+  substrate: native
+  cpu:
+    cores: 8
+  memory:
+    ram_gb: 32
+  gpu:
+    vendor: nvidia
+    vram_gb: 12
+  accelerator_apis:
+    - cuda

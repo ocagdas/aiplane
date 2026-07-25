@@ -105,6 +105,8 @@ run_capture 22-doctor aiplane doctor
 run_capture 23-pick aiplane pick --intent chat --runtime ollama
 run_capture 23-recommend aiplane recommend
 run_capture 23-calibration-plan aiplane benchmarks calibration-plan --model local_chat --runtime ollama --repeats 5
+run_capture 23-capacity-plan aiplane runtimes capacity-plan ollama --model local_chat --context-tokens 8192
+run_capture 23-calibration-export aiplane benchmarks calibration-export evidence/calibration.json
 run_capture 24-codex aiplane export codex --model local_chat
 run_capture 24-codex-launch aiplane launch --tool codex --model local_chat --dry-run
 run_capture 25-copilot-cli aiplane export copilot-cli --model local_chat --format json --offline

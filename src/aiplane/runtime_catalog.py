@@ -367,6 +367,107 @@ class RuntimeCatalog:
         }
         return validate_runtime_bundle(payload)
 
+    def runtime_inventory(self, runtime: str) -> dict[str, Any]:
+        """Read the runner-owned installed/served inventory when its local API exposes one."""
+        if runtime not in RUNTIME_DEFINITIONS:
+            raise ValueError(f"unknown runtime: {runtime}")
+        configured = self.models_by_runtime(runtime, include_gui=True)["models"].get(runtime, [])
+        endpoint = self.endpoint(runtime)
+        try:
+            if runtime == "ollama":
+                native_ids = OllamaBackend(
+                    endpoint or "http://localhost:11434", http_transport=self.http_transport
+                ).available_models()
+                interface = "GET /api/tags"
+                inventory_kind = "installed"
+            elif RUNTIME_DEFINITIONS[runtime].get("protocol") == "openai_compatible" and endpoint:
+                native_ids = OpenAICompatibleBackend(endpoint, http_transport=self.http_transport).available_models()
+                interface = "GET /v1/models"
+                inventory_kind = "served"
+            else:
+                native_ids = []
+                interface = None
+                inventory_kind = "unavailable"
+            available = interface is not None
+            reason = (
+                "runtime inventory read successfully" if available else "runtime has no configured inventory endpoint"
+            )
+        except (OSError, RuntimeError, ValueError) as exc:
+            native_ids = []
+            interface = "GET /api/tags" if runtime == "ollama" else "GET /v1/models"
+            inventory_kind = "unavailable"
+            available = False
+            reason = f"runtime inventory is not reachable: {exc}"
+        aliases_by_native: dict[str, list[str]] = {}
+        for row in configured:
+            native = str(row.get("model") or "")
+            if native:
+                aliases_by_native.setdefault(native, []).append(str(row.get("name")))
+        return {
+            "contract_version": "1.0",
+            "record_type": "runtime_inventory",
+            "runtime": runtime,
+            "endpoint": endpoint,
+            "available": available,
+            "inventory_kind": inventory_kind,
+            "interface": interface,
+            "reason": reason,
+            "runtime_models": [
+                {"native_id": native, "aliases": sorted(aliases_by_native.get(native, []))}
+                for native in sorted(native_ids)
+            ],
+            "configured_models": configured,
+            "notes": [
+                "runtime_models are runner-reported installed or served identities; configured_models are profile metadata.",
+                "A configured alias is not evidence that weights are installed or a server is currently serving it.",
+            ],
+        }
+
+    def capacity_plan(
+        self,
+        runtime: str,
+        model_name: str,
+        *,
+        context_tokens: int | None = None,
+    ) -> dict[str, Any]:
+        """Render a non-mutating per-runtime capacity plan from normalized profile inventory."""
+        model = self.validate_model_runtime(model_name, runtime)
+        from .hardware import HardwareManager
+
+        assessment = HardwareManager(self.profile).assess(model_name, runtime=runtime, context_tokens=context_tokens)
+        inventory = self.models_by_runtime(runtime, include_gui=True)["models"].get(runtime, [])
+        configured = [row for row in inventory if bool(row.get("enabled"))]
+        resources = (
+            assessment.get("placement", {}).get("resources", {})
+            if isinstance(assessment.get("placement"), dict)
+            else {}
+        )
+        return {
+            "contract_version": "1.0",
+            "record_type": "runtime_capacity_plan",
+            "runtime": runtime,
+            "model": {"alias": model_name, "native_id": model.get("model"), "source": self.source_for_model(model)},
+            "requested_context_tokens": context_tokens,
+            "runtime_status": self.runtime_available(runtime),
+            "runtime_inventory": self.runtime_inventory(runtime),
+            "configured_inventory": {"count": len(configured), "models": configured},
+            "placement": assessment.get("placement"),
+            "recommended_settings": {
+                "context_tokens": resources.get("context_tokens"),
+                "tensor_parallel": (assessment.get("placement", {}).get("selected_mode") == "tensor_parallel")
+                if isinstance(assessment.get("placement"), dict)
+                else False,
+                "offload": assessment.get("placement", {}).get("selected_mode")
+                if isinstance(assessment.get("placement"), dict)
+                else None,
+            },
+            "notes": [
+                "Configured inventory is profile-owned metadata, not a claim about weights currently installed by a runtime.",
+                "Use `aiplane runtimes list-runtime-models RUNTIME` to inspect runtime-owned installed/served inventory where the runner exposes it.",
+                "This plan does not start a runtime or apply context, parallelism, cache, or offload settings.",
+            ],
+        }
+
     def artifact_lock(self, model_name: str) -> dict[str, Any]:
         model = self._model(model_name)
         if self._model_ownership(model) == "managed_service":

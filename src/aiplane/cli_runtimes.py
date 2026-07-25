@@ -79,6 +79,30 @@ def add_runtimes_parser(
     )
     profile_arg(runtimes_capabilities)
     runtimes_capabilities.add_argument("runtime", nargs="?", help="Optional primary runtime name")
+    runtimes_inventory = runtimes_sub.add_parser(
+        "inventory",
+        help="Read runtime-owned installed or served model identities",
+        description="Read a runner's documented local model-inventory endpoint. This is read-only and keeps runtime-reported identities distinct from configured profile aliases.",
+        formatter_class=formatter_class,
+        allow_abbrev=False,
+    )
+    profile_arg(runtimes_inventory)
+    runtimes_inventory.add_argument(
+        "runtime", help="Runtime name, such as ollama, vllm, lmstudio, llamacpp, mlx, or docker_model_runner"
+    )
+
+    runtimes_capacity = runtimes_sub.add_parser(
+        "capacity-plan",
+        help="Render runtime-specific model capacity guidance",
+        description="Assess one configured model against local hardware and render context/parallelism/offload guidance without changing runtime settings.",
+        formatter_class=formatter_class,
+        allow_abbrev=False,
+    )
+    profile_arg(runtimes_capacity)
+    runtimes_capacity.add_argument("runtime", help="Target local runtime")
+    runtimes_capacity.add_argument("--model", required=True, help="Configured model alias")
+    runtimes_capacity.add_argument("--context-tokens", type=int, help="Requested context length")
+
     runtimes_sources = runtimes_sub.add_parser(
         "sources",
         help="List model catalogs/sources",
@@ -304,6 +328,16 @@ def handle_runtimes_command(
             return 0
         if args.runtimes_command == "capabilities":
             print(json_dumps(catalog.capabilities(args.runtime), indent=2))
+            return 0
+        if args.runtimes_command == "inventory":
+            print(json_dumps(catalog.runtime_inventory(args.runtime), indent=2))
+            return 0
+        if args.runtimes_command == "capacity-plan":
+            print(
+                json_dumps(
+                    catalog.capacity_plan(args.runtime, args.model, context_tokens=args.context_tokens), indent=2
+                )
+            )
             return 0
         if args.runtimes_command == "sources":
             print(json_dumps(catalog.sources(), indent=2))

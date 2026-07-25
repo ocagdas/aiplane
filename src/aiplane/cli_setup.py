@@ -4,7 +4,13 @@ import argparse
 from pathlib import Path
 from typing import Any, Callable
 
-from .benchmark_evidence import calibration_plan, import_measurement_record, load_suite
+from .benchmark_evidence import (
+    calibration_plan,
+    export_calibration_bundle,
+    import_calibration_bundle,
+    import_measurement_record,
+    load_suite,
+)
 from .benchmark_comparison import DIMENSIONS, compare_benchmarks
 from .benchmark_tools import BenchmarkToolManager
 from .config import load_profile
@@ -205,6 +211,29 @@ def add_setup_parsers(
         "--repeats", type=int, default=5, help="Measured repetitions after warm-up (2-100; default: 5)"
     )
 
+    benchmarks_export = benchmarks_sub.add_parser(
+        "calibration-export",
+        help="Preview or export controlled calibration records",
+        description="Bundle controlled, provenance-bearing calibration records without credentials or local source paths. Preview is default.",
+        formatter_class=formatter_class,
+        allow_abbrev=False,
+    )
+    profile_arg(benchmarks_export)
+    benchmarks_export.add_argument("path", help="Output JSON bundle path")
+    benchmarks_export.add_argument("--yes", action="store_true", help="Write the portable bundle")
+    benchmarks_import_bundle = benchmarks_sub.add_parser(
+        "calibration-import",
+        help="Preview or import a calibration bundle",
+        description="Validate checksums and controlled records. Preview is default; --yes writes ignored local benchmark records.",
+        formatter_class=formatter_class,
+        allow_abbrev=False,
+    )
+    profile_arg(benchmarks_import_bundle)
+    benchmarks_import_bundle.add_argument("path", help="Portable calibration JSON bundle")
+    benchmarks_import_bundle.add_argument(
+        "--yes", action="store_true", help="Write validated records under .aiplane/benchmarks"
+    )
+
     benchmarks_compare = benchmarks_sub.add_parser(
         "compare",
         help="Compare saved benchmark records without collapsing metrics",
@@ -356,6 +385,10 @@ def handle_setup_command(
                 repeats=args.repeats,
                 profile=profile.name,
             )
+        elif args.benchmarks_command == "calibration-export":
+            payload = export_calibration_bundle(profile.workspace, Path(args.path).resolve(), dry_run=not args.yes)
+        elif args.benchmarks_command == "calibration-import":
+            payload = import_calibration_bundle(profile.workspace, Path(args.path).resolve(), dry_run=not args.yes)
         elif args.benchmarks_command == "compare":
             payload = compare_benchmarks(
                 profile,

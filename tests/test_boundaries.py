@@ -63,3 +63,23 @@ def test_provider_http_uses_injected_transport() -> None:
     payload = ProviderRegistry(profile, http_transport=transport)._json_get("https://example.invalid/v1/models")
     assert payload["data"][0]["id"] == "synthetic-model"
     assert len(transport.requests) == 1
+
+
+def test_managed_backends_preserve_exact_response_usage_without_inventing_timing() -> None:
+    anthropic = AnthropicMessagesBackend(
+        http_transport=FakeHttpTransport(
+            {"content": [{"text": "ok"}], "usage": {"input_tokens": 3, "output_tokens": 5}}
+        )
+    ).chat("model", "hello")
+    azure = AzureOpenAIBackend(
+        "https://example.invalid",
+        http_transport=FakeHttpTransport(
+            {"choices": [{"message": {"content": "ok"}}], "usage": {"prompt_tokens": 4, "completion_tokens": 6}}
+        ),
+    ).chat("deployment", "hello")
+    assert anthropic.telemetry["prompt_tokens"] == 3
+    assert anthropic.telemetry["output_tokens"] == 5
+    assert anthropic.telemetry["ttft_ms"] is None
+    assert azure.telemetry["prompt_tokens"] == 4
+    assert azure.telemetry["output_tokens"] == 6
+    assert azure.telemetry["tokens_per_second"] is None

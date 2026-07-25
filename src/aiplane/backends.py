@@ -201,6 +201,20 @@ class OpenAICompatibleBackend:
         return BackendResult(self.name, str(first.get("text", "")), False, telemetry)
 
 
+def _usage_telemetry(usage: object, *, source: str) -> dict[str, Any]:
+    values = usage if isinstance(usage, dict) else {}
+    return {
+        "elapsed_ms": None,
+        "load_duration_ms": None,
+        "ttft_ms": None,
+        "prompt_tokens": values.get("prompt_tokens", values.get("input_tokens")),
+        "prompt_tokens_per_second": None,
+        "output_tokens": values.get("completion_tokens", values.get("output_tokens")),
+        "tokens_per_second": None,
+        "source": source if values else None,
+    }
+
+
 class AnthropicMessagesBackend:
     name = "anthropic_messages"
 
@@ -243,14 +257,16 @@ class AnthropicMessagesBackend:
                 f"Anthropic Messages endpoint is not reachable at {self.endpoint}. "
                 f"Check provider credentials and endpoint configuration. Details: {exc}"
             ) from exc
+        telemetry = _usage_telemetry(body.get("usage"), source="anthropic_messages_usage")
         chunks = body.get("content", [])
         if isinstance(chunks, list):
             return BackendResult(
                 self.name,
                 "".join(str(chunk.get("text", "")) for chunk in chunks if isinstance(chunk, dict)),
                 True,
+                telemetry,
             )
-        return BackendResult(self.name, str(chunks or ""), True)
+        return BackendResult(self.name, str(chunks or ""), True, telemetry)
 
 
 class AzureOpenAIBackend:
@@ -293,9 +309,10 @@ class AzureOpenAIBackend:
                 f"Check the resource endpoint, deployment name, api-version, and credentials. Details: {exc}"
             ) from exc
         choices = body.get("choices", [])
+        telemetry = _usage_telemetry(body.get("usage"), source="azure_openai_usage")
         if not choices or not isinstance(choices[0], dict):
-            return BackendResult(self.name, "", True)
+            return BackendResult(self.name, "", True, telemetry)
         message = choices[0].get("message")
         if isinstance(message, dict):
-            return BackendResult(self.name, str(message.get("content", "")), True)
-        return BackendResult(self.name, str(choices[0].get("text", "")), True)
+            return BackendResult(self.name, str(message.get("content", "")), True, telemetry)
+        return BackendResult(self.name, str(choices[0].get("text", "")), True, telemetry)
