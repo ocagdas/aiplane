@@ -5,7 +5,7 @@ import socket
 from typing import Any
 
 from .boundaries import CommandRunner, SubprocessCommandRunner
-from .agent_frameworks import render_framework_starter
+from .agent_frameworks import framework_control_enforcement, render_framework_starter
 from .persistence import atomic_write_text
 from .config import dump_yaml, provider_helper_path
 from .docker_model_runner import DockerModelRunner
@@ -301,6 +301,7 @@ class StackManager:
                     "mutates": False,
                 },
             )
+        role_plan = self._role_plan(stack, endpoint)
         return {
             "name": name,
             "orchestrator": orchestrator or None,
@@ -321,7 +322,16 @@ class StackManager:
             "endpoint_security": self.endpoint_plan(name),
             "limits": stack.get("limits", {}),
             "tools": stack.get("tools", {}),
-            "roles": self._role_plan(stack, endpoint),
+            "roles": role_plan,
+            "control_enforcement": (
+                framework_control_enforcement(
+                    orchestrator,
+                    role_plan,
+                    str(stack.get("approval_mode") or "ask"),
+                )
+                if orchestrator
+                else None
+            ),
             "approval_mode": stack.get("approval_mode"),
             "audit_label": stack.get("audit_label"),
             "steps": steps,
@@ -368,6 +378,17 @@ class StackManager:
             if isinstance(check, dict):
                 checks.append(check)
         checks.extend(self._role_checks(plan.get("roles", {})))
+        enforcement = plan.get("control_enforcement")
+        if isinstance(enforcement, dict):
+            checks.append(
+                {
+                    "name": "agent_control_enforcement",
+                    "ok": bool(enforcement.get("enforcement_ready")),
+                    "warning": bool(enforcement.get("requires_runtime_enforcement")),
+                    "detail": enforcement.get("summary"),
+                    "controls": enforcement.get("controls"),
+                }
+            )
         if plan.get("orchestrator"):
             orch = plan.get("orchestrator_status") or {}
             checks.append(
@@ -380,6 +401,7 @@ class StackManager:
         return {
             "name": name,
             "checks": checks,
+            "control_enforcement": enforcement,
             "plan_summary": {
                 "orchestrator": plan.get("orchestrator"),
                 "runtime": plan["runtime"],

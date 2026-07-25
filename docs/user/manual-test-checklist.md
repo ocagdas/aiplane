@@ -479,6 +479,8 @@ aiplane agents templates
 aiplane agents plan manual-agent --framework langgraph --model "$CHAT_ALIAS"
 aiplane agents manifest manual-agent --framework langgraph --model "$CHAT_ALIAS"
 aiplane agents export manual-agent --framework langgraph --model "$CHAT_ALIAS" --file agent.py
+aiplane agents export manual-agent --framework crewai --model "$CHAT_ALIAS" --file endpoint-smoke.py
+aiplane agents export manual-agent --framework crewai --model "$CHAT_ALIAS" --file endpoint-smoke-requirements.txt
 aiplane agents export manual-agent --framework langgraph --model "$CHAT_ALIAS" --file agent-environment.yaml
 aiplane agents export manual-agent --framework crewai --model "$CHAT_ALIAS" --file framework-config.yaml
 aiplane agents export manual-agent --framework autogen --model "$CHAT_ALIAS" --file framework-config.yaml
@@ -493,7 +495,8 @@ aiplane orchestrators doctor langgraph
 
 - [ ] Plans contain reviewed model alias, native id, endpoint, tool policy, approval mode, limits, and audit label where configured.
 - [ ] The manifest is schema version `1.0`, is marked `render_only`, and says Aiplane does not run agents.
-- [ ] Each framework config contains its framework-specific topology key and readiness checks.
+- [ ] Each framework config contains its framework-specific topology key and readiness checks, including Python version, observed framework package version or missing-package warning, HTTP(S) endpoint shape, OpenAI-compatible protocol, and declared chat role.
+- [ ] Every framework provides a compilable `endpoint-smoke.py` and minimal `endpoint-smoke-requirements.txt`; separate framework requirements are only needed for framework-native translation. Only LangGraph and `simple-openai` claim a framework-native executable `agent.py`.
 - [ ] Single-role frameworks report a readiness mismatch when given multiple roles.
 - [ ] Starter output contains no secret values and explicitly says it installs nothing and runs no agents.
 - [ ] Aiplane configures and validates the environment; it does not silently launch an autonomous workflow.
@@ -535,6 +538,9 @@ aiplane stacks start manual-stack --yes
 - [ ] The job output is schema version `1.0`, render-only, targets only roles from the stack, carries a safe relative workspace path, and references the environment checksum.
 - [ ] The handoff embeds both environment and job records with matching checksums; validation fails after either record is edited.
 - [ ] Job/handoff commands do not queue or run an agent, write credentials, or apply configuration.
+- [ ] Stack plan, doctor, manifest, job, handoff, and framework starter expose `control_enforcement`.
+- [ ] Requested workspace/tool/approval/limit controls state `not_enforced` until a selected framework or reviewed wrapper enforces them; audit labels state `label_only`.
+- [ ] `agent_control_enforcement` is warning-level rather than a false readiness claim.
 
 ## 16. Render-only Kubernetes artifacts
 

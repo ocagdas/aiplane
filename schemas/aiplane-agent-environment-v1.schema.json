@@ -12,7 +12,8 @@
     "profile",
     "orchestrator",
     "roles",
-    "execution_boundary"
+    "execution_boundary",
+    "control_enforcement"
   ],
   "properties": {
     "$schema": {
@@ -114,6 +115,39 @@
     "framework_config": {
       "type": "string",
       "minLength": 1
+    },
+    "control_enforcement": {
+      "type": "object",
+      "required": [
+        "framework",
+        "enforcement_ready",
+        "requires_runtime_enforcement",
+        "controls",
+        "summary"
+      ],
+      "properties": {
+        "framework": {
+          "type": "string",
+          "minLength": 1
+        },
+        "enforcement_ready": {
+          "type": "boolean"
+        },
+        "requires_runtime_enforcement": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "controls": {
+          "type": "object"
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": true
     }
   },
   "additionalProperties": true
