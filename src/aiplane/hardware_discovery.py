@@ -51,10 +51,44 @@ def discover_hardware(runner: CommandRunner, host: HostPlatform) -> dict[str, An
         gpu.setdefault("device_id", str(gpu.get("uuid") or gpu.get("pci_bus_id") or index))
         gpu.setdefault("free_vram_gb", None)
         gpu.setdefault("unified_memory", False)
+        gpu.setdefault("numa_node", None)
+        gpu.setdefault("cpu_affinity", None)
+        gpu.setdefault("partitioned", False)
+    found["topology"] = _normalize_topology(found["topology"], found["gpus"])
     found["gpu_groups"] = group_gpus(found["gpus"])
     if not found["gpus"]:
         found["notes"].append("No supported accelerator was discovered through available platform tools")
     return found
+
+
+def _normalize_topology(raw: object, devices: list[dict[str, Any]]) -> dict[str, Any]:
+    """Make topology absence explicit without manufacturing vendor-specific facts."""
+    topology = dict(raw) if isinstance(raw, dict) else {}
+    links = topology.get("links")
+    topology["links"] = list(links) if isinstance(links, list) else []
+    topology.setdefault("state", "not_available")
+    partitions = topology.get("partitions")
+    partitions = dict(partitions) if isinstance(partitions, dict) else {}
+    instances = partitions.get("instances")
+    by_parent = partitions.get("by_parent")
+    topology["partitions"] = {
+        "state": str(partitions.get("state") or "not_available"),
+        "instances": list(instances) if isinstance(instances, list) else [],
+        "by_parent": dict(by_parent) if isinstance(by_parent, dict) else {},
+    }
+    topology["devices"] = [
+        {
+            "index": device["index"],
+            "device_id": device["device_id"],
+            "vendor": device.get("vendor"),
+            "numa_node": device.get("numa_node"),
+            "cpu_affinity": device.get("cpu_affinity"),
+            "partitioned": bool(device.get("partitioned")),
+            "interconnect_state": "reported" if topology["links"] else "unresolved",
+        }
+        for device in devices
+    ]
+    return topology
 
 
 def _memory(host: HostPlatform, runner: CommandRunner) -> dict[str, Any]:

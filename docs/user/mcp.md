@@ -28,7 +28,7 @@ The current read tools are:
 - `aiplane.providers.models` and `aiplane.providers.diagnose`
 - `aiplane.models.defaults`
 - `aiplane.models.list` with filters, named-machine/current-machine fit filtering, sorting, and limits
-- `aiplane.models.show`
+- `aiplane.models.show` and `aiplane.models.pick` for a concise locally suitable choice with review-first next commands
 - `aiplane.hardware.discover`
 - `aiplane.hardware.recommend`
 - `aiplane.machines.list`, `aiplane.machines.show`, and `aiplane.machines.recommend`
@@ -36,7 +36,8 @@ The current read tools are:
 - `aiplane.integrations.export`
 - `aiplane.integrations.roles` and `aiplane.integrations.plan`
 - `aiplane.orchestrators.list` and `aiplane.orchestrators.show`
-- `aiplane.runtimes.status` and render-only `aiplane.runtimes.bundle`; bundle mode supports `auto`, `docker`, `conda`, and `native` when the selected runtime supports it.
+- `aiplane.runtimes.status`, `aiplane.runtimes.inventory`, `aiplane.runtimes.capacity_plan`, and render-only `aiplane.runtimes.bundle`; inventory keeps runner-reported installed/served IDs distinct from profile aliases, while capacity plans apply no settings.
+- `aiplane.benchmarks.calibration_plan` for a read-only controlled measurement protocol.
 - render-only `aiplane.agents.manifest`
 - `aiplane.remote.tunnel.plan`
 - `aiplane.remote.tunnel.status`
@@ -53,6 +54,8 @@ Write tools execute through the same managers as the CLI. Where a tool supports 
 All tools return JSON as both text content and structured MCP content where supported by the client. Mutating tools call the same internal managers as the CLI; they do not bypass profile validation, policy boundaries, or filesystem scoping. The stdio server rejects malformed non-object JSON-RPC messages, invalid tool arguments (with JSON-RPC `-32602`), oversized header blocks, and frames larger than 1 MiB before reading their bodies.
 
 New CLI features are not automatically MCP tools. MCP coverage is reviewed during pre-PR cleanup and recurring synchronization checkpoints, not continuously after every feature and not at every regular milestone. Useful inspection, planning, recommendation, and config export features can be mirrored into MCP, while host mutation, downloads, installs, cloud apply, secret writes, and broad shell execution stay CLI-only or deferred until they have explicit guardrails and audit behavior.
+
+`models list --offline-catalog PATH` accepts a filesystem path and remains CLI-only. This prevents an MCP caller from reading arbitrary local files; use a checked-out, reviewed fixture for offline planning.
 
 ## MCP And Agent Skills
 

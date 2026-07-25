@@ -313,6 +313,27 @@ class ModelListingTests(unittest.TestCase):
             self.assertEqual(code, 0)
             self.assertEqual([row["name"] for row in json.loads(stdout.getvalue())], ["cpu_ok"])
 
+    def test_models_list_loads_versioned_offline_catalog_without_writing_profile(self) -> None:
+        catalog_path = Path.cwd() / "examples" / "offline-demo" / "models.catalog.yaml"
+        stdout = StringIO()
+        with redirect_stdout(stdout):
+            code = cli_main(
+                [
+                    "models",
+                    "list",
+                    "--offline-catalog",
+                    str(catalog_path),
+                    "--catalog-cache",
+                    "off",
+                    "--profile",
+                    "local-dev",
+                ]
+            )
+        self.assertEqual(code, 0)
+        names = {row["name"] for row in json.loads(stdout.getvalue())}
+        self.assertIn("offline-chat-small", names)
+        self.assertIn("offline-code-medium", names)
+
     def test_models_list_can_filter_by_named_machine_and_machine_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

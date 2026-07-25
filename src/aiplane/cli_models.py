@@ -9,6 +9,7 @@ from .cli_support import parse_provider_limits, parse_settings, refresh_progress
 from .hardware import HardwareManager
 from .machine_model_filters import merge_machine_model_filters
 from .model_catalog import ModelCatalog
+from .offline_catalog import load_offline_catalog
 from .model_filters import (
     ACCELERATOR_API_CHOICES,
     GPU_VENDOR_CHOICES,
@@ -277,6 +278,11 @@ def add_models_parser(
         default=[],
         metavar="FIELD=VALUE",
         help="Filter by an exact raw model property; supports dotted paths and can be repeated, e.g. quantization=q4 or source_metadata.pipeline_tag=text-generation",
+    )
+    models_list.add_argument(
+        "--offline-catalog",
+        type=Path,
+        help="Versioned JSON/YAML fallback catalog for read-only offline planning; it is never written into the profile",
     )
     models_list.add_argument(
         "--catalog-cache",
@@ -736,6 +742,9 @@ def handle_models_command(
         print(json_dumps(payload, indent=2))
         return 0
     if args.models_command == "list":
+        offline_catalog = load_offline_catalog(args.offline_catalog) if args.offline_catalog else None
+        if offline_catalog is not None:
+            catalog.generated_config = offline_catalog
         filters = model_filter_args(args)
         if args.fits_hardware:
             filters.update(active_hardware_model_filters(profile))
@@ -749,8 +758,8 @@ def handle_models_command(
         rows = catalog.sort_rows(
             catalog.filter(
                 filters,
-                use_materialized=args.catalog_cache != "off",
-                force_rebuild=args.catalog_cache == "rebuild",
+                use_materialized=args.catalog_cache != "off" and offline_catalog is None,
+                force_rebuild=args.catalog_cache == "rebuild" and offline_catalog is None,
             ),
             sort_by=args.sort_by,
             roles=filters.get("roles", []),

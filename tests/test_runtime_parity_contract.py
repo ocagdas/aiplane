@@ -75,8 +75,9 @@ def test_benchmark_prefers_runtime_native_measurements() -> None:
             "source": "fixture_native",
         },
     )
-    with patch.object(runner.catalog, "complete", return_value=native):
+    with patch.object(runner.catalog, "complete", return_value=native) as complete:
         result = runner.run("fixture-analysis-small", save=False)
+    assert complete.call_args.kwargs["purpose"] == "benchmark"
     row = result["results"][0]
     assert row["elapsed_ms"] == 12.5
     assert row["ttft_ms"] == 3.5
@@ -109,6 +110,41 @@ class _JsonTransport:
         return _JsonResponse(self.payload)
 
 
+class _StreamingJsonResponse:
+    def __init__(self, payloads: list[dict[str, object]]):
+        self._lines = [json.dumps(payload).encode("utf-8") + b"\n" for payload in payloads]
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return None
+
+    def readline(self) -> bytes:
+        return self._lines.pop(0) if self._lines else b""
+
+
+class _StreamingJsonTransport:
+    def __init__(self, payloads: list[dict[str, object]]):
+        self.payloads = payloads
+        self.requests = []
+
+    def open(self, request, timeout=None):
+        self.requests.append(request)
+        return _StreamingJsonResponse(self.payloads)
+
+
+class _RuntimeInventoryTransport:
+    def __init__(self) -> None:
+        self.requests = []
+
+    def open(self, request, timeout=None):
+        self.requests.append(request)
+        if request.full_url.endswith("/api/tags"):
+            return _JsonResponse({"models": [{"name": "runner-native-id"}]})
+        return _JsonResponse({"data": [{"id": "runner-native-id"}]})
+
+
 def test_ollama_backend_preserves_native_token_and_duration_fields() -> None:
     backend = OllamaBackend(
         http_transport=_JsonTransport(
@@ -134,6 +170,41 @@ def test_ollama_backend_preserves_native_token_and_duration_fields() -> None:
         "tokens_per_second": 20.0,
         "source": "ollama_native_response",
     }
+
+
+def test_ollama_streamed_benchmark_telemetry_records_observed_ttft() -> None:
+    transport = _StreamingJsonTransport(
+        [
+            {"message": {"content": "hello "}, "done": False},
+            {
+                "message": {"content": "world"},
+                "done": True,
+                "total_duration": 80_000_000,
+                "load_duration": 10_000_000,
+                "prompt_eval_count": 4,
+                "prompt_eval_duration": 20_000_000,
+                "eval_count": 2,
+                "eval_duration": 40_000_000,
+            },
+        ]
+    )
+    backend = OllamaBackend(http_transport=transport)
+    with patch("aiplane.backends.time.perf_counter", side_effect=[10.0, 10.025]):
+        result = backend.chat("model", "hello", measure_ttft=True)
+
+    assert result.text == "hello world"
+    assert result.telemetry == {
+        "elapsed_ms": 80.0,
+        "load_duration_ms": 10.0,
+        "ttft_ms": 25.0,
+        "prompt_tokens": 4,
+        "prompt_tokens_per_second": 200.0,
+        "output_tokens": 2,
+        "tokens_per_second": 50.0,
+        "source": "ollama_stream_client_timing",
+    }
+    payload = json.loads(transport.requests[0].data.decode("utf-8"))
+    assert payload["stream"] is True
 
 
 def test_openai_compatible_backend_preserves_zero_completion_tokens() -> None:
@@ -361,12 +432,50 @@ def test_profile_runtime_endpoint_override_drives_bundle_and_launch_ports() -> N
     assert launch["endpoint"]["base_url"] == "http://127.0.0.1:9001/v1"
 
 
-def test_runtime_capacity_plan_keeps_configured_and_runtime_owned_inventory_distinct(tmp_path: Path) -> None:
-    from aiplane.config import load_profile
-    from aiplane.runtime_catalog import RuntimeCatalog
+@pytest.mark.parametrize("runtime", PARITY_RUNTIMES)
+def test_primary_runner_inventory_and_capacity_plan_use_the_normalized_contract(runtime: str) -> None:
+    profile = load_profile("local-dev", Path.cwd())
+    alias = "provider-code-large-vllm"
+    model = dict(profile.models["models"][alias])
+    model["supported_runtimes"] = list(PARITY_RUNTIMES)
+    profile.models["models"][alias] = model
+    transport = _RuntimeInventoryTransport()
+    catalog = RuntimeCatalog(profile, http_transport=transport)
+    placement = {"placement": {"selected_mode": "single_gpu", "resources": {"context_tokens": 4096}}}
 
+    with (
+        patch("aiplane.runtime_catalog.RuntimeCatalog.runtime_available", return_value={"available": True}),
+        patch("aiplane.hardware.HardwareManager.assess", return_value=placement),
+    ):
+        inventory = catalog.runtime_inventory(runtime)
+        capacity = catalog.capacity_plan(runtime, alias, context_tokens=4096)
+
+    expected_kind = "installed" if runtime == "ollama" else "served"
+    assert inventory["available"] is True
+    assert inventory["inventory_kind"] == expected_kind
+    assert inventory["runtime_models"] == [{"native_id": "runner-native-id", "aliases": []}]
+    assert capacity["runtime_inventory"]["record_type"] == "runtime_inventory"
+    assert capacity["runtime_inventory"]["runtime"] == runtime
+    assert capacity["configured_inventory"]["count"] == len(capacity["configured_inventory"]["models"])
+    assert all(row["enabled"] is True for row in capacity["configured_inventory"]["models"])
+    assert any(
+        request.full_url.endswith("/models") or request.full_url.endswith("/api/tags") for request in transport.requests
+    )
+
+
+def test_runtime_inventory_and_capacity_plan_keep_runner_and_profile_models_distinct(tmp_path: Path) -> None:
     profile = load_profile("local-dev", tmp_path)
-    payload = RuntimeCatalog(profile).capacity_plan("ollama", "fixture-analysis-small", context_tokens=4096)
+    catalog = RuntimeCatalog(profile)
+    placement = {"placement": {"selected_mode": "single_gpu", "resources": {"context_tokens": 4096}}}
+    with (
+        patch("aiplane.runtime_catalog.OllamaBackend.available_models", return_value=["native-a"]),
+        patch("aiplane.runtime_catalog.RuntimeCatalog.runtime_available", return_value={"available": True}),
+        patch("aiplane.hardware.HardwareManager.assess", return_value=placement),
+    ):
+        inventory = catalog.runtime_inventory("ollama")
+        payload = catalog.capacity_plan("ollama", "fixture-analysis-small", context_tokens=4096)
+    assert inventory["runtime_models"] == [{"native_id": "native-a", "aliases": []}]
     assert payload["record_type"] == "runtime_capacity_plan"
     assert payload["model"]["alias"] == "fixture-analysis-small"
+    assert payload["runtime_inventory"]["inventory_kind"] == "installed"
     assert "configured inventory" in " ".join(payload["notes"]).lower()

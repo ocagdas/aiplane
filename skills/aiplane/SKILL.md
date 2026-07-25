@@ -39,6 +39,14 @@ conda run -n aiplane scripts/check.sh
 
 For docs-only contributor/security changes, also run a Markdown sanity check for local links and fenced code blocks if available.
 
+## Preferred Read-Only Workflows
+
+- Use `aiplane pick --intent chat` for one local choice; use `aiplane recommend` for the complete rationale.
+- Use `aiplane runtimes inventory RUNTIME` to distinguish runner-reported installed/served IDs from profile aliases.
+- Use `aiplane runtimes capacity-plan RUNTIME --model MODEL_ALIAS` before changing context, parallelism, cache, or offload settings.
+- Use `aiplane benchmarks calibration-plan` and preview-first calibration export/import for repeatable measurement evidence.
+- Use `aiplane models list --machine-file PATH` for a read-only named-machine simulation; do not mistake a fixture for target-host discovery.
+
 ## MCP Guidance
 
 MCP should mirror useful inspection, planning, recommendation, and export surfaces by delegating to existing managers. Keep mutation narrow, audited, and guarded. When adding an MCP tool:

@@ -31,6 +31,7 @@ COMMAND_TIERS = (
         (
             "run",
             "tool",
+            "patches",
             "code",
             "agents",
             "chat",

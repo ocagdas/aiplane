@@ -157,7 +157,7 @@ class BenchmarkRunner:
             backend = "dry_run"
         else:
             try:
-                result = self.catalog.complete(model_name, prompt)
+                result = self.catalog.complete(model_name, prompt, purpose="benchmark")
                 text = result.text
                 backend = result.backend
                 telemetry = dict(result.telemetry)

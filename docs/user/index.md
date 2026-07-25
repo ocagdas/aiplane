@@ -69,6 +69,7 @@ Read these when you need to customize the environment model or automate team wor
 - [Machines, stacks, and orchestrators](machines-and-stacks.md): machine inventory, stack planning, remote workstation plans, and orchestrator bindings.
 - [Policy, approvals, and audit](overview.md#ai-workflow-stack-doctor): repository policy effects surfaced through doctor, recommend, and policy explain.
 - [MCP adapter](mcp.md): structured read/planning access for compatible clients and guarded write surfaces.
+- [Reviewed patch workflow](patches.md): inspect and explicitly apply an already-reviewed workspace patch without staging or committing.
 - [Benchmarks](benchmarks.md): smoke checks and practical model/runtime evaluation notes.
 - [External toolchain](tools.md): prerequisite CLIs for runtime, provisioning, and benchmark workflows.
 - [Cloud deployment planning](cloud-deployment.md): guarded planning and checks for Azure targets.

@@ -61,6 +61,15 @@ def test_nvidia_discovery_preserves_devices_groups_free_memory_and_topology(monk
     assert found["gpus"][0]["numa_node"] == "0"
     assert found["gpus"][0]["partitioned"] is True
     assert found["topology"]["partitions"]["instances"][0]["uuid"] == "MIG-a"
+    assert found["topology"]["devices"][0] == {
+        "index": 0,
+        "device_id": "GPU-a",
+        "vendor": "nvidia",
+        "numa_node": "0",
+        "cpu_affinity": "0-31",
+        "partitioned": True,
+        "interconnect_state": "reported",
+    }
 
 
 def test_apple_and_windows_discovery_use_platform_specific_sources() -> None:
@@ -76,6 +85,8 @@ def test_apple_and_windows_discovery_use_platform_specific_sources() -> None:
     assert apple_found["memory"]["architecture"] == "unified"
     assert apple_found["gpus"][0]["backend"] == "metal"
     assert apple_found["gpus"][0]["unified_memory"] is True
+    assert apple_found["topology"]["partitions"]["state"] == "not_available"
+    assert apple_found["topology"]["devices"][0]["interconnect_state"] == "unresolved"
 
     powershell_payload = {
         "memory": {"total_kib": 32 * 1024**2, "available_kib": 20 * 1024**2},
@@ -98,6 +109,8 @@ def test_apple_and_windows_discovery_use_platform_specific_sources() -> None:
     assert windows_found["available_memory_gb"] == 20
     assert windows_found["gpus"][0]["vendor"] == "nvidia"
     assert windows_found["gpus"][0]["source"] == "Win32_VideoController"
+    assert windows_found["topology"]["devices"][0]["numa_node"] is None
+    assert windows_found["topology"]["devices"][0]["partitioned"] is False
 
 
 def test_resource_estimate_uses_exact_kv_formula_when_architecture_is_known() -> None:

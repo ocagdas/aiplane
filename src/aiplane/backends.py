@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import dataclass, field
 from urllib.error import URLError
 from urllib.parse import urlencode
@@ -60,10 +61,10 @@ class OllamaBackend:
         except (URLError, TimeoutError, OSError, ConnectionError) as exc:
             return False, f"Ollama is not reachable: {exc}"
 
-    def chat(self, model: str, prompt: str) -> BackendResult:
+    def chat(self, model: str, prompt: str, *, measure_ttft: bool = False) -> BackendResult:
         payload = {
             "model": model,
-            "stream": False,
+            "stream": measure_ttft,
             "messages": [{"role": "user", "content": prompt}],
         }
         request = Request(
@@ -72,8 +73,11 @@ class OllamaBackend:
             headers={"Content-Type": "application/json", **self.headers},
             method="POST",
         )
+        started_at = time.perf_counter()
         try:
             with self.http_transport.open(request, timeout=self.timeout_seconds) as response:
+                if measure_ttft:
+                    return self._stream_chat_response(response, started_at)
                 body = json.loads(response.read().decode("utf-8"))
         except (URLError, TimeoutError, OSError, ConnectionError) as exc:
             detail = str(exc)
@@ -111,6 +115,50 @@ class OllamaBackend:
             "source": "ollama_native_response",
         }
         return BackendResult(self.name, str(message.get("content", "")), False, telemetry)
+
+    def _stream_chat_response(self, response: Any, started_at: float) -> BackendResult:
+        """Collect an Ollama NDJSON stream and time its first content event.
+
+        The measurement is client-observed from request dispatch to the first non-empty
+        streamed message fragment. It is not inferred from total request duration.
+        """
+        parts: list[str] = []
+        final: dict[str, Any] = {}
+        first_content_at: float | None = None
+        while True:
+            raw = response.readline()
+            if not raw:
+                break
+            try:
+                item = json.loads(raw.decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                raise RuntimeError("Ollama returned an invalid streamed response") from exc
+            if not isinstance(item, dict):
+                continue
+            message = item.get("message")
+            content = message.get("content") if isinstance(message, dict) else None
+            if isinstance(content, str) and content:
+                if first_content_at is None:
+                    first_content_at = time.perf_counter()
+                parts.append(content)
+            if item.get("done") is True:
+                final = item
+                break
+        if not final:
+            raise RuntimeError("Ollama stream ended before its final telemetry record")
+        prompt_tokens = final.get("prompt_eval_count")
+        output_tokens = final.get("eval_count")
+        telemetry = {
+            "elapsed_ms": _nanoseconds_to_milliseconds(final.get("total_duration")),
+            "load_duration_ms": _nanoseconds_to_milliseconds(final.get("load_duration")),
+            "ttft_ms": round((first_content_at - started_at) * 1000, 3) if first_content_at is not None else None,
+            "prompt_tokens": prompt_tokens,
+            "prompt_tokens_per_second": _tokens_per_second(prompt_tokens, final.get("prompt_eval_duration")),
+            "output_tokens": output_tokens,
+            "tokens_per_second": _tokens_per_second(output_tokens, final.get("eval_duration")),
+            "source": "ollama_stream_client_timing",
+        }
+        return BackendResult(self.name, "".join(parts), False, telemetry)
 
 
 def _tokens_per_second(tokens: object, duration_ns: object) -> float | None:

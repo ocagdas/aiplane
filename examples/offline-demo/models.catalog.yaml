@@ -1,0 +1,25 @@
+contract_version: "1.0"
+record_type: offline_model_catalog
+models:
+  offline-chat-small:
+    provider: ollama
+    model: "qwen2.5:3b"
+    local: true
+    enabled: true
+    roles: ["chat", "analysis"]
+    supported_runtimes: ["ollama", "llamacpp"]
+    preferred_runtime: ollama
+    min_ram_gb: 8
+    min_vram_gb: 4
+    parameters_b: 3
+  offline-code-medium:
+    provider: ollama
+    model: "qwen2.5-coder:7b"
+    local: true
+    enabled: true
+    roles: ["completion", "generation", "refactor"]
+    supported_runtimes: ["ollama", "vllm"]
+    preferred_runtime: ollama
+    min_ram_gb: 16
+    min_vram_gb: 8
+    parameters_b: 7
