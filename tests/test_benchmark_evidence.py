@@ -244,6 +244,8 @@ def test_public_evidence_schemas_are_declared_for_packaging() -> None:
         "aiplane-runtime-launch-v1.schema.json",
         "aiplane-runtime-bundle-v1.schema.json",
         "aiplane-agent-environment-v1.schema.json",
+        "aiplane-agent-job-v1.schema.json",
+        "aiplane-agent-handoff-v1.schema.json",
         "aiplane-deployment-artifacts-v1.schema.json",
         "aiplane-offline-model-catalog-v1.schema.json",
     ]

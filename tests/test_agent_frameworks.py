@@ -1,14 +1,18 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
+from jsonschema import Draft202012Validator
 
 from aiplane.agent_frameworks import FRAMEWORK_SPECS, render_framework_starter
 from aiplane.agents import AgentManager
+from aiplane.machines import MachineManager
+from aiplane.stacks import StackManager
 from aiplane.config import parse_yaml
 from tests.cli_fixtures import run_cli
-from tests.profile_fixtures import _isolated_profiles_dir, _isolated_test_profile
+from tests.profile_fixtures import _isolated_profiles_dir, _isolated_test_profile, _load_profile_with_test_models
 
 
 @pytest.mark.parametrize(
@@ -127,3 +131,162 @@ def test_framework_config_cli_export_is_yaml_and_render_only(tmp_path: Path, mon
     assert payload["framework"] == "crewai"
     assert payload["topology"]["crew"]["agents"] == ["primary"]
     assert payload["execution_boundary"]["runs_agents"] is False
+
+
+def _stack_bound_agent_manager(tmp_path: Path) -> tuple[AgentManager, str]:
+    profile = _isolated_test_profile(workspace=tmp_path)
+    manager_context = profile
+    loaded = manager_context.__enter__()
+    exported = MachineManager(loaded).export_machine("local_box")
+    machine_path = tmp_path / "local_box.machine.json"
+    machine_path.write_text(json.dumps(exported), encoding="utf-8")
+    MachineManager(loaded).import_file(machine_path)
+    StackManager(loaded).setup(
+        "review_stack",
+        orchestrator="langgraph",
+        runtime="ollama",
+        model="fixture-chat-small",
+        machine="local_box",
+        access="same_host",
+        endpoint="http://localhost:11434/v1",
+        roles={"planner": "fixture-chat-small", "reviewer": "fixture-analysis-small"},
+        limits={"timeout": "30m"},
+        tools={"filesystem": "workspace_only"},
+        approval_mode="ask",
+        audit_label="review_stack",
+    )
+    return AgentManager(loaded), manager_context
+
+
+def test_stack_bound_job_and_handoff_are_schema_valid_and_reproducible(tmp_path: Path) -> None:
+    manager, profile_context = _stack_bound_agent_manager(tmp_path)
+    try:
+        job = manager.job(
+            "repository-review",
+            stack="review_stack",
+            task="Review the current repository and propose a safe refactoring plan.",
+            roles=["planner"],
+        )
+        handoff = manager.handoff(
+            "repository-review",
+            stack="review_stack",
+            task="Review the current repository and propose a safe refactoring plan.",
+            roles=["planner"],
+        )
+    finally:
+        profile_context.__exit__(None, None, None)
+
+    schema_root = Path(__file__).parents[1] / "schemas"
+    Draft202012Validator(
+        json.loads((schema_root / "aiplane-agent-job-v1.schema.json").read_text(encoding="utf-8"))
+    ).validate(job)
+    Draft202012Validator(
+        json.loads((schema_root / "aiplane-agent-handoff-v1.schema.json").read_text(encoding="utf-8"))
+    ).validate(handoff)
+    assert job["target_roles"] == ["planner"]
+    assert job["execution_boundary"]["runs_agents"] is False
+    assert handoff["job"] == job
+    assert handoff["checksums"]["environment_sha256"] == job["environment"]["sha256"]
+
+
+def test_job_and_handoff_validation_detects_tampering_and_stays_workspace_bound(tmp_path: Path) -> None:
+    manager, profile_context = _stack_bound_agent_manager(tmp_path)
+    try:
+        handoff = manager.handoff(
+            "repository-review",
+            stack="review_stack",
+            task="Review the repository.",
+        )
+        path = tmp_path / "review.handoff.json"
+        path.write_text(json.dumps(handoff), encoding="utf-8")
+        assert manager.validate_job_file(path, handoff=True) == {
+            "record_type": "agent_handoff_validation",
+            "path": "review.handoff.json",
+            "valid": True,
+            "errors": [],
+            "mutates": False,
+        }
+
+        handoff["job"]["task"] = "Tampered task"
+        path.write_text(json.dumps(handoff), encoding="utf-8")
+        invalid = manager.validate_job_file(path, handoff=True)
+        assert invalid["valid"] is False
+        assert "job checksum does not match" in invalid["errors"]
+
+        handoff["job"]["environment"].pop("source_stack")
+        path.write_text(json.dumps(handoff), encoding="utf-8")
+        invalid_job_environment = manager.validate_job_file(path, handoff=True)
+        assert invalid_job_environment["valid"] is False
+        assert (
+            "job: environment must identify name, profile, source_stack, orchestrator, and sha256"
+            in invalid_job_environment["errors"]
+        )
+
+        handoff["environment"].pop("roles")
+        path.write_text(json.dumps(handoff), encoding="utf-8")
+        invalid_environment = manager.validate_job_file(path, handoff=True)
+        assert invalid_environment["valid"] is False
+        assert "environment: roles must be a non-empty object" in invalid_environment["errors"]
+
+        outside = tmp_path.parent / "outside-agent-job.json"
+        outside.write_text(json.dumps(handoff), encoding="utf-8")
+        with pytest.raises(PermissionError, match="escapes workspace"):
+            manager.validate_job_file(outside, handoff=True)
+    finally:
+        profile_context.__exit__(None, None, None)
+
+
+def test_job_rejects_unknown_roles_unsafe_workspace_and_secret_like_task(tmp_path: Path) -> None:
+    manager, profile_context = _stack_bound_agent_manager(tmp_path)
+    try:
+        with pytest.raises(ValueError, match="unknown stack roles"):
+            manager.job("review", stack="review_stack", task="Review", roles=["missing"])
+        with pytest.raises(ValueError, match="must not contain duplicates"):
+            manager.job("review", stack="review_stack", task="Review", roles=["planner", "planner"])
+        with pytest.raises(ValueError, match="safe relative path"):
+            manager.job("review", stack="review_stack", task="Review", job_workspace="../outside")
+        with pytest.raises(ValueError, match="secret-like"):
+            manager.job("review", stack="review_stack", task="api_key=sk-abcdefghijklmnop")
+    finally:
+        profile_context.__exit__(None, None, None)
+
+
+def test_agent_job_cli_renders_then_validates_workspace_artifact(tmp_path: Path) -> None:
+    with _isolated_profiles_dir() as profiles_dir:
+        profile = _load_profile_with_test_models("local-dev", tmp_path, profiles_dir=profiles_dir)
+        exported = MachineManager(profile).export_machine("local_box")
+        machine_path = tmp_path / "local_box.machine.json"
+        machine_path.write_text(json.dumps(exported), encoding="utf-8")
+        MachineManager(profile).import_file(machine_path)
+        StackManager(profile).setup(
+            "review_stack",
+            orchestrator="langgraph",
+            runtime="ollama",
+            model="fixture-chat-small",
+            machine="local_box",
+            access="same_host",
+            endpoint="http://localhost:11434/v1",
+        )
+        common = ["--workspace", str(tmp_path), "--profiles-dir", str(profiles_dir)]
+        rendered = run_cli(
+            [
+                *common,
+                "agents",
+                "job",
+                "render",
+                "repository-review",
+                "--stack",
+                "review_stack",
+                "--task",
+                "Review the repository.",
+            ]
+        )
+        assert rendered.code == 0
+        payload = json.loads(rendered.stdout)
+        assert payload["record_type"] == "agent_job"
+        artifact = tmp_path / "review.job.json"
+        artifact.write_text(rendered.stdout, encoding="utf-8")
+        validated = run_cli([*common, "agents", "job", "validate", "review.job.json"])
+
+    assert validated.code == 0
+    assert json.loads(validated.stdout)["valid"] is True

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
 import json
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from .config import agent_artifacts_root, dump_yaml
@@ -10,6 +12,7 @@ from .integrations import IntegrationManager
 from .model_catalog import ModelCatalog
 from .stacks import StackManager
 from .models import Profile
+from .secrets import contains_secret
 
 
 AGENT_FRAMEWORKS: dict[str, dict[str, Any]] = {
@@ -75,6 +78,22 @@ class AgentSelection:
     runtime: str
     endpoint: str
     api_key_env: str | None
+
+
+_MAX_JOB_FILE_BYTES = 1_048_576
+_MAX_TASK_CHARS = 10_000
+
+
+def _canonical_sha256(value: object) -> str:
+    encoded = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _safe_job_workspace(value: str) -> str:
+    candidate = PurePosixPath(value)
+    if candidate.is_absolute() or any(part in {"", "..", ".git"} for part in candidate.parts):
+        raise ValueError("job workspace must be a safe relative path inside the selected workspace")
+    return str(candidate)
 
 
 class AgentManager:
@@ -246,6 +265,147 @@ class AgentManager:
                 "Credential references contain names only; secret values are never rendered.",
             ],
         }
+
+    def job(
+        self,
+        name: str,
+        *,
+        stack: str,
+        task: str,
+        roles: list[str] | None = None,
+        job_workspace: str = ".",
+    ) -> dict[str, Any]:
+        """Render a secret-free job handoff for an already configured stack."""
+        manifest = self.manifest(name, stack=stack)
+        return self._job_from_manifest(manifest, task=task, roles=roles, job_workspace=job_workspace)
+
+    def handoff(
+        self,
+        name: str,
+        *,
+        stack: str,
+        task: str,
+        roles: list[str] | None = None,
+        job_workspace: str = ".",
+    ) -> dict[str, Any]:
+        """Render one checksummed environment-and-job artifact without executing it."""
+        manifest = self.manifest(name, stack=stack)
+        job = self._job_from_manifest(manifest, task=task, roles=roles, job_workspace=job_workspace)
+        return {
+            "$schema": "schemas/aiplane-agent-handoff-v1.schema.json",
+            "schema_version": "1.0",
+            "record_type": "agent_handoff",
+            "render_only": True,
+            "name": name,
+            "environment": manifest,
+            "job": job,
+            "checksums": {
+                "environment_sha256": _canonical_sha256(manifest),
+                "job_sha256": _canonical_sha256(job),
+            },
+            "execution_boundary": {
+                "submits_jobs": False,
+                "runs_agents": False,
+                "writes_credentials": False,
+                "applies_configuration": False,
+            },
+            "notes": [
+                "This is a render-only handoff bundle; give it to the selected framework or reviewed wrapper to execute.",
+                "The bundle contains endpoint and credential-reference metadata only, never credential values.",
+            ],
+        }
+
+    def validate_job_file(self, source: Path | str, *, handoff: bool = False) -> dict[str, Any]:
+        path, payload = self._read_job_file(source)
+        errors = _validate_handoff(payload) if handoff else _validate_job(payload)
+        return {
+            "record_type": "agent_handoff_validation" if handoff else "agent_job_validation",
+            "path": str(path.relative_to(self.profile.workspace)),
+            "valid": not errors,
+            "errors": errors,
+            "mutates": False,
+        }
+
+    def _job_from_manifest(
+        self,
+        manifest: dict[str, Any],
+        *,
+        task: str,
+        roles: list[str] | None,
+        job_workspace: str,
+    ) -> dict[str, Any]:
+        task = task.strip()
+        if not task:
+            raise ValueError("job task must be non-empty")
+        if len(task) > _MAX_TASK_CHARS:
+            raise ValueError(f"job task exceeds the {_MAX_TASK_CHARS}-character review limit")
+        if contains_secret(task):
+            raise ValueError(
+                "job task contains secret-like material; use an ignored local file or credential reference instead"
+            )
+        workspace = _safe_job_workspace(job_workspace)
+        available_roles = manifest.get("roles") if isinstance(manifest.get("roles"), dict) else {}
+        selected_roles = roles or sorted(available_roles)
+        if not selected_roles:
+            raise ValueError("agent environment has no roles to receive a job")
+        if len(selected_roles) != len(set(selected_roles)):
+            raise ValueError("job target roles must not contain duplicates")
+        unknown_roles = sorted(set(selected_roles) - set(available_roles))
+        if unknown_roles:
+            raise ValueError(f"job targets unknown stack roles: {', '.join(unknown_roles)}")
+        environment_sha256 = _canonical_sha256(manifest)
+        return {
+            "$schema": "schemas/aiplane-agent-job-v1.schema.json",
+            "schema_version": "1.0",
+            "record_type": "agent_job",
+            "render_only": True,
+            "name": manifest["name"],
+            "environment": {
+                "name": manifest["name"],
+                "profile": manifest["profile"],
+                "source_stack": manifest["source_stack"],
+                "orchestrator": manifest["orchestrator"],
+                "sha256": environment_sha256,
+            },
+            "task": task,
+            "target_roles": selected_roles,
+            "workspace": {"path": workspace, "policy": "workspace_only"},
+            "limits": manifest.get("limits", {}),
+            "approval_mode": manifest.get("approval_mode", "ask"),
+            "audit_label": manifest.get("audit_label", manifest["name"]),
+            "execution_boundary": {
+                "submits_jobs": False,
+                "runs_agents": False,
+                "writes_credentials": False,
+                "applies_configuration": False,
+            },
+            "notes": [
+                "Task execution belongs to the selected framework or a reviewed wrapper, not aiplane.",
+                "Target roles and controls are handoff metadata; verify framework enforcement before execution.",
+            ],
+        }
+
+    def _read_job_file(self, source: Path | str) -> tuple[Path, dict[str, Any]]:
+        path = Path(source)
+        if not path.is_absolute():
+            path = self.profile.workspace / path
+        path = path.resolve()
+        workspace = self.profile.workspace.resolve()
+        if workspace not in path.parents:
+            raise PermissionError("agent artifact path escapes workspace boundary")
+        if not path.is_file():
+            raise ValueError("agent artifact path must be an existing regular file inside the workspace")
+        if path.stat().st_size > _MAX_JOB_FILE_BYTES:
+            raise ValueError(f"agent artifact exceeds the {_MAX_JOB_FILE_BYTES}-byte review limit")
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise ValueError("agent artifact must be valid JSON") from exc
+        if not isinstance(payload, dict):
+            raise ValueError("agent artifact root must be a JSON object")
+        if _artifact_contains_secret(payload):
+            raise ValueError("agent artifact contains secret-like material and cannot be validated through aiplane")
+        return path, payload
 
     def export(
         self,
@@ -483,3 +643,122 @@ def main() -> int:
 if __name__ == "__main__":
     raise SystemExit(main())
 """
+
+
+def _artifact_contains_secret(value: object) -> bool:
+    """Check artifact values without mistaking credential-reference field names for secrets."""
+    if isinstance(value, dict):
+        return any(_artifact_contains_secret(inner) for inner in value.values())
+    if isinstance(value, (list, tuple)):
+        return any(_artifact_contains_secret(item) for item in value)
+    return isinstance(value, str) and contains_secret(value)
+
+
+def _validate_environment(payload: object) -> list[str]:
+    if not isinstance(payload, dict):
+        return ["environment must be a JSON object"]
+    errors: list[str] = []
+    expected = {
+        "$schema": "schemas/aiplane-agent-environment-v1.schema.json",
+        "schema_version": "1.0",
+        "record_type": "agent_environment",
+        "render_only": True,
+    }
+    for key, value in expected.items():
+        if payload.get(key) != value:
+            errors.append(f"{key} must equal {value!r}")
+    for key in ("name", "profile", "orchestrator"):
+        if not isinstance(payload.get(key), str) or not payload[key].strip():
+            errors.append(f"{key} must be a non-empty string")
+    if not isinstance(payload.get("source_stack"), str) or not payload["source_stack"].strip():
+        errors.append("source_stack must be a non-empty string for a job handoff")
+    roles = payload.get("roles")
+    if not isinstance(roles, dict) or not roles:
+        errors.append("roles must be a non-empty object")
+    if not isinstance(payload.get("execution_boundary"), dict):
+        errors.append("execution_boundary must be an object")
+    return errors
+
+
+def _validate_job(payload: object) -> list[str]:
+    if not isinstance(payload, dict):
+        return ["job must be a JSON object"]
+    errors: list[str] = []
+    expected = {
+        "$schema": "schemas/aiplane-agent-job-v1.schema.json",
+        "schema_version": "1.0",
+        "record_type": "agent_job",
+        "render_only": True,
+    }
+    for key, value in expected.items():
+        if payload.get(key) != value:
+            errors.append(f"{key} must equal {value!r}")
+    if not isinstance(payload.get("name"), str) or not payload["name"].strip():
+        errors.append("name must be a non-empty string")
+    task = payload.get("task")
+    if not isinstance(task, str) or not task.strip():
+        errors.append("task must be a non-empty string")
+    elif len(task) > _MAX_TASK_CHARS:
+        errors.append(f"task exceeds the {_MAX_TASK_CHARS}-character review limit")
+    roles = payload.get("target_roles")
+    if not isinstance(roles, list) or not roles or any(not isinstance(role, str) or not role.strip() for role in roles):
+        errors.append("target_roles must be a non-empty list of role names")
+    elif len(roles) != len(set(roles)):
+        errors.append("target_roles must not contain duplicates")
+    workspace = payload.get("workspace")
+    if not isinstance(workspace, dict) or workspace.get("policy") != "workspace_only":
+        errors.append("workspace must declare workspace_only policy")
+    elif not isinstance(workspace.get("path"), str):
+        errors.append("workspace path must be a string")
+    else:
+        try:
+            _safe_job_workspace(workspace["path"])
+        except ValueError as exc:
+            errors.append(str(exc))
+    environment = payload.get("environment")
+    if not isinstance(environment, dict) or not all(
+        isinstance(environment.get(key), str) and environment[key]
+        for key in ("name", "profile", "source_stack", "orchestrator", "sha256")
+    ):
+        errors.append("environment must identify name, profile, source_stack, orchestrator, and sha256")
+    if not isinstance(payload.get("execution_boundary"), dict):
+        errors.append("execution_boundary must be an object")
+    return errors
+
+
+def _validate_handoff(payload: object) -> list[str]:
+    if not isinstance(payload, dict):
+        return ["handoff must be a JSON object"]
+    errors: list[str] = []
+    expected = {
+        "$schema": "schemas/aiplane-agent-handoff-v1.schema.json",
+        "schema_version": "1.0",
+        "record_type": "agent_handoff",
+        "render_only": True,
+    }
+    for key, value in expected.items():
+        if payload.get(key) != value:
+            errors.append(f"{key} must equal {value!r}")
+    environment = payload.get("environment")
+    job = payload.get("job")
+    errors.extend(f"environment: {error}" for error in _validate_environment(environment))
+    errors.extend(f"job: {error}" for error in _validate_job(job))
+    if isinstance(environment, dict) and isinstance(job, dict):
+        reference = job.get("environment")
+        if isinstance(reference, dict):
+            for key in ("name", "profile", "source_stack", "orchestrator"):
+                if reference.get(key) != environment.get(key):
+                    errors.append(f"job environment {key} does not match")
+    checksums = payload.get("checksums")
+    if not isinstance(checksums, dict):
+        errors.append("checksums must be an object")
+    else:
+        if isinstance(environment, dict) and checksums.get("environment_sha256") != _canonical_sha256(environment):
+            errors.append("environment checksum does not match")
+        if isinstance(job, dict) and checksums.get("job_sha256") != _canonical_sha256(job):
+            errors.append("job checksum does not match")
+        if isinstance(environment, dict) and isinstance(job, dict):
+            reference = job.get("environment")
+            if not isinstance(reference, dict) or reference.get("sha256") != _canonical_sha256(environment):
+                errors.append("job environment reference does not match")
+    return errors
