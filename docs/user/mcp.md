@@ -38,7 +38,7 @@ The current read tools are:
 - `aiplane.orchestrators.list` and `aiplane.orchestrators.show`
 - `aiplane.runtimes.status`, `aiplane.runtimes.inventory`, `aiplane.runtimes.capacity_plan`, and render-only `aiplane.runtimes.bundle`; inventory keeps runner-reported installed/served IDs distinct from profile aliases, while capacity plans apply no settings.
 - `aiplane.benchmarks.calibration_plan` for a read-only controlled measurement protocol.
-- render-only `aiplane.agents.manifest`
+- render-only `aiplane.agents.manifest`, including explicit control-enforcement status; task/job handoff remains CLI-only because task contents can be sensitive.
 - `aiplane.remote.tunnel.plan`
 - `aiplane.remote.tunnel.status`
 

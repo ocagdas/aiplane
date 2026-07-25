@@ -535,6 +535,9 @@ aiplane stacks start manual-stack --yes
 - [ ] The job output is schema version `1.0`, render-only, targets only roles from the stack, carries a safe relative workspace path, and references the environment checksum.
 - [ ] The handoff embeds both environment and job records with matching checksums; validation fails after either record is edited.
 - [ ] Job/handoff commands do not queue or run an agent, write credentials, or apply configuration.
+- [ ] Stack plan, doctor, manifest, job, handoff, and framework starter expose `control_enforcement`.
+- [ ] Requested workspace/tool/approval/limit controls state `not_enforced` until a selected framework or reviewed wrapper enforces them; audit labels state `label_only`.
+- [ ] `agent_control_enforcement` is warning-level rather than a false readiness claim.
 
 ## 16. Render-only Kubernetes artifacts
 

@@ -55,6 +55,78 @@ def normalize_framework(name: str) -> str:
     return normalized
 
 
+def framework_control_enforcement(
+    framework: str,
+    roles: dict[str, Any],
+    approval_mode: str,
+    *,
+    job_workspace: bool = False,
+) -> dict[str, Any]:
+    """State plainly which requested controls a starter can and cannot enforce.
+
+    Aiplane validates and serializes these controls, but framework starter metadata
+    is not a sandbox or an execution policy engine.
+    """
+    name = normalize_framework(framework)
+    bindings = [binding for binding in roles.values() if isinstance(binding, dict)]
+    tool_policies = [binding.get("tools") for binding in bindings if isinstance(binding.get("tools"), dict)]
+    limits = [binding.get("limits") for binding in bindings if isinstance(binding.get("limits"), dict)]
+    requested_tools = any(policy for policy in tool_policies)
+    requested_limits = any(limit for limit in limits)
+    workspace_requested = job_workspace or any(
+        str(policy.get("filesystem") or "").lower() == "workspace_only" for policy in tool_policies
+    )
+    controls = {
+        "workspace_boundary": {
+            "requested": workspace_requested,
+            "aiplane_status": "validated_in_handoff" if job_workspace else "recorded",
+            "runtime_status": "not_enforced",
+            "owner": "selected framework or reviewed wrapper",
+            "detail": "Aiplane validates a handoff path, but exported starters do not sandbox filesystem access.",
+        },
+        "tool_policy": {
+            "requested": requested_tools,
+            "aiplane_status": "recorded",
+            "runtime_status": "not_enforced",
+            "owner": "selected framework or reviewed wrapper",
+            "detail": "Tool-policy metadata is passed through; the target framework must restrict tool registration and invocation.",
+        },
+        "approval_mode": {
+            "requested": bool(approval_mode),
+            "aiplane_status": "recorded",
+            "runtime_status": "not_enforced",
+            "owner": "selected framework or reviewed wrapper",
+            "detail": "Approval mode is a reviewed handoff label; the target must implement its confirmation checkpoint.",
+        },
+        "limits": {
+            "requested": requested_limits,
+            "aiplane_status": "recorded",
+            "runtime_status": "not_enforced",
+            "owner": "selected framework, model provider, or reviewed wrapper",
+            "detail": "Timeout, token, and concurrency limits are not applied by Aiplane starter artifacts.",
+        },
+        "audit_label": {
+            "requested": any(bool(binding.get("audit_label")) for binding in bindings),
+            "aiplane_status": "recorded",
+            "runtime_status": "label_only",
+            "owner": "selected framework or reviewed wrapper",
+            "detail": "Audit labels support correlation but do not create framework execution audit events.",
+        },
+    }
+    requested = [name for name, control in controls.items() if control["requested"]]
+    return {
+        "framework": name,
+        "enforcement_ready": not requested,
+        "requires_runtime_enforcement": requested,
+        "controls": controls,
+        "summary": (
+            "No runtime controls were requested."
+            if not requested
+            else "Requested controls are validated or recorded by Aiplane and require enforcement by the selected framework or wrapper."
+        ),
+    }
+
+
 def framework_readiness(framework: str, roles: dict[str, Any], approval_mode: str) -> dict[str, Any]:
     name = normalize_framework(framework)
     spec = FRAMEWORK_SPECS[name]
@@ -101,6 +173,7 @@ def framework_readiness(framework: str, roles: dict[str, Any], approval_mode: st
         "ready": all(bool(check["ok"]) for check in checks),
         "packages": list(spec["packages"]),
         "checks": check_map,
+        "control_enforcement": framework_control_enforcement(name, roles, approval_mode),
     }
 
 
@@ -149,6 +222,7 @@ def render_framework_starter(framework: str, metadata: dict[str, Any]) -> str:
         "roles": normalized_roles,
         "topology": _topology(name, normalized_roles),
         "readiness": readiness,
+        "control_enforcement": readiness["control_enforcement"],
         "execution_boundary": {
             "runs_agents": False,
             "installs_packages": False,

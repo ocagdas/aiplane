@@ -7,7 +7,13 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from .config import agent_artifacts_root, dump_yaml
-from .agent_frameworks import FRAMEWORK_SPECS, framework_readiness, normalize_framework, render_framework_starter
+from .agent_frameworks import (
+    FRAMEWORK_SPECS,
+    framework_control_enforcement,
+    framework_readiness,
+    normalize_framework,
+    render_framework_starter,
+)
 from .integrations import IntegrationManager
 from .model_catalog import ModelCatalog
 from .stacks import StackManager
@@ -250,6 +256,7 @@ class AgentManager:
             },
             "roles": roles,
             "readiness": readiness,
+            "control_enforcement": readiness["control_enforcement"],
             "framework_config": framework_config,
             "tools": tools,
             "limits": limits,
@@ -354,6 +361,12 @@ class AgentManager:
         if unknown_roles:
             raise ValueError(f"job targets unknown stack roles: {', '.join(unknown_roles)}")
         environment_sha256 = _canonical_sha256(manifest)
+        control_enforcement = framework_control_enforcement(
+            str(manifest["orchestrator"]),
+            available_roles,
+            str(manifest.get("approval_mode") or "ask"),
+            job_workspace=True,
+        )
         return {
             "$schema": "schemas/aiplane-agent-job-v1.schema.json",
             "schema_version": "1.0",
@@ -370,6 +383,7 @@ class AgentManager:
             "task": task,
             "target_roles": selected_roles,
             "workspace": {"path": workspace, "policy": "workspace_only"},
+            "control_enforcement": control_enforcement,
             "limits": manifest.get("limits", {}),
             "approval_mode": manifest.get("approval_mode", "ask"),
             "audit_label": manifest.get("audit_label", manifest["name"]),
@@ -675,6 +689,8 @@ def _validate_environment(payload: object) -> list[str]:
     roles = payload.get("roles")
     if not isinstance(roles, dict) or not roles:
         errors.append("roles must be a non-empty object")
+    if not isinstance(payload.get("control_enforcement"), dict):
+        errors.append("control_enforcement must be an object")
     if not isinstance(payload.get("execution_boundary"), dict):
         errors.append("execution_boundary must be an object")
     return errors
@@ -721,6 +737,8 @@ def _validate_job(payload: object) -> list[str]:
         for key in ("name", "profile", "source_stack", "orchestrator", "sha256")
     ):
         errors.append("environment must identify name, profile, source_stack, orchestrator, and sha256")
+    if not isinstance(payload.get("control_enforcement"), dict):
+        errors.append("control_enforcement must be an object")
     if not isinstance(payload.get("execution_boundary"), dict):
         errors.append("execution_boundary must be an object")
     return errors

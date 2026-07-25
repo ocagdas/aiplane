@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from jsonschema import Draft202012Validator
 
-from aiplane.agent_frameworks import FRAMEWORK_SPECS, render_framework_starter
+from aiplane.agent_frameworks import FRAMEWORK_SPECS, framework_control_enforcement, render_framework_starter
 from aiplane.agents import AgentManager
 from aiplane.machines import MachineManager
 from aiplane.stacks import StackManager
@@ -290,3 +290,46 @@ def test_agent_job_cli_renders_then_validates_workspace_artifact(tmp_path: Path)
 
     assert validated.code == 0
     assert json.loads(validated.stdout)["valid"] is True
+
+
+def test_control_enforcement_reports_advisory_agent_controls() -> None:
+    report = framework_control_enforcement(
+        "langgraph",
+        {
+            "planner": {
+                "tools": {"filesystem": "workspace_only", "shell": "guarded"},
+                "limits": {"timeout": "30m", "max_tokens": 1000},
+                "audit_label": "review.planner",
+            }
+        },
+        "ask",
+        job_workspace=True,
+    )
+
+    assert report["enforcement_ready"] is False
+    assert set(report["requires_runtime_enforcement"]) == {
+        "workspace_boundary",
+        "tool_policy",
+        "approval_mode",
+        "limits",
+        "audit_label",
+    }
+    assert report["controls"]["workspace_boundary"]["aiplane_status"] == "validated_in_handoff"
+    assert report["controls"]["workspace_boundary"]["runtime_status"] == "not_enforced"
+    assert report["controls"]["tool_policy"]["runtime_status"] == "not_enforced"
+
+
+def test_manifest_job_and_stack_doctor_surface_control_enforcement(tmp_path: Path) -> None:
+    manager, profile_context = _stack_bound_agent_manager(tmp_path)
+    try:
+        manifest = manager.manifest("repository-review", stack="review_stack")
+        job = manager.job("repository-review", stack="review_stack", task="Review the repository.")
+        doctor = StackManager(manager.profile).doctor("review_stack")
+    finally:
+        profile_context.__exit__(None, None, None)
+
+    assert manifest["control_enforcement"]["controls"]["tool_policy"]["requested"] is True
+    assert job["control_enforcement"]["controls"]["workspace_boundary"]["aiplane_status"] == "validated_in_handoff"
+    check = next(item for item in doctor["checks"] if item["name"] == "agent_control_enforcement")
+    assert check["warning"] is True
+    assert check["controls"]["limits"]["runtime_status"] == "not_enforced"

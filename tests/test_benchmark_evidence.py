@@ -262,7 +262,9 @@ def test_public_evidence_schemas_are_declared_for_packaging() -> None:
     assert run_properties["telemetry_source"]["type"] == ["string", "null"]
 
     agent = json.loads((root / "schemas" / "aiplane-agent-environment-v1.schema.json").read_text(encoding="utf-8"))
-    assert {"framework", "readiness", "framework_config"} <= set(agent["properties"])
+    assert {"framework", "readiness", "framework_config", "control_enforcement"} <= set(agent["properties"])
+    job = json.loads((root / "schemas" / "aiplane-agent-job-v1.schema.json").read_text(encoding="utf-8"))
+    assert "control_enforcement" in job["required"]
 
 
 def test_calibration_bundle_cli_previews_export_and_import(tmp_path: Path, monkeypatch) -> None:

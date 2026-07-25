@@ -315,6 +315,15 @@ If omitted, `stacks` falls back to using the machine name as the tunnel target a
 
 Stack `--limit`, `--tool`, and `--role` values are structured pass-through metadata. `aiplane` stores and exports them, but enforcement belongs to the runtime, orchestrator, wrapper script, or later workload runner. A `--role ROLE=MODEL_ALIAS` entry validates that the model alias exists in the profile, records provider/runtime or managed-service endpoint ownership, and adds role-level approval and audit labels. Managed-service role aliases keep their provider endpoint, while the primary stack model remains the only model used for local runtime lifecycle install/pull/start actions.
 
+For every orchestrated stack, `stacks plan`, `stacks doctor`, manifests, jobs, and framework starters include `control_enforcement`. Read it before execution:
+
+- `validated_in_handoff` means Aiplane checked the serialized handoff value; it is not a runtime sandbox.
+- `recorded` means Aiplane preserved a requested tool, approval, limit, or audit control as metadata.
+- `not_enforced` means the selected framework or a reviewed wrapper must enforce it.
+- `label_only` means an audit label is available for correlation but does not create framework audit events.
+
+An `agent_control_enforcement` doctor finding is warning-level when requested controls need external enforcement; it does not claim that a starter project is safe to run unattended.
+
 Common examples:
 
 ```bash
