@@ -34,14 +34,15 @@ class PatchManager:
 
     def inspect(self, source: Path | str) -> dict[str, Any]:
         path, text = self._read_patch(source)
+        resolved_path = path.resolve()
         workspace = self.profile.workspace.resolve()
         files = _patch_paths(text)
-        check = self._git_apply_check(path)
+        check = self._git_apply_check(resolved_path)
         return {
             "contract_version": "1.0",
             "record_type": "patch_proposal",
             "mutates": False,
-            "path": str(path.relative_to(workspace)),
+            "path": str(resolved_path.relative_to(workspace)),
             "sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
             "size_bytes": len(text.encode("utf-8")),
             "files": files,
@@ -124,16 +125,17 @@ class PatchManager:
         return path, text
 
     def _git_apply_check(self, path: Path) -> dict[str, Any]:
+        resolved_path = path.resolve()
         workspace = self.profile.workspace.resolve()
         result = self.command_runner.run(
-            ["git", "apply", "--check", "--verbose", "--", str(path)],
+            ["git", "apply", "--check", "--verbose", "--", str(resolved_path)],
             cwd=self.profile.workspace,
             text=True,
             capture_output=True,
             check=False,
         )
         return {
-            "command": ["git", "apply", "--check", "--verbose", "--", str(path.relative_to(workspace))],
+            "command": ["git", "apply", "--check", "--verbose", "--", str(resolved_path.relative_to(workspace))],
             "ok": result.returncode == 0,
             "reason": (
                 "git apply --check passed"
