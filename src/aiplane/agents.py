@@ -718,9 +718,9 @@ def _validate_job(payload: object) -> list[str]:
     environment = payload.get("environment")
     if not isinstance(environment, dict) or not all(
         isinstance(environment.get(key), str) and environment[key]
-        for key in ("name", "profile", "orchestrator", "sha256")
+        for key in ("name", "profile", "source_stack", "orchestrator", "sha256")
     ):
-        errors.append("environment must identify name, profile, orchestrator, and sha256")
+        errors.append("environment must identify name, profile, source_stack, orchestrator, and sha256")
     if not isinstance(payload.get("execution_boundary"), dict):
         errors.append("execution_boundary must be an object")
     return errors

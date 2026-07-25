@@ -213,6 +213,15 @@ def test_job_and_handoff_validation_detects_tampering_and_stays_workspace_bound(
         assert invalid["valid"] is False
         assert "job checksum does not match" in invalid["errors"]
 
+        handoff["job"]["environment"].pop("source_stack")
+        path.write_text(json.dumps(handoff), encoding="utf-8")
+        invalid_job_environment = manager.validate_job_file(path, handoff=True)
+        assert invalid_job_environment["valid"] is False
+        assert (
+            "job: environment must identify name, profile, source_stack, orchestrator, and sha256"
+            in invalid_job_environment["errors"]
+        )
+
         handoff["environment"].pop("roles")
         path.write_text(json.dumps(handoff), encoding="utf-8")
         invalid_environment = manager.validate_job_file(path, handoff=True)
