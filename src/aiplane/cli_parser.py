@@ -11,6 +11,7 @@ from .cli_help import HelpFormatter
 from .cli_integrations import add_integrations_parser
 from .cli_models import add_models_parser
 from .cli_profiles import add_profiles_parser
+from .cli_patches import add_patch_parsers
 from .cli_providers import add_providers_parser
 from .cli_public import add_public_parsers
 from .cli_runtimes import add_runtimes_parser
@@ -135,6 +136,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     add_config_parser(subparsers, command_factory=_command, formatter_class=HelpFormatter)
     add_profiles_parser(subparsers, **common)
+    add_patch_parsers(subparsers, **common)
     add_execution_parsers(subparsers, **common, launch_tools=LAUNCH_TOOLS, bridge_actions=BRIDGE_ACTIONS)
     add_hardware_machine_parsers(subparsers, **common)
     add_stack_parsers(subparsers, **common)

@@ -7,6 +7,7 @@ import pytest
 from jsonschema import Draft202012Validator
 
 from aiplane.deploy import DeployManager
+from aiplane.offline_catalog import load_offline_catalog
 
 from .artifact_fixtures import profile_with_local_vm_target, profile_with_target_iac
 from .profile_fixtures import load_profile
@@ -42,6 +43,13 @@ def test_local_vm_provider_artifacts_validate_against_public_schema(provider: st
 def test_non_cloud_deployment_artifacts_validate_against_public_schema() -> None:
     payload = DeployManager(load_profile("local-dev", Path.cwd())).render("gpu_workstation_ssh")
     Draft202012Validator(_schema("aiplane-deployment-artifacts-v1.schema.json")).validate(payload)
+
+
+def test_example_offline_catalog_validates_against_public_schema() -> None:
+    payload = load_offline_catalog(Path.cwd() / "examples" / "offline-demo" / "models.catalog.yaml")
+    Draft202012Validator(_schema("aiplane-offline-model-catalog-v1.schema.json")).validate(
+        {"contract_version": "1.0", "record_type": "offline_model_catalog", "models": payload["models"]}
+    )
 
 
 @pytest.mark.parametrize("runtime", sorted(PRIMARY_RUNTIME_FIXTURES))

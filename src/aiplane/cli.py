@@ -51,6 +51,7 @@ from .cli_runtimes import handle_runtimes_command
 from .cli_execution import handle_execution_command
 from .cli_public import handle_public_command
 from .cli_profiles import handle_profiles_command
+from .cli_patches import handle_patch_command
 from .cli_models import handle_models_command
 from .cli_support import (
     parse_setting_value as _parse_setting_value,
@@ -188,6 +189,17 @@ def _main(argv: list[str] | None = None) -> int:
     )
     if governance_result is not None:
         return governance_result
+
+    patch_result = handle_patch_command(
+        args,
+        workspace=workspace,
+        profiles_dir=profiles_dir,
+        effective_profile=effective_profile,
+        json_dumps=_json,
+        command_runner=_COMMAND_RUNNER,
+    )
+    if patch_result is not None:
+        return patch_result
 
     execution_result = handle_execution_command(
         args,

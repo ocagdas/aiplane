@@ -45,6 +45,10 @@ class McpTests(unittest.TestCase):
         self.assertIn("aiplane.models.use", names)
         self.assertIn("aiplane.runtimes.status", names)
         self.assertIn("aiplane.runtimes.bundle", names)
+        self.assertIn("aiplane.models.pick", names)
+        self.assertIn("aiplane.runtimes.inventory", names)
+        self.assertIn("aiplane.runtimes.capacity_plan", names)
+        self.assertIn("aiplane.benchmarks.calibration_plan", names)
         self.assertIn("aiplane.agents.manifest", names)
         self.assertIn("aiplane.providers.diagnose", names)
         self.assertIn("aiplane.hardware.assess", names)
@@ -103,6 +107,67 @@ class McpTests(unittest.TestCase):
         result = response["result"]
         self.assertIn("local-dev", result["structuredContent"]["profiles"])
         self.assertEqual(result["content"][0]["type"], "text")
+
+    def test_mcp_model_pick_is_read_only_and_uses_recommendation_result(self) -> None:
+        recommendation = {
+            "models": {
+                "recommended": [
+                    {
+                        "name": "fixture-chat-small",
+                        "model": "native-chat",
+                        "runtime_recommendation": "ollama",
+                        "selection_score": 90,
+                        "reason": "fits",
+                    }
+                ],
+                "usable": [],
+            },
+            "hidden": {},
+        }
+        with patch("aiplane.mcp.HardwareManager.recommend", return_value=recommendation) as recommend:
+            response = AiplaneMcpServer(Path.cwd()).handle_message(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 200,
+                    "method": "tools/call",
+                    "params": {"name": "aiplane.models.pick", "arguments": {"intent": "chat", "runtime": "ollama"}},
+                }
+            )
+        payload = response["result"]["structuredContent"]
+        self.assertEqual(payload["selection"]["alias"], "fixture-chat-small")
+        recommend.assert_called_once()
+
+    def test_mcp_inventory_and_capacity_tools_delegate_to_runtime_catalog(self) -> None:
+        with (
+            patch("aiplane.mcp.RuntimeCatalog.runtime_inventory", return_value={"available": True}) as inventory,
+            patch(
+                "aiplane.mcp.RuntimeCatalog.capacity_plan", return_value={"record_type": "runtime_capacity_plan"}
+            ) as capacity,
+        ):
+            server = AiplaneMcpServer(Path.cwd())
+            inventory_response = server.handle_message(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 201,
+                    "method": "tools/call",
+                    "params": {"name": "aiplane.runtimes.inventory", "arguments": {"runtime": "ollama"}},
+                }
+            )
+            capacity_response = server.handle_message(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 202,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "aiplane.runtimes.capacity_plan",
+                        "arguments": {"runtime": "ollama", "model": "fixture-analysis-small", "context_tokens": 4096},
+                    },
+                }
+            )
+        self.assertTrue(inventory_response["result"]["structuredContent"]["available"])
+        self.assertEqual(capacity_response["result"]["structuredContent"]["record_type"], "runtime_capacity_plan")
+        inventory.assert_called_once_with("ollama")
+        capacity.assert_called_once_with("ollama", "fixture-analysis-small", context_tokens=4096)
 
     def test_mcp_hardware_assess_forwards_explicit_assumptions(self) -> None:
         expected = {"placement": {"eligible": True}, "score": {"selection_score": 80}}

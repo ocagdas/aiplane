@@ -146,6 +146,8 @@ aiplane hardware doctor
 aiplane hardware scoring
 aiplane hardware recommend
 aiplane runtimes capacity-plan ollama --model MODEL_ALIAS --context-tokens 8192
+aiplane runtimes inventory ollama
+aiplane runtimes inventory vllm
 aiplane hardware export-machine --name manual-host > manual-host.machine.yaml
 aiplane machines list
 aiplane machines recommend
@@ -163,6 +165,8 @@ aiplane machines show manual-host
 - [ ] Multiple or heterogeneous GPUs are not collapsed into a fictitious single device.
 - [ ] Apple Silicon reports unified-memory/Metal facts; NVIDIA reports CUDA facts; AMD reports ROCm/Vulkan facts only when observed.
 - [ ] Missing vendor tools lower confidence or produce unresolved fields rather than invented values.
+- [ ] `topology.devices` includes every discovered accelerator and marks unavailable NUMA, interconnect, or partition facts as unresolved rather than inferred.
+- [ ] `runtimes inventory` keeps runner-native IDs separate from configured aliases; Ollama results are `installed`, while OpenAI-compatible endpoint results are `served`.
 - [ ] Exported machine evidence can be inspected without importing it.
 
 ## 5. Provider and model discovery
@@ -212,6 +216,7 @@ aiplane models list --property quantization=q4 --min-benchmark-score 50 --sort-b
 aiplane models list --group-by runtime --format json
 aiplane models list --catalog-cache off --format json > full-scan.json
 aiplane models list --catalog-cache rebuild --format json > indexed.json
+aiplane models list --offline-catalog examples/offline-demo/models.catalog.yaml --machine-file examples/offline-demo/laptop-32gb.machine.yaml --runtime ollama --role chat --catalog-cache off --format json
 aiplane models catalog-cache status
 aiplane recommend --intent coding --format text
 aiplane recommend --intent throughput --format json
@@ -430,6 +435,7 @@ aiplane benchmarks import path/to/measurements.json --dry-run
 - [ ] Benchmark records include runtime evidence.
 - [ ] Native prompt/output token counts, elapsed time, load duration, prompt-evaluation throughput, TTFT, and decode throughput appear only when the runtime exposes them; unavailable values remain null.
 - [ ] Ollama load duration and prompt-evaluation throughput remain separate from TTFT; no non-streaming timing is labelled as first-token latency.
+- [ ] An Ollama benchmark records TTFT only when its streamed response yields a first content fragment, labelled `ollama_stream_client_timing`; a non-streaming response leaves TTFT null.
 - [ ] Comparison leaders appear only for at least two distinct values under explicit suite comparability metadata.
 - [ ] TTFT leaders contain a non-empty telemetry source; provenance-free TTFT cannot become a leader.
 - [ ] Quality, performance, throughput, elapsed time, and TTFT remain separate rather than collapsing into a universal score.
@@ -649,6 +655,27 @@ AIPLANE_RUN_EXTERNAL_VALIDATORS=1 python -m pytest -q tests/test_external_artifa
 - [ ] Installed validators run; unavailable tools and unusable VM providers skip with an explicit reason.
 - [ ] Ansible syntax validation does not connect to the configured host.
 - [ ] Pulumi uses a disposable local backend and preview only.
+
+
+## 18C. Inspect and explicitly apply a reviewed patch
+
+Use a disposable Git worktree and a patch file that is already inside that workspace. **Inspect is read-only; apply is mutating.** Do not use a production patch for this check.
+
+```bash
+aiplane patches inspect changes.patch
+aiplane patches apply changes.patch
+aiplane patches apply changes.patch --yes
+git diff --check
+git diff
+git status --short
+```
+
+- [ ] Inspection returns `record_type: patch_proposal`, `mutates: false`, a SHA-256 value, changed-file summary, bounded preview, and the result of `git apply --check --verbose`.
+- [ ] Inspection does not modify the working tree or create an audit record.
+- [ ] Apply without `--yes` returns `confirmation_required` and changes no files.
+- [ ] Apply with `--yes` repeats validation, obeys the selected profile's `write_file` policy, and records an audit decision.
+- [ ] A successful apply changes only the patch's working-tree targets; it does not stage or commit files.
+- [ ] A patch outside the workspace, one with `../` or `.git` targets, or secret-like content fails before Git apply runs.
 
 ## 19. Failure and safety checks
 

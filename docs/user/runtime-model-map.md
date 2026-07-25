@@ -148,12 +148,15 @@ the model source and `runtime_endpoint` for the configured runtime endpoint.
 as the source of truth for stale discovered ids. Profile-owned model entries in `models.yaml` are preserved by refresh. `models clear-cache` includes profile-owned review entries by default unless `--keep-curated` is used, so discovery state can be cleared and repopulated from providers. Profile-catalog fallback never updates
 or prunes.
 
-Runtime inventory is queried separately with `aiplane runtimes
-list-runtime-models <runtime>`. For Ollama, runtime inventory comes from the
-local `/api/tags` endpoint and means "models already pulled here", not "every
-model in the public Ollama library".
+Runtime inventory is queried separately with `aiplane runtimes inventory RUNTIME`. For Ollama, `/api/tags` reports models already pulled on that host. For the other primary endpoint runners—llama.cpp, MLX, Docker Model Runner, LM Studio, and vLLM—`/v1/models`-style results mean models currently served by the configured endpoint. Neither is a public provider catalog.
 
-Catalog entries and pulled runtime files are deliberately separate. Use `aiplane models list` to inspect configured/imported aliases, `aiplane models remove NAME` to delete one profile-owned alias, and `aiplane models clear-cache` to clear discovered/imported catalog entries. Use `aiplane runtimes list-runtime-models ollama`, `aiplane runtimes remove ollama --model NAME --yes`, and `aiplane runtimes clear ollama --yes` for the actual Ollama model store.
+```bash
+aiplane runtimes inventory ollama
+aiplane runtimes inventory vllm
+aiplane runtimes capacity-plan vllm --model MODEL_ALIAS --context-tokens 8192
+```
+
+Catalog entries and runtime-owned models are deliberately separate. `runtime_models` always contains native runner IDs; `configured_models` contains profile aliases. Use `aiplane models list` to inspect configured/imported aliases, `aiplane models remove NAME` to delete one profile-owned alias, and `aiplane models clear-cache` to clear discovered/imported catalog entries. Use `aiplane runtimes remove ollama --model NAME --yes` and `aiplane runtimes clear ollama --yes` only for the actual Ollama model store.
 
 Code task commands use the provider HTTP/API timeout rather than the native interactive CLI wait behavior. For large first-run Ollama models, use `--timeout-seconds`, for example `aiplane code write --model MODEL_ALIAS --task "..." --timeout-seconds 180`.
 
@@ -268,6 +271,15 @@ Grouping meanings:
 - defaults grouped by `provider`: shows which default roles, such as `chat_model`, `autocomplete_model`, `embedding_model`, `self_managed_model`, or `reasoning_model`, resolve to each provider.
 
 ## Single-Prompt Execution Protocols
+
+For no-network catalog and machine simulation, load the reviewed versioned fixtures without writing profile state:
+
+```bash
+aiplane models list --offline-catalog examples/offline-demo/models.catalog.yaml \
+  --machine-file examples/offline-demo/laptop-32gb.machine.yaml --runtime ollama --role chat
+```
+
+Profile-owned aliases remain authoritative if they have the same name as an offline entry. The fixture is planning data only; refresh configured providers and run `hardware discover` before live runtime work.
 
 For a non-mutating capacity assessment of one configured model and runtime:
 

@@ -182,9 +182,11 @@ class ModelExecution:
         self.require_execution_capability(name, model, purpose)
         provider_name = self._runtime_for_model(name, model)
         if provider_name in {"ollama", "ollama_cloud"}:
-            return self._ollama_backend(provider_name, timeout_seconds=timeout_seconds).chat(
-                self._execution_model_id(provider_name, model), prompt
-            )
+            backend = self._ollama_backend(provider_name, timeout_seconds=timeout_seconds)
+            model_id = self._execution_model_id(provider_name, model)
+            if purpose == "benchmark":
+                return backend.chat(model_id, prompt, measure_ttft=True)
+            return backend.chat(model_id, prompt)
         if self._is_openai_compatible(provider_name):
             return self._openai_compatible_backend(provider_name, model, timeout_seconds=timeout_seconds).chat(
                 str(model.get("model")), prompt
@@ -215,12 +217,14 @@ class ModelExecution:
             "analysis": {"analysis", "chat"},
             "completion": {"completion", "autocomplete", "code", "chat"},
             "write": {"generation", "refactor", "code", "chat"},
+            "benchmark": {"analysis", "completion", "generation", "chat"},
         }
         purpose_scores = {
             "chat": {"general_chat", "reasoning", "tool_use"},
             "analysis": {"code_analysis", "reasoning", "general_chat"},
             "completion": {"code_completion", "code_generation", "general_chat"},
             "write": {"code_generation", "debugging_refactor", "general_chat"},
+            "benchmark": {"code_analysis", "code_generation", "general_chat"},
         }
         allowed_roles = purpose_roles.get(purpose, purpose_roles["chat"])
         allowed_scores = purpose_scores.get(purpose, purpose_scores["chat"])

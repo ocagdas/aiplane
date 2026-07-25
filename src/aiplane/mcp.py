@@ -9,6 +9,8 @@ from .agents import AgentManager
 from .audit import AuditLogger
 from .config import list_profiles, load_profile, resolve_profile_name
 from .hardware import HardwareManager
+from .benchmark_evidence import calibration_plan
+
 from .integration_contracts import ALL_INTEGRATION_TOOLS
 from .integrations import IntegrationManager
 from .machines import MachineManager
@@ -26,6 +28,8 @@ from .orchestrators import OrchestratorCatalog
 from .providers import ProviderRegistry
 from .remote import RemoteManager
 from .models import AuditEvent, Profile
+
+_PICK_INTENTS = ("balanced", "coding", "chat", "reasoning", "quality", "throughput")
 
 
 READ_ONLY_TOOLS: list[dict[str, Any]] = [
@@ -82,6 +86,11 @@ READ_ONLY_TOOLS: list[dict[str, Any]] = [
     {
         "name": "aiplane.hardware.recommend",
         "description": "Return hardware-aware model recommendations.",
+        "mutates": False,
+    },
+    {
+        "name": "aiplane.models.pick",
+        "description": "Pick one locally suitable configured model and return review-first next commands.",
         "mutates": False,
     },
     {
@@ -162,6 +171,21 @@ READ_ONLY_TOOLS: list[dict[str, Any]] = [
     {
         "name": "aiplane.agents.manifest",
         "description": "Compile a versioned agent-environment manifest from profile or stack configuration.",
+        "mutates": False,
+    },
+    {
+        "name": "aiplane.runtimes.inventory",
+        "description": "Read runner-reported installed or served model identities without changing the runtime.",
+        "mutates": False,
+    },
+    {
+        "name": "aiplane.runtimes.capacity_plan",
+        "description": "Render local runtime capacity guidance without applying settings.",
+        "mutates": False,
+    },
+    {
+        "name": "aiplane.benchmarks.calibration_plan",
+        "description": "Render a controlled real-machine benchmark collection protocol without executing it.",
         "mutates": False,
     },
     {
@@ -323,6 +347,16 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
             "runtime": {"type": "string"},
             "context_tokens": {"type": "integer", "minimum": 1},
             "score_profile": {"type": "string"},
+        },
+        "additionalProperties": False,
+    },
+    "aiplane.models.pick": {
+        "type": "object",
+        "properties": {
+            "profile": {"type": "string"},
+            "intent": {"type": "string", "enum": list(_PICK_INTENTS), "default": "chat"},
+            "runtime": {"type": "string"},
+            "limit": {"type": "integer", "minimum": 1, "default": 3},
         },
         "additionalProperties": False,
     },
@@ -513,6 +547,34 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
             "api_key_env": {"type": "string"},
         },
         "required": ["name"],
+        "additionalProperties": False,
+    },
+    "aiplane.runtimes.inventory": {
+        "type": "object",
+        "properties": {"profile": {"type": "string"}, "runtime": {"type": "string"}},
+        "required": ["runtime"],
+        "additionalProperties": False,
+    },
+    "aiplane.runtimes.capacity_plan": {
+        "type": "object",
+        "properties": {
+            "profile": {"type": "string"},
+            "runtime": {"type": "string"},
+            "model": {"type": "string"},
+            "context_tokens": {"type": "integer", "minimum": 1},
+        },
+        "required": ["runtime", "model"],
+        "additionalProperties": False,
+    },
+    "aiplane.benchmarks.calibration_plan": {
+        "type": "object",
+        "properties": {
+            "profile": {"type": "string"},
+            "model": {"type": "string"},
+            "runtime": {"type": "string"},
+            "repeats": {"type": "integer", "minimum": 2, "maximum": 100, "default": 5},
+        },
+        "required": ["model", "runtime"],
         "additionalProperties": False,
     },
     "aiplane.runtimes.status": {
@@ -764,6 +826,23 @@ class AiplaneMcpServer:
                 ),
                 score_profile=str(arguments.get("score_profile") or "") or None,
             )
+        if name == "aiplane.models.pick":
+            from .cli_public import _RECOMMENDATION_INTENTS, build_model_pick
+
+            intent_name = str(arguments.get("intent") or "chat")
+            intent = _RECOMMENDATION_INTENTS[intent_name]
+            recommendation = HardwareManager(profile).recommend(
+                runtime=str(arguments.get("runtime") or "") or None,
+                roles=list(intent["roles"]) or None,
+                score_profile=str(intent["score_profile"]),
+            )
+            return build_model_pick(
+                recommendation,
+                profile=profile.name,
+                intent_name=intent_name,
+                runtime_filter=str(arguments.get("runtime") or "") or None,
+                limit=int(arguments.get("limit") or 3),
+            )
         if name == "aiplane.hardware.assess":
             return HardwareManager(profile).assess(
                 str(arguments.get("model") or ""),
@@ -866,6 +945,24 @@ class AiplaneMcpServer:
                 provider=str(arguments.get("provider") or "") or None,
                 endpoint=str(arguments.get("endpoint") or "") or None,
                 api_key_env=str(arguments.get("api_key_env") or "") or None,
+            )
+        if name == "aiplane.runtimes.inventory":
+            return RuntimeCatalog(profile).runtime_inventory(str(arguments.get("runtime") or ""))
+        if name == "aiplane.runtimes.capacity_plan":
+            return RuntimeCatalog(profile).capacity_plan(
+                str(arguments.get("runtime") or ""),
+                str(arguments.get("model") or ""),
+                context_tokens=int(arguments["context_tokens"])
+                if arguments.get("context_tokens") is not None
+                else None,
+            )
+        if name == "aiplane.benchmarks.calibration_plan":
+            ModelCatalog(profile).show(str(arguments.get("model") or ""))
+            return calibration_plan(
+                model_name=str(arguments.get("model") or ""),
+                runtime=str(arguments.get("runtime") or ""),
+                repeats=int(arguments.get("repeats") or 5),
+                profile=profile.name,
             )
         if name == "aiplane.runtimes.status":
             catalog = RuntimeCatalog(profile)

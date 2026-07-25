@@ -1,5 +1,8 @@
 name: offline-laptop-32gb
 machine:
+  stock:
+    provider: synthetic
+    model: offline-laptop
   placement: local
   substrate: native
   cpu:
@@ -9,5 +12,5 @@ machine:
   gpu:
     vendor: nvidia
     vram_gb: 12
-  accelerator_apis:
-    - cuda
+  accelerator_apis: ["cuda"]
+  os: linux
