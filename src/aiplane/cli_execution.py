@@ -203,6 +203,53 @@ def add_execution_parsers(
     agents_manifest.add_argument("--endpoint")
     agents_manifest.add_argument("--api-key-env")
 
+    agents_job = agents_sub.add_parser(
+        "job",
+        help="Render or validate a versioned agent job handoff",
+        description="Render a secret-free, stack-bound job specification for an external framework, or validate a saved specification. This never queues or executes an agent.",
+        formatter_class=formatter_class,
+    )
+    agents_job_sub = agents_job.add_subparsers(dest="agent_job_command", required=True, metavar="command")
+    agents_handoff = agents_sub.add_parser(
+        "handoff",
+        help="Render or validate a checksummed agent environment/job handoff",
+        description="Combine a versioned stack-derived environment manifest and job specification into a render-only, checksummed handoff. This never queues or executes an agent.",
+        formatter_class=formatter_class,
+    )
+    agents_handoff_sub = agents_handoff.add_subparsers(dest="agent_handoff_command", required=True, metavar="command")
+
+    def add_job_render_arguments(parser: argparse.ArgumentParser) -> None:
+        profile_arg(parser)
+        parser.add_argument("name", help="Agent environment name")
+        parser.add_argument(
+            "--stack", required=True, help="Configured stack that supplies roles, endpoints, policies, and limits"
+        )
+        parser.add_argument("--task", required=True, help="Reviewed task text for the selected framework")
+        parser.add_argument(
+            "--role", action="append", default=[], help="Target stack role; can be repeated and defaults to all roles"
+        )
+        parser.add_argument("--job-workspace", default=".", help="Relative workspace path available to the job")
+
+    job_render = agents_job_sub.add_parser(
+        "render", help="Render a stack-bound job specification", formatter_class=formatter_class
+    )
+    add_job_render_arguments(job_render)
+    job_validate = agents_job_sub.add_parser(
+        "validate", help="Validate a saved job specification", formatter_class=formatter_class
+    )
+    profile_arg(job_validate)
+    job_validate.add_argument("path", help="JSON job specification inside the selected workspace")
+
+    handoff_render = agents_handoff_sub.add_parser(
+        "render", help="Render an environment-and-job handoff", formatter_class=formatter_class
+    )
+    add_job_render_arguments(handoff_render)
+    handoff_validate = agents_handoff_sub.add_parser(
+        "validate", help="Validate a saved handoff", formatter_class=formatter_class
+    )
+    profile_arg(handoff_validate)
+    handoff_validate.add_argument("path", help="JSON handoff artifact inside the selected workspace")
+
     agents_export = agents_sub.add_parser(
         "export",
         help="Print one starter agent file",
@@ -508,6 +555,32 @@ def handle_execution_command(
                     indent=2,
                 )
             )
+            return 0
+        if args.agents_command == "job":
+            if args.agent_job_command == "validate":
+                payload = manager.validate_job_file(args.path)
+            else:
+                payload = manager.job(
+                    args.name,
+                    stack=args.stack,
+                    task=args.task,
+                    roles=args.role,
+                    job_workspace=args.job_workspace,
+                )
+            print(json_dumps(payload, indent=2))
+            return 0
+        if args.agents_command == "handoff":
+            if args.agent_handoff_command == "validate":
+                payload = manager.validate_job_file(args.path, handoff=True)
+            else:
+                payload = manager.handoff(
+                    args.name,
+                    stack=args.stack,
+                    task=args.task,
+                    roles=args.role,
+                    job_workspace=args.job_workspace,
+                )
+            print(json_dumps(payload, indent=2))
             return 0
         exported = manager.export(
             args.name,

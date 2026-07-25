@@ -509,6 +509,10 @@ aiplane stacks setup manual-stack --runtime "$RUNTIME" --model "$CHAT_ALIAS" --m
 aiplane stacks show manual-stack
 aiplane stacks plan manual-stack
 aiplane agents manifest manual-stack-agents --stack manual-stack
+aiplane agents job render manual-review --stack manual-stack --task "Review this disposable workspace." > manual-review.job.json
+aiplane agents job validate manual-review.job.json
+aiplane agents handoff render manual-review --stack manual-stack --task "Review this disposable workspace." > manual-review.handoff.json
+aiplane agents handoff validate manual-review.handoff.json
 aiplane stacks doctor manual-stack
 aiplane stacks endpoint-plan manual-stack
 aiplane stacks prepare manual-stack --dry-run
@@ -528,6 +532,9 @@ aiplane stacks start manual-stack --yes
 - [ ] Omitting `--yes` returns `confirmation_required` and executes no command.
 - [ ] A Docker Model Runner stack resolves the alias to its native model id, uses `http://localhost:12434/engines/v1`, and renders native `docker model` commands.
 - [ ] Remote targets remain planned-not-executed unless an explicitly supported guarded boundary exists.
+- [ ] The job output is schema version `1.0`, render-only, targets only roles from the stack, carries a safe relative workspace path, and references the environment checksum.
+- [ ] The handoff embeds both environment and job records with matching checksums; validation fails after either record is edited.
+- [ ] Job/handoff commands do not queue or run an agent, write credentials, or apply configuration.
 
 ## 16. Render-only Kubernetes artifacts
 

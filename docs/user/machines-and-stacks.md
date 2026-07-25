@@ -420,6 +420,28 @@ aiplane agents export repo-helper --framework crewai --model MODEL_ALIAS --file 
 
 Only `langgraph` and `simple-openai` currently emit `agent.py`; the other frameworks intentionally export configuration for translation into a reviewed framework project. The normal stack flow is still `stacks setup`, `stacks prepare --dry-run`, and an explicitly confirmed `stacks prepare/start --yes`.
 
+### Versioned job handoffs
+
+After a stack is configured, render a job that names its reviewed task, target roles, workspace boundary, limits, approvals, and the exact environment manifest checksum. Render a combined handoff when the framework/project needs both artifacts together:
+
+```bash
+aiplane agents job render repository-review \
+  --stack coding_agents \
+  --task "Review this repository and propose a safe refactoring plan." \
+  --role planner > repository-review.job.json
+
+aiplane agents job validate repository-review.job.json
+
+aiplane agents handoff render repository-review \
+  --stack coding_agents \
+  --task "Review this repository and propose a safe refactoring plan." \
+  --role planner > repository-review.handoff.json
+
+aiplane agents handoff validate repository-review.handoff.json
+```
+
+Both commands are render-only. A job is not queued, assigned to a running process, or executed by `aiplane`; give the validated artifact to the selected framework or a reviewed wrapper. Validation rejects out-of-workspace input, malformed JSON, secret-like values, unsafe workspace paths, and changed environment/job checksums.
+
 ## Orchestrators
 
 Orchestrators are frameworks that can run agent or workflow logic on top of configured model endpoints. `aiplane` does not initiate autonomous workloads here. It catalogs orchestrator options and lets stacks bind an orchestrator to a self-managed runtime/model/machine target or, where the framework supports it, to a managed-service endpoint. Planned agent-to-agent support belongs in this layer as role, endpoint, tool-policy, approval, and audit metadata for established frameworks.
