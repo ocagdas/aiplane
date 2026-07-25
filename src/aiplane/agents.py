@@ -16,6 +16,7 @@ from .agent_frameworks import (
 )
 from .integrations import IntegrationManager
 from .model_catalog import ModelCatalog
+from .network_validation import validate_http_endpoint
 from .stacks import StackManager
 from .models import Profile
 from .secrets import contains_secret
@@ -52,6 +53,8 @@ for _framework_name, _framework_spec in FRAMEWORK_SPECS.items():
             "packages": list(_framework_spec["packages"]),
             "good_for": ["reviewed role binding", "endpoint configuration", "tool-policy handoff"],
             "files": [
+                "endpoint-smoke.py",
+                "endpoint-smoke-requirements.txt",
                 "requirements.txt",
                 ".env.example",
                 "agent-environment.json",
@@ -63,6 +66,8 @@ for _framework_name, _framework_spec in FRAMEWORK_SPECS.items():
 
 
 _AGENT_CONFIG_FILES = [
+    "endpoint-smoke.py",
+    "endpoint-smoke-requirements.txt",
     "requirements.txt",
     ".env.example",
     "README.md",
@@ -146,8 +151,10 @@ class AgentManager:
             or "You are a focused coding assistant. Keep answers concise and ask before destructive actions.",
             "files": spec["files"],
             "packages": spec["packages"],
+            "endpoint_smoke_packages": ["openai"],
             "next_steps": [
-                "Review the exported agent code before running it.",
+                "Export and run endpoint-smoke.py first to verify the selected OpenAI-compatible endpoint.",
+                "Review the framework configuration before translating it into a framework-native project.",
                 "Install requirements in an isolated environment.",
                 "Set the API-key environment variable when the selected endpoint requires one.",
                 "Run aiplane environment doctor before using local runtimes.",
@@ -216,7 +223,9 @@ class AgentManager:
                 "ownership": binding.get("ownership") or model_config.get("ownership"),
                 "runtime": binding.get("runtime"),
                 "endpoint": binding.get("endpoint"),
-                "capabilities": model_config.get("capabilities", []),
+                "endpoint_protocol": "openai_compatible",
+                "model_roles": model_config.get("roles", []),
+                "capabilities": model_config.get("capabilities", {}),
                 "tools": binding.get("tools") if isinstance(binding.get("tools"), dict) else tools,
                 "limits": binding.get("limits") if isinstance(binding.get("limits"), dict) else limits,
                 "approval_mode": binding.get("approval_mode") or approval_mode,
@@ -431,11 +440,12 @@ class AgentManager:
         endpoint: str | None = None,
         api_key_env: str | None = None,
         instruction: str | None = None,
-        file: str = "agent.py",
+        file: str | None = None,
         output_dir: str | None = None,
     ) -> dict[str, Any]:
         if framework not in AGENT_FRAMEWORKS:
             raise ValueError(f"unknown agent framework: {framework}")
+        file = file or ("agent.py" if framework in {"langgraph", "simple-openai"} else "endpoint-smoke.py")
         selection = self._selection(
             name,
             framework,
@@ -451,12 +461,18 @@ class AgentManager:
         )
         if file == "agent.py":
             if framework not in {"langgraph", "simple-openai"}:
-                raise ValueError(f"{framework} is config-only; export framework-config.yaml instead")
+                raise ValueError(
+                    f"{framework} has no native executable scaffold; export endpoint-smoke.py and framework-config.yaml"
+                )
             content = (
                 _langgraph_agent(selection, instruction)
                 if framework == "langgraph"
                 else _simple_openai_agent(selection, instruction)
             )
+        elif file == "endpoint-smoke.py":
+            content = _endpoint_smoke(selection, instruction)
+        elif file == "endpoint-smoke-requirements.txt":
+            content = "openai\n"
         elif file == "requirements.txt":
             content = "\n".join(AGENT_FRAMEWORKS[framework]["packages"]) + "\n"
         elif file == ".env.example":
@@ -482,7 +498,7 @@ class AgentManager:
             )
         else:
             raise ValueError(
-                "file must be agent.py, requirements.txt, .env.example, README.md, agent-environment.json, agent-environment.yaml, or framework-config.yaml"
+                "file must be agent.py, endpoint-smoke.py, endpoint-smoke-requirements.txt, requirements.txt, .env.example, README.md, agent-environment.json, agent-environment.yaml, or framework-config.yaml"
             )
         return {
             "name": "agent_export",
@@ -532,9 +548,13 @@ class AgentManager:
             model=str(row["model"]),
             provider=str(row["provider"]),
             runtime=str(row["runtime"]),
-            endpoint=str(row["endpoint"]),
+            endpoint=validate_http_endpoint(row["endpoint"], "selected agent endpoint"),
             api_key_env=row.get("api_key_env"),
         )
+
+
+def _endpoint_smoke(selection: AgentSelection, instruction: str) -> str:
+    return _simple_openai_agent(selection, instruction)
 
 
 def _env_example(selection: AgentSelection) -> str:
@@ -550,6 +570,12 @@ def _env_example(selection: AgentSelection) -> str:
 
 def _readme(name: str, framework: str, selection: AgentSelection) -> str:
     key_env = selection.api_key_env or "OPENAI_API_KEY"
+    entrypoint = "agent.py" if framework in {"langgraph", "simple-openai"} else "endpoint-smoke.py"
+    framework_note = (
+        '`agent.py` is a small executable starter for this framework. After verifying the endpoint, run `pip install -r requirements.txt` and `python agent.py "Summarize this repository"`.'
+        if entrypoint == "agent.py"
+        else "`endpoint-smoke.py` is a directly runnable endpoint check; translate `framework-config.yaml` into the selected framework's native project shape before building a workflow."
+    )
     return f"""# {name}
 
 Generated starter agent scaffold for `{framework}`.
@@ -559,19 +585,23 @@ Model id/deployment: `{selection.model}`
 Endpoint: `{selection.endpoint}`
 API key env: `{key_env}`
 
-## Run
+{framework_note}
+
+## Verify the endpoint
 
 ```bash
 python -m venv .venv
 . .venv/bin/activate
-pip install -r requirements.txt
+pip install -r endpoint-smoke-requirements.txt
 export OPENAI_BASE_URL={selection.endpoint}
 export AIPLANE_MODEL={selection.model}
 export {key_env}=replace-me
-python agent.py "Summarize this repository"
+python endpoint-smoke.py "Summarize this repository"
 ```
 
-For local Ollama/OpenAI-compatible endpoints, a dummy API key is often accepted.
+For `langgraph` and `simple-openai`, install `requirements.txt` after the endpoint check and then run `agent.py` if you want the native executable starter. For other frameworks, `requirements.txt` is for the reviewed framework translation, not a requirement of the endpoint smoke path.
+
+For local OpenAI-compatible endpoints, a dummy API key is often accepted. The starter does not install packages, write credentials, enforce tool policy, or run a background agent.
 """
 
 

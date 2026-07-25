@@ -6,7 +6,12 @@ from pathlib import Path
 import pytest
 from jsonschema import Draft202012Validator
 
-from aiplane.agent_frameworks import FRAMEWORK_SPECS, framework_control_enforcement, render_framework_starter
+from aiplane.agent_frameworks import (
+    FRAMEWORK_SPECS,
+    framework_control_enforcement,
+    framework_readiness,
+    render_framework_starter,
+)
 from aiplane.agents import AgentManager
 from aiplane.machines import MachineManager
 from aiplane.stacks import StackManager
@@ -68,7 +73,13 @@ def test_every_framework_advertises_its_rendered_contract_files(tmp_path: Path) 
 
     assert {row["name"] for row in templates} == set(FRAMEWORK_SPECS)
     for row in templates:
-        assert {"agent-environment.json", "agent-environment.yaml", "framework-config.yaml"} <= set(row["files"])
+        assert {
+            "endpoint-smoke.py",
+            "endpoint-smoke-requirements.txt",
+            "agent-environment.json",
+            "agent-environment.yaml",
+            "framework-config.yaml",
+        } <= set(row["files"])
         assert ("agent.py" in row["files"]) is (row["name"] in {"langgraph", "simple-openai"})
 
 
@@ -131,6 +142,66 @@ def test_framework_config_cli_export_is_yaml_and_render_only(tmp_path: Path, mon
     assert payload["framework"] == "crewai"
     assert payload["topology"]["crew"]["agents"] == ["primary"]
     assert payload["execution_boundary"]["runs_agents"] is False
+
+
+@pytest.mark.parametrize("framework", sorted(FRAMEWORK_SPECS))
+def test_every_framework_has_a_compilable_endpoint_smoke_starter(tmp_path: Path, framework: str) -> None:
+    with _isolated_test_profile(workspace=tmp_path) as profile:
+        manager = AgentManager(profile)
+        runner = manager.export(
+            "endpoint-check", framework=framework, model="fixture-chat-small", file="endpoint-smoke.py"
+        )
+        smoke_requirements = manager.export(
+            "endpoint-check", framework=framework, model="fixture-chat-small", file="endpoint-smoke-requirements.txt"
+        )
+        requirements = manager.export(
+            "endpoint-check", framework=framework, model="fixture-chat-small", file="requirements.txt"
+        )
+        readme = manager.export("endpoint-check", framework=framework, model="fixture-chat-small", file="README.md")
+
+    compile(runner["content"], "endpoint-smoke.py", "exec")
+    assert "from openai import OpenAI" in runner["content"]
+    assert smoke_requirements["content"] == "openai\n"
+    assert requirements["content"].splitlines() == FRAMEWORK_SPECS[framework]["packages"]
+    assert "Verify the endpoint" in readme["content"]
+    if framework in {"langgraph", "simple-openai"}:
+        assert "python agent.py" in readme["content"]
+    else:
+        assert "python endpoint-smoke.py" in readme["content"]
+
+
+def test_framework_readiness_rejects_invalid_endpoint_and_non_chat_model() -> None:
+    readiness = framework_readiness(
+        "crewai",
+        {
+            "planner": {
+                "model": "fixture",
+                "endpoint": "file:///tmp/not-an-api",
+                "endpoint_protocol": "openai_compatible",
+                "model_roles": ["embedding"],
+            }
+        },
+        "ask",
+    )
+
+    assert readiness["ready"] is False
+    assert readiness["checks"]["role_endpoint:planner"]["ok"] is False
+    assert readiness["checks"]["role_chat_capability:planner"]["ok"] is False
+
+
+def test_framework_aware_default_export_is_runnable_for_config_targets(tmp_path: Path) -> None:
+    with _isolated_test_profile(workspace=tmp_path) as profile:
+        exported = AgentManager(profile).export("crew-check", framework="crewai", model="fixture-chat-small")
+
+    assert exported["file"] == "endpoint-smoke.py"
+    compile(exported["content"], "endpoint-smoke.py", "exec")
+
+
+def test_agent_selection_rejects_non_http_endpoint_override(tmp_path: Path) -> None:
+    with _isolated_test_profile(workspace=tmp_path) as profile:
+        manager = AgentManager(profile)
+        with pytest.raises(ValueError, match="must use http or https"):
+            manager.plan("endpoint-check", framework="crewai", model="fixture-chat-small", endpoint="file:///tmp/model")
 
 
 def _stack_bound_agent_manager(tmp_path: Path) -> tuple[AgentManager, str]:

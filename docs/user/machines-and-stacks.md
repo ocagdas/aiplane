@@ -427,7 +427,7 @@ aiplane agents export repo-helper --framework crewai --model MODEL_ALIAS --file 
 aiplane agents export repo-helper --framework crewai --model MODEL_ALIAS --file agent-environment.yaml
 ```
 
-Only `langgraph` and `simple-openai` currently emit `agent.py`; the other frameworks intentionally export configuration for translation into a reviewed framework project. The normal stack flow is still `stacks setup`, `stacks prepare --dry-run`, and an explicitly confirmed `stacks prepare/start --yes`.
+Only `langgraph` and `simple-openai` emit framework-native `agent.py` starters. Every target also provides `endpoint-smoke.py` to verify its selected OpenAI-compatible endpoint before translating `framework-config.yaml` into a reviewed framework project. The normal stack flow is still `stacks setup`, `stacks prepare --dry-run`, and an explicitly confirmed `stacks prepare/start --yes`.
 
 ### Versioned job handoffs
 

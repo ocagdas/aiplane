@@ -1,44 +1,61 @@
 from __future__ import annotations
 
+from importlib import metadata as importlib_metadata
+import sys
 from typing import Any
 
 from .config import dump_yaml
+from .network_validation import validate_http_endpoint
 
 FRAMEWORK_SPECS: dict[str, dict[str, Any]] = {
     "langgraph": {
         "packages": ["langgraph", "langchain-openai"],
         "adapter": "state_graph",
         "multi_role": True,
+        "endpoint_protocol": "openai_compatible",
+        "minimum_python": (3, 11),
     },
     "crewai": {
         "packages": ["crewai"],
         "adapter": "crew",
         "multi_role": True,
+        "endpoint_protocol": "openai_compatible",
+        "minimum_python": (3, 11),
     },
     "autogen": {
         "packages": ["autogen-agentchat", "autogen-ext[openai]"],
         "adapter": "team",
         "multi_role": True,
+        "endpoint_protocol": "openai_compatible",
+        "minimum_python": (3, 11),
     },
     "semantic_kernel": {
         "packages": ["semantic-kernel"],
         "adapter": "kernel_agents",
         "multi_role": True,
+        "endpoint_protocol": "openai_compatible",
+        "minimum_python": (3, 11),
     },
     "llamaindex_workflows": {
         "packages": ["llama-index-core", "llama-index-llms-openai-like"],
         "adapter": "workflow",
         "multi_role": True,
+        "endpoint_protocol": "openai_compatible",
+        "minimum_python": (3, 11),
     },
     "openhands": {
         "packages": ["openhands-ai"],
         "adapter": "llm_config",
         "multi_role": False,
+        "endpoint_protocol": "openai_compatible",
+        "minimum_python": (3, 11),
     },
     "simple-openai": {
         "packages": ["openai"],
         "adapter": "openai_client",
         "multi_role": False,
+        "endpoint_protocol": "openai_compatible",
+        "minimum_python": (3, 11),
     },
 }
 
@@ -127,10 +144,75 @@ def framework_control_enforcement(
     }
 
 
+def _installed_distribution_version(requirement: str) -> str | None:
+    """Return the locally observed distribution version without importing the framework."""
+    distribution = requirement.split("[", 1)[0]
+    try:
+        return importlib_metadata.version(distribution)
+    except importlib_metadata.PackageNotFoundError:
+        return None
+
+
+def _framework_package_checks(packages: list[str]) -> list[dict[str, Any]]:
+    checks = []
+    for package in packages:
+        version = _installed_distribution_version(package)
+        checks.append(
+            {
+                "name": f"framework_package:{package}",
+                "ok": True,
+                "warning": version is None,
+                "detail": f"installed {version}"
+                if version
+                else "not installed in this Python environment; requirements.txt includes it",
+            }
+        )
+    return checks
+
+
+def _role_endpoint_check(role_name: str, binding: dict[str, Any], protocol: str) -> dict[str, Any]:
+    endpoint = binding.get("endpoint")
+    if not isinstance(endpoint, str) or not endpoint.strip():
+        return {"name": f"role_endpoint:{role_name}", "ok": False, "detail": "missing"}
+    try:
+        validated = validate_http_endpoint(endpoint, f"role {role_name} endpoint")
+    except ValueError as exc:
+        return {"name": f"role_endpoint:{role_name}", "ok": False, "detail": str(exc)}
+    return {
+        "name": f"role_endpoint:{role_name}",
+        "ok": True,
+        "detail": f"{validated} ({protocol})",
+    }
+
+
+def _role_chat_capability_check(role_name: str, binding: dict[str, Any]) -> dict[str, Any]:
+    model_roles = binding.get("model_roles")
+    if not isinstance(model_roles, list) or not model_roles:
+        return {
+            "name": f"role_chat_capability:{role_name}",
+            "ok": True,
+            "warning": True,
+            "detail": "chat role is not declared; confirm the endpoint supports chat completions",
+        }
+    supports_chat = "chat" in {str(item) for item in model_roles}
+    return {
+        "name": f"role_chat_capability:{role_name}",
+        "ok": supports_chat,
+        "detail": "declared" if supports_chat else "model does not declare the chat role",
+    }
+
+
 def framework_readiness(framework: str, roles: dict[str, Any], approval_mode: str) -> dict[str, Any]:
     name = normalize_framework(framework)
     spec = FRAMEWORK_SPECS[name]
+    minimum_python = tuple(spec["minimum_python"])
     checks: list[dict[str, Any]] = [
+        {
+            "name": "python_version",
+            "ok": sys.version_info[:2] >= minimum_python,
+            "detail": f"Python {sys.version_info.major}.{sys.version_info.minor}; requires >= {minimum_python[0]}.{minimum_python[1]}",
+        },
+        *_framework_package_checks(list(spec["packages"])),
         {
             "name": "roles_present",
             "ok": bool(roles),
@@ -151,11 +233,13 @@ def framework_readiness(framework: str, roles: dict[str, Any], approval_mode: st
                     "ok": bool(binding.get("model_id") or binding.get("model")),
                     "detail": binding.get("model_id") or binding.get("model") or "missing",
                 },
+                _role_endpoint_check(role_name, binding, str(spec["endpoint_protocol"])),
                 {
-                    "name": f"role_endpoint:{role_name}",
-                    "ok": bool(binding.get("endpoint")),
-                    "detail": binding.get("endpoint") or "missing",
+                    "name": f"role_protocol:{role_name}",
+                    "ok": str(binding.get("endpoint_protocol") or "openai_compatible") == spec["endpoint_protocol"],
+                    "detail": str(binding.get("endpoint_protocol") or "openai_compatible"),
                 },
+                _role_chat_capability_check(role_name, binding),
             ]
         )
     risky = str(approval_mode).lower() in {"auto", "none", "silent", "unattended"}
@@ -190,6 +274,9 @@ def render_framework_starter(framework: str, metadata: dict[str, Any]) -> str:
             "provider": role.get("provider"),
             "runtime": role.get("runtime") or metadata.get("runtime"),
             "endpoint": role.get("endpoint") or metadata.get("endpoint"),
+            "endpoint_protocol": role.get("endpoint_protocol") or "openai_compatible",
+            "model_roles": role.get("model_roles", []),
+            "capabilities": role.get("capabilities", {}),
             "api_key_env": credential.get("api_key_env") or role.get("api_key_env"),
             "tools": role.get("tools", {}),
             "limits": role.get("limits", {}),
@@ -203,6 +290,9 @@ def render_framework_starter(framework: str, metadata: dict[str, Any]) -> str:
             "provider": metadata.get("provider"),
             "runtime": metadata.get("runtime"),
             "endpoint": metadata.get("endpoint"),
+            "endpoint_protocol": "openai_compatible",
+            "model_roles": metadata.get("model_roles", []),
+            "capabilities": metadata.get("capabilities", {}),
             "api_key_env": metadata.get("api_key_env"),
             "tools": metadata.get("tools", {}),
             "limits": metadata.get("limits", {}),
@@ -217,6 +307,8 @@ def render_framework_starter(framework: str, metadata: dict[str, Any]) -> str:
         "framework": name,
         "adapter": FRAMEWORK_SPECS[name]["adapter"],
         "packages": list(FRAMEWORK_SPECS[name]["packages"]),
+        "minimum_python": ".".join(str(value) for value in FRAMEWORK_SPECS[name]["minimum_python"]),
+        "endpoint_protocol": FRAMEWORK_SPECS[name]["endpoint_protocol"],
         "stack": metadata.get("name"),
         "profile": metadata.get("profile"),
         "roles": normalized_roles,

@@ -387,7 +387,18 @@ aiplane agents export repo-helper --framework langgraph --model MODEL_ALIAS --fi
 aiplane agents export repo-helper --framework langgraph --model MODEL_ALIAS --file README.md
 ```
 
-The generated `agent.py` is intentionally small: it reads `OPENAI_BASE_URL`, `AIPLANE_MODEL`, and an API-key env var, then calls the selected endpoint. For local Ollama, the endpoint is usually `http://localhost:11434/v1` and a dummy API key is often accepted. For managed providers, set the configured API-key env var first.
+LangGraph and `simple-openai` also provide a small executable `agent.py`. Every supported framework provides `endpoint-smoke.py`: a direct OpenAI-compatible endpoint check that is useful before you translate the separate `framework-config.yaml` into that framework's native project layout. It does not instantiate a CrewAI, AutoGen, Semantic Kernel, LlamaIndex, or OpenHands workflow; those frameworks keep ownership of their own project formats and execution semantics.
+
+```bash
+aiplane agents export repo-helper --framework crewai --model MODEL_ALIAS --file endpoint-smoke.py > endpoint-smoke.py
+aiplane agents export repo-helper --framework crewai --model MODEL_ALIAS --file endpoint-smoke-requirements.txt > endpoint-smoke-requirements.txt
+python -m venv .venv
+. .venv/bin/activate
+pip install -r endpoint-smoke-requirements.txt
+python endpoint-smoke.py "Say hello"
+```
+
+The generated runner reads `OPENAI_BASE_URL`, `AIPLANE_MODEL`, and an API-key env var, then calls the selected endpoint. Readiness validates HTTP(S) endpoint shape, required OpenAI-compatible protocol metadata, Python version, declared chat role, and reports locally observed framework-package versions without importing them. Missing framework packages are warnings because export remains render-only. `endpoint-smoke-requirements.txt` contains only `openai`; the separate `requirements.txt` contains framework packages to install later, before translating or running a framework-native workflow. For local Ollama, the endpoint is usually `http://localhost:11434/v1` and a dummy API key is often accepted. For managed providers, set the configured API-key env var first.
 
 Agent artifact paths are intentionally separate from profiles. Use `--output-dir`, `AIPLANE_AGENT_ARTIFACTS_DIR`, or local config `agent_artifacts_dir` to choose where generated agent projects should live. The default is `.aiplane/agents`, which is ignored by git.
 

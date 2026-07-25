@@ -281,6 +281,8 @@ def add_execution_parsers(
         "--file",
         choices=[
             "agent.py",
+            "endpoint-smoke.py",
+            "endpoint-smoke-requirements.txt",
             "requirements.txt",
             ".env.example",
             "README.md",
@@ -288,8 +290,7 @@ def add_execution_parsers(
             "agent-environment.yaml",
             "framework-config.yaml",
         ],
-        default="agent.py",
-        help="Scaffold file to print",
+        help="Scaffold file to print; defaults to agent.py for LangGraph/simple-openai and endpoint-smoke.py for other frameworks",
     )
 
     chat_cmd = command_factory(
