@@ -389,6 +389,21 @@ aiplane agents export repo-helper --framework langgraph --model MODEL_ALIAS --fi
 
 LangGraph and `simple-openai` also provide a small executable `agent.py`. Every supported framework provides `endpoint-smoke.py`: a direct OpenAI-compatible endpoint check that is useful before you translate the separate `framework-config.yaml` into that framework's native project layout. It does not instantiate a CrewAI, AutoGen, Semantic Kernel, LlamaIndex, or OpenHands workflow; those frameworks keep ownership of their own project formats and execution semantics.
 
+Inspect the planned environment without network contact:
+
+```bash
+aiplane agents doctor repo-helper --framework crewai --model MODEL_ALIAS
+```
+
+Add `--probe-endpoint` only when you want a live, credential-free OpenAI-compatible `GET /models` check:
+
+```bash
+aiplane agents doctor repo-helper --framework crewai --model MODEL_ALIAS --probe-endpoint --timeout-seconds 5
+aiplane agents doctor repo-helper --framework crewai --model MODEL_ALIAS --probe-endpoint --probe-chat --timeout-seconds 5
+```
+
+The doctor reads installed distribution metadata without importing a framework. Its inventory probe sends no API key and never reads credential references. Add `--probe-chat` only with `--probe-endpoint` when a minimal live chat-completions check is appropriate: after the selected native model is listed, it sends exactly one `Reply with OK.` prompt with `max_tokens: 1`, records only success/failure, and never starts an agent. A `401` or `403` means the endpoint rejected this anonymous check; use `aiplane providers test` for a provider-specific authenticated check instead. An observed package version is evidence, not a compatibility guarantee.
+
 ```bash
 aiplane agents export repo-helper --framework crewai --model MODEL_ALIAS --file endpoint-smoke.py > endpoint-smoke.py
 aiplane agents export repo-helper --framework crewai --model MODEL_ALIAS --file endpoint-smoke-requirements.txt > endpoint-smoke-requirements.txt

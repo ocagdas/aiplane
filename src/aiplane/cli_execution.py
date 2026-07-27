@@ -203,6 +203,33 @@ def add_execution_parsers(
     agents_manifest.add_argument("--endpoint")
     agents_manifest.add_argument("--api-key-env")
 
+    agents_doctor = agents_sub.add_parser(
+        "doctor",
+        help="Inspect framework packages and optionally verify endpoint behaviour",
+        description="Read installed distribution metadata and, only with explicit probe flags, send credential-free endpoint checks. --probe-endpoint sends GET /models; --probe-chat additionally sends one fixed POST /chat/completions request after inventory succeeds. This never imports frameworks, reads credentials, or starts agents.",
+        formatter_class=formatter_class,
+    )
+    profile_arg(agents_doctor)
+    agents_doctor.add_argument("name", help="Agent environment name")
+    agents_doctor.add_argument("--stack", help="Use roles, endpoints, and policies from a configured stack")
+    agents_doctor.add_argument("--framework", choices=sorted(FRAMEWORK_SPECS), default="langgraph")
+    agents_doctor.add_argument("--model", help="Direct model alias when --stack is omitted")
+    agents_doctor.add_argument("--runtime")
+    agents_doctor.add_argument("--provider")
+    agents_doctor.add_argument("--endpoint")
+    agents_doctor.add_argument("--api-key-env")
+    agents_doctor.add_argument(
+        "--probe-endpoint",
+        action="store_true",
+        help="Send an unauthenticated GET /models request; credentials are never read or sent",
+    )
+    agents_doctor.add_argument(
+        "--probe-chat",
+        action="store_true",
+        help="After --probe-endpoint confirms the model, send one fixed credential-free POST /chat/completions request",
+    )
+    agents_doctor.add_argument("--timeout-seconds", type=int, default=5, help="Endpoint probe timeout (1-60 seconds)")
+
     agents_job = agents_sub.add_parser(
         "job",
         help="Render or validate a versioned agent job handoff",
@@ -552,6 +579,26 @@ def handle_execution_command(
                         api_key_env=args.api_key_env,
                         instruction=args.instruction,
                         output_dir=args.output_dir,
+                    ),
+                    indent=2,
+                )
+            )
+            return 0
+        if args.agents_command == "doctor":
+            print(
+                json_dumps(
+                    manager.doctor(
+                        args.name,
+                        stack=args.stack,
+                        framework=args.framework,
+                        model=args.model,
+                        runtime=args.runtime,
+                        provider=args.provider,
+                        endpoint=args.endpoint,
+                        api_key_env=args.api_key_env,
+                        probe_endpoint=args.probe_endpoint,
+                        probe_chat=args.probe_chat,
+                        timeout_seconds=args.timeout_seconds,
                     ),
                     indent=2,
                 )

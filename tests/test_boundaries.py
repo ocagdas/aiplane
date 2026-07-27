@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from aiplane.agents import AgentManager
 from aiplane.audit import AuditLogger
 from aiplane.backends import AnthropicMessagesBackend, AzureOpenAIBackend, OllamaBackend, OpenAICompatibleBackend
 from aiplane.benchmarks import BenchmarkRunner
@@ -43,6 +44,7 @@ def test_domain_managers_accept_explicit_boundaries() -> None:
     assert machines.http_transport is transport
     assert ProviderRegistry(profile, http_transport=transport).http_transport is transport
     assert RuntimeCatalog(profile, http_transport=transport).http_transport is transport
+    assert AgentManager(profile, http_transport=transport).http_transport is transport
     assert OllamaBackend(http_transport=transport).http_transport is transport
     assert OpenAICompatibleBackend("https://example.invalid/v1", http_transport=transport).http_transport is transport
     assert AnthropicMessagesBackend(http_transport=transport).http_transport is transport

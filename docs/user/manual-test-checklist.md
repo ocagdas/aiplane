@@ -6,6 +6,101 @@ This checklist validates an `aiplane` installation from a clean shell through pr
 
 Use a disposable working directory and a disposable profile. Commands marked **read-only** do not intentionally change state. Commands marked **preview** render a proposed mutation. Commands marked **mutating** require review and may install software, download model weights, or edit the disposable profile. External runtimes remain separate products; skip runner-specific live checks when that runner or suitable hardware is unavailable.
 
+## Quick grouped command path
+
+Run these groups in order when collecting a concise, shareable validation record.
+The numbered sections that follow provide the assertions, alternatives, and
+failure checks for each group.
+
+### A. Installation and isolated profile
+
+```bash
+mkdir -p aiplane-manual-test
+cd aiplane-manual-test
+export AIPLANE_PROFILES_DIR="$PWD/profiles"
+export AIPLANE_PROFILE=manual-test
+aiplane --version
+aiplane profiles templates
+aiplane profiles create manual-test --template local-dev
+aiplane profiles validate manual-test
+```
+
+### B. Host discovery and catalog configuration
+
+```bash
+aiplane hardware discover
+aiplane hardware doctor
+aiplane providers list
+aiplane models refresh --provider ollama --limit 20 --dry-run
+aiplane models list --current-machine --role chat --identity both --limit 20
+aiplane recommend --intent chat --format json
+```
+
+### C. Local runtime and chat configuration
+
+Choose an alias printed by group B, then use it consistently below.
+
+```bash
+export CHAT_ALIAS=YOUR_ALIAS_FROM_THE_PREVIOUS_COMMAND
+export RUNTIME=ollama
+aiplane models show "$CHAT_ALIAS"
+aiplane hardware assess "$CHAT_ALIAS" --runtime "$RUNTIME"
+aiplane runtimes start "$RUNTIME" --model "$CHAT_ALIAS" --dry-run
+aiplane runtimes pull "$RUNTIME" --model "$CHAT_ALIAS" --dry-run
+aiplane chat --model "$CHAT_ALIAS" --prompt "Reply with exactly: ready" --dry-run
+```
+
+### D. Host-client configuration exports
+
+```bash
+aiplane integrations setup continue --chat "$CHAT_ALIAS" --runtime "$RUNTIME" --dry-run
+aiplane integrations export codex --model "$CHAT_ALIAS"
+aiplane integrations export copilot-cli --model "$CHAT_ALIAS"
+aiplane integrations export copilot-vscode --model "$CHAT_ALIAS"
+```
+
+### E. Agent-environment configuration and endpoint evidence
+
+```bash
+aiplane agents plan manual-agent --framework crewai --model "$CHAT_ALIAS"
+aiplane agents doctor manual-agent --framework crewai --model "$CHAT_ALIAS"
+aiplane agents export manual-agent --framework crewai --model "$CHAT_ALIAS" --file endpoint-smoke.py > endpoint-smoke.py
+aiplane agents export manual-agent --framework crewai --model "$CHAT_ALIAS" --file endpoint-smoke-requirements.txt > endpoint-smoke-requirements.txt
+```
+
+The following opt-in command contacts the selected endpoint anonymously. It
+does not use credentials or send a prompt, and is appropriate only for a local
+or intentionally public OpenAI-compatible endpoint:
+
+```bash
+aiplane agents doctor manual-agent --framework crewai --model "$CHAT_ALIAS" --probe-endpoint --timeout-seconds 5
+```
+
+For a controlled chat-completions compatibility check, add `--probe-chat`. This
+sends exactly one fixed `Reply with OK.` request only after the inventory probe
+lists the selected model; it sends no credentials and does not run an agent:
+
+```bash
+aiplane agents doctor manual-agent --framework crewai --model "$CHAT_ALIAS" --probe-endpoint --probe-chat --timeout-seconds 5
+```
+
+### F. Reproducibility, stacks, and contributor gate
+
+```bash
+aiplane hardware export-machine --name manual-host > manual-host.machine.yaml
+aiplane machines import manual-host.machine.yaml
+aiplane profiles archive manual-test --output manual-test.profile.json --dry-run
+aiplane stacks setup manual-stack --runtime "$RUNTIME" --model "$CHAT_ALIAS" --machine manual-host --access same_host --dry-run
+python -m pytest
+python -m ruff format --check src tests
+python -m ruff check src tests
+```
+
+Group F assumes the machine export/import and runtime review steps in sections
+10, 15, 17, and 20 have been completed. It deliberately leaves real runtime
+installation, model download, and agent execution as separately reviewed
+actions.
+
 ## Test record
 
 Record these before starting:
@@ -67,8 +162,9 @@ aiplane profiles templates
 **Mutating only inside the chosen profile directory:**
 
 ```bash
-mkdir aiplane-manual-test
+mkdir -p aiplane-manual-test
 cd aiplane-manual-test
+export AIPLANE_PROFILES_DIR="$PWD/profiles"
 export AIPLANE_PROFILE=manual-test
 aiplane profiles create manual-test --template local-dev
 aiplane profiles list
@@ -478,6 +574,11 @@ Use `integrations <subcommand> --help` if a target needs role-specific flags in 
 aiplane agents templates
 aiplane agents plan manual-agent --framework langgraph --model "$CHAT_ALIAS"
 aiplane agents manifest manual-agent --framework langgraph --model "$CHAT_ALIAS"
+aiplane agents doctor manual-agent --framework crewai --model "$CHAT_ALIAS"
+# Optional live, unauthenticated GET /models probe; use only against an endpoint you intend to contact:
+aiplane agents doctor manual-agent --framework crewai --model "$CHAT_ALIAS" --probe-endpoint --timeout-seconds 5
+# Optional fixed chat probe; it requires --probe-endpoint and sends one "Reply with OK." request without credentials:
+aiplane agents doctor manual-agent --framework crewai --model "$CHAT_ALIAS" --probe-endpoint --probe-chat --timeout-seconds 5
 aiplane agents export manual-agent --framework langgraph --model "$CHAT_ALIAS" --file agent.py
 aiplane agents export manual-agent --framework crewai --model "$CHAT_ALIAS" --file endpoint-smoke.py
 aiplane agents export manual-agent --framework crewai --model "$CHAT_ALIAS" --file endpoint-smoke-requirements.txt
@@ -496,6 +597,7 @@ aiplane orchestrators doctor langgraph
 - [ ] Plans contain reviewed model alias, native id, endpoint, tool policy, approval mode, limits, and audit label where configured.
 - [ ] The manifest is schema version `1.0`, is marked `render_only`, and says Aiplane does not run agents.
 - [ ] Each framework config contains its framework-specific topology key and readiness checks, including Python version, observed framework package version or missing-package warning, HTTP(S) endpoint shape, OpenAI-compatible protocol, and declared chat role.
+- [ ] `agents doctor` performs no network request by default, imports no framework, and never reads or transmits credentials. With `--probe-endpoint`, it sends only an unauthenticated `GET /models` and reports whether each selected native model is listed. `--probe-chat` requires that inventory probe to succeed and then sends exactly one fixed `Reply with OK.` OpenAI-compatible chat request; it records only success/failure, never generated text, and never starts an agent. Use `--timeout-seconds 5` for a bounded live probe; values outside 1–60 fail before network contact.
 - [ ] Every framework provides a compilable `endpoint-smoke.py` and minimal `endpoint-smoke-requirements.txt`; separate framework requirements are only needed for framework-native translation. Only LangGraph and `simple-openai` claim a framework-native executable `agent.py`.
 - [ ] Single-role frameworks report a readiness mismatch when given multiple roles.
 - [ ] Starter output contains no secret values and explicitly says it installs nothing and runs no agents.
