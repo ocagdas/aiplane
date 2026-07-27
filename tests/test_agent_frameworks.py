@@ -251,6 +251,91 @@ def test_agent_doctor_probe_verifies_anonymous_models_response(tmp_path: Path, m
     assert timeout == 5
 
 
+def test_agent_doctor_chat_probe_is_explicit_credential_free_and_model_gated(tmp_path: Path, monkeypatch) -> None:
+    transport = FakeHttpTransport(
+        {"data": [{"id": "provider-chat-small:8b"}]},
+        {"choices": [{"message": {"content": "OK"}}]},
+    )
+    monkeypatch.setattr(
+        "aiplane.agents.framework_package_versions",
+        lambda _framework: [
+            {
+                "requirement": "crewai",
+                "distribution": "crewai",
+                "installed": True,
+                "version": "synthetic",
+                "compatibility": "observed_only",
+            }
+        ],
+    )
+    with _isolated_test_profile(workspace=tmp_path) as profile:
+        payload = AgentManager(profile, http_transport=transport).doctor(
+            "endpoint-check",
+            framework="crewai",
+            model="fixture-chat-small",
+            probe_endpoint=True,
+            probe_chat=True,
+        )
+
+    inventory_request, inventory_timeout = transport.requests[0]
+    chat_request, chat_timeout = transport.requests[1]
+    chat_probe = payload["endpoint_probes"]["primary"]["chat_completion"]
+    assert payload["ready"] is True
+    assert payload["execution_boundary"]["runs_model_prompts"] is True
+    assert inventory_request.get_method() == "GET"
+    assert chat_request.get_method() == "POST"
+    assert chat_request.full_url == "http://localhost:11434/v1/chat/completions"
+    assert json.loads(chat_request.data.decode("utf-8")) == {
+        "model": "provider-chat-small:8b",
+        "messages": [{"role": "user", "content": "Reply with OK."}],
+        "max_tokens": 1,
+        "temperature": 0,
+        "stream": False,
+    }
+    assert chat_request.headers.get("Authorization") is None
+    assert chat_request.headers.get("X-api-key") is None
+    assert inventory_timeout == chat_timeout == 5
+    assert chat_probe["ok"] is True
+
+
+def test_agent_doctor_chat_probe_does_not_send_prompt_when_model_is_not_listed(tmp_path: Path, monkeypatch) -> None:
+    transport = FakeHttpTransport({"data": []})
+    monkeypatch.setattr(
+        "aiplane.agents.framework_package_versions",
+        lambda _framework: [
+            {
+                "requirement": "crewai",
+                "distribution": "crewai",
+                "installed": True,
+                "version": "synthetic",
+                "compatibility": "observed_only",
+            }
+        ],
+    )
+    with _isolated_test_profile(workspace=tmp_path) as profile:
+        payload = AgentManager(profile, http_transport=transport).doctor(
+            "endpoint-check",
+            framework="crewai",
+            model="fixture-chat-small",
+            probe_endpoint=True,
+            probe_chat=True,
+        )
+
+    chat_probe = payload["endpoint_probes"]["primary"]["chat_completion"]
+    assert len(transport.requests) == 1
+    assert chat_probe["attempted"] is False
+    assert chat_probe["network_contacted"] is False
+    assert payload["execution_boundary"]["runs_model_prompts"] is False
+
+
+def test_agent_doctor_requires_inventory_probe_before_chat_probe(tmp_path: Path) -> None:
+    with _isolated_test_profile(workspace=tmp_path) as profile:
+        with pytest.raises(ValueError, match="requires --probe-endpoint"):
+            AgentManager(profile).doctor(
+                "endpoint-check", framework="crewai", model="fixture-chat-small", probe_chat=True
+            )
+
+
 def test_agent_doctor_probe_reports_model_absence_and_stack_roles(tmp_path: Path, monkeypatch) -> None:
     manager, profile_context = _stack_bound_agent_manager(tmp_path)
     transport = FakeHttpTransport(

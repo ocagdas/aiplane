@@ -205,8 +205,8 @@ def add_execution_parsers(
 
     agents_doctor = agents_sub.add_parser(
         "doctor",
-        help="Inspect framework packages and optionally verify endpoint model inventory",
-        description="Read installed distribution metadata and, only with --probe-endpoint, send a credential-free GET /models request. This never imports frameworks, reads credentials, sends prompts, or starts agents.",
+        help="Inspect framework packages and optionally verify endpoint behaviour",
+        description="Read installed distribution metadata and, only with explicit probe flags, send credential-free endpoint checks. --probe-endpoint sends GET /models; --probe-chat additionally sends one fixed POST /chat/completions request after inventory succeeds. This never imports frameworks, reads credentials, or starts agents.",
         formatter_class=formatter_class,
     )
     profile_arg(agents_doctor)
@@ -222,6 +222,11 @@ def add_execution_parsers(
         "--probe-endpoint",
         action="store_true",
         help="Send an unauthenticated GET /models request; credentials are never read or sent",
+    )
+    agents_doctor.add_argument(
+        "--probe-chat",
+        action="store_true",
+        help="After --probe-endpoint confirms the model, send one fixed credential-free POST /chat/completions request",
     )
     agents_doctor.add_argument("--timeout-seconds", type=int, default=5, help="Endpoint probe timeout (1-60 seconds)")
 
@@ -592,6 +597,7 @@ def handle_execution_command(
                         endpoint=args.endpoint,
                         api_key_env=args.api_key_env,
                         probe_endpoint=args.probe_endpoint,
+                        probe_chat=args.probe_chat,
                         timeout_seconds=args.timeout_seconds,
                     ),
                     indent=2,

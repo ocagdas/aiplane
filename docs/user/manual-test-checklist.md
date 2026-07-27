@@ -76,6 +76,14 @@ or intentionally public OpenAI-compatible endpoint:
 aiplane agents doctor manual-agent --framework crewai --model "$CHAT_ALIAS" --probe-endpoint --timeout-seconds 5
 ```
 
+For a controlled chat-completions compatibility check, add `--probe-chat`. This
+sends exactly one fixed `Reply with OK.` request only after the inventory probe
+lists the selected model; it sends no credentials and does not run an agent:
+
+```bash
+aiplane agents doctor manual-agent --framework crewai --model "$CHAT_ALIAS" --probe-endpoint --probe-chat --timeout-seconds 5
+```
+
 ### F. Reproducibility, stacks, and contributor gate
 
 ```bash
@@ -569,6 +577,8 @@ aiplane agents manifest manual-agent --framework langgraph --model "$CHAT_ALIAS"
 aiplane agents doctor manual-agent --framework crewai --model "$CHAT_ALIAS"
 # Optional live, unauthenticated GET /models probe; use only against an endpoint you intend to contact:
 aiplane agents doctor manual-agent --framework crewai --model "$CHAT_ALIAS" --probe-endpoint --timeout-seconds 5
+# Optional fixed chat probe; it requires --probe-endpoint and sends one "Reply with OK." request without credentials:
+aiplane agents doctor manual-agent --framework crewai --model "$CHAT_ALIAS" --probe-endpoint --probe-chat --timeout-seconds 5
 aiplane agents export manual-agent --framework langgraph --model "$CHAT_ALIAS" --file agent.py
 aiplane agents export manual-agent --framework crewai --model "$CHAT_ALIAS" --file endpoint-smoke.py
 aiplane agents export manual-agent --framework crewai --model "$CHAT_ALIAS" --file endpoint-smoke-requirements.txt
@@ -587,7 +597,7 @@ aiplane orchestrators doctor langgraph
 - [ ] Plans contain reviewed model alias, native id, endpoint, tool policy, approval mode, limits, and audit label where configured.
 - [ ] The manifest is schema version `1.0`, is marked `render_only`, and says Aiplane does not run agents.
 - [ ] Each framework config contains its framework-specific topology key and readiness checks, including Python version, observed framework package version or missing-package warning, HTTP(S) endpoint shape, OpenAI-compatible protocol, and declared chat role.
-- [ ] `agents doctor` performs no network request by default, imports no framework, and never reads or transmits credentials. With `--probe-endpoint`, it sends only an unauthenticated `GET /models`, reports whether each selected native model is listed, and never sends a prompt or starts an agent. Use `--timeout-seconds 5` for a bounded live probe; values outside 1–60 fail before network contact.
+- [ ] `agents doctor` performs no network request by default, imports no framework, and never reads or transmits credentials. With `--probe-endpoint`, it sends only an unauthenticated `GET /models` and reports whether each selected native model is listed. `--probe-chat` requires that inventory probe to succeed and then sends exactly one fixed `Reply with OK.` OpenAI-compatible chat request; it records only success/failure, never generated text, and never starts an agent. Use `--timeout-seconds 5` for a bounded live probe; values outside 1–60 fail before network contact.
 - [ ] Every framework provides a compilable `endpoint-smoke.py` and minimal `endpoint-smoke-requirements.txt`; separate framework requirements are only needed for framework-native translation. Only LangGraph and `simple-openai` claim a framework-native executable `agent.py`.
 - [ ] Single-role frameworks report a readiness mismatch when given multiple roles.
 - [ ] Starter output contains no secret values and explicitly says it installs nothing and runs no agents.

@@ -399,9 +399,10 @@ Add `--probe-endpoint` only when you want a live, credential-free OpenAI-compati
 
 ```bash
 aiplane agents doctor repo-helper --framework crewai --model MODEL_ALIAS --probe-endpoint --timeout-seconds 5
+aiplane agents doctor repo-helper --framework crewai --model MODEL_ALIAS --probe-endpoint --probe-chat --timeout-seconds 5
 ```
 
-The doctor reads installed distribution metadata without importing a framework. Its optional probe sends no API key, never reads credential references, and never sends a prompt, starts an agent, or installs packages. A `401` or `403` means the endpoint rejected this anonymous inventory check; use `aiplane providers test` for a provider-specific authenticated check instead. An observed package version is evidence, not a compatibility guarantee.
+The doctor reads installed distribution metadata without importing a framework. Its inventory probe sends no API key and never reads credential references. Add `--probe-chat` only with `--probe-endpoint` when a minimal live chat-completions check is appropriate: after the selected native model is listed, it sends exactly one `Reply with OK.` prompt with `max_tokens: 1`, records only success/failure, and never starts an agent. A `401` or `403` means the endpoint rejected this anonymous check; use `aiplane providers test` for a provider-specific authenticated check instead. An observed package version is evidence, not a compatibility guarantee.
 
 ```bash
 aiplane agents export repo-helper --framework crewai --model MODEL_ALIAS --file endpoint-smoke.py > endpoint-smoke.py

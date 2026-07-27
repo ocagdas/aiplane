@@ -140,15 +140,19 @@ class AgentManager:
         endpoint: str | None = None,
         api_key_env: str | None = None,
         probe_endpoint: bool = False,
+        probe_chat: bool = False,
         timeout_seconds: int = 5,
     ) -> dict[str, Any]:
-        """Inspect framework packages and optionally probe endpoint model inventories.
+        """Inspect framework packages and optionally probe endpoint behaviour.
 
-        The optional probe is intentionally credential-free and only verifies the
-        OpenAI-compatible ``GET /models`` surface; it never starts a workflow.
+        Optional probes are credential-free and never start a workflow. The chat
+        probe sends one fixed, minimal request only after endpoint inventory has
+        confirmed the selected model.
         """
         if not 1 <= timeout_seconds <= 60:
             raise ValueError("agent endpoint probe timeout must be between 1 and 60 seconds")
+        if probe_chat and not probe_endpoint:
+            raise ValueError("--probe-chat requires --probe-endpoint")
         manifest = self.manifest(
             name,
             stack=stack,
@@ -163,17 +167,31 @@ class AgentManager:
         roles = manifest.get("roles") if isinstance(manifest.get("roles"), dict) else {}
         package_versions = framework_package_versions(selected_framework)
         package_ok = all(bool(row["installed"]) for row in package_versions)
-        probes = {
-            role_name: self._probe_endpoint_models(
+        probes = {}
+        for role_name, role in sorted(roles.items()):
+            if not isinstance(role, dict):
+                continue
+            inventory = self._probe_endpoint_models(
                 str(role.get("endpoint") or ""),
                 str(role.get("model_id") or ""),
                 timeout_seconds=timeout_seconds,
                 enabled=probe_endpoint,
             )
-            for role_name, role in sorted(roles.items())
-            if isinstance(role, dict)
-        }
+            inventory["chat_completion"] = self._probe_endpoint_chat(
+                str(role.get("endpoint") or ""),
+                str(role.get("model_id") or ""),
+                timeout_seconds=timeout_seconds,
+                enabled=probe_chat,
+                inventory_ok=bool(inventory.get("ok")),
+            )
+            probes[role_name] = inventory
         endpoint_ok = all(bool(probe.get("ok")) for probe in probes.values()) if probe_endpoint else True
+        chat_ok = all(bool(probe["chat_completion"].get("ok")) for probe in probes.values()) if probe_chat else True
+        network_contacted = any(
+            bool(probe.get("network_contacted")) or bool(probe["chat_completion"].get("network_contacted"))
+            for probe in probes.values()
+        )
+        chat_prompt_sent = any(bool(probe["chat_completion"].get("attempted")) for probe in probes.values())
         readiness = manifest["readiness"]
         checks = [
             {
@@ -202,6 +220,18 @@ class AgentManager:
                     else "one or more endpoint probes did not verify the selected model"
                 ),
             },
+            {
+                "name": "endpoint_chat_probe",
+                "ok": chat_ok,
+                "skipped": not probe_chat,
+                "detail": (
+                    "credential-free chat-completions probe passed for every role"
+                    if probe_chat and chat_ok
+                    else "chat-completions probe was not requested; pass --probe-chat with --probe-endpoint"
+                    if not probe_chat
+                    else "one or more endpoints did not complete the fixed chat probe"
+                ),
+            },
         ]
         return {
             "record_type": "agent_framework_doctor",
@@ -210,7 +240,7 @@ class AgentManager:
             "source_stack": stack,
             "framework": selected_framework,
             "mutates": False,
-            "network_contacted": probe_endpoint,
+            "network_contacted": network_contacted,
             "credential_behavior": "never reads or transmits credentials",
             "ready": all(bool(check["ok"]) for check in checks if not check.get("skipped")),
             "checks": checks,
@@ -220,11 +250,11 @@ class AgentManager:
                 "imports_frameworks": False,
                 "starts_agents": False,
                 "writes_credentials": False,
-                "runs_model_prompts": False,
+                "runs_model_prompts": chat_prompt_sent,
             },
             "notes": [
                 "Package versions are observed from installed distribution metadata only; compatibility is not inferred from a version number.",
-                "Endpoint probing is opt-in, unauthenticated, and limited to GET /models. Use provider-specific tests for authenticated endpoint validation.",
+                "Endpoint inventory probing is opt-in, unauthenticated, and limited to GET /models. --probe-chat adds one fixed POST /chat/completions request after inventory confirms the selected model.",
             ],
         }
 
@@ -301,6 +331,96 @@ class AgentManager:
             "reason": "selected model listed by endpoint"
             if model_available
             else "selected model is not listed by endpoint",
+        }
+
+    def _probe_endpoint_chat(
+        self,
+        endpoint: str,
+        model_id: str,
+        *,
+        timeout_seconds: int,
+        enabled: bool,
+        inventory_ok: bool,
+    ) -> dict[str, Any]:
+        if not enabled:
+            return {
+                "attempted": False,
+                "network_contacted": False,
+                "ok": None,
+                "reason": "pass --probe-chat with --probe-endpoint to send a fixed credential-free chat request",
+            }
+        if not inventory_ok:
+            return {
+                "attempted": False,
+                "network_contacted": False,
+                "ok": False,
+                "reason": "selected model was not confirmed by GET /models; chat probe was not sent",
+            }
+        try:
+            chat_url = _chat_probe_url(endpoint)
+        except ValueError as exc:
+            return {
+                "attempted": False,
+                "network_contacted": False,
+                "ok": False,
+                "reason": str(exc),
+            }
+        body = json.dumps(
+            {
+                "model": model_id,
+                "messages": [{"role": "user", "content": "Reply with OK."}],
+                "max_tokens": 1,
+                "temperature": 0,
+                "stream": False,
+            }
+        ).encode("utf-8")
+        request = Request(
+            chat_url,
+            data=body,
+            headers={
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+                "User-Agent": "aiplane/0.1",
+            },
+            method="POST",
+        )
+        try:
+            with self.http_transport.open(request, timeout=timeout_seconds) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        except HTTPError as exc:
+            return {
+                "attempted": True,
+                "network_contacted": True,
+                "ok": False,
+                "url": chat_url,
+                "http_status": exc.code,
+                "reason": "endpoint rejected the anonymous chat probe; use provider-specific authenticated validation",
+            }
+        except (URLError, TimeoutError, OSError, ConnectionError, json.JSONDecodeError):
+            return {
+                "attempted": True,
+                "network_contacted": True,
+                "ok": False,
+                "url": chat_url,
+                "reason": "endpoint did not return an OpenAI-compatible chat response",
+            }
+        choices = payload.get("choices") if isinstance(payload, dict) else None
+        message = (
+            choices[0].get("message")
+            if isinstance(choices, list) and choices and isinstance(choices[0], dict)
+            else None
+        )
+        content = message.get("content") if isinstance(message, dict) else None
+        ok = isinstance(content, str) and bool(content.strip())
+        return {
+            "attempted": True,
+            "network_contacted": True,
+            "ok": ok,
+            "url": chat_url,
+            "model_id": model_id,
+            "reason": "endpoint returned a non-empty chat completion"
+            if ok
+            else "endpoint response does not contain a non-empty chat completion",
         }
 
     def plan(
@@ -751,6 +871,17 @@ def _models_probe_url(endpoint: str) -> str:
     path = parsed.path.rstrip("/")
     if not path.endswith("/models"):
         path = f"{path}/models" if path else "/models"
+    return urlunsplit((parsed.scheme, parsed.netloc, path, parsed.query, ""))
+
+
+def _chat_probe_url(endpoint: str) -> str:
+    validated = validate_http_endpoint(endpoint, "agent endpoint")
+    parsed = urlsplit(validated)
+    path = parsed.path.rstrip("/")
+    if path.endswith("/models"):
+        path = path[: -len("/models")]
+    if not path.endswith("/chat/completions"):
+        path = f"{path}/chat/completions" if path else "/chat/completions"
     return urlunsplit((parsed.scheme, parsed.netloc, path, parsed.query, ""))
 
 
