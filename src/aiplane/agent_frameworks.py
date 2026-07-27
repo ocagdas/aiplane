@@ -153,6 +153,26 @@ def _installed_distribution_version(requirement: str) -> str | None:
         return None
 
 
+def framework_package_versions(framework: str) -> list[dict[str, Any]]:
+    """Observe installed framework distributions without importing their modules."""
+    name = normalize_framework(framework)
+    rows = []
+    for requirement in FRAMEWORK_SPECS[name]["packages"]:
+        requirement = str(requirement)
+        distribution = requirement.split("[", 1)[0]
+        version = _installed_distribution_version(requirement)
+        rows.append(
+            {
+                "requirement": requirement,
+                "distribution": distribution,
+                "installed": version is not None,
+                "version": version,
+                "compatibility": "observed_only",
+            }
+        )
+    return rows
+
+
 def _framework_package_checks(packages: list[str]) -> list[dict[str, Any]]:
     checks = []
     for package in packages:
@@ -256,6 +276,7 @@ def framework_readiness(framework: str, roles: dict[str, Any], approval_mode: st
         "framework": name,
         "ready": all(bool(check["ok"]) for check in checks),
         "packages": list(spec["packages"]),
+        "package_versions": framework_package_versions(name),
         "checks": check_map,
         "control_enforcement": framework_control_enforcement(name, roles, approval_mode),
     }

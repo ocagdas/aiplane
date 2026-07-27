@@ -5,11 +5,16 @@ import hashlib
 import json
 from pathlib import Path, PurePosixPath
 from typing import Any
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlsplit, urlunsplit
+from urllib.request import Request
 
+from .boundaries import HttpTransport, UrllibHttpTransport
 from .config import agent_artifacts_root, dump_yaml
 from .agent_frameworks import (
     FRAMEWORK_SPECS,
     framework_control_enforcement,
+    framework_package_versions,
     framework_readiness,
     normalize_framework,
     render_framework_starter,
@@ -115,12 +120,188 @@ def _safe_job_workspace(value: str) -> str:
 
 
 class AgentManager:
-    def __init__(self, profile: Profile):
+    def __init__(self, profile: Profile, http_transport: HttpTransport | None = None):
         self.profile = profile
         self.integrations = IntegrationManager(profile)
+        self.http_transport = http_transport or UrllibHttpTransport()
 
     def templates(self) -> list[dict[str, Any]]:
         return [{"name": name, **spec} for name, spec in sorted(AGENT_FRAMEWORKS.items())]
+
+    def doctor(
+        self,
+        name: str,
+        *,
+        stack: str | None = None,
+        framework: str = "langgraph",
+        model: str | None = None,
+        runtime: str | None = None,
+        provider: str | None = None,
+        endpoint: str | None = None,
+        api_key_env: str | None = None,
+        probe_endpoint: bool = False,
+        timeout_seconds: int = 5,
+    ) -> dict[str, Any]:
+        """Inspect framework packages and optionally probe endpoint model inventories.
+
+        The optional probe is intentionally credential-free and only verifies the
+        OpenAI-compatible ``GET /models`` surface; it never starts a workflow.
+        """
+        if not 1 <= timeout_seconds <= 60:
+            raise ValueError("agent endpoint probe timeout must be between 1 and 60 seconds")
+        manifest = self.manifest(
+            name,
+            stack=stack,
+            framework=framework,
+            model=model,
+            runtime=runtime,
+            provider=provider,
+            endpoint=endpoint,
+            api_key_env=api_key_env,
+        )
+        selected_framework = str(manifest["orchestrator"])
+        roles = manifest.get("roles") if isinstance(manifest.get("roles"), dict) else {}
+        package_versions = framework_package_versions(selected_framework)
+        package_ok = all(bool(row["installed"]) for row in package_versions)
+        probes = {
+            role_name: self._probe_endpoint_models(
+                str(role.get("endpoint") or ""),
+                str(role.get("model_id") or ""),
+                timeout_seconds=timeout_seconds,
+                enabled=probe_endpoint,
+            )
+            for role_name, role in sorted(roles.items())
+            if isinstance(role, dict)
+        }
+        endpoint_ok = all(bool(probe.get("ok")) for probe in probes.values()) if probe_endpoint else True
+        readiness = manifest["readiness"]
+        checks = [
+            {
+                "name": "framework_configuration",
+                "ok": bool(readiness.get("ready")),
+                "detail": "rendered agent-environment readiness",
+            },
+            {
+                "name": "framework_packages",
+                "ok": package_ok,
+                "detail": (
+                    "all framework distributions are installed"
+                    if package_ok
+                    else "install missing framework distributions from requirements.txt"
+                ),
+            },
+            {
+                "name": "endpoint_models_probe",
+                "ok": endpoint_ok,
+                "skipped": not probe_endpoint,
+                "detail": (
+                    "credential-free GET /models probe passed for every role"
+                    if probe_endpoint and endpoint_ok
+                    else "credential-free endpoint probe was not requested; pass --probe-endpoint"
+                    if not probe_endpoint
+                    else "one or more endpoint probes did not verify the selected model"
+                ),
+            },
+        ]
+        return {
+            "record_type": "agent_framework_doctor",
+            "name": name,
+            "profile": self.profile.name,
+            "source_stack": stack,
+            "framework": selected_framework,
+            "mutates": False,
+            "network_contacted": probe_endpoint,
+            "credential_behavior": "never reads or transmits credentials",
+            "ready": all(bool(check["ok"]) for check in checks if not check.get("skipped")),
+            "checks": checks,
+            "package_versions": package_versions,
+            "endpoint_probes": probes,
+            "execution_boundary": {
+                "imports_frameworks": False,
+                "starts_agents": False,
+                "writes_credentials": False,
+                "runs_model_prompts": False,
+            },
+            "notes": [
+                "Package versions are observed from installed distribution metadata only; compatibility is not inferred from a version number.",
+                "Endpoint probing is opt-in, unauthenticated, and limited to GET /models. Use provider-specific tests for authenticated endpoint validation.",
+            ],
+        }
+
+    def _probe_endpoint_models(
+        self,
+        endpoint: str,
+        model_id: str,
+        *,
+        timeout_seconds: int,
+        enabled: bool,
+    ) -> dict[str, Any]:
+        if not enabled:
+            return {
+                "attempted": False,
+                "network_contacted": False,
+                "ok": None,
+                "reason": "pass --probe-endpoint to send a credential-free GET /models request",
+            }
+        try:
+            models_url = _models_probe_url(endpoint)
+        except ValueError as exc:
+            return {
+                "attempted": False,
+                "network_contacted": False,
+                "ok": False,
+                "reason": str(exc),
+            }
+        request = Request(models_url, headers={"Accept": "application/json", "User-Agent": "aiplane/0.1"})
+        try:
+            with self.http_transport.open(request, timeout=timeout_seconds) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        except HTTPError as exc:
+            return {
+                "attempted": True,
+                "network_contacted": True,
+                "ok": False,
+                "url": models_url,
+                "http_status": exc.code,
+                "reason": "endpoint rejected the anonymous models probe; use provider-specific authenticated validation",
+            }
+        except (URLError, TimeoutError, OSError, ConnectionError, json.JSONDecodeError):
+            return {
+                "attempted": True,
+                "network_contacted": True,
+                "ok": False,
+                "url": models_url,
+                "reason": "endpoint did not return an OpenAI-compatible models response",
+            }
+        data = payload.get("data") if isinstance(payload, dict) else None
+        if not isinstance(data, list):
+            return {
+                "attempted": True,
+                "network_contacted": True,
+                "ok": False,
+                "url": models_url,
+                "reason": "endpoint response does not contain an OpenAI-compatible data array",
+            }
+        model_ids = sorted(
+            {
+                str(item.get("id"))
+                for item in data
+                if isinstance(item, dict) and isinstance(item.get("id"), str) and item["id"]
+            }
+        )
+        model_available = bool(model_id) and model_id in model_ids
+        return {
+            "attempted": True,
+            "network_contacted": True,
+            "ok": model_available,
+            "url": models_url,
+            "model_id": model_id,
+            "model_available": model_available,
+            "models_seen": len(model_ids),
+            "reason": "selected model listed by endpoint"
+            if model_available
+            else "selected model is not listed by endpoint",
+        }
 
     def plan(
         self,
@@ -562,6 +743,15 @@ class AgentManager:
 
 def _endpoint_smoke(selection: AgentSelection, instruction: str) -> str:
     return _simple_openai_agent(selection, instruction)
+
+
+def _models_probe_url(endpoint: str) -> str:
+    validated = validate_http_endpoint(endpoint, "agent endpoint")
+    parsed = urlsplit(validated)
+    path = parsed.path.rstrip("/")
+    if not path.endswith("/models"):
+        path = f"{path}/models" if path else "/models"
+    return urlunsplit((parsed.scheme, parsed.netloc, path, parsed.query, ""))
 
 
 def _env_example(selection: AgentSelection) -> str:
