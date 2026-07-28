@@ -25,6 +25,7 @@ from .integration_contracts import (
 )
 from .models import Profile
 from .output import json_dumps
+from .policy import PolicyEngine
 from .runtime_catalog import RuntimeCatalog
 from .runtime_pull import ollama_model_id, runtime_pull_support
 from .secrets import CredentialStore
@@ -120,6 +121,7 @@ class IntegrationManager:
             model_name = str(plan["selection"]["primary"]["name"])
         model_name = model_name or self._default_model_name("chat_model", "code_model", "self_managed_model")
         model = self.catalog.get(model_name)
+        self._require_model_allowed(model_name)
         provider_name = str(model.get("provider"))
         endpoint_value = endpoint or self._endpoint_for_provider(provider_name)
         api_key_value = api_key_env or self._api_key_env_for(model, provider_name)
@@ -162,6 +164,7 @@ class IntegrationManager:
         if not row:
             raise ValueError("saved plan does not contain a primary selection")
         model_name = str(row.get("name") or "selected-model")
+        self._require_model_allowed(model_name)
         model = {"model": row.get("model")}
         provider_name = str(row.get("provider") or "")
         endpoint = str(row.get("endpoint") or "")
@@ -536,6 +539,18 @@ class IntegrationManager:
     def _required_roles(self, tool: str) -> list[dict[str, Any]]:
         return required_roles(tool)
 
+    def _require_model_allowed(self, model_name: str) -> None:
+        model = self.catalog.get(model_name)
+        provider_name = str(model.get("provider") or "")
+        policy = PolicyEngine(self.profile)
+        provider = policy.explain_base(f"provider:{provider_name}")
+        if not provider.allowed:
+            raise PermissionError(f"integration selection blocked: {provider.reason}")
+        if not bool(model.get("local", False)):
+            cloud = policy.explain_base("backend:cloud")
+            if not cloud.allowed:
+                raise PermissionError(f"integration selection blocked: {cloud.reason}")
+
     def _default_model_name(self, *roles: str) -> str:
         defaults = self.catalog.defaults()
         models = self.catalog.models()
@@ -601,6 +616,7 @@ class IntegrationManager:
         runtime_constraint: str | None = None,
     ) -> dict[str, Any]:
         model = self.catalog.get(model_name)
+        self._require_model_allowed(model_name)
         runtime_catalog = RuntimeCatalog(self.profile)
         supported = runtime_catalog.supported_runtimes(model_name)
         if runtime_constraint:
@@ -910,6 +926,11 @@ class IntegrationManager:
 
     def _continue_export_from_plan(self, plan: dict[str, Any]) -> IntegrationExport:
         selection = plan["selection"]
+        for role in ("chat", "autocomplete", "embedding"):
+            row = selection.get(role)
+            if not isinstance(row, dict):
+                raise ValueError(f"saved Continue plan is missing {role} selection")
+            self._require_model_allowed(str(row.get("name") or ""))
 
         def api_key(row: dict[str, Any]) -> str:
             key_env = str(row.get("api_key_env") or "")

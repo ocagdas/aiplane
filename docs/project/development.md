@@ -133,10 +133,11 @@ Artifacts are written to `.aiplane/wheelhouse/` with `SHA256SUMS` and `provenanc
 ### Make Targets and Test Coverage
 
 - `make format`: format only (no tests)
+- `make format-check`: check formatting without modifying files
 - `make lint`: lint only (no tests)
 - `make test`: run tests in the current environment
 - `make test-clean`: run tests in isolated temp profiles
-- `make check`: `format + lint + test-clean` (full local gate)
+- `make check`: `format-check + lint + test-clean` (strict full local gate)
 
 The equivalent environment helper commands are:
 
@@ -161,7 +162,7 @@ make install-hooks
 ```
 
 By default, the hook runs:
-- `make check` (format + lint + `test-clean`)
+- `make check` (`format-check` + lint + `test-clean`)
 
 You can override behavior when you need speed or need to bypass checks for
 backup-only/local-only pushes:

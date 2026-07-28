@@ -10,9 +10,10 @@ from pathlib import Path
 import pytest
 
 
+_TEST_REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 _TEST_PROFILES_TEMP = tempfile.TemporaryDirectory(prefix="aiplane-tests-")
 _TEST_PROFILES_ROOT = Path(_TEST_PROFILES_TEMP.name) / "profiles"
-shutil.copytree(Path.cwd() / "profile-templates", _TEST_PROFILES_ROOT)
+shutil.copytree(_TEST_REPOSITORY_ROOT / "profile-templates", _TEST_PROFILES_ROOT)
 os.environ["AIPLANE_PROFILES_DIR"] = str(_TEST_PROFILES_ROOT)
 
 from .profile_fixtures import _materialize_test_models  # noqa: E402

@@ -96,6 +96,13 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
 
+def _unhandled_command(parser, command: object) -> int:
+    parser.error(
+        f"internal dispatch error: no handler for command {command!r}; run 'aiplane --help' and report this command-dispatch bug"
+    )
+    raise AssertionError("argparse parser.error must terminate the command")
+
+
 def _debug_enabled(argv: list[str] | None) -> bool:
     arguments = sys.argv[1:] if argv is None else argv
     return "--debug" in arguments or os.environ.get("AIPLANE_DEBUG", "").lower() in {"1", "true", "yes"}
@@ -316,4 +323,4 @@ def _main(argv: list[str] | None = None) -> int:
     if deploy_remote_result is not None:
         return deploy_remote_result
 
-    return 1
+    return _unhandled_command(parser, args.command)

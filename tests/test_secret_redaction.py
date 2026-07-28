@@ -8,7 +8,7 @@ from aiplane.audit import AuditLogger
 from aiplane.config import load_profile
 from aiplane.mcp import AiplaneMcpServer
 from aiplane.secrets import REDACTED, contains_secret, redact
-from aiplane.tools import ToolExecutor
+from aiplane.tool_execution import ToolExecutor
 
 
 def test_redact_handles_command_flags_assignments_tokens_and_nested_keys() -> None:

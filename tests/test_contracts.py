@@ -120,8 +120,13 @@ def test_aiplane_skill_is_versioned_and_not_template_text() -> None:
     assert "name: aiplane" in text
     assert "Version: 0.1.0" in text
     assert "TODO" not in text
-    assert "control-plane CLI" in text
-    assert Path("skills/aiplane/agents/openai.yaml").is_file()
+    assert "environment doctor and configuration compiler" in text
+    assert "control-plane" not in text
+    assert "tests/test_mvp.py" not in text
+    assert "tests/test_quick_smoke.py" in text
+    manifest = Path("skills/aiplane/agents/openai.yaml").read_text(encoding="utf-8")
+    assert "environment-configuration" in manifest
+    assert "control-plane" not in manifest
 
 
 def test_cli_command_families_are_owned_outside_composition_root() -> None:
@@ -169,6 +174,18 @@ def test_full_check_uses_configurable_file_level_parallelism() -> None:
     script = Path("scripts/check.sh").read_text(encoding="utf-8")
     assert "AIPLANE_TEST_WORKERS:-4" in script
     assert "--dist loadfile" in script
+
+
+def test_make_check_is_strict_and_contributor_commands_are_maintained() -> None:
+    makefile = Path("Makefile").read_text(encoding="utf-8")
+    contributing = Path("CONTRIBUTING.md").read_text(encoding="utf-8")
+
+    assert "format-check:\n\tpython -m ruff format --check src tests" in makefile
+    assert "check: format-check lint test-clean" in makefile
+    assert "test_mvp.py" not in contributing
+    assert "tests/test_contracts.py" in contributing
+    assert "tests/test_quick_smoke.py" in contributing
+    assert "environment doctor and configuration compiler" in contributing
 
 
 def test_external_io_calls_are_centralized_in_boundaries() -> None:
@@ -361,7 +378,7 @@ def test_p0_documentation_sweep_stays_open_until_user_demonstrations() -> None:
 def test_post_gate_backlog_numbers_are_sequential() -> None:
     backlog = _project_plan_section("Product Adoption Backlog")
     numbered = [int(value) for value in re.findall(r"(?m)^(\d+)\. ", backlog)]
-    assert numbered == list(range(1, 26))
+    assert numbered == list(range(1, max(numbered) + 1))
 
 
 def test_public_demo_plan_is_bounded_reproducible_and_uses_current_commands() -> None:

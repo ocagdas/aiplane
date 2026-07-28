@@ -9,7 +9,7 @@ Version: 0.1.0
 
 ## Operating Boundary
 
-Treat `aiplane` as a control-plane CLI. It plans, checks, prepares, and exports configuration for AI development environments. It must not become a coding agent, model runtime, model proxy, IDE extension, hidden cloud deployment engine, or broad MCP shell executor.
+Treat `aiplane` as an environment doctor and configuration compiler. It plans, checks, prepares, and exports configuration for AI development environments. It must not become a coding agent, model runtime, model proxy, IDE extension, hidden cloud deployment engine, or broad MCP shell executor.
 
 ## First Steps
 
@@ -33,7 +33,7 @@ Run focused tests for the changed area, then run the full check before calling a
 
 ```bash
 conda run -n aiplane python -m pytest tests/test_contracts.py -q
-conda run -n aiplane python -m pytest tests/test_mvp.py -k "keyword_for_change" -q
+conda run -n aiplane python -m pytest tests/test_quick_smoke.py -q
 conda run -n aiplane scripts/check.sh
 ```
 

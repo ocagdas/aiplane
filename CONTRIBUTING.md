@@ -2,7 +2,7 @@
 
 Thanks for considering a contribution.
 
-`aiplane` is a control-plane CLI for AI development environments. It plans, checks, prepares, and exports configuration for providers, models, runtimes, machines, stacks, tools, integrations, and MCP. It is not a coding agent, model runtime, model proxy, IDE extension, or hidden cloud deployment engine.
+`aiplane` is an environment doctor and configuration compiler for AI development environments. It plans, checks, prepares, and exports configuration for providers, models, runtimes, machines, stacks, tools, integrations, and MCP. It is not a coding agent, model runtime, model proxy, IDE extension, or hidden cloud deployment engine.
 
 ## Before You Start
 
@@ -41,7 +41,7 @@ Run focused tests for the area you changed, then run the full check before openi
 
 ```bash
 conda run -n aiplane python -m pytest tests/test_contracts.py -q
-conda run -n aiplane python -m pytest tests/test_mvp.py -k "keyword_for_your_change" -q
+conda run -n aiplane python -m pytest tests/test_quick_smoke.py -q
 conda run --no-capture-output -n aiplane scripts/check.sh
 ```
 
@@ -55,7 +55,7 @@ When behavior changes, update relevant docs in the same change:
 
 - `docs/user/`
 - `docs/project/project-plan.md`
-- tests in `tests/test_mvp.py` or a focused test file
+- a focused `tests/test_*.py` file that covers the changed behavior
 
 Keep CLI help, docs, MCP surfaces, and tests aligned.
 

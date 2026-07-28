@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from aiplane.integrations import IntegrationManager
 from aiplane.policy import PolicyEngine
 from aiplane.policy_state import PolicyGrantStore, parse_duration
 from tests.cli_fixtures import run_cli
@@ -138,6 +139,17 @@ def test_provider_and_cloud_grants_do_not_leak_into_model_decisions(tmp_path: Pa
         assert cloud_engine.cloud_decision().outcome == "overridden"
         assert cloud_engine.model_decision("remote-openai") == cloud_model_base
         assert cloud_engine.explain_base("model:remote-openai") == cloud_model_base
+
+
+def test_integration_plan_and_export_enforce_selected_model_policy(tmp_path: Path) -> None:
+    with _isolated_test_profile(workspace=tmp_path) as source:
+        restricted = replace(source, repository={**source.repository, "allowed_providers": ["ollama"]})
+        manager = IntegrationManager(restricted)
+
+        with pytest.raises(PermissionError, match="provider .openai. is not allowed"):
+            manager.plan("continue", chat="managed-chat-small")
+        with pytest.raises(PermissionError, match="provider .openai. is not allowed"):
+            manager.export("continue", "managed-chat-small")
 
 
 def test_policy_state_rejects_malformed_data_and_policy_fails_closed(tmp_path: Path) -> None:

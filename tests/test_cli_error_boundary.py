@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import argparse
 import io
 from contextlib import redirect_stderr
 from unittest.mock import patch
 
-from aiplane.cli import main
+import pytest
+
+from aiplane.cli import _unhandled_command, main
 from aiplane.secrets import REDACTED
 
 
@@ -17,6 +20,16 @@ def _run_with_failure(error: BaseException, argv: list[str] | None = None) -> tu
     with patch("aiplane.cli._main", side_effect=error), redirect_stderr(stderr):
         code = main([] if argv is None else argv)
     return code, stderr.getvalue()
+
+
+def test_unhandled_dispatch_reports_an_actionable_internal_error(capsys) -> None:
+    parser = argparse.ArgumentParser(prog="aiplane")
+
+    with pytest.raises(SystemExit) as result:
+        _unhandled_command(parser, "synthetic-command")
+
+    assert result.value.code == 2
+    assert "no handler for command 'synthetic-command'" in capsys.readouterr().err
 
 
 def test_expected_error_message_is_redacted() -> None:
