@@ -202,6 +202,12 @@ aiplane tool --yes write_file note.txt hello
 aiplane tool --yes run_tests python -m pytest -q
 ```
 
+Without passthrough arguments, `run_tests` runs `python -m pytest -q`, `build`
+runs `python -m compileall src`, and `lint` runs `python -m ruff check src tests`.
+Those are contributor/development commands: a missing pytest or Ruff installation,
+or a failing command, is reported as a failed tool action rather than a successful
+empty result. Use `aiplane tools doctor` for prerequisite guidance.
+
 `--yes` does not add a tool to the profile allowlist or bypass workspace path
 checks. It only satisfies an approval already required by policy for that one
 command. Tool decisions and outcomes are written to the local profile audit log.

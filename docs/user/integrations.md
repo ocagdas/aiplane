@@ -12,6 +12,8 @@ name, endpoint/base URL, and API key environment variable where applicable. Use
 `--endpoint` when the model is hosted somewhere other than the provider default,
 for example a shared workstation or cloud gateway.
 
+Selection applies the profile repository policy before rendering. A provider allow-list or cloud-backend restriction blocks a matching managed alias in `plan`, `setup`, and `export`; resolve the reported policy rule or choose an allowed alias. This remains a configuration check: it does not send a request to the selected endpoint.
+
 ## Plan, Setup, Export
 
 The integration flow has three separate steps. With the shipped profile template, discover or promote model entries first, then pass them explicitly:

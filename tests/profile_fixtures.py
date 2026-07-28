@@ -12,6 +12,7 @@ from aiplane.models import Profile
 
 
 _REAL_LOAD_PROFILE = load_profile
+_TEST_REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 
 
 def _test_model_fixture() -> dict[str, object]:
@@ -39,8 +40,8 @@ def _materialize_test_models(profile_root: Path) -> None:
 def _ensure_repo_test_profile(name: str, profiles_dir: Path | str | None = None) -> None:
     if profiles_dir is not None:
         return
-    destination = Path.cwd() / "profiles" / name
-    source = Path.cwd() / "profile-templates" / name
+    destination = _TEST_REPOSITORY_ROOT / "profiles" / name
+    source = _TEST_REPOSITORY_ROOT / "profile-templates" / name
     if not source.is_dir():
         return
     if not destination.exists():
@@ -61,7 +62,7 @@ def _ensure_repo_test_profile(name: str, profiles_dir: Path | str | None = None)
 def _isolated_profiles_dir(name: str = "local-dev"):
     with tempfile.TemporaryDirectory() as tmp:
         profiles_dir = Path(tmp) / "profiles"
-        template_source = Path.cwd() / "profile-templates" / name
+        template_source = _TEST_REPOSITORY_ROOT / "profile-templates" / name
         prepared_root = os.environ.get("AIPLANE_PROFILES_DIR")
         prepared_source = Path(prepared_root) / name if prepared_root else None
         source = prepared_source if prepared_source is not None and prepared_source.is_dir() else template_source

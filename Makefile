@@ -18,10 +18,13 @@ test-clean:
 format:
 	python -m ruff format src tests
 
+format-check:
+	python -m ruff format --check src tests
+
 lint:
 	python -m ruff check src tests
 
-check: format lint test-clean
+check: format-check lint test-clean
 
 wheel-local:
 	$(PYTHON) scripts/build_local_wheel.py --clean
@@ -36,4 +39,4 @@ install-hooks:
 	printf 'Installed pre-push hook to .git/hooks/pre-push (from .githooks/pre-push).\n'
 	printf 'Override: export AIPLANE_PREPUSH_MODE=backup|fast|off (default=full).\n'
 
-.PHONY: test test-clean format lint check wheel-local install-hooks
+.PHONY: test test-clean format format-check lint check wheel-local install-hooks

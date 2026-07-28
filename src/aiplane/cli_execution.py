@@ -17,7 +17,7 @@ from .config import load_profile
 from .integrations import IntegrationManager
 from .models import AuditEvent
 from .router import Router
-from .tools import ToolExecutor
+from .tool_execution import ToolExecutor
 
 
 def add_execution_parsers(

@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from aiplane.agents import AgentManager
+from aiplane.approvals import ApprovalHandler
 from aiplane.audit import AuditLogger
 from aiplane.backends import AnthropicMessagesBackend, AzureOpenAIBackend, OllamaBackend, OpenAICompatibleBackend
 from aiplane.benchmarks import BenchmarkRunner
@@ -17,7 +20,8 @@ from aiplane.providers import ProviderRegistry
 from aiplane.remote import RemoteManager
 from aiplane.runtime_catalog import RuntimeCatalog
 from aiplane.stacks import StackManager
-from aiplane.tools import ToolExecutor, ToolchainManager
+from aiplane.tool_execution import ToolExecutor
+from aiplane.tools import ToolchainManager
 
 
 from .boundary_fakes import FakeCommandRunner, FakeHttpTransport
@@ -49,6 +53,36 @@ def test_domain_managers_accept_explicit_boundaries() -> None:
     assert OpenAICompatibleBackend("https://example.invalid/v1", http_transport=transport).http_transport is transport
     assert AnthropicMessagesBackend(http_transport=transport).http_transport is transport
     assert AzureOpenAIBackend("https://example.invalid", http_transport=transport).http_transport is transport
+
+
+def test_tool_executor_default_development_commands_are_exact_and_fail_closed() -> None:
+    profile = load_profile("local-dev", Path.cwd())
+    runner = FakeCommandRunner()
+    executor = ToolExecutor(
+        profile,
+        AuditLogger(profile),
+        approvals=ApprovalHandler(assume_yes=True),
+        command_runner=runner,
+    )
+
+    executor.run("run_tests", [])
+    executor.run("build", [])
+    executor.run("lint", [])
+
+    assert runner.commands == [
+        ["python", "-m", "pytest", "-q"],
+        ["python", "-m", "compileall", "src"],
+        ["python", "-m", "ruff", "check", "src", "tests"],
+    ]
+
+    failing = ToolExecutor(
+        profile,
+        AuditLogger(profile),
+        approvals=ApprovalHandler(assume_yes=True),
+        command_runner=FakeCommandRunner(returncode=1, stderr="No module named ruff"),
+    )
+    with pytest.raises(RuntimeError, match="No module named ruff"):
+        failing.run("lint", [])
 
 
 def test_deploy_apply_uses_injected_runner() -> None:

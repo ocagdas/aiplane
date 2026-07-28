@@ -58,7 +58,7 @@ from aiplane.runtime_catalog import RuntimeCatalog
 from aiplane.runtime_pull import ollama_model_id, runtime_pull_support
 from aiplane.secrets import contains_secret, redact
 from aiplane.stacks import StackManager
-from aiplane.tools import ToolExecutor
+from aiplane.tool_execution import ToolExecutor
 
 from .http_fixtures import OpenAICompatibleTestHandler, TestHttpServer
 from .profile_fixtures import (
