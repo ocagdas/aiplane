@@ -629,7 +629,8 @@ class AgentManager:
         contract = dict(manifest["guardrails"])
         if limits or rate_card:
             merged = dict(manifest.get("limits") or {})
-            merged.update(limits)
+            if limits:
+                merged.update(limits)
             contract = render_guardrails(
                 name=name,
                 profile=self.profile.name,

@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 import hashlib
 import json
 from pathlib import Path
+import re
 import time
 from typing import Any
 
@@ -284,6 +285,15 @@ def validate_receipt(payload: object) -> list[str]:
     errors = [f"{key} must equal {value!r}" for key, value in expected.items() if payload.get(key) != value]
     if not isinstance(payload.get("run_id"), str) or not payload["run_id"].strip():
         errors.append("run_id must be a non-empty string")
+    guardrails_sha256 = payload.get("guardrails_sha256")
+    if not isinstance(guardrails_sha256, str) or not re.fullmatch(r"sha256:[a-f0-9]{64}", guardrails_sha256):
+        errors.append("guardrails_sha256 must be a string matching sha256:<64 hex chars>")
+    recorded_at = payload.get("recorded_at")
+    if not isinstance(recorded_at, str) or not recorded_at.strip():
+        errors.append("recorded_at must be a non-empty string")
+    enforcement_status = payload.get("enforcement_status")
+    if enforcement_status not in ("active", "stopped"):
+        errors.append("enforcement_status must be one of 'active', 'stopped'")
     if not isinstance(payload.get("counters"), dict):
         errors.append("counters must be an object")
     return errors
