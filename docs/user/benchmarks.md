@@ -177,6 +177,23 @@ not infer TTFT from elapsed time.
 }
 ```
 
+## Evidence-to-Handoff Plan
+
+After reviewing a compatible alias and collecting or importing any available calibration evidence, render one portable decision record for a runtime, client configuration, and optional external-agent starter. This reads existing profile and ignored local evidence only; it neither starts the runtime nor writes target configuration.
+
+```bash
+aiplane models handoff-plan \
+  --role chat \
+  --model MODEL_ALIAS \
+  --runtime ollama \
+  --context-tokens 8192 \
+  --integration continue \
+  --framework langgraph > model-handoff.json
+aiplane models handoff-validate model-handoff.json
+```
+
+The artifact distinguishes unavailable calibration from controlled, runtime-specific evidence. A checksum mismatch, profile mismatch, workspace escape, malformed JSON, or secret-like material fails validation. For agent guardrails and optional local receipts, see [Machines, stacks, and orchestrators](machines-and-stacks.md#portable-agent-guardrails).
+
 ## Portable Calibration Bundles
 
 Export only controlled, provenance-bearing records into a checksum-protected JSON

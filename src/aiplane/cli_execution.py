@@ -12,6 +12,7 @@ from .agent_frameworks import FRAMEWORK_SPECS
 from .approvals import ApprovalHandler
 from .audit import AuditLogger
 from .code_tasks import CodeTaskRunner
+from .cli_support import parse_settings
 from .persistence import atomic_write_text
 from .config import load_profile
 from .integrations import IntegrationManager
@@ -230,6 +231,44 @@ def add_execution_parsers(
     )
     agents_doctor.add_argument("--timeout-seconds", type=int, default=5, help="Endpoint probe timeout (1-60 seconds)")
 
+    agents_guardrails = agents_sub.add_parser(
+        "guardrails",
+        help="Render or validate portable agent guardrails",
+        description="Render a versioned, secret-free budget contract and Python callback adapter. Aiplane does not run or proxy agents.",
+        formatter_class=formatter_class,
+    )
+    agents_guardrails_sub = agents_guardrails.add_subparsers(
+        dest="agent_guardrails_command", required=True, metavar="command"
+    )
+    guardrails_render = agents_guardrails_sub.add_parser(
+        "render", help="Render a guardrails contract", formatter_class=formatter_class
+    )
+    profile_arg(guardrails_render)
+    guardrails_render.add_argument("name", help="Agent environment name")
+    guardrails_render.add_argument("--stack", help="Use limits from a configured stack")
+    guardrails_render.add_argument("--framework", choices=sorted(FRAMEWORK_SPECS), default="langgraph")
+    guardrails_render.add_argument("--model")
+    guardrails_render.add_argument("--runtime")
+    guardrails_render.add_argument("--provider")
+    guardrails_render.add_argument("--endpoint")
+    guardrails_render.add_argument("--api-key-env")
+    guardrails_render.add_argument(
+        "--limit", action="append", default=[], help="Numeric guardrail key=value; repeatable"
+    )
+    guardrails_render.add_argument(
+        "--rate", action="append", default=[], help="Pinned USD rate-card key=value; repeatable"
+    )
+    guardrails_validate = agents_guardrails_sub.add_parser(
+        "validate", help="Validate a saved guardrails contract", formatter_class=formatter_class
+    )
+    profile_arg(guardrails_validate)
+    guardrails_validate.add_argument("path", help="JSON guardrails contract inside the selected workspace")
+    guardrails_receipt = agents_guardrails_sub.add_parser(
+        "receipt", help="Inspect a saved guardrails receipt", formatter_class=formatter_class
+    )
+    profile_arg(guardrails_receipt)
+    guardrails_receipt.add_argument("path", help="JSON receipt inside the selected workspace")
+
     agents_job = agents_sub.add_parser(
         "job",
         help="Render or validate a versioned agent job handoff",
@@ -316,6 +355,8 @@ def add_execution_parsers(
             "agent-environment.json",
             "agent-environment.yaml",
             "framework-config.yaml",
+            "guardrails.json",
+            "guardrails.py",
         ],
         help="Scaffold file to print; defaults to agent.py for LangGraph/simple-openai and endpoint-smoke.py for other frameworks",
     )
@@ -603,6 +644,26 @@ def handle_execution_command(
                     indent=2,
                 )
             )
+            return 0
+        if args.agents_command == "guardrails":
+            if args.agent_guardrails_command == "validate":
+                payload = manager.validate_guardrails_file(args.path)
+            elif args.agent_guardrails_command == "receipt":
+                payload = manager.validate_receipt_file(args.path)
+            else:
+                payload = manager.guardrails(
+                    args.name,
+                    stack=args.stack,
+                    framework=args.framework,
+                    model=args.model,
+                    runtime=args.runtime,
+                    provider=args.provider,
+                    endpoint=args.endpoint,
+                    api_key_env=args.api_key_env,
+                    limits=parse_settings(args.limit),
+                    rate_card=parse_settings(args.rate),
+                )
+            print(json_dumps(payload, indent=2))
             return 0
         if args.agents_command == "job":
             if args.agent_job_command == "validate":

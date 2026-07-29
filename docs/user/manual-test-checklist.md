@@ -618,6 +618,20 @@ aiplane agents job render manual-review --stack manual-stack --task "Review this
 aiplane agents job validate manual-review.job.json
 aiplane agents handoff render manual-review --stack manual-stack --task "Review this disposable workspace." > manual-review.handoff.json
 aiplane agents handoff validate manual-review.handoff.json
+aiplane agents guardrails render manual-stack-agents --stack manual-stack --limit max_total_tokens=1000 --limit max_cost_usd=0.05 > manual-stack.guardrails.json
+aiplane agents guardrails validate manual-stack.guardrails.json
+aiplane models handoff-plan --role chat --model "$CHAT_ALIAS" --runtime "$RUNTIME" --context-tokens 4096 --integration continue --framework langgraph > model-handoff.json
+aiplane models handoff-validate model-handoff.json
+aiplane agents export manual-stack-agents --framework langgraph --model "$CHAT_ALIAS" --file guardrails.py > guardrails.py
+# Optional local adapter receipt: this exercises callbacks only; it does not start an agent or contact a model.
+export AIPLANE_GUARDRAILS_PATH="$PWD/manual-stack.guardrails.json"
+export AIPLANE_GUARDRAILS_RECEIPT_PATH="$PWD/guardrails-receipt.json"
+python -c 'from aiplane.agent_guardrails import GuardrailAdapter; import os; guard = GuardrailAdapter.from_path(os.environ["AIPLANE_GUARDRAILS_PATH"], receipt_path=os.environ["AIPLANE_GUARDRAILS_RECEIPT_PATH"]); guard.before_model_call(); guard.record_model_response(input_tokens=1, output_tokens=1)'
+aiplane agents guardrails receipt guardrails-receipt.json
+# Negative checksum check: preserve a disposable copy, edit only its sha256 field, then validate it.
+cp model-handoff.json tampered-handoff.json
+python -c 'import json; path = "tampered-handoff.json"; payload = json.load(open(path)); payload["sha256"] = "sha256:" + "0" * 64; json.dump(payload, open(path, "w"), indent=2)'
+aiplane models handoff-validate tampered-handoff.json
 aiplane stacks doctor manual-stack
 aiplane stacks endpoint-plan manual-stack
 aiplane stacks prepare manual-stack --dry-run
@@ -643,6 +657,15 @@ aiplane stacks start manual-stack --yes
 - [ ] Stack plan, doctor, manifest, job, handoff, and framework starter expose `control_enforcement`.
 - [ ] Requested workspace/tool/approval/limit controls state `not_enforced` until a selected framework or reviewed wrapper enforces them; audit labels state `label_only`.
 - [ ] `agent_control_enforcement` is warning-level rather than a false readiness claim.
+- [ ] The rendered guardrails contract is schema version `1.0`, secret-free, and states it does not run, proxy, or terminate the framework process.
+- [ ] The generated adapter exposes `before_model_call`, `record_model_response`, `before_tool_call`, `record_tool_result`, and `record_retry`; import it only from the selected framework application.
+- [ ] A configured numeric limit raises `BudgetExceeded` from that in-process callback before a subsequent model/tool/retry action exceeds the quota.
+- [ ] `model-handoff.json` is schema version `1.0`, `render_only: true`, checksummed, contains role routing, calibration evidence, runtime capacity guidance, the requested Continue plan, and optional agent guardrails metadata; it does not start a runtime or write a target-tool configuration.
+- [ ] With no controlled local/imported record, `calibration_evidence.status` is `unavailable` and clearly says that missing evidence is not a quality claim. With controlled imported evidence, it reports record/sample count, provenance, uncertainty, and runtime/context applicability without generalizing it to other machines.
+- [ ] The adapter receipt exists only after `AIPLANE_GUARDRAILS_RECEIPT_PATH` is set, is secret-free, records a run id/counters/contract checksum/cost source, and validates through `agents guardrails receipt`. Delete the environment variable and repeat the callback command: no receipt file should be created.
+- [ ] `aiplane models handoff-validate model-handoff.json` returns JSON with `record_type: "model_handoff_validation"`, `valid: true`, an empty `errors` list, `mutates: false`, and a path relative to the selected profile workspace.
+- [ ] `aiplane agents guardrails receipt guardrails-receipt.json` returns JSON with `record_type: "agent_guardrails_receipt_validation"`, `valid: true`, an empty `errors` list, and `mutates: false`. The receipt itself contains `record_type: "agent_guardrails_receipt"`, `enforcement_status: "active"`, and `counters.model_calls: 1` after the supplied callback command.
+- [ ] The tampered handoff validation exits normally but returns `valid: false` and an error containing `sha256 does not match the handoff payload`; it must not rewrite either artifact or profile state.
 
 ## 16. Render-only Kubernetes artifacts
 
@@ -696,7 +719,8 @@ aiplane profiles replay-check manual-test.profile.json --source archive --client
 ## 18. MCP and policy/audit read surfaces
 
 ```bash
-aiplane mcp manifest
+aiplane mcp manifest > mcp-manifest.json
+python -c 'import json; tools = {row["name"] for row in json.load(open("mcp-manifest.json"))["tools"]}; assert {"aiplane.models.handoff_plan", "aiplane.agents.guardrails_receipt"} <= tools'
 aiplane policy explain --action provider:ollama
 aiplane policy list
 aiplane policy drift
@@ -714,7 +738,8 @@ aiplane mcp serve
 
 Send a valid MCP initialize request from an MCP client, inspect the tool list, then terminate the stdio process.
 
-- [ ] Manifest exposes structured read/planning tools.
+- [ ] Manifest exposes structured read/planning tools, including `aiplane.models.handoff_plan` and `aiplane.agents.guardrails_receipt`; both are marked `mutates: false` and the manifest command itself writes only `mcp-manifest.json` through shell redirection.
+- [ ] A client call to `aiplane.models.handoff_plan` returns the same render-only fields as `models handoff-plan`; a client call to `aiplane.agents.guardrails_receipt` returns the same validation shape as the CLI. Neither tool contacts a provider, starts a runtime, or attaches to an agent process.
 - [ ] Mutating tools remain guarded; arbitrary shell execution is not exposed.
 - [ ] Policy output explains allowed, approval-required, temporarily-approved, blocked, and overridden decisions.
 - [ ] Grants are action-scoped, expiring, ignored workspace-local JSON; grant and revoke events are audited.

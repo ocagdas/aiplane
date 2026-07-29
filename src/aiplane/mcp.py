@@ -6,6 +6,7 @@ from pathlib import Path as FsPath
 from typing import Any
 
 from .agents import AgentManager
+from .agent_frameworks import FRAMEWORK_SPECS
 from .audit import AuditLogger
 from .config import list_profiles, load_profile, resolve_profile_name
 from .hardware import HardwareManager
@@ -16,6 +17,7 @@ from .integrations import IntegrationManager
 from .machines import MachineManager
 from .machine_model_filters import merge_machine_model_filters
 from .model_catalog import ModelCatalog
+from .model_handoff import ModelHandoffManager
 from .runtime_catalog import RuntimeCatalog
 from .stacks import StackManager
 from .model_filters import (
@@ -171,6 +173,16 @@ READ_ONLY_TOOLS: list[dict[str, Any]] = [
     {
         "name": "aiplane.agents.manifest",
         "description": "Compile a versioned agent-environment manifest from profile or stack configuration.",
+        "mutates": False,
+    },
+    {
+        "name": "aiplane.models.handoff_plan",
+        "description": "Render an evidence-backed model/runtime/client handoff without applying it.",
+        "mutates": False,
+    },
+    {
+        "name": "aiplane.agents.guardrails_receipt",
+        "description": "Validate and inspect a secret-free guardrails receipt inside the profile workspace.",
         "mutates": False,
     },
     {
@@ -531,6 +543,26 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
             "tensor_parallel": {"type": "integer", "minimum": 1},
         },
         "required": ["runtime", "model"],
+        "additionalProperties": False,
+    },
+    "aiplane.models.handoff_plan": {
+        "type": "object",
+        "properties": {
+            "profile": {"type": "string"},
+            "role": {"type": "string"},
+            "model": {"type": "string"},
+            "runtime": {"type": "string"},
+            "context_tokens": {"type": "integer", "minimum": 1},
+            "integration": {"type": "array", "items": {"type": "string"}},
+            "framework": {"type": "string", "enum": sorted(FRAMEWORK_SPECS)},
+        },
+        "required": ["role", "model", "runtime"],
+        "additionalProperties": False,
+    },
+    "aiplane.agents.guardrails_receipt": {
+        "type": "object",
+        "properties": {"profile": {"type": "string"}, "path": {"type": "string"}},
+        "required": ["path"],
         "additionalProperties": False,
     },
     "aiplane.agents.manifest": {
@@ -935,6 +967,19 @@ class AiplaneMcpServer:
                 if arguments.get("tensor_parallel") is not None
                 else None,
             )
+        if name == "aiplane.models.handoff_plan":
+            return ModelHandoffManager(profile).plan(
+                role=str(arguments.get("role") or ""),
+                model=str(arguments.get("model") or ""),
+                runtime=str(arguments.get("runtime") or ""),
+                context_tokens=int(arguments["context_tokens"])
+                if arguments.get("context_tokens") is not None
+                else None,
+                integrations=_string_list(arguments.get("integration")),
+                framework=str(arguments.get("framework") or "") or None,
+            )
+        if name == "aiplane.agents.guardrails_receipt":
+            return AgentManager(profile).validate_receipt_file(str(arguments.get("path") or ""))
         if name == "aiplane.agents.manifest":
             return AgentManager(profile).manifest(
                 str(arguments.get("name") or ""),

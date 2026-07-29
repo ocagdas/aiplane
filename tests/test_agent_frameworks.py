@@ -60,6 +60,10 @@ def test_framework_starters_have_specific_topology_and_safe_boundaries(framework
     assert payload["packages"] == FRAMEWORK_SPECS[framework]["packages"]
     assert topology_key in payload["topology"]
     assert payload["readiness"]["ready"] is True
+    guidance = payload["guardrail_integration"]
+    assert guidance["adapter_file"] == "guardrails.py"
+    assert "before_model_call" in guidance["required_hooks"]
+    assert guidance["framework_step"]
     assert payload["execution_boundary"] == {
         "runs_agents": False,
         "installs_packages": False,
