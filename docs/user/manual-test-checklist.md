@@ -630,7 +630,7 @@ python -c 'from aiplane.agent_guardrails import GuardrailAdapter; import os; gua
 aiplane agents guardrails receipt guardrails-receipt.json
 # Negative checksum check: preserve a disposable copy, edit only its sha256 field, then validate it.
 cp model-handoff.json tampered-handoff.json
-# Replace the sha256 value in tampered-handoff.json with sha256: followed by 64 zeroes.
+python -c 'import json; path = "tampered-handoff.json"; payload = json.load(open(path)); payload["sha256"] = "sha256:" + "0" * 64; json.dump(payload, open(path, "w"), indent=2)'
 aiplane models handoff-validate tampered-handoff.json
 aiplane stacks doctor manual-stack
 aiplane stacks endpoint-plan manual-stack
