@@ -4,11 +4,13 @@ import argparse
 from pathlib import Path
 from typing import Any, Callable
 
+from .agent_frameworks import FRAMEWORK_SPECS
 from .benchmarks import BenchmarkRunner
 from .cli_support import parse_provider_limits, parse_settings, refresh_progress
 from .hardware import HardwareManager
 from .machine_model_filters import merge_machine_model_filters
 from .model_catalog import ModelCatalog
+from .model_handoff import ModelHandoffManager, validate_handoff_file
 from .offline_catalog import load_offline_catalog
 from .model_filters import (
     ACCELERATOR_API_CHOICES,
@@ -620,6 +622,24 @@ def add_models_parser(
     models_route.add_argument("--runtime", help="Require one runtime for local placement")
     models_route.add_argument("--context-tokens", type=int, help="Requested context length")
     models_route.add_argument("--score-profile", help="Placement scoring profile from hardware.yaml")
+    models_handoff = models_sub.add_parser(
+        "handoff-plan",
+        help="Render an evidence-backed runtime and client handoff",
+        description="Compose existing routing, calibration, runtime, integration, and optional agent plans without applying them.",
+        formatter_class=formatter_class,
+    )
+    profile_arg(models_handoff)
+    models_handoff.add_argument("--role", required=True, help="Requested role, such as chat or code")
+    models_handoff.add_argument("--model", required=True, help="Approved model alias")
+    models_handoff.add_argument("--runtime", required=True, help="Runtime for capacity and compatibility planning")
+    models_handoff.add_argument("--context-tokens", type=int, help="Requested context length")
+    models_handoff.add_argument("--integration", action="append", default=[], help="Integration target; repeatable")
+    models_handoff.add_argument("--framework", choices=sorted(FRAMEWORK_SPECS), help="Optional agent starter framework")
+    models_handoff_validate = models_sub.add_parser(
+        "handoff-validate", help="Validate a saved model handoff", formatter_class=formatter_class
+    )
+    profile_arg(models_handoff_validate)
+    models_handoff_validate.add_argument("path", help="JSON handoff inside the selected workspace")
     models_benchmark = models_sub.add_parser(
         "benchmark",
         help="Run smoke benchmark tasks",
@@ -950,6 +970,24 @@ def handle_models_command(
                 indent=2,
             )
         )
+        return 0
+    if args.models_command == "handoff-plan":
+        print(
+            json_dumps(
+                ModelHandoffManager(profile).plan(
+                    role=args.role,
+                    model=args.model,
+                    runtime=args.runtime,
+                    context_tokens=args.context_tokens,
+                    integrations=args.integration,
+                    framework=args.framework,
+                ),
+                indent=2,
+            )
+        )
+        return 0
+    if args.models_command == "handoff-validate":
+        print(json_dumps(validate_handoff_file(profile, args.path), indent=2))
         return 0
     if args.models_command == "benchmark":
         model_name = args.name

@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aiplane.dev/schemas/agent-guardrails-receipt/v1",
+  "title": "aiplane agent guardrails receipt", "type": "object",
+  "required": ["$schema", "schema_version", "record_type", "run_id", "guardrails_sha256", "recorded_at", "counters", "enforcement_status"],
+  "properties": {
+    "$schema": {"const": "schemas/aiplane-agent-guardrails-receipt-v1.schema.json"}, "schema_version": {"const": "1.0"},
+    "record_type": {"const": "agent_guardrails_receipt"}, "run_id": {"type": "string", "minLength": 1},
+    "guardrails_sha256": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}, "recorded_at": {"type": "string", "minLength": 1},
+    "counters": {"type": "object"}, "enforcement_status": {"enum": ["active", "stopped"]}
+  }, "additionalProperties": true
+}

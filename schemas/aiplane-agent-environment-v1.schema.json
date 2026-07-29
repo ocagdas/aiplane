@@ -13,7 +13,8 @@
     "orchestrator",
     "roles",
     "execution_boundary",
-    "control_enforcement"
+    "control_enforcement",
+    "guardrails"
   ],
   "properties": {
     "$schema": {
@@ -51,6 +52,9 @@
       "type": "object"
     },
     "limits": {
+      "type": "object"
+    },
+    "guardrails": {
       "type": "object"
     },
     "approval_mode": {

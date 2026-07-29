@@ -19,6 +19,7 @@ from .agent_frameworks import (
     normalize_framework,
     render_framework_starter,
 )
+from .agent_guardrails import render_guardrails, validate_guardrails, validate_receipt
 from .integrations import IntegrationManager
 from .model_catalog import ModelCatalog
 from .network_validation import validate_http_endpoint
@@ -79,6 +80,8 @@ _AGENT_CONFIG_FILES = [
     "agent-environment.json",
     "agent-environment.yaml",
     "framework-config.yaml",
+    "guardrails.json",
+    "guardrails.py",
 ]
 for _framework_spec in AGENT_FRAMEWORKS.values():
     _framework_spec["files"] = list(dict.fromkeys([*_framework_spec.get("files", []), *_AGENT_CONFIG_FILES]))
@@ -557,7 +560,7 @@ class AgentManager:
             "audit_label": audit_label,
         }
         framework_config = render_framework_starter(orchestrator, framework_metadata)
-        return {
+        manifest = {
             "$schema": "schemas/aiplane-agent-environment-v1.schema.json",
             "schema_version": "1.0",
             "record_type": "agent_environment",
@@ -588,6 +591,75 @@ class AgentManager:
                 "Review this manifest and generated framework configuration before use.",
                 "Credential references contain names only; secret values are never rendered.",
             ],
+        }
+        manifest["guardrails"] = render_guardrails(
+            name=name,
+            profile=self.profile.name,
+            framework=orchestrator,
+            limits=limits,
+            environment_sha256=_canonical_sha256(manifest),
+        )
+        return manifest
+
+    def guardrails(
+        self,
+        name: str,
+        *,
+        stack: str | None = None,
+        framework: str = "langgraph",
+        model: str | None = None,
+        runtime: str | None = None,
+        provider: str | None = None,
+        endpoint: str | None = None,
+        api_key_env: str | None = None,
+        limits: dict[str, object] | None = None,
+        rate_card: dict[str, object] | None = None,
+    ) -> dict[str, Any]:
+        """Render the standalone guardrail contract selected by a manifest."""
+        manifest = self.manifest(
+            name,
+            stack=stack,
+            framework=framework,
+            model=model,
+            runtime=runtime,
+            provider=provider,
+            endpoint=endpoint,
+            api_key_env=api_key_env,
+        )
+        contract = dict(manifest["guardrails"])
+        if limits or rate_card:
+            merged = dict(manifest.get("limits") or {})
+            merged.update(limits)
+            contract = render_guardrails(
+                name=name,
+                profile=self.profile.name,
+                framework=str(manifest["orchestrator"]),
+                limits=merged,
+                rate_card=rate_card,
+                environment_sha256=contract.get("environment_sha256"),
+            )
+        return contract
+
+    def validate_guardrails_file(self, source: Path | str) -> dict[str, Any]:
+        path, payload = self._read_job_file(source)
+        errors = validate_guardrails(payload)
+        return {
+            "record_type": "agent_guardrails_validation",
+            "path": str(path.relative_to(self.profile.workspace)),
+            "valid": not errors,
+            "errors": errors,
+            "mutates": False,
+        }
+
+    def validate_receipt_file(self, source: Path | str) -> dict[str, Any]:
+        path, payload = self._read_job_file(source)
+        errors = validate_receipt(payload)
+        return {
+            "record_type": "agent_guardrails_receipt_validation",
+            "path": str(path.relative_to(self.profile.workspace)),
+            "valid": not errors,
+            "errors": errors,
+            "mutates": False,
         }
 
     def job(
@@ -787,7 +859,7 @@ class AgentManager:
             content = _env_example(selection)
         elif file == "README.md":
             content = _readme(name, framework, selection)
-        elif file in {"agent-environment.json", "agent-environment.yaml", "framework-config.yaml"}:
+        elif file in {"agent-environment.json", "agent-environment.yaml", "framework-config.yaml", "guardrails.json"}:
             manifest = self.manifest(
                 name,
                 framework=framework,
@@ -798,15 +870,19 @@ class AgentManager:
                 api_key_env=api_key_env,
             )
             content = (
-                json.dumps(manifest, indent=2, sort_keys=True) + "\n"
-                if file.endswith(".json")
+                json.dumps(manifest["guardrails"], indent=2, sort_keys=True) + "\n"
+                if file == "guardrails.json"
+                else json.dumps(manifest, indent=2, sort_keys=True) + "\n"
+                if file == "agent-environment.json"
                 else manifest["framework_config"]
                 if file == "framework-config.yaml"
                 else dump_yaml(manifest)
             )
+        elif file == "guardrails.py":
+            content = _guardrails_adapter_source()
         else:
             raise ValueError(
-                "file must be agent.py, endpoint-smoke.py, endpoint-smoke-requirements.txt, requirements.txt, .env.example, README.md, agent-environment.json, agent-environment.yaml, or framework-config.yaml"
+                "file must be agent.py, endpoint-smoke.py, endpoint-smoke-requirements.txt, requirements.txt, .env.example, README.md, agent-environment.json, agent-environment.yaml, framework-config.yaml, guardrails.json, or guardrails.py"
             )
         return {
             "name": "agent_export",
@@ -1017,6 +1093,22 @@ if __name__ == "__main__":
 """
 
 
+def _guardrails_adapter_source() -> str:
+    return (
+        '"""Aiplane guardrails callback adapter."""\n'
+        "import os\n"
+        "from aiplane.agent_guardrails import BudgetExceeded, GuardrailAdapter\n\n"
+        'GUARDRAILS = GuardrailAdapter.from_path(os.environ["AIPLANE_GUARDRAILS_PATH"], run_id=os.environ.get("AIPLANE_GUARDRAILS_RUN_ID", "default"), receipt_path=os.environ.get("AIPLANE_GUARDRAILS_RECEIPT_PATH"))\n'
+        "before_model_call = GUARDRAILS.before_model_call\n"
+        "record_model_response = GUARDRAILS.record_model_response\n"
+        "before_tool_call = GUARDRAILS.before_tool_call\n"
+        "record_tool_result = GUARDRAILS.record_tool_result\n"
+        "record_retry = GUARDRAILS.record_retry\n\n"
+        "# Call before_model_call before every provider request. Record response usage after it.\n"
+        "# BudgetExceeded stops the framework-owned loop; Aiplane never starts it.\n"
+    )
+
+
 def _artifact_contains_secret(value: object) -> bool:
     """Check artifact values without mistaking credential-reference field names for secrets."""
     if isinstance(value, dict):
@@ -1056,6 +1148,9 @@ def _validate_environment(payload: object) -> list[str]:
                 errors.append(f"control_enforcement missing required key {key!r}")
     if not isinstance(payload.get("execution_boundary"), dict):
         errors.append("execution_boundary must be an object")
+    guardrails = payload.get("guardrails")
+    guardrail_errors = validate_guardrails(guardrails)
+    errors.extend(f"guardrails: {error}" for error in guardrail_errors)
     return errors
 
 

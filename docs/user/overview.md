@@ -41,6 +41,7 @@ These are the public-first, inspect-first commands for onboarding before advance
 - Serve an MCP adapter so tools can query `aiplane` for profiles, providers, models, recommendations, hardware, integrations, and guarded profile changes.
 - Render SSH tunnel plans and guarded start/stop commands for remote self-managed endpoints.
 - Render checksummed runtime bundles using only the Docker, Conda, or native handoff modes each of the six primary runners actually supports, without building, starting, or applying them.
+- Render a checksummed evidence-to-handoff plan that joins a reviewed model decision, local/imported calibration status, runtime capacity, requested client exports, and optional external-agent metadata without applying any of it.
 - Render schema-linked Azure VM/AKS, remote-host, local-VM, and Dev Container starter artifact families without applying infrastructure.
 
 ## Common Terms
@@ -64,6 +65,7 @@ These are the public-first, inspect-first commands for onboarding before advance
 - **MCP Adapter**: A stdio server that lets IDEs/agents query `aiplane` as structured tools. It is separate from the model inference endpoint.
 - **Doctor**: A readiness check. It explains whether required tools, endpoints, credentials, or runtimes look usable.
 - **Benchmark**: A small smoke test for a model/runtime/profile combination. Current scores are practical smoke indicators, not formal benchmark claims.
+- **Model handoff**: A render-only, checksummed decision record from `aiplane models handoff-plan`; it records routing, calibration applicability, capacity, and requested downstream configurations but never starts a runtime or agent.
 - **Self-managed**: You manage the runtime and machine, whether it is on a laptop, workstation, VM, Docker host, or cluster.
 - **Managed service**: A third-party/cloud API owns model hosting, scaling, and the runtime, such as OpenAI or Azure OpenAI.
 

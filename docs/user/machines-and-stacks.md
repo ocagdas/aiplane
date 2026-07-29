@@ -313,7 +313,7 @@ aiplane stacks setup coding_agents \
 When `access=ssh_tunnel`, prefer `--target` to point at a configured tunnel target in `targets.yaml`.
 If omitted, `stacks` falls back to using the machine name as the tunnel target and marks this as a warning in preflight.
 
-Stack `--limit`, `--tool`, and `--role` values are structured pass-through metadata. `aiplane` stores and exports them, but enforcement belongs to the runtime, orchestrator, wrapper script, or later workload runner. A `--role ROLE=MODEL_ALIAS` entry validates that the model alias exists in the profile, records provider/runtime or managed-service endpoint ownership, and adds role-level approval and audit labels. Managed-service role aliases keep their provider endpoint, while the primary stack model remains the only model used for local runtime lifecycle install/pull/start actions.
+Stack `--limit`, `--tool`, and `--role` values are structured pass-through metadata. For portable numeric agent budgets, render `aiplane agents guardrails render` and have the selected framework call the exported Python adapter hooks; Aiplane does not launch or proxy that loop. `aiplane` stores and exports them, but enforcement belongs to the runtime, orchestrator, wrapper script, or later workload runner. A `--role ROLE=MODEL_ALIAS` entry validates that the model alias exists in the profile, records provider/runtime or managed-service endpoint ownership, and adds role-level approval and audit labels. Managed-service role aliases keep their provider endpoint, while the primary stack model remains the only model used for local runtime lifecycle install/pull/start actions.
 
 For every orchestrated stack, `stacks plan`, `stacks doctor`, manifests, jobs, and framework starters include `control_enforcement`. Read it before execution:
 
@@ -323,6 +323,25 @@ For every orchestrated stack, `stacks plan`, `stacks doctor`, manifests, jobs, a
 - `label_only` means an audit label is available for correlation but does not create framework audit events.
 
 An `agent_control_enforcement` doctor finding is warning-level when requested controls need external enforcement; it does not claim that a starter project is safe to run unattended.
+
+## Portable agent guardrails
+
+Render a secret-free contract from a direct model selection or a stack. The callback adapter is imported by the framework application and raises `BudgetExceeded` before a further model call, tool call, or retry would exceed a configured numeric quota. It does not run, observe, or terminate agents from outside the framework process.
+
+```bash
+aiplane agents guardrails render repo-helper --stack coding_agents --limit max_total_tokens=120000 --limit max_cost_usd=2.50 --rate input_usd_per_million_tokens=1.25 --rate output_usd_per_million_tokens=5.00 > guardrails.json
+aiplane agents export repo-helper --framework langgraph --model MODEL_ALIAS --file guardrails.py > guardrails.py
+export AIPLANE_GUARDRAILS_PATH="$PWD/guardrails.json"
+```
+
+Supported quotas are `max_wall_seconds`, `max_model_calls`, `max_tool_calls`, `max_retries`, `max_input_tokens`, `max_output_tokens`, `max_total_tokens`, and `max_cost_usd`. Cost values use a framework/provider-reported USD value when available, or the optional pinned `--rate input_usd_per_million_tokens=...` and `--rate output_usd_per_million_tokens=...` values; delayed provider billing reconciliation is intentionally not an immediate safety signal. Validate an artifact before wiring it into an agent:
+
+```bash
+aiplane agents guardrails validate guardrails.json
+# An external framework writes this only when AIPLANE_GUARDRAILS_RECEIPT_PATH is set:
+aiplane agents guardrails receipt guardrails-receipt.json
+aiplane models handoff-plan --role chat --model MODEL_ALIAS --runtime ollama --integration continue --framework langgraph > model-handoff.json
+```
 
 Common examples:
 

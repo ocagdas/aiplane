@@ -282,6 +282,31 @@ def framework_readiness(framework: str, roles: dict[str, Any], approval_mode: st
     }
 
 
+def _guardrail_integration_guidance(framework: str) -> dict[str, Any]:
+    steps = {
+        "langgraph": "Import guardrails in each model-calling node; call before_model_call before invoke and record_model_response from returned usage.",
+        "crewai": "Wrap the configured LLM client/callback boundary; do not rely on task labels alone to count model or tool events.",
+        "autogen": "Wrap the model-client call path and registered tools so every provider request and retry emits a callback event.",
+        "semantic_kernel": "Use the kernel invocation/filter boundary around chat completion and function invocation events.",
+        "llamaindex_workflows": "Call hooks in workflow steps that invoke the LLM or tools, including retry handlers.",
+        "openhands": "Use the reviewed LLM and tool-execution extension boundary; do not modify framework-owned runtime internals.",
+        "simple-openai": "Call hooks immediately before and after client.chat.completions.create and around any tool/retry loop.",
+    }
+    return {
+        "adapter_file": "guardrails.py",
+        "environment": ["AIPLANE_GUARDRAILS_PATH", "AIPLANE_GUARDRAILS_RECEIPT_PATH (optional)"],
+        "required_hooks": [
+            "before_model_call",
+            "record_model_response",
+            "before_tool_call",
+            "record_tool_result",
+            "record_retry",
+        ],
+        "framework_step": steps[framework],
+        "boundary": "Framework code owns the loop and handles BudgetExceeded; Aiplane does not run or supervise it.",
+    }
+
+
 def render_framework_starter(framework: str, metadata: dict[str, Any]) -> str:
     name = normalize_framework(framework)
     roles = metadata.get("roles") if isinstance(metadata.get("roles"), dict) else {}
@@ -336,6 +361,7 @@ def render_framework_starter(framework: str, metadata: dict[str, Any]) -> str:
         "topology": _topology(name, normalized_roles),
         "readiness": readiness,
         "control_enforcement": readiness["control_enforcement"],
+        "guardrail_integration": _guardrail_integration_guidance(name),
         "execution_boundary": {
             "runs_agents": False,
             "installs_packages": False,
