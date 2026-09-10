@@ -1,0 +1,124 @@
+name: Version
+
+on:
+  workflow_call:
+    inputs:
+      source:
+        required: true
+        type: string
+      trunk:
+        required: true
+        type: string
+      go:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  classify:
+    if: ${{ vars.REPOSITORY_VERSIONING_ENABLED == 'true' && github.event_name == 'push' && github.workflow == 'CI' && github.ref_name == inputs.trunk && github.sha == inputs.source && inputs.go == 'true' }}
+    runs-on: ubuntu-latest
+    outputs:
+      mode: ${{ steps.plan.outputs.mode }}
+      merged: ${{ steps.pr.outputs.merged }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ inputs.source }}
+          fetch-depth: 0
+      - name: Detect merged pull request on selected trunk
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TRUNK: ${{ inputs.trunk }}
+        run: |
+          merged="$(python scripts/merged_pr.py --source "$GITHUB_SHA" --trunk "$TRUNK")"
+          echo "merged=$merged" >> "$GITHUB_OUTPUT"
+      - name: Classify tested source
+        id: plan
+        env:
+          REPOSITORY_TRUNK: ${{ inputs.trunk }}
+          MERGED: ${{ steps.pr.outputs.merged }}
+        run: |
+          args=()
+          if [ "$MERGED" = true ]; then args+=(--merged); fi
+          python scripts/version.py classify-ci "${args[@]}" --github-output
+
+  publish:
+    needs: [classify]
+    if: ${{ needs.classify.outputs.mode == 'patch' || needs.classify.outputs.mode == 'tag' }}
+    runs-on: ubuntu-latest
+    concurrency:
+      group: aiplane-version-${{ inputs.trunk }}
+      cancel-in-progress: false
+    outputs:
+      status: ${{ steps.result.outputs.status }}
+      version: ${{ steps.result.outputs.version }}
+      tag: ${{ steps.result.outputs.tag }}
+      version_commit: ${{ steps.result.outputs.version_commit }}
+      source_commit: ${{ steps.result.outputs.source_commit }}
+    steps:
+      - name: Require versioning app configuration
+        env:
+          APP_ID: ${{ vars.AIPLANE_VERSIONING_APP_ID }}
+          PRIVATE_KEY_CONFIGURED: ${{ secrets.AIPLANE_VERSIONING_APP_PRIVATE_KEY != '' }}
+        run: |
+          test -n "$APP_ID" || { echo "::error::Missing AIPLANE_VERSIONING_APP_ID"; exit 1; }
+          test "$PRIVATE_KEY_CONFIGURED" = true || { echo "::error::Missing AIPLANE_VERSIONING_APP_PRIVATE_KEY"; exit 1; }
+      - name: Create versioning app token
+        id: versioning-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
+        with:
+          app-id: ${{ vars.AIPLANE_VERSIONING_APP_ID }}
+          private-key: ${{ secrets.AIPLANE_VERSIONING_APP_PRIVATE_KEY }}
+          permission-contents: write
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ inputs.source }}
+          fetch-depth: 0
+          token: ${{ steps.versioning-token.outputs.token }}
+      - name: Publish tested version atomically
+        id: result
+        env:
+          SOURCE: ${{ inputs.source }}
+          REPOSITORY_TRUNK: ${{ inputs.trunk }}
+          MERGED: ${{ needs.classify.outputs.merged }}
+        run: |
+          git config user.name "aiplane-versioning[bot]"
+          git config user.email "aiplane-versioning[bot]@users.noreply.github.com"
+          args=()
+          if [ "$MERGED" = true ]; then args+=(--merged); fi
+          python scripts/publish_version.py --source "$SOURCE" --trunk "$REPOSITORY_TRUNK" "${args[@]}" --github-output
+
+  main-versioned-wheel:
+    name: Trunk versioned wheel artifact
+    needs: [publish]
+    if: ${{ needs.publish.result == 'success' && needs.publish.outputs.status == 'published' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ needs.publish.outputs.version_commit }}
+          fetch-depth: 0
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.13'
+      - run: python -m pip install build
+      - name: Build tested version distributions
+        env:
+          TAG: ${{ needs.publish.outputs.tag }}
+        run: python scripts/build_release.py --tag "$TAG" --output artifacts
+      - run: python scripts/verify_install_channels.py artifacts --channel pip
+      - name: Identify version commit
+        id: provenance
+        shell: bash
+        run: echo "short=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: aiplane-wheel-v${{ needs.publish.outputs.version }}-${{ steps.provenance.outputs.short }}
+          path: artifacts/
+          if-no-files-found: error
+          retention-days: 30

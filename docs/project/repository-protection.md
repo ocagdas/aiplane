@@ -1,10 +1,12 @@
 # Repository Protection
 
-The pull-request UI displays the durable aggregate check as **CI / Release gate**. GitHub rulesets identify a normal workflow check by its job name, so the required-check value to select is **`Release gate`**. It succeeds only after the full quality gate, supported-Python packaging checks, and Linux/macOS/Windows installed-wheel lifecycle jobs succeed.
+The hosted branch and tag rules were repaired on 10 September 2026: Quality gate replaces Release gate, the branch target is refs/heads/main and the tag target is refs/tags/v*. Squash-only merges are enabled. A passing/failing PR on the new workflow delta still needs hosted qualification.
 
-## Current hosted-state gap
+The pull-request UI displays the durable aggregate check as **CI / Quality gate**. GitHub rulesets identify a normal workflow check by its job name, so the required-check value to select is **`Quality gate`**. It succeeds only after the full quality gate, supported-Python packaging checks, and Linux/macOS/Windows installed-wheel lifecycle jobs succeed.
 
-Source-controlled workflows cannot install a GitHub App, store its private key, or activate repository rules. Complete the app-token test below before activating protection; otherwise the automated version push will be rejected.
+## App setup and remaining qualification
+
+The existing App settings and bypass were preserved. REPOSITORY_TRUNK=main and REPOSITORY_VERSIONING_ENABLED=true are configured. Repository files alone do not apply hosted settings; the API changes are recorded above. Complete the app-token test below against the new workflow delta.
 
 ## Install the narrow versioning identity
 
@@ -36,7 +38,7 @@ Open **Settings -> Rules -> Rulesets -> New ruleset -> New branch ruleset**.
 5. Enable **Restrict updates**, so only bypass actors can make the final update to `main`; contributors may still open PRs and an administrator merges them.
 6. Enable **Restrict deletions** and **Block force pushes**. These rules target `main` only; ordinary development branches may still be rebased, force-pushed, and deleted.
 7. Enable **Require a pull request before merging**. Set one required approval when another eligible reviewer exists, dismiss stale approvals, require approval of the most recent reviewable push, and require conversation resolution. A PR author cannot approve their own PR. If this is still a single-maintainer repository, use zero approvals temporarily rather than creating an impossible gate.
-8. Enable **Require status checks to pass** and add `Release gate`. Enable the option requiring the branch to be current before merge. GitHub offers a check only after it has completed successfully in this repository during the preceding seven days.
+8. Enable **Require status checks to pass** and add `Quality gate`. Enable the option requiring the branch to be current before merge. GitHub offers a check only after it has completed successfully in this repository during the preceding seven days.
 9. Enable linear history only if the selected merge strategy is squash or rebase.
 10. Save, activate, and use a disposable PR to prove that pending/failing checks, missing approval, and unresolved conversations block non-bypass merging.
 
@@ -66,7 +68,7 @@ gh api repos/ocagdas/aiplane/rulesets/RULESET_ID
 Expected evidence:
 
 - the branch ruleset is active and targets only `main`;
-- `Release gate` is required and the branch must be current;
+- `Quality gate` is required and the branch must be current;
 - pull requests, the configured review policy, update/deletion restriction, and force-push protection are enabled;
 - bypass actors are limited to repository administrators and `aiplane-versioning`;
 - the `v*` tag ruleset prevents update and deletion;

@@ -10,7 +10,7 @@ It must not become a coding agent, model runtime, model proxy, IDE extension, or
 
 ## Open Source Quality Bar
 
-Treat `aiplane` as a public open-source project that should be worthy of trust, adoption, and contribution. Code quality, practical tests, CLI help, user docs, and the status, roadmap, backlog, command-coverage, and handoff sections of `docs/project/project-plan.md` are part of every implementation task unless there is a concrete engineering reason they do not apply. Keep code, documentation, the unified project plan, implemented features, examples, and tests aligned and held to a high standard. Do not let the project drift into a collection of impressive but undocumented, untested, or overstated capabilities.
+Treat `aiplane` as a public open-source project that should be worthy of trust, adoption, and contribution. Code quality, practical tests, CLI help, user docs, and `STATUS.md`, `VALIDATION.md`, `ROADMAP.md`, and `TODO.md`, linked by `docs/project/project-plan.md` are part of every implementation task unless there is a concrete engineering reason they do not apply. Keep code, documentation, the unified project plan, implemented features, examples, and tests aligned and held to a high standard. Do not let the project drift into a collection of impressive but undocumented, untested, or overstated capabilities.
 
 ## Local Direction Notes
 
@@ -22,7 +22,7 @@ When changing behavior, update these together in the same change whenever releva
 
 - user docs under `docs/user/`;
 - project docs under `docs/project/`;
-- `docs/project/project-plan.md` for current status, roadmap, backlog, public CLI coverage, gates, and handoff state;
+- the canonical root status, validation, roadmap and backlog documents linked by `docs/project/project-plan.md`;
 - focused tests under `tests/` using the domain-specific modules and shared `tests/support.py` helpers.
 
 Behavior changes should normally land with matching test updates in the same change. Tests should cover the behavior contract, failure mode, or regression risk that matters; do not add tests just to increase counts. If a behavior change genuinely does not need a new or changed test, make that an explicit engineering decision and still run the relevant focused tests. Do not leave the corresponding project-plan sections or tests stale after adding commands, changing defaults, or moving a feature between planned/in-progress/implemented.
@@ -60,7 +60,7 @@ Concrete normal pattern for repeated `apply_patch` failures:
 - If `apply_patch` reports the loopback sandbox error (`bwrap: loopback: Failed RTM_NEWADDR`), do not keep retrying.
 - Edit the target file directly with one narrow command and a deterministic anchor.
 - Run `git diff` to confirm only the intended section changed.
-- Record the edit path and workaround in final handoff notes for future repeatability.
+- Record the edit path and workaround in the final response for future repeatability.
 
 ## Validation Expectations
 
@@ -73,7 +73,7 @@ python -m aiplane environment doctor --required-only --format json
 python -m pytest
 ```
 
-For tool, provider, integration, or stack work, also run representative CLI commands and update the project plan handoff section with the latest successful validation summary.
+For tool, provider, integration, or stack work, also run representative CLI commands and update `VALIDATION.md` with the latest successful validation summary.
 
 ## Documentation Tone
 

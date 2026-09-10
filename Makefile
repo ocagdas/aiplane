@@ -16,15 +16,18 @@ test-clean:
 	./scripts/test-clean.sh $(PYTEST_ARGS)
 
 format:
-	python -m ruff format src tests
+	python -m ruff format src tests scripts
 
 format-check:
-	python -m ruff format --check src tests
+	python -m ruff format --check src tests scripts
 
 lint:
-	python -m ruff check src tests
+	python -m ruff check src tests scripts
 
-check: format-check lint test-clean
+standard-check:
+	$(PYTHON) scripts/check_repository_standard.py
+
+check: format-check lint standard-check test-clean
 
 wheel-local:
 	$(PYTHON) scripts/build_local_wheel.py --clean
@@ -39,4 +42,4 @@ install-hooks:
 	printf 'Installed pre-push hook to .git/hooks/pre-push (from .githooks/pre-push).\n'
 	printf 'Override: export AIPLANE_PREPUSH_MODE=backup|fast|off (default=full).\n'
 
-.PHONY: test test-clean format format-check lint check wheel-local install-hooks
+.PHONY: standard-check test test-clean format format-check lint check wheel-local install-hooks

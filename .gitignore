@@ -52,3 +52,6 @@ credentials.local.yaml
 # OS files
 .DS_Store
 Thumbs.db
+
+# Generated local quality reports and release candidates
+.quality/

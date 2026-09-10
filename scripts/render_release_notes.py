@@ -26,7 +26,7 @@ def render_notes(tag: str, change_kind: str, commit: str, changelog: str, checks
     if not re.fullmatch(r"[0-9a-f]{40}", commit):
         raise ReleaseNotesError("commit must be a full lowercase Git SHA")
     manifest_rows = [line for line in checksums.splitlines() if line.strip()]
-    if len(manifest_rows) != 2:
+    if len(manifest_rows) != 3 or not any(row.endswith("  provenance.json") for row in manifest_rows):
         raise ReleaseNotesError("SHA256SUMS must identify exactly one wheel and one source distribution")
     changes = unreleased_notes(changelog)
     return f"""# aiplane {tag}
@@ -41,18 +41,20 @@ Validated {change_kind} release artifacts for `{tag}` from commit `{commit}`.
 
 ## Verify before installation
 
-Download the wheel, source distribution, and `SHA256SUMS` from this release, then run:
+Download the wheel, source distribution, `provenance.json`, and `SHA256SUMS` from this release, then run:
 
 ```bash
 python scripts/verify_release_manifest.py .
-gh attestation verify aiplane-* --repo ocagdas/aiplane
+for artifact in ./*.whl ./*.tar.gz ./provenance.json; do
+  gh attestation verify "$artifact" --repo ocagdas/aiplane
+done
 ```
 
 The checksum manifest verifies file integrity. The GitHub artifact attestation separately verifies the repository and workflow that built the distributions.
 
 ## Upgrade and rollback
 
-Use the same installation owner for install, upgrade, and uninstall. The complete pip, pipx, and uv commands plus the rollback procedure are in `docs/user/setup.md`; release operations and recovery rules are in `docs/project/ci-and-release-process.md`.
+Use the same installation owner for install, upgrade, and uninstall. The complete pip, pipx, and uv commands plus the rollback procedure are in `docs/user/setup.md`; release operations and recovery rules are in `VERSIONING.md`.
 """
 
 

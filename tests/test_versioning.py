@@ -40,8 +40,8 @@ def classify(**overrides):
 
 def test_ci_version_classification_bumps_only_main_merge_commits() -> None:
     result = classify(parent_count=2, message="Merge pull request #12")
-    assert result["mode"] == "ci_patch_after_merge"
-    assert result["next_version"] == "0.1.1"
+    assert result["mode"] == "patch"
+    assert result["version"] == "0.1.1"
     assert result["tag"] == "v0.1.1"
 
 
@@ -52,9 +52,9 @@ def test_ci_version_classification_does_not_recurse_on_ci_version_commit() -> No
         changed_files={"pyproject.toml"},
         actor="aiplane-versioning[bot]",
     )
-    assert result["mode"] == "validate_only"
-    assert result["next_version"] == "0.1.0"
-    assert result["actor"] == "aiplane-versioning[bot]"
+    assert result["mode"] == "none"
+    assert result["version"] == "0.1.0"
+    assert classify(parent_count=2, actor="aiplane-versioning[bot]", message="[skip ci-version]")["mode"] == "patch"
 
 
 def test_ci_version_classification_does_not_honor_human_skip_marker() -> None:
@@ -63,7 +63,7 @@ def test_ci_version_classification_does_not_honor_human_skip_marker() -> None:
         message="Merge feature [skip ci-version]",
         author="Human <human@example.com>",
     )
-    assert result["mode"] == "ci_patch_after_merge"
+    assert result["mode"] == "patch"
 
 
 def test_ci_version_classification_respects_direct_maintainer_version_commit() -> None:
@@ -72,34 +72,33 @@ def test_ci_version_classification_respects_direct_maintainer_version_commit() -
         parent_version="0.1.0",
         changed_files={"pyproject.toml", "src/aiplane/__init__.py"},
     )
-    assert result["mode"] == "maintainer_direct_main_version_commit"
-    assert result["next_version"] == "0.2.0"
+    assert result["mode"] == "tag"
+    assert result["version"] == "0.2.0"
     assert result["tag"] == "v0.2.0"
-    assert result["version_change"] == "minor"
+    assert result["kind"] == "minor"
 
 
 def test_ci_version_classification_rejects_version_change_merged_through_pr() -> None:
-    result = classify(
-        version="1.0.0",
-        parent_version="0.1.7",
-        parent_count=2,
-        associated_pull_request=True,
-        changed_files={"pyproject.toml", "src/aiplane/__init__.py"},
-    )
-    assert result["mode"] == "invalid_pr_version_change"
-    assert result["reason"] == "pull-request merge changed tracked version value"
+    with pytest.raises(ValueError, match="PR merge changed"):
+        classify(
+            version="1.0.0",
+            parent_version="0.1.7",
+            parent_count=2,
+            associated_pull_request=True,
+            changed_files=version_script.VERSION_FILES,
+        )
 
 
 def test_ci_version_classification_does_not_treat_unchanged_version_file_as_user_versioning() -> None:
     result = classify(changed_files={"pyproject.toml", "src/aiplane/__init__.py"}, parent_version="0.1.0")
-    assert result["mode"] == "validate_only"
-    assert result["version_changed"] is False
+    assert result["mode"] == "none"
+    assert result["version"] == "0.1.0"
 
 
 def test_ci_version_classification_skips_when_matching_tag_already_points_at_head() -> None:
     result = classify(parent_count=2, matching_tag_points_at_head=True)
-    assert result["mode"] == "validate_only"
-    assert result["reason"] == "matching version tag already points at HEAD"
+    assert result["mode"] == "none"
+    assert result["reason"] == "already tagged"
 
 
 def test_ci_version_classification_ignores_pr_events_and_feature_branches() -> None:
@@ -109,22 +108,22 @@ def test_ci_version_classification_ignores_pr_events_and_feature_branches() -> N
 
 def test_ci_version_classification_validates_direct_main_non_version_commits_without_bump() -> None:
     result = classify(parent_count=1, changed_files={"README.md"})
-    assert result["mode"] == "validate_only"
-    assert result["next_version"] == "0.1.0"
+    assert result["mode"] == "none"
+    assert result["version"] == "0.1.0"
     assert result["tag"] == "v0.1.0"
 
 
-def test_ci_version_classification_distinguishes_main_merge_from_pr_branch_build() -> None:
+def test_classifier_is_context_independent_workflow_owns_authorization() -> None:
     main_merge = classify(event="push", ref="refs/heads/main", parent_count=2)
     squash_merge = classify(event="push", ref="refs/heads/main", parent_count=1, associated_pull_request=True)
     pr_branch = classify(event="push", ref="refs/heads/feature/demo", parent_count=2, associated_pull_request=True)
     pull_request = classify(
         event="pull_request", ref="refs/pull/12/merge", parent_count=2, associated_pull_request=True
     )
-    assert main_merge["mode"] == "ci_patch_after_merge"
-    assert squash_merge["mode"] == "ci_patch_after_merge"
-    assert pr_branch["mode"] == "none"
-    assert pull_request["mode"] == "none"
+    assert main_merge["mode"] == "patch"
+    assert squash_merge["mode"] == "patch"
+    assert pr_branch["mode"] == "patch"
+    assert pull_request["mode"] == "patch"
 
 
 @pytest.mark.parametrize(
@@ -157,7 +156,13 @@ def test_release_plan_auto_publishes_only_minor_and_major_versions() -> None:
 def test_classify_release_reads_and_validates_the_previous_ref(monkeypatch) -> None:
     monkeypatch.setattr(version_script, "check_versions", lambda: "0.2.0")
     monkeypatch.setattr(version_script, "version_at_ref", lambda ref: "0.1.9" if ref == "HEAD^1" else None)
-    assert version_script.classify_release("HEAD^1") == {
+    monkeypatch.setattr(version_script, "tag_points_at_head", lambda tag: tag == "v0.2.0")
+    monkeypatch.setattr(version_script, "run", lambda *a, **k: type("Result", (), {"stdout": "tested-sha"})())
+    assert version_script.classify_release("HEAD^1", tag="v0.2.0") == {
+        "schema_version": 1,
+        "version": "0.2.0",
+        "publish": True,
+        "source_commit": "tested-sha",
         "previous_version": "0.1.9",
         "current_version": "0.2.0",
         "change_kind": "minor",
@@ -165,17 +170,12 @@ def test_classify_release_reads_and_validates_the_previous_ref(monkeypatch) -> N
         "tag": "v0.2.0",
     }
     with pytest.raises(ValueError, match="cannot read previous version"):
-        version_script.classify_release("missing")
+        version_script.classify_release("missing", tag="v0.2.0")
 
 
 def test_ci_rejects_a_direct_version_decrease() -> None:
-    result = classify(
-        version="0.1.9",
-        parent_version="0.2.0",
-        changed_files={"pyproject.toml", "src/aiplane/__init__.py"},
-    )
-    assert result["mode"] == "invalid_direct_version_change"
-    assert result["version_change"] == "invalid"
+    with pytest.raises(ValueError, match="must increase"):
+        classify(version="0.1.9", parent_version="0.2.0", changed_files=version_script.VERSION_FILES)
 
 
 def test_skip_marker_requires_the_configured_versioning_app_actor() -> None:
@@ -185,7 +185,7 @@ def test_skip_marker_requires_the_configured_versioning_app_actor() -> None:
         actor="Human",
         parent_count=2,
     )
-    assert forged["mode"] == "ci_patch_after_merge"
+    assert forged["mode"] == "patch"
 
 
 def test_github_outputs_render_booleans_for_workflow_conditions(tmp_path, monkeypatch) -> None:
@@ -247,3 +247,31 @@ def test_pr_version_guard_rejects_changed_or_unreadable_base(monkeypatch) -> Non
     monkeypatch.setattr(version_script, "version_at_ref", lambda _ref: None)
     with pytest.raises(ValueError, match="cannot read base version"):
         version_script.check_pr_version("origin/main")
+
+
+@pytest.mark.parametrize("value", ["01.2.3", "1.02.3", "1.2.03", "1.2.3rc1", " 1.2.3", "1.2.3\n"])
+def test_numeric_version_contract_rejects_noncanonical_values(value):
+    with pytest.raises(ValueError, match="MAJOR.MINOR.PATCH"):
+        version_script.Version.parse(value)
+
+
+@pytest.mark.parametrize(("command", "expected"), [("patch", "1.2.4"), ("minor", "1.3.0"), ("major", "2.0.0")])
+def test_all_bumps_dry_run_preserve_mirrors(tmp_path, monkeypatch, capsys, command, expected):
+    import json
+
+    project = tmp_path / "pyproject.toml"
+    package = tmp_path / "__init__.py"
+    project.write_text('[project]\nversion = "1.2.3"\n')
+    package.write_text('__version__ = "1.2.3"\n')
+    monkeypatch.setattr(version_script, "PYPROJECT", project)
+    monkeypatch.setattr(version_script, "PACKAGE_INIT", package)
+    assert version_script.main([command, "--dry-run"]) == 0
+    assert json.loads(capsys.readouterr().out)["new_version"] == expected
+    assert version_script.check_versions() == "1.2.3"
+    assert version_script.main(["current", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out) == {"version": "1.2.3"}
+    assert version_script.main(["current", "--plain"]) == 0
+    assert capsys.readouterr().out.strip() == "1.2.3"
+    package.write_text('__version__ = "1.2.4"\n')
+    with pytest.raises(ValueError, match="mismatch"):
+        version_script.check_versions()

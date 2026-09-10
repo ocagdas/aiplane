@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from scripts.repository_provenance import write_provenance
 from scripts.render_release_notes import ReleaseNotesError, render_notes, unreleased_notes
 from scripts.verify_release_manifest import ManifestError, parse_manifest, verify_directory
 from scripts.write_release_evidence import main as write_evidence
@@ -22,7 +23,9 @@ def release_directory(tmp_path: Path) -> Path:
     sdist = tmp_path / "aiplane-0.1.2.tar.gz"
     wheel.write_bytes(b"synthetic-wheel")
     sdist.write_bytes(b"synthetic-sdist")
+    write_provenance(tmp_path, version="0.1.2", commit="a" * 40, tag="v0.1.2")
     (tmp_path / "SHA256SUMS").write_text(
+        f"{digest((tmp_path / 'provenance.json').read_bytes())}  provenance.json\n"
         f"{digest(wheel.read_bytes())}  {wheel.name}\n{digest(sdist.read_bytes())}  {sdist.name}\n",
         encoding="utf-8",
     )
@@ -32,7 +35,7 @@ def release_directory(tmp_path: Path) -> Path:
 def test_release_manifest_requires_and_verifies_one_wheel_and_sdist(tmp_path: Path) -> None:
     directory = release_directory(tmp_path)
     entries = verify_directory(directory)
-    assert set(entries) == {"aiplane-0.1.2-py3-none-any.whl", "aiplane-0.1.2.tar.gz"}
+    assert set(entries) == {"aiplane-0.1.2-py3-none-any.whl", "aiplane-0.1.2.tar.gz", "provenance.json"}
 
 
 def test_release_manifest_rejects_traversal_duplicates_and_checksum_mismatch(tmp_path: Path) -> None:
@@ -89,6 +92,7 @@ def test_release_evidence_writer_emits_a_canonical_sanitized_record(tmp_path: Pa
 def test_release_notes_are_rendered_from_tracked_unreleased_changes() -> None:
     changelog = Path("CHANGELOG.md").read_text(encoding="utf-8")
     checksums = f"{'a' * 64}  aiplane-0.2.0-py3-none-any.whl\n{'b' * 64}  aiplane-0.2.0.tar.gz\n"
+    checksums += f"{'c' * 64}  provenance.json\n"
     notes = render_notes("v0.2.0", "minor", "c" * 40, changelog, checksums)
     assert unreleased_notes(changelog) in notes
     assert "pre-1.0" in notes

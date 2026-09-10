@@ -104,7 +104,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Outcome: a profile-aware readiness report with an exact next export step.\n\n"
             "Next command:\n"
             "  aiplane quickstart local-coding --dry-run\n\n"
-            "Command maturity and coverage are documented in docs/project/project-plan.md#command-coverage.\n"
+            "Command maturity and coverage are documented in STATUS.md#command-coverage.\n"
             "Docs: docs/user/index.md"
         ),
         formatter_class=HelpFormatter,

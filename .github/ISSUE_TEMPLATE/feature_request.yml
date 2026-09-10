@@ -1,0 +1,20 @@
+name: Feature request
+description: Describe a problem, desired behavior and how to verify improvement.
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem and use case
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior and alternatives
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: Acceptance criteria
+      description: How would you verify that this solves the problem?

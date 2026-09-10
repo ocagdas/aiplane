@@ -1,0 +1,87 @@
+# Purpose
+
+## Project Quality Principles
+
+`aiplane` should be a professional-grade, community-first open-source tool: reliable, well documented, testable, inspectable, and respectful of the complexity of real AI workflow environments.
+
+Good design choices flow from that standard:
+
+- Prefer transparency over magic. Significant operations should be inspectable before they run.
+- Prefer composability over replacement. Integrate with tools developers already use rather than duplicating them.
+- Prefer explicitness over convenience at the cost of control. Profile-driven configuration is intentionally visible.
+- Prefer depth over breadth. Do the environment doctor and compiler job well before expanding scope.
+- Prefer a polished local/hybrid AI workflow stack doctor over broad integration lists that are not end-to-end useful.
+
+## Positioning
+
+`aiplane` is a local-first configuration and operations environment doctor and configuration compiler for AI workflow environments across local, remote, VM, and cloud-adjacent machines. Its sharpest wedge is making local and hybrid AI workflow stacks reproducible, inspectable, policy-aware, and portable from one profile.
+
+It is not a coding agent, IDE assistant, full chat UI, inference server, model marketplace, model proxy, or cloud platform. Existing tools such as Continue, Cline, Cursor, Codex-like CLIs, Claude Code, Aider, OpenHands, Ollama, LM Studio, vLLM, TGI, llama.cpp, LocalAI, OpenAI, Anthropic, and Azure OpenAI already cover large parts of those domains. `aiplane` should configure, check, plan, export, and govern those pieces rather than replacing them.
+The aim of `aiplane` is to make environment setup, migration, and model/runtime pairing an explicit, repeatable operations layer so teams can focus on AI experiments, model work, and code outcomes instead.
+
+Scope anchor: changing this boundary is allowed only as an explicit product decision recorded in strategy and roadmap. Do not drift into agent execution, runtime implementation, broad cloud apply, IDE replacement, or a generic chat/session product through incremental feature work.
+
+## Core Problem
+
+AI workflow setups are fragmented:
+
+- local runtimes have different install, model, GPU, and API behavior;
+- managed providers have different keys, model catalogs, deployment names, and policy constraints;
+- IDEs and CLI agents require separate configuration;
+- teams need repo-sensitive rules for when cloud or remote endpoints are allowed;
+- hardware capability matters: CPU, RAM, GPU, VRAM, container runtime, and device passthrough all change what models are practical;
+- repeatable setup requires doctors, plans, exports, and tests that explain what works now and what is only planned.
+
+`aiplane` solves this by making those choices explicit and profile-driven.
+
+## Product Boundary
+
+### Own
+
+- Profile-based configuration for providers, models, runtimes, hardware, machines, stacks, tools, credentials references, approvals, and policy.
+- Environment planning for system Python, `venv`, Conda, and Docker execution modes.
+- Readiness checks through `doctor` commands.
+- Provider/model discovery and profile-owned model entries.
+- Hardware and machine inventory with model-fit recommendations.
+- Stack planning that binds a machine, runtime, primary model, optional orchestrator, and access policy.
+- Non-mutating config exports for IDEs, CLI agents, MCP clients, tools, and starter deployment artifacts.
+- Narrow, auditable lifecycle helpers where the native tool boundary is clear.
+- Local audit, secret redaction, and approval foundations.
+
+### Do Not Own
+
+- A full coding agent or IDE assistant.
+- A custom inference runtime.
+- A general model proxy or production gateway.
+- A marketplace extension as the primary integration path.
+- Hidden cloud deployment, broad shell execution, or secret writes through MCP.
+
+## Advanced surfaces (subordinate)
+
+These implemented and planned surfaces support specialist users, but remain subordinate to the doctor and configuration-compiler workflow and do not add parallel product promises.
+
+### Agentic Environments and Workflows
+
+Create, configure, and validate external agent applications that use model endpoints and credentials managed by `aiplane`. Current support includes starter agent templates and non-mutating `agents templates/plan/export` commands. Future work should generate fuller project directories, add run/test checks, and cover richer research, news, coding, and multi-agent workflows.
+
+### Provisioning and Automation Tools
+
+Interface cleanly with tools that prepare machines and environments instead of replacing them. Current support includes readiness checks plus non-mutating plans and starter exports for Vagrant, Packer, OpenTofu/Terraform, Pulumi, Dev Containers, Ansible, and related infrastructure tools. Future work should harden provider-specific modules and keep remote mutation behind explicit plans, SSH controls, and audit output.
+
+### Benchmarking and Evaluation
+
+Benchmark models and endpoints using the right tool in the right place. Current support includes smoke/custom model checks plus benchmark framework list, doctor, install-plan, and plan helpers. Future work should add placement metadata, latency/throughput/token metrics, repeated-run summaries, and comparison views.
+
+## Success Criteria
+
+`aiplane` is successful if a user can say:
+
+1. Here is my hardware and privacy posture.
+2. Here are the providers, runtimes, credentials references, and endpoints I am allowed to use.
+3. Here are the approved models for this profile or repo.
+4. Configure my environment and tools without hiding important choices.
+5. Tell me what works and what does not.
+6. Export my chosen IDE, CLI assistant, MCP client, stack artifact, or agent scaffold with the right configuration.
+7. Keep policy, approvals, and audit consistent.
+
+If it becomes another chat UI, IDE assistant, inference engine, or hidden cloud deployment tool, it has left its strongest lane.

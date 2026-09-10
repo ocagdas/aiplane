@@ -12,7 +12,9 @@ Please read:
 - [Security Policy](SECURITY.md)
 - [Code of Conduct](CODE_OF_CONDUCT.md)
 - [Agent Guidance](docs/project/agent-guidance.md)
-- [Roadmap](docs/project/project-plan.md#roadmap)
+- [CI and quality gates](CI.md)
+- [Versioning and release policy](VERSIONING.md)
+- [Roadmap](ROADMAP.md#roadmap)
 
 ## Development Setup
 
@@ -88,3 +90,6 @@ MCP and future agent-skill support are synchronized at periodic checkpoints and 
 ## Compatibility
 
 `aiplane` has not reached a stable public release yet. Until maintainers say otherwise, prefer the clean current interface over backward-compatibility shims. Keep documentation and tests up to date with the current interface.
+
+Follow [BRANCHING.md](BRANCHING.md) for the shared trunk/dev branch convention,
+version/tag rules and REPOSITORY_VERSIONING_ENABLED activation setting.

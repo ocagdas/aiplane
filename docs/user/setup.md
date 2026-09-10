@@ -12,9 +12,9 @@ Platform behavior is documented in [Platform support](platform-support.md). Port
 
 Download the `.whl` attached to the [latest GitHub Release](https://github.com/ocagdas/aiplane/releases/latest). The wheel is the standard evaluation channel and contains the CLI, profile and config templates, and packaged runtime helper scripts. You do not need Git or a source checkout.
 
-Download `SHA256SUMS` from the same release and verify the wheel before installation. Linux can use `sha256sum --check SHA256SUMS`; macOS can use `shasum -a 256 --check SHA256SUMS`; on Windows compare `Get-FileHash -Algorithm SHA256` output with the manifest.
+Download the source archive, `provenance.json` and `SHA256SUMS` from the same release into the same clean directory, and verify the complete set before installation. Linux can use `sha256sum --check SHA256SUMS`; macOS can use `shasum -a 256 --check SHA256SUMS`; on Windows compare `Get-FileHash -Algorithm SHA256` output with the manifest.
 
-Also verify its signed build provenance with GitHub CLI: `gh attestation verify aiplane-* --repo ocagdas/aiplane`. The checksum detects a changed download; the attestation confirms which repository and workflow built it. Both checks run automatically in the published-release verification matrix.
+Also verify its signed build provenance with GitHub CLI: `gh attestation verify "$artifact" --repo ocagdas/aiplane` once for each wheel, source archive and provenance file. The checksum detects a changed download; the attestation confirms which repository and workflow built it. Both checks run automatically in the published-release verification matrix.
 
 Choose one installation owner:
 
