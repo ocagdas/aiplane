@@ -510,3 +510,8 @@ aiplane providers adapter-validate tests/fixtures/adapter-v1.json
 ~~~
 
 An empty upstream_versions list means no exact upstream version has been verified. The 1.0 adapter contract requires stable IDs, provider identity, provenance, unique entries, and secret-free fields. Its schema is schemas/aiplane-adapter-v1.schema.json. Aiplane does not dynamically execute arbitrary adapter files.
+
+Materialized catalog files are disposable. Invalid numeric values (including nonfinite
+values), capability/benchmark shapes, collections or derived indexes cause an automatic
+rebuild from profile and discovery sources before filtering. No manual cache repair is
+needed for these cases; `aiplane models catalog-cache rebuild` remains available.

@@ -19,118 +19,105 @@ permissions:
   artifact-metadata: write
 
 jobs:
+  classify:
+    runs-on: ubuntu-latest
+    outputs:
+      publish: ${{ steps.tag.outputs.publish }}
+      tag: ${{ steps.tag.outputs.tag }}
+      commit: ${{ steps.tag.outputs.source_commit }}
+      change_kind: ${{ steps.tag.outputs.change_kind }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          fetch-depth: 0
+      - id: tag
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: python scripts/version.py classify-release --tag "$TAG" --github-output
+
+  qualification:
+    needs: [classify]
+    if: ${{ needs.classify.outputs.publish == 'true' || github.event_name == 'workflow_dispatch' }}
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+      pull-requests: read
+    with:
+      ref: ${{ needs.classify.outputs.commit }}
+
   release:
+    needs: [classify, qualification]
+    if: ${{ needs.qualification.result == 'success' && needs.qualification.outputs.go == 'true' }}
     runs-on: ubuntu-latest
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v7
+      - name: Check out qualified release commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+          ref: ${{ needs.classify.outputs.commit }}
           fetch-depth: 0
-
-      - name: Classify release version
-        id: tag
-        shell: bash
-        run: |
-          set -euo pipefail
-          tag="${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}"
-          test "$(git rev-parse "$tag^{commit}")" = "$(git rev-parse HEAD)"
-          test "$tag" = "v$(python scripts/version.py current --plain)"
-          echo "name=$tag" >> "$GITHUB_OUTPUT"
-          python scripts/version.py classify-release --previous-ref HEAD^1 --github-output
-
-      - name: Skip automatic patch publication
-        if: ${{ github.event_name == 'push' && steps.tag.outputs.automatic_publish != 'true' }}
-        run: echo "${{ steps.tag.outputs.name }} is a patch release; retaining its tag and workflow artifact without creating a public GitHub Release."
-
       - name: Set up Python
-        if: ${{ github.event_name == 'workflow_dispatch' || steps.tag.outputs.automatic_publish == 'true' }}
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: "3.13"
           cache: pip
 
       - name: Set up uv
-        if: ${{ github.event_name == 'workflow_dispatch' || steps.tag.outputs.automatic_publish == 'true' }}
-        uses: astral-sh/setup-uv@v8.3.2
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
 
       - name: Install build and validation tools
-        if: ${{ github.event_name == 'workflow_dispatch' || steps.tag.outputs.automatic_publish == 'true' }}
         run: python -m pip install build pipx setuptools==83.0.0 -e ".[dev]"
 
-      - name: Run full quality gate
-        if: ${{ github.event_name == 'workflow_dispatch' || steps.tag.outputs.automatic_publish == 'true' }}
-        run: scripts/check.sh
-
-      - name: Require tag to match package version
-        if: ${{ github.event_name == 'workflow_dispatch' || steps.tag.outputs.automatic_publish == 'true' }}
-        run: python -c 'import os, tomllib, pathlib; version = tomllib.loads(pathlib.Path("pyproject.toml").read_text())["project"]["version"]; tag = os.environ["RELEASE_TAG"]; assert tag == f"v{version}", f"tag {tag} does not match package version {version}"'
-        env:
-          RELEASE_TAG: ${{ steps.tag.outputs.name }}
-
       - name: Build wheel and source distribution
-        if: ${{ github.event_name == 'workflow_dispatch' || steps.tag.outputs.automatic_publish == 'true' }}
-        run: python -m build
-
-      - name: Build and verify SHA-256 manifest
-        if: ${{ github.event_name == 'workflow_dispatch' || steps.tag.outputs.automatic_publish == 'true' }}
-        run: |
-          cd dist
-          sha256sum aiplane-* > SHA256SUMS
-          sha256sum --check SHA256SUMS
+        env:
+          TAG: ${{ needs.classify.outputs.tag }}
+        run: python scripts/build_release.py --tag "$TAG" --output dist
 
       - name: Validate wheel through every install channel
-        if: ${{ github.event_name == 'workflow_dispatch' || steps.tag.outputs.automatic_publish == 'true' }}
         run: python scripts/verify_install_channels.py dist
 
       - name: Require complete release artifact set
-        if: ${{ github.event_name == 'workflow_dispatch' || steps.tag.outputs.automatic_publish == 'true' }}
         run: python scripts/verify_release_manifest.py dist
 
       - name: Attest release distributions
-        if: ${{ github.event_name == 'workflow_dispatch' || steps.tag.outputs.automatic_publish == 'true' }}
-        uses: actions/attest@v4
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-checksums: dist/SHA256SUMS
 
       - name: Verify release build provenance
-        if: ${{ github.event_name == 'workflow_dispatch' || steps.tag.outputs.automatic_publish == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh attestation verify dist/aiplane-* --repo "$GITHUB_REPOSITORY"
+        run: |
+          for artifact in dist/*.whl dist/*.tar.gz dist/provenance.json; do
+            gh attestation verify "$artifact" --repo "$GITHUB_REPOSITORY"
+          done
 
       - name: Write generated release notes
-        if: ${{ github.event_name == 'workflow_dispatch' || steps.tag.outputs.automatic_publish == 'true' }}
         run: |
           python scripts/render_release_notes.py \
-            --tag "${{ steps.tag.outputs.name }}" \
-            --change-kind "${{ steps.tag.outputs.change_kind }}" \
+            --tag "${{ needs.classify.outputs.tag }}" \
+            --change-kind "${{ needs.classify.outputs.change_kind }}" \
             --commit "$(git rev-parse HEAD)" \
             --checksums dist/SHA256SUMS \
             --output RELEASE_NOTES.md
 
       - name: Publish GitHub Release artifacts
-        if: ${{ github.event_name == 'workflow_dispatch' || steps.tag.outputs.automatic_publish == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${{ steps.tag.outputs.name }}" dist/* --title "aiplane ${{ steps.tag.outputs.name }}" --notes-file RELEASE_NOTES.md --verify-tag
+        run: gh release create "${{ needs.classify.outputs.tag }}" dist/* --title "aiplane ${{ needs.classify.outputs.tag }}" --notes-file RELEASE_NOTES.md --verify-tag
 
       - name: Verify published release assets
-        if: ${{ github.event_name == 'workflow_dispatch' || steps.tag.outputs.automatic_publish == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.tag.outputs.name }}
-        shell: bash
+          TAG: ${{ needs.classify.outputs.tag }}
         run: |
-          set -euo pipefail
-          gh release view "$TAG" --json assets --jq '.assets[].name' > published-assets.txt
-          test "$(grep -Ec '^aiplane-.*\.whl$' published-assets.txt)" -eq 1
-          test "$(grep -Ec '^aiplane-.*\.tar\.gz$' published-assets.txt)" -eq 1
-          test "$(grep -Ec '^SHA256SUMS$' published-assets.txt)" -eq 1
+          gh release download "$TAG" --dir downloaded
+          python scripts/build_release.py --verify-only --output downloaded
+          cmp dist/SHA256SUMS downloaded/SHA256SUMS
 
       - name: Start public cross-platform verification
-        if: ${{ github.event_name == 'workflow_dispatch' || steps.tag.outputs.automatic_publish == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.tag.outputs.name }}
-        run: gh workflow run verify-release.yml --ref main -f tag="$TAG"
+          TAG: ${{ needs.classify.outputs.tag }}
+          TRUNK: ${{ vars.REPOSITORY_TRUNK || 'main' }}
+        run: gh workflow run verify-release.yml --ref "$TRUNK" -f tag="$TAG"

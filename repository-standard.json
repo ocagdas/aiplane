@@ -1,0 +1,13 @@
+{
+  "contract_version": "1.0.0",
+  "project": "aiplane",
+  "required_jobs": [
+    "checks",
+    "compatibility",
+    "install-channels"
+  ],
+  "version_mirror": "src/aiplane/__init__.py",
+  "trunk_variable": "REPOSITORY_TRUNK",
+  "publication": "minor-major",
+  "license_profile": "MIT"
+}

@@ -4,12 +4,13 @@ import os
 import re
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit, parse_qsl
 
 REDACTED = "[REDACTED_SECRET]"
 _PEM_PATTERN = re.compile(r"-----BEGIN (?:RSA |DSA |EC |OPENSSH |)PRIVATE KEY-----|-----BEGIN CERTIFICATE-----")
 SECRET_PATTERNS = [
     re.compile(
-        r"(?i)\b(api[_-]?key|secret|token|password|authorization|credential)\b\s*[:=]\s*['\"]?([A-Za-z0-9_\-./+=:]{8,})"
+        r"(?i)\b(?:[A-Za-z0-9]+[_-])?(?:api[_-]?key|subscription[_-]?key|secret|token|password|authorization|credential)s?\b['\"]?\s*[:=]\s*['\"]?([A-Za-z0-9_\-./+=:]{8,})"
     ),
     re.compile(r"\b(?:sk|pk|ghp|github_pat|xoxb|xoxp)[_-][A-Za-z0-9_\-]{12,}\b"),
     re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
@@ -51,9 +52,41 @@ def credentials_path(path: Path | str | None = None, config_path: Path | str | N
     return project_root() / ".aiplane" / "credentials.yaml"
 
 
+def credential_url(value: str) -> bool:
+    """Recognize credential-bearing URLs without returning their sensitive values."""
+    try:
+        parsed = urlsplit(value)
+        return bool(
+            parsed.scheme
+            and (
+                parsed.username is not None
+                or parsed.password is not None
+                or any(
+                    is_sensitive_key(key) or key.lower() in {"key", "sig", "signature"}
+                    for key, _ in parse_qsl(parsed.query)
+                )
+            )
+        )
+    except ValueError:
+        return True
+
+
+def is_sensitive_key(value: str) -> bool:
+    return _is_sensitive_key(value)
+
+
+def _contains_credential_url(text: str) -> bool:
+    return any(credential_url(match.group(0)) for match in re.finditer(r"[A-Za-z][A-Za-z0-9+.-]*://[^\s<>\"']+", text))
+
+
 def contains_secret(value: Any) -> bool:
     text = _stringify(value)
-    return bool(_PEM_PATTERN.search(text)) or any(pattern.search(text) for pattern in SECRET_PATTERNS)
+    return (
+        _contains_secret_structure(value)
+        or _contains_credential_url(text)
+        or bool(_PEM_PATTERN.search(text))
+        or any(pattern.search(text) for pattern in SECRET_PATTERNS)
+    )
 
 
 def redact(value: Any) -> Any:
@@ -66,7 +99,7 @@ def redact(value: Any) -> Any:
         return _redact_sequence(value)
     if not isinstance(value, str):
         return value
-    if _PEM_PATTERN.search(value):
+    if _contains_credential_url(value) or _PEM_PATTERN.search(value):
         return REDACTED
     redacted = value
     for pattern in SECRET_PATTERNS:
@@ -101,9 +134,19 @@ def _is_sensitive_flag(value: str) -> bool:
 
 def _is_sensitive_key(value: str) -> bool:
     normalized = re.sub(r"[^a-z0-9]", "", value.lower())
-    return normalized in _SENSITIVE_KEY_MARKERS or any(
-        normalized.endswith(marker) for marker in _SENSITIVE_KEY_MARKERS if len(marker) >= 6
-    )
+    return normalized in _SENSITIVE_KEY_MARKERS or any(normalized.endswith(marker) for marker in _SENSITIVE_KEY_MARKERS)
+
+
+def _contains_secret_structure(value: Any) -> bool:
+    if isinstance(value, dict):
+        for key, inner in value.items():
+            if _is_sensitive_key(str(key)) and inner not in (None, "", [], {}):
+                return True
+            if _contains_secret_structure(inner):
+                return True
+    elif isinstance(value, (list, tuple)):
+        return any(_contains_secret_structure(item) for item in value)
+    return False
 
 
 class CredentialStore:
@@ -121,14 +164,14 @@ class CredentialStore:
                     continue
                 rows.append(
                     {
-                        "ref": f"{provider}.{account}",
-                        "provider": provider,
-                        "account": account,
-                        "endpoint": value.get("endpoint"),
-                        "api_key_env": value.get("api_key_env"),
+                        "ref": redact(f"{provider}.{account}"),
+                        "provider": redact(provider),
+                        "account": redact(account),
+                        "endpoint": redact(value.get("endpoint")),
+                        "api_key_env": redact(value.get("api_key_env")),
                         "has_api_key": bool(value.get("api_key")),
                         "has_token": bool(value.get("token") or value.get("bearer_token")),
-                        "notes": value.get("notes"),
+                        "notes": redact(value.get("notes")),
                     }
                 )
         return {"name": "credentials", "credentials": rows}

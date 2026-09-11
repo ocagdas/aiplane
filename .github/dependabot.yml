@@ -1,0 +1,15 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    # CodeGraphContext 0.6.x requires MCP <2; qualify a compatible backend before upgrading.
+    ignore:
+      - dependency-name: mcp
+        versions: [">=2"]

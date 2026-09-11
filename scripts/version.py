@@ -7,8 +7,14 @@ import os
 import re
 import subprocess
 import sys
+import tomllib
 from dataclasses import dataclass
 from pathlib import Path
+
+if __package__:
+    from . import repository_release as shared
+else:
+    import repository_release as shared
 
 ROOT = Path(__file__).resolve().parents[1]
 PYPROJECT = ROOT / "pyproject.toml"
@@ -26,7 +32,8 @@ class Version:
 
     @classmethod
     def parse(cls, value: str) -> "Version":
-        match = VERSION_RE.fullmatch(value.strip())
+        shared.parse(value)
+        match = VERSION_RE.fullmatch(value)
         if not match:
             raise ValueError(f"unsupported version {value!r}; expected MAJOR.MINOR.PATCH")
         return cls(*(int(part) for part in match.groups()))
@@ -95,11 +102,9 @@ def init_version() -> str:
 
 
 def pyproject_version_from_text(text: str) -> str:
-    match = re.search(r'(?m)^version = "([^"]+)"$', text)
-    if not match:
-        raise ValueError("text does not contain a simple [project] version field")
-    Version.parse(match.group(1))
-    return match.group(1)
+    value = tomllib.loads(text)["project"]["version"]
+    Version.parse(value)
+    return value
 
 
 def version_at_ref(ref: str) -> str | None:
@@ -119,14 +124,15 @@ def check_versions() -> str:
 
 def check_pr_version(base_ref: str) -> str:
     current = check_versions()
-    base = version_at_ref(base_ref)
+    merge_base = run(["git", "merge-base", base_ref, "HEAD"]).stdout.strip()
+    base = version_at_ref(merge_base)
     if base is None:
         raise ValueError(f"cannot read base version from {base_ref}")
     if current != base:
         raise ValueError(
             f"pull requests must not change package version: {base_ref}={base}, current={current}; "
             "merge ordinary changes for an automatic patch bump, or have an authorized maintainer "
-            "run scripts/version.py minor|major|set directly on main"
+            "run scripts/version.py minor|major|set directly on the configured trunk"
         )
     return current
 
@@ -167,7 +173,7 @@ def changed_files_at_head() -> set[str]:
     if head_parent_count() == 0:
         output = run(["git", "show", "--pretty=", "--name-only", "HEAD"]).stdout
     else:
-        output = run(["git", "diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD"]).stdout
+        output = run(["git", "diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD^1", "HEAD"]).stdout
     return {line.strip() for line in output.splitlines() if line.strip()}
 
 
@@ -197,64 +203,31 @@ def classify_from_data(
     associated_pull_request: bool = False,
     parent_version: str | None = None,
     actor: str = "",
+    trunk: str = "main",
 ) -> dict[str, object]:
-    current = Version.parse(version)
-    version_files_changed = bool(changed_files & VERSION_FILES)
-    version_value_changed = parent_version is not None and parent_version != version
-    version_change = (
-        classify_version_change(parent_version, version)
-        if version_value_changed and parent_version is not None
-        else "none"
+    result = shared.plan(
+        parent_version, version, merged=parent_count > 1 or associated_pull_request, tagged=matching_tag_points_at_head
     )
-    mode = "none"
-    reason = "not a main push"
-    if event == "push" and ref == "refs/heads/main":
-        if "[skip ci-version]" in message and actor == VERSIONING_ACTOR:
-            mode = "validate_only"
-            reason = "version loop breaker on trusted versioning app commit"
-        elif matching_tag_points_at_head:
-            mode = "validate_only"
-            reason = "matching version tag already points at HEAD"
-        elif (parent_count > 1 or associated_pull_request) and version_value_changed:
-            mode = "invalid_pr_version_change"
-            reason = "pull-request merge changed tracked version value"
-        elif version_files_changed and version_value_changed and version_change == "invalid":
-            mode = "invalid_direct_version_change"
-            reason = "direct main version must increase"
-        elif version_files_changed and version_value_changed:
-            mode = "maintainer_direct_main_version_commit"
-            reason = f"maintainer selected a {version_change} version"
-        elif parent_count > 1 or associated_pull_request:
-            mode = "ci_patch_after_merge"
-            reason = "pull-request merge on main"
-        else:
-            mode = "validate_only"
-            reason = "direct main commit without version change"
-    next_version = str(current.bump_patch()) if mode == "ci_patch_after_merge" else version
-    return {
-        "mode": mode,
-        "reason": reason,
-        "current_version": version,
-        "next_version": next_version,
-        "tag": f"v{next_version}",
-        "parent_count": parent_count,
-        "author": author,
-        "version_changed": version_value_changed,
-        "version_files_changed": version_files_changed,
-        "associated_pull_request": associated_pull_request,
-        "parent_version": parent_version,
-        "version_change": version_change,
-        "actor": actor,
-    }
+    return {**result, "schema_version": 1, "tag": f"v{result['version']}"}
 
 
-def classify_ci() -> dict[str, object]:
+def selected_trunk() -> str:
+    override = os.environ.get("REPOSITORY_TRUNK")
+    if override:
+        return override
+    result = run(["git", "symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"], expected=(0, 1))
+    if result.returncode == 0:
+        return result.stdout.strip().removeprefix("refs/remotes/origin/")
+    raise ValueError("set REPOSITORY_TRUNK or fetch the origin default branch")
+
+
+def classify_ci(*, merged: bool = False, trunk: str | None = None) -> dict[str, object]:
     event = os.environ.get("GITHUB_EVENT_NAME", "")
     ref = os.environ.get("GITHUB_REF", "")
     version = check_versions()
     tag = f"v{version}"
     parent_count = head_parent_count()
-    return classify_from_data(
+    result = classify_from_data(
         event=event,
         ref=ref,
         version=version,
@@ -263,10 +236,13 @@ def classify_ci() -> dict[str, object]:
         author=head_author(),
         changed_files=changed_files_at_head(),
         matching_tag_points_at_head=tag_points_at_head(tag),
-        associated_pull_request=os.environ.get("AIPLANE_ASSOCIATED_PR", "").lower() == "true",
+        associated_pull_request=merged,
         parent_version=version_at_ref("HEAD^1") if parent_count else None,
         actor=os.environ.get("GITHUB_ACTOR", ""),
+        trunk=trunk or "",
     )
+    result["source_commit"] = run(["git", "rev-parse", "HEAD"]).stdout.strip()
+    return result
 
 
 def write_github_outputs(values: dict[str, object]) -> None:
@@ -279,12 +255,20 @@ def write_github_outputs(values: dict[str, object]) -> None:
             handle.write(f"{key}={rendered}\n")
 
 
-def classify_release(previous_ref: str) -> dict[str, object]:
+def classify_release(previous_ref: str, *, tag: str) -> dict[str, object]:
     current = check_versions()
+    if tag != f"v{current}" or not tag_points_at_head(tag):
+        raise ValueError("release tag must match the package version and HEAD")
     previous = version_at_ref(previous_ref)
     if previous is None:
         raise ValueError(f"cannot read previous version from {previous_ref}")
-    return release_plan(previous, current)
+    return {
+        "schema_version": 1,
+        **release_plan(previous, current),
+        "version": current,
+        "publish": release_plan(previous, current)["automatic_publish"],
+        "source_commit": run(["git", "rev-parse", "HEAD"]).stdout.strip(),
+    }
 
 
 def require_clean_tree() -> None:
@@ -306,6 +290,9 @@ def create_tag(*, ci_artifact: bool = False, dry_run: bool = False) -> str:
     version = check_versions()
     plan = tag_plan(version, ci_artifact=ci_artifact)
     tag = str(plan["tag"])
+    require_clean_tree()
+    if tag_exists(tag) and not tag_points_at_head(tag):
+        raise RuntimeError(f"tag {tag} already exists and does not point at HEAD")
     if dry_run:
         print(json.dumps({**plan, "would_create": not tag_exists(tag)}, indent=2, sort_keys=True))
         return tag
@@ -331,15 +318,19 @@ def main(argv: list[str] | None = None) -> int:
     set_cmd.add_argument("--dry-run", action="store_true")
     sub.add_parser("check")
     current_cmd = sub.add_parser("current")
-    current_cmd.add_argument("--plain", action="store_true")
+    current_format = current_cmd.add_mutually_exclusive_group()
+    current_format.add_argument("--plain", action="store_true")
+    current_format.add_argument("--json", action="store_true")
     tag_cmd = sub.add_parser("tag")
     tag_cmd.add_argument("--ci-artifact", action="store_true")
     tag_cmd.add_argument("--dry-run", action="store_true")
     classify_cmd = sub.add_parser("classify-ci")
     classify_cmd.add_argument("--github-output", action="store_true")
+    classify_cmd.add_argument("--merged", action="store_true")
     check_pr_cmd = sub.add_parser("check-pr")
     check_pr_cmd.add_argument("--base-ref", required=True)
     classify_release_cmd = sub.add_parser("classify-release")
+    classify_release_cmd.add_argument("--tag", required=True)
     classify_release_cmd.add_argument("--previous-ref", default="HEAD^1")
     classify_release_cmd.add_argument("--github-output", action="store_true")
 
@@ -354,12 +345,12 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if args.command in {"patch", "minor", "major"}:
             version = Version.parse(check_versions())
-            next_version = {
+            version = {
                 "patch": version.bump_patch,
                 "minor": version.bump_minor,
                 "major": version.bump_major,
             }[args.command]()
-            write_version(str(next_version), dry_run=args.dry_run)
+            write_version(str(version), dry_run=args.dry_run)
             return 0
         if args.command == "set":
             write_version(str(Version.parse(args.version)), dry_run=args.dry_run)
@@ -368,18 +359,16 @@ def main(argv: list[str] | None = None) -> int:
             create_tag(ci_artifact=args.ci_artifact, dry_run=args.dry_run)
             return 0
         if args.command == "classify-ci":
-            result = classify_ci()
+            result = classify_ci(merged=args.merged)
             print(json.dumps(result, indent=2, sort_keys=True))
             if args.github_output:
                 write_github_outputs(result)
-            if result["mode"] in {"invalid_pr_version_change", "invalid_direct_version_change"}:
-                raise ValueError(str(result["reason"]))
             return 0
         if args.command == "check-pr":
             print(check_pr_version(args.base_ref))
             return 0
         if args.command == "classify-release":
-            result = classify_release(args.previous_ref)
+            result = classify_release(args.previous_ref, tag=args.tag)
             print(json.dumps(result, indent=2, sort_keys=True))
             if args.github_output:
                 write_github_outputs(result)

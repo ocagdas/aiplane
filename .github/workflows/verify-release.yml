@@ -23,19 +23,19 @@ jobs:
         channel: [pip, pipx, uv]
     steps:
       - name: Check out the tagged source
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.tag }}
           fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: "3.13"
           cache: pip
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v8.3.2
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
 
       - name: Install verification tools
         run: python -m pip install pipx setuptools==83.0.0
@@ -53,6 +53,13 @@ jobs:
           gh release download "$TAG" --dir release --pattern 'aiplane-*.whl'
           gh release download "$TAG" --dir release --pattern 'aiplane-*.tar.gz'
           gh release download "$TAG" --dir release --pattern 'SHA256SUMS'
+          gh release download "$TAG" --dir release --pattern 'provenance.json'
+
+      - name: Bind downloaded artifacts to the selected commit
+        shell: bash
+        env:
+          TAG: ${{ inputs.tag }}
+        run: python scripts/verify_release.py --directory release --tag "$TAG" --commit "$(git rev-parse HEAD)" --report evidence/artifacts.json
 
       - name: Verify release checksums and artifact shape
         run: python scripts/verify_release_manifest.py release
@@ -61,7 +68,10 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh attestation verify release/aiplane-* --repo "$GITHUB_REPOSITORY"
+        run: |
+          for artifact in release/*.whl release/*.tar.gz release/provenance.json; do
+            gh attestation verify "$artifact" --repo "$GITHUB_REPOSITORY"
+          done
 
       - name: Exercise the selected no-clone install owner
         id: lifecycle
@@ -94,7 +104,7 @@ jobs:
           python scripts/validate_trial_evidence.py "evidence/${RUNNER_OS}-${CHANNEL}.json"
 
       - name: Upload verification evidence
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: release-evidence-${{ inputs.tag }}-${{ runner.os }}-${{ matrix.channel }}
           path: evidence/

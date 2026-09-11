@@ -1,12 +1,14 @@
 # CI Wheel Artifacts
 
-Every successful push to protected `main`—normally a merged pull request—creates a GitHub Actions artifact named:
+A qualifying trunk PR merge or authorized direct version change creates a GitHub Actions artifact named:
 
 ```text
 aiplane-wheel-v<VERSION>-<SHORT_VERSION_COMMIT_SHA>
 ```
 
-The artifact contains the wheel, `SHA256SUMS`, and `provenance.json`. Provenance records the package version, release tag, source commit, exact versioned commit, short versioned commit, branch ref, and workflow run ID. The PR UI labels the aggregate check **CI / Release gate** (ruleset value: `Release gate`). The producing job depends on that gate, so it cannot run unless the full quality, compatibility, and Linux/macOS/Windows installation matrix succeeds.
+The artifact contains the wheel, source distribution, `SHA256SUMS`, and `provenance.json`. Provenance records the release tag, source commit, exact versioned commit and workflow run ID. The PR UI labels the aggregate check **CI / Quality gate** (ruleset value: `Quality gate`). The producing job depends on that gate, so it cannot run unless the full quality, compatibility, and Linux/macOS/Windows installation matrix succeeds.
+
+Superseded runs and direct code-only pushes do not produce a new version artifact. See [version policy](../../VERSIONING.md).
 
 Download the artifact from the successful CI workflow run, extract it into a clean directory, verify `SHA256SUMS`, and install the wheel through `pipx`, `uv tool`, or an explicitly active Python environment. This supports pre-release no-clone testing without requiring a source checkout.
 

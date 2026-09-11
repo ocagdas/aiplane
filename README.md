@@ -62,7 +62,7 @@ notes.
 > Aiplane is a **developer preview / pre-1.0 alpha**. The public path is
 > deliberately narrow: discover -> doctor -> recommend -> export. Supporting
 > commands are tested, but their maturity varies and is documented in
-> [command coverage](docs/project/project-plan.md#command-coverage).
+> [command coverage](STATUS.md#command-coverage).
 
 
 Advanced, review-first workflows are available without turning Aiplane into a model server or cluster controller:
@@ -289,11 +289,11 @@ Archive and restore validate paths, required files, YAML mappings, file sizes, S
 
 Identical portable evidence is classified as **exact**. When only active hardware differs, Aiplane reports **capability-equivalent** only if every selected local model still meets its configured minimum RAM, VRAM, GPU-vendor, and accelerator-API requirements. Resource failures are **materially incompatible** and missing model or machine facts are **unresolved**. Other portable configuration changes are conservatively material. Each result includes the changed facts and their provenance; neither command mutates profiles or the current machine. Credentials, model weights, discovery caches, audit logs, tunnel state, and runtime-owned data remain machine-local. See [Profile backup, recovery, and replay](docs/user/profile-schema.md#backup-recovery-and-cross-machine-replay).
 
-Command categories are explicit in [command coverage](docs/project/project-plan.md#command-coverage): core commands lead onboarding, supporting commands troubleshoot specific subsystems, and experimental commands remain outside the developer-preview path.
+Command categories are explicit in [command coverage](STATUS.md#command-coverage): core commands lead onboarding, supporting commands troubleshoot specific subsystems, and experimental commands remain outside the developer-preview path.
 
 ## Advanced and experimental commands
 
-The repository contains additional tested commands for specialised environment troubleshooting, integration planning, and guarded operations. They remain subordinate to the profile → discover → doctor → recommend → export workflow. They remain implementation details rather than additional product promises. See [command coverage](docs/project/project-plan.md#command-coverage) for the exact maturity boundary and [Roadmap](docs/project/project-plan.md#roadmap) for future decisions.
+The repository contains additional tested commands for specialised environment troubleshooting, integration planning, and guarded operations. They remain subordinate to the profile → discover → doctor → recommend → export workflow. They remain implementation details rather than additional product promises. See [command coverage](STATUS.md#command-coverage) for the exact maturity boundary and [Roadmap](ROADMAP.md#roadmap) for future decisions.
 
 ## Safety, governance, and trust model
 
@@ -322,7 +322,7 @@ More detail:
 - [core user workflow](docs/user/index.md)
 - [doctor output contract](docs/user/doctor-contract.md)
 - [platform support](docs/user/platform-support.md)
-- [advanced command maturity](docs/project/project-plan.md#command-coverage)
+- [advanced command maturity](STATUS.md#command-coverage)
 
 ## Validation expectations
 
@@ -344,15 +344,16 @@ Conda environment first, you can select it explicitly with
 `scripts/format.sh check` to check formatting only, or `scripts/format.sh fix`
 to apply formatting fixes.
 
-Use [command coverage](docs/project/project-plan.md#command-coverage) and [strategy](docs/project/strategy.md) to keep behavior, docs, and tests synchronized.
+Use [command coverage](STATUS.md#command-coverage) and [strategy](PURPOSE.md) to keep behavior, docs, and tests synchronized.
 
 ## Documentation
 
+- [Documentation map](docs/index.md)
 - [Start here](docs/user/index.md)
 - [Installation and setup](docs/user/setup.md)
 - [Platform support](docs/user/platform-support.md)
 - [Security policy](SECURITY.md) and [practical threat model](docs/project/threat-model.md)
-- [Advanced command maturity](docs/project/project-plan.md#command-coverage)
+- [Advanced command maturity](STATUS.md#command-coverage)
 - [Contributor guide](CONTRIBUTING.md)
 
 ## Contributing
@@ -370,3 +371,5 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+Development uses `main` and `dev/<topic>` PR branches; see [BRANCHING.md](BRANCHING.md).

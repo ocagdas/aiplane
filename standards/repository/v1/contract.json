@@ -1,0 +1,85 @@
+{
+  "contract_version": "1.0.0",
+  "schema_version": 1,
+  "required_documents": [
+    "README.md",
+    "PURPOSE.md",
+    "STATUS.md",
+    "VALIDATION.md",
+    "ROADMAP.md",
+    "TODO.md",
+    "CONTRIBUTING.md",
+    "CI.md",
+    "VERSIONING.md",
+    "REPOSITORY_STRUCTURE.md",
+    "AGENTS.md",
+    "HANDOFF.md",
+    "LICENSE",
+    "NOTICE.md",
+    "SECURITY.md",
+    "CODE_OF_CONDUCT.md",
+    "docs/index.md",
+    "docs/architecture.md",
+    "SUPPORT.md",
+    "BRANCHING.md"
+  ],
+  "required_helpers": [
+    "version.py",
+    "publish_version.py",
+    "build_release.py",
+    "ci_gate.py",
+    "verify_release.py",
+    "check_branch_policy.py"
+  ],
+  "canonical_workflows": [
+    "ci.yml",
+    "version.yml",
+    "release.yml",
+    "verify-release.yml"
+  ],
+  "gate_cases": [
+    {
+      "name": "success",
+      "change": null,
+      "expected": true
+    },
+    {
+      "name": "failure",
+      "change": "failure",
+      "expected": false
+    },
+    {
+      "name": "cancelled",
+      "change": "cancelled",
+      "expected": false
+    },
+    {
+      "name": "skipped",
+      "change": "skipped",
+      "expected": false
+    },
+    {
+      "name": "missing",
+      "change": "missing",
+      "expected": false
+    },
+    {
+      "name": "extra_success",
+      "change": "extra_success",
+      "expected": true
+    },
+    {
+      "name": "extra_failure",
+      "change": "extra_failure",
+      "expected": false
+    }
+  ],
+  "shared_github_files": [
+    ".github/CODEOWNERS",
+    ".github/ISSUE_TEMPLATE/bug_report.yml",
+    ".github/ISSUE_TEMPLATE/config.yml",
+    ".github/ISSUE_TEMPLATE/feature_request.yml",
+    ".github/PULL_REQUEST_TEMPLATE.md",
+    ".github/dependabot.yml"
+  ]
+}

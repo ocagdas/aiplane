@@ -12,6 +12,7 @@ from typing import Any
 
 from .config import create_profile, dump_yaml, parse_yaml, profiles_root
 from .persistence import atomic_write_text, file_lock
+from .secrets import credential_url, contains_secret
 
 _ENV_REF = re.compile(r"^(?:\$\{([A-Z][A-Z0-9_]*)\}|\$([A-Z][A-Z0-9_]*))$")
 _ALIAS = re.compile(r"[^a-z0-9]+")
@@ -204,7 +205,16 @@ def _normalize_models(candidates: list[dict[str, Any]]) -> tuple[dict[str, Any],
             item["preferred_runtime"] = runtime
         endpoint = candidate.get("endpoint")
         if endpoint:
-            item["endpoint"] = str(endpoint)
+            endpoint_text = str(endpoint).strip()
+            if (
+                _invalid_import_endpoint(endpoint_text)
+                or credential_url(endpoint_text)
+                or contains_secret(endpoint_text)
+            ):
+                raise ValueError(
+                    "Imported endpoint contains credentials; use a credential-free endpoint and environment reference."
+                )
+            item["endpoint"] = endpoint_text
         credential = candidate.get("credential")
         if credential:
             match = _ENV_REF.fullmatch(str(credential).strip())
@@ -215,3 +225,8 @@ def _normalize_models(candidates: list[dict[str, Any]]) -> tuple[dict[str, Any],
                 warnings.append(f"omitted a literal credential from imported model {alias}")
         models[alias] = item
     return models, redacted, warnings
+
+
+def _invalid_import_endpoint(value: str) -> bool:
+    lowered = value.lower()
+    return value.startswith("*") or "[redacted" in lowered

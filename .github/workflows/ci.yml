@@ -2,22 +2,47 @@ name: CI
 
 on:
   pull_request:
-    branches:
-      - main
   push:
-    branches:
-      - main
+    branches: ['**']
+  merge_group:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      ref:
+        required: true
+        type: string
+    outputs:
+      go:
+        value: ${{ jobs.quality-gate.outputs.go }}
+
+permissions:
+  contents: read
 
 jobs:
   checks:
-    if: ${{ github.event_name != 'push' || github.actor != 'aiplane-versioning[bot]' || !contains(github.event.head_commit.message, '[skip ci-version]') }}
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          ref: ${{ inputs.ref || github.sha }}
 
+      - name: Validate workflows with pinned actionlint
+        shell: bash
+        run: |
+          curl -fsSL https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz -o "$RUNNER_TEMP/actionlint.tar.gz"
+          echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  $RUNNER_TEMP/actionlint.tar.gz" | sha256sum --check
+          tar -xzf "$RUNNER_TEMP/actionlint.tar.gz" -C "$RUNNER_TEMP" actionlint
+          "$RUNNER_TEMP/actionlint" -shellcheck=''
+
+      - name: Validate shared branch policy
+        if: github.event_name == 'pull_request'
+        env:
+          SOURCE_BRANCH: ${{ github.head_ref }}
+          TARGET_BRANCH: ${{ github.base_ref }}
+          TRUNK: ${{ vars.REPOSITORY_TRUNK || 'main' }}
+        run: python scripts/check_branch_policy.py --source "$SOURCE_BRANCH" --target "$TARGET_BRANCH" --trunk "$TRUNK"
       - name: Reject package-version changes in pull requests
         if: ${{ github.event_name == 'pull_request' }}
         shell: bash
@@ -26,7 +51,7 @@ jobs:
           python scripts/version.py check-pr --base-ref "origin/$GITHUB_BASE_REF"
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: "3.11"
           cache: pip
@@ -35,10 +60,16 @@ jobs:
         run: python -m pip install -e ".[dev]"
 
       - name: Quality gate
-        run: make check
+        run: make check PYTEST_ARGS="-m pytest -q --junitxml=${{ runner.temp }}/junit.xml"
+
+      - name: Upload test evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: unit-tests
+          path: ${{ runner.temp }}/junit.xml
 
   compatibility:
-    if: ${{ github.event_name != 'push' || github.actor != 'aiplane-versioning[bot]' || !contains(github.event.head_commit.message, '[skip ci-version]') }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -46,10 +77,12 @@ jobs:
         python-version: ["3.12", "3.13"]
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref || github.sha }}
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
@@ -61,7 +94,6 @@ jobs:
         run: python -m pytest -q tests/test_contracts.py tests/test_packaging.py
 
   install-channels:
-    if: ${{ github.event_name != 'push' || github.actor != 'aiplane-versioning[bot]' || !contains(github.event.head_commit.message, '[skip ci-version]') }}
     name: Install channels (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
@@ -70,16 +102,18 @@ jobs:
         os: [ubuntu-latest, macos-14, windows-latest]
     steps:
       - name: Check out repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref || github.sha }}
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: "3.13"
           cache: pip
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v8.3.2
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
 
       - name: Install packaging tools
         env:
@@ -92,275 +126,41 @@ jobs:
       - name: Validate real pip, pipx, and uv installed-wheel lifecycles
         run: python scripts/verify_install_channels.py dist
 
-  release-gate:
-    name: Release gate
-    if: ${{ always() && (github.event_name != 'push' || github.actor != 'aiplane-versioning[bot]' || !contains(github.event.head_commit.message, '[skip ci-version]')) }}
+  quality-gate:
+    name: Quality gate
+    if: ${{ always() }}
     needs: [checks, compatibility, install-channels]
     runs-on: ubuntu-latest
+    outputs:
+      go: ${{ steps.gate.outputs.go }}
     steps:
-      - name: Require every release-path check
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+      - name: Evaluate every dependency
+        id: gate
         env:
-          CHECKS: ${{ needs.checks.result }}
-          COMPATIBILITY: ${{ needs.compatibility.result }}
-          INSTALL_CHANNELS: ${{ needs.install-channels.result }}
+          NEEDS_JSON: ${{ toJSON(needs) }}
         run: |
-          test "$CHECKS" = success
-          test "$COMPATIBILITY" = success
-          test "$INSTALL_CHANNELS" = success
+          export GITHUB_SHA="$(git rev-parse HEAD)"
+          python scripts/ci_gate.py --report "$RUNNER_TEMP/ci-gate.json"
+      - name: Upload quality evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: quality-gate
+          path: ${{ runner.temp }}/ci-gate.json
+          if-no-files-found: error
 
-  classify-main-push:
-    name: Classify main push
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-    needs: [release-gate]
-    runs-on: ubuntu-latest
+  version:
+    needs: [quality-gate]
+    if: ${{ vars.REPOSITORY_VERSIONING_ENABLED == 'true' && github.event_name == 'push' && github.workflow == 'CI' && github.ref_name == (vars.REPOSITORY_TRUNK || 'main') && needs.quality-gate.result == 'success' && needs.quality-gate.outputs.go == 'true' }}
+    uses: ./.github/workflows/version.yml
     permissions:
       contents: read
       pull-requests: read
-    outputs:
-      mode: ${{ steps.classify.outputs.mode }}
-      current_version: ${{ steps.classify.outputs.current_version }}
-      next_version: ${{ steps.classify.outputs.next_version }}
-      tag: ${{ steps.classify.outputs.tag }}
-      reason: ${{ steps.classify.outputs.reason }}
-    steps:
-      - name: Check out main with full history
-        uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      - name: Detect associated pull request
-        id: associated-pr
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          associated="$(gh api -H "Accept: application/vnd.github+json" "/repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/pulls" --jq 'if length > 0 then "true" else "false" end')"
-          echo "value=$associated" >> "$GITHUB_OUTPUT"
-
-      - name: Classify version action
-        id: classify
-        env:
-          AIPLANE_ASSOCIATED_PR: ${{ steps.associated-pr.outputs.value }}
-        run: python scripts/version.py classify-ci --github-output
-
-  ci-version-bump-and-tag:
-    name: CI patch version and tag
-    if: ${{ needs.classify-main-push.outputs.mode == 'ci_patch_after_merge' }}
-    needs: [classify-main-push]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    concurrency:
-      group: aiplane-main-version-mutation
-      cancel-in-progress: false
-    outputs:
-      version: ${{ steps.result.outputs.version }}
-      tag: ${{ steps.result.outputs.tag }}
-      version_commit: ${{ steps.result.outputs.version_commit }}
-      source_commit: ${{ steps.result.outputs.source_commit }}
-      version_source: ${{ steps.result.outputs.version_source }}
-    steps:
-      - name: Require versioning app configuration
-        shell: bash
-        env:
-          APP_ID: ${{ vars.AIPLANE_VERSIONING_APP_ID }}
-          PRIVATE_KEY_CONFIGURED: ${{ secrets.AIPLANE_VERSIONING_APP_PRIVATE_KEY != '' }}
-        run: |
-          test -n "$APP_ID" || { echo "::error::Missing repository variable AIPLANE_VERSIONING_APP_ID"; exit 1; }
-          test "$PRIVATE_KEY_CONFIGURED" = true || { echo "::error::Missing repository secret AIPLANE_VERSIONING_APP_PRIVATE_KEY"; exit 1; }
-
-      - name: Create versioning app token
-        id: versioning-token
-        uses: actions/create-github-app-token@v3
-        with:
-          app-id: ${{ vars.AIPLANE_VERSIONING_APP_ID }}
-          private-key: ${{ secrets.AIPLANE_VERSIONING_APP_PRIVATE_KEY }}
-          permission-contents: write
-
-      - name: Check out main with full history
-        uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-          token: ${{ steps.versioning-token.outputs.token }}
-
-      - name: Configure release bot identity
-        run: |
-          git config user.name "aiplane-versioning[bot]"
-          git config user.email "aiplane-versioning[bot]@users.noreply.github.com"
-
-      - name: Rebase versioning on latest main and push atomically
-        id: result
-        shell: bash
-        run: |
-          set -euo pipefail
-          pushed=false
-          for attempt in 1 2 3; do
-            git fetch origin main --tags
-            git checkout -B main origin/main
-            python scripts/version.py patch
-            version="$(python scripts/version.py current --plain)"
-            tag="v${version}"
-            git add pyproject.toml src/aiplane/__init__.py
-            git commit -m "chore(release): ${tag} [skip ci-version]"
-            if git push origin HEAD:main; then
-              pushed=true
-              break
-            fi
-            echo "main moved during versioning; retrying from latest main (${attempt}/3)" >&2
-          done
-          test "$pushed" = true
-          python scripts/version.py tag --ci-artifact
-          git push origin "$tag"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
-          echo "version_commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-          echo "source_commit=${{ github.sha }}" >> "$GITHUB_OUTPUT"
-          echo "version_source=ci_patch_after_merge" >> "$GITHUB_OUTPUT"
-
-  direct-version-tag:
-    name: Ensure direct version tag
-    if: ${{ needs.classify-main-push.outputs.mode == 'maintainer_direct_main_version_commit' }}
-    needs: [classify-main-push]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    concurrency:
-      group: aiplane-main-version-mutation
-      cancel-in-progress: false
-    outputs:
-      version: ${{ steps.result.outputs.version }}
-      tag: ${{ steps.result.outputs.tag }}
-      version_commit: ${{ steps.result.outputs.version_commit }}
-      source_commit: ${{ steps.result.outputs.source_commit }}
-      version_source: ${{ steps.result.outputs.version_source }}
-    steps:
-      - name: Require versioning app configuration
-        shell: bash
-        env:
-          APP_ID: ${{ vars.AIPLANE_VERSIONING_APP_ID }}
-          PRIVATE_KEY_CONFIGURED: ${{ secrets.AIPLANE_VERSIONING_APP_PRIVATE_KEY != '' }}
-        run: |
-          test -n "$APP_ID" || { echo "::error::Missing repository variable AIPLANE_VERSIONING_APP_ID"; exit 1; }
-          test "$PRIVATE_KEY_CONFIGURED" = true || { echo "::error::Missing repository secret AIPLANE_VERSIONING_APP_PRIVATE_KEY"; exit 1; }
-
-      - name: Create versioning app token
-        id: versioning-token
-        uses: actions/create-github-app-token@v3
-        with:
-          app-id: ${{ vars.AIPLANE_VERSIONING_APP_ID }}
-          private-key: ${{ secrets.AIPLANE_VERSIONING_APP_PRIVATE_KEY }}
-          permission-contents: write
-
-      - name: Check out direct version commit
-        uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-          token: ${{ steps.versioning-token.outputs.token }}
-
-      - name: Configure release bot identity
-        run: |
-          git config user.name "aiplane-versioning[bot]"
-          git config user.email "aiplane-versioning[bot]@users.noreply.github.com"
-
-      - name: Ensure CI artifact tag exists
-        run: python scripts/version.py tag --ci-artifact
-
-      - name: Push tag
-        run: git push origin "${{ needs.classify-main-push.outputs.tag }}"
-
-      - name: Emit resolved version commit
-        id: result
-        run: |
-          echo "version=${{ needs.classify-main-push.outputs.current_version }}" >> "$GITHUB_OUTPUT"
-          echo "tag=${{ needs.classify-main-push.outputs.tag }}" >> "$GITHUB_OUTPUT"
-          echo "version_commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-          echo "source_commit=${{ github.sha }}" >> "$GITHUB_OUTPUT"
-          echo "version_source=maintainer_direct_main_version_commit" >> "$GITHUB_OUTPUT"
-
-  main-versioned-wheel:
-    name: Main versioned wheel artifact
-    if: ${{ always() && (needs.ci-version-bump-and-tag.result == 'success' || needs.direct-version-tag.result == 'success') }}
-    needs: [ci-version-bump-and-tag, direct-version-tag]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - name: Resolve versioned commit
-        id: resolved
-        run: |
-          if [ "${{ needs.ci-version-bump-and-tag.result }}" = "success" ]; then
-            echo "version=${{ needs.ci-version-bump-and-tag.outputs.version }}" >> "$GITHUB_OUTPUT"
-            echo "tag=${{ needs.ci-version-bump-and-tag.outputs.tag }}" >> "$GITHUB_OUTPUT"
-            echo "version_commit=${{ needs.ci-version-bump-and-tag.outputs.version_commit }}" >> "$GITHUB_OUTPUT"
-            echo "version_commit_short=$(printf '%s' '${{ needs.ci-version-bump-and-tag.outputs.version_commit }}' | cut -c1-7)" >> "$GITHUB_OUTPUT"
-            echo "source_commit=${{ needs.ci-version-bump-and-tag.outputs.source_commit }}" >> "$GITHUB_OUTPUT"
-            echo "version_source=${{ needs.ci-version-bump-and-tag.outputs.version_source }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "version=${{ needs.direct-version-tag.outputs.version }}" >> "$GITHUB_OUTPUT"
-            echo "tag=${{ needs.direct-version-tag.outputs.tag }}" >> "$GITHUB_OUTPUT"
-            echo "version_commit=${{ needs.direct-version-tag.outputs.version_commit }}" >> "$GITHUB_OUTPUT"
-            echo "version_commit_short=$(printf '%s' '${{ needs.direct-version-tag.outputs.version_commit }}' | cut -c1-7)" >> "$GITHUB_OUTPUT"
-            echo "source_commit=${{ needs.direct-version-tag.outputs.source_commit }}" >> "$GITHUB_OUTPUT"
-            echo "version_source=${{ needs.direct-version-tag.outputs.version_source }}" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Check out versioned commit
-        uses: actions/checkout@v7
-        with:
-          ref: ${{ steps.resolved.outputs.version_commit }}
-          fetch-depth: 0
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.13"
-          cache: pip
-
-      - name: Install packaging tools
-        run: python -m pip install build
-
-      - name: Verify tag points at versioned commit
-        run: |
-          test "$(git rev-parse '${{ steps.resolved.outputs.tag }}^{}')" = "${{ steps.resolved.outputs.version_commit }}"
-          test "$(python scripts/version.py current --plain)" = "${{ steps.resolved.outputs.version }}"
-
-      - name: Build main versioned wheel
-        run: python -m build --wheel --outdir artifacts
-
-      - name: Validate the exact versioned wheel
-        run: python scripts/verify_install_channels.py artifacts --channel pip
-
-      - name: Write checksum and provenance
-        env:
-          VERSION: ${{ steps.resolved.outputs.version }}
-          TAG: ${{ steps.resolved.outputs.tag }}
-          VERSION_COMMIT: ${{ steps.resolved.outputs.version_commit }}
-          SOURCE_COMMIT: ${{ steps.resolved.outputs.source_commit }}
-          VERSION_SOURCE: ${{ steps.resolved.outputs.version_source }}
-        run: |
-          cd artifacts
-          sha256sum aiplane-*.whl > SHA256SUMS
-          sha256sum --check SHA256SUMS
-          python - <<'PY'
-          import json, os, pathlib
-          payload = {
-              "version": os.environ["VERSION"],
-              "tag": os.environ["TAG"],
-              "version_source": os.environ["VERSION_SOURCE"],
-              "source_commit": os.environ["SOURCE_COMMIT"],
-              "version_commit": os.environ["VERSION_COMMIT"],
-              "version_commit_short": os.environ["VERSION_COMMIT"][:7],
-              "ref": "refs/heads/main",
-              "workflow_run_id": os.environ["GITHUB_RUN_ID"],
-              "wheel": next(path.name for path in pathlib.Path('.').glob('aiplane-*.whl')),
-              "sha256sums": "SHA256SUMS",
-          }
-          pathlib.Path("provenance.json").write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-          PY
-
-      - name: Upload versioned main wheel artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: aiplane-wheel-v${{ steps.resolved.outputs.version }}-${{ steps.resolved.outputs.version_commit_short }}
-          path: artifacts/
-          if-no-files-found: error
-          retention-days: 30
+    with:
+      source: ${{ github.sha }}
+      trunk: ${{ vars.REPOSITORY_TRUNK || 'main' }}
+      go: ${{ needs.quality-gate.outputs.go }}
+    secrets: inherit

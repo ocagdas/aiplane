@@ -28,42 +28,36 @@ from aiplane.runtime_pull import runtime_pull_support
 PROJECT_PLAN = Path("docs/project/project-plan.md")
 
 
+PLAN_OWNERS = {
+    "Command Coverage": "STATUS.md",
+    "Roadmap": "ROADMAP.md",
+    "Integration Roadmap": "docs/project/integration-design.md",
+    "Product Adoption Backlog": "TODO.md",
+    "P0 Maintainer Checklist": "TODO.md",
+    "Developer-Preview Scope Freeze": "docs/project/preview-scope.md",
+    "Public Launch Review": "docs/project/launch-criteria.md",
+    "Public Demo Plan": "docs/user/demo.md",
+    "External Trial Evidence": "docs/project/trial-evidence/recording-guide.md",
+}
+
+
 def _project_plan_section(title: str) -> str:
-    text = PROJECT_PLAN.read_text(encoding="utf-8")
+    text = Path(PLAN_OWNERS[title]).read_text(encoding="utf-8")
     marker = f"## {title}\n"
+    if text.startswith(f"# {title}\n"):
+        return text.split("\n", 1)[1]
     assert marker in text, title
     return text.split(marker, 1)[1].split("\n## ", 1)[0]
 
 
-def test_project_planning_documents_are_unified() -> None:
+def test_project_planning_documents_have_single_owners() -> None:
     text = PROJECT_PLAN.read_text(encoding="utf-8")
-    for heading in (
-        "Current Status and Session Handoff",
-        "Command Coverage",
-        "Roadmap",
-        "Integration Roadmap",
-        "Product Adoption Backlog",
-        "Developer-Preview Scope Freeze",
-        "P0 Maintainer Checklist",
-        "External Trial Evidence",
-        "Public Launch Review",
-        "Public Demo Plan",
-    ):
-        assert text.count(f"## {heading}\n") == 1
-    assert not any(character.isdigit() for character in PROJECT_PLAN.name)
-    for obsolete in (
-        "roadmap.md",
-        "session-handoff.md",
-        "command-coverage.md",
-        "integrations-roadmap.md",
-        "product-adoption-backlog-2026-07.md",
-        "public-demo-plan.md",
-        "public-launch-review.md",
-        "preview-scope-freeze.md",
-        "p0-maintainer-checklist.md",
-        "external-trial-evidence.md",
-    ):
-        assert not (PROJECT_PLAN.parent / obsolete).exists()
+    for name in ("PURPOSE.md", "STATUS.md", "VALIDATION.md", "ROADMAP.md", "TODO.md"):
+        assert Path(name).is_file()
+        assert name in text
+    assert len(text.splitlines()) < 30
+    for title in PLAN_OWNERS:
+        assert _project_plan_section(title).strip()
 
 
 def test_integration_contracts_define_tools_and_roles_once() -> None:
@@ -180,12 +174,20 @@ def test_make_check_is_strict_and_contributor_commands_are_maintained() -> None:
     makefile = Path("Makefile").read_text(encoding="utf-8")
     contributing = Path("CONTRIBUTING.md").read_text(encoding="utf-8")
 
-    assert "format-check:\n\tpython -m ruff format --check src tests" in makefile
-    assert "check: format-check lint test-clean" in makefile
+    assert "format-check:\n\tpython -m ruff format --check src tests scripts" in makefile
+    assert "check: format-check lint standard-check test-clean" in makefile
+    assert "$(PYTHON) scripts/check_repository_standard.py" in makefile
     assert "test_mvp.py" not in contributing
     assert "tests/test_contracts.py" in contributing
     assert "tests/test_quick_smoke.py" in contributing
     assert "environment doctor and configuration compiler" in contributing
+
+
+def test_documentation_split_points_to_canonical_development_and_architecture_docs() -> None:
+    development = Path("docs/development/setup.md").read_text(encoding="utf-8")
+
+    assert "`docs/development/setup.md`: dependency, test, and contributor workflows." in development
+    assert "`docs/architecture.md`: product strategy and architecture boundary." in development
 
 
 def test_external_io_calls_are_centralized_in_boundaries() -> None:
@@ -275,7 +277,7 @@ def test_public_positioning_agrees_across_metadata_and_launch_docs() -> None:
     launch_review = _project_plan_section("Public Launch Review")
     for name, document in (
         ("README.md", Path("README.md").read_text(encoding="utf-8")),
-        ("docs/project/strategy.md", Path("docs/project/strategy.md").read_text(encoding="utf-8")),
+        ("PURPOSE.md", Path("PURPOSE.md").read_text(encoding="utf-8")),
         ("project plan: public launch review", launch_review),
     ):
         opening = document[:2000].lower()
@@ -336,7 +338,7 @@ def test_install_channels_and_release_workflows_are_explicit() -> None:
         assert f'"{portable_command}"' in validator
     assert "unsupported_platform" in validator
     assert "tags:" in release and '- "v*"' in release
-    assert 'tag == f"v{version}"' in release
+    assert 'scripts/version.py classify-release --tag "$TAG"' in release
     assert "gh release create" in release
     project = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
     package_init = Path("src/aiplane/__init__.py").read_text(encoding="utf-8")
@@ -375,10 +377,10 @@ def test_p0_documentation_sweep_stays_open_until_user_demonstrations() -> None:
     assert "interim pass does not close this gate" in backlog
 
 
-def test_post_gate_backlog_numbers_are_sequential() -> None:
+def test_open_backlog_retains_unique_ordered_task_identifiers() -> None:
     backlog = _project_plan_section("Product Adoption Backlog")
     numbered = [int(value) for value in re.findall(r"(?m)^(\d+)\. ", backlog)]
-    assert numbered == list(range(1, max(numbered) + 1))
+    assert numbered == sorted(set(numbered))
 
 
 def test_public_demo_plan_is_bounded_reproducible_and_uses_current_commands() -> None:
@@ -449,11 +451,10 @@ def test_install_verifier_is_portable_and_never_starts_supported_tunnels() -> No
     assert '"tunnel",\n                "start"' in windows_guard
 
 
-def test_backlog_review_reference_is_portable_and_gates_remain_open() -> None:
+def test_backlog_is_portable_and_gates_remain_open() -> None:
     backlog = _project_plan_section("Product Adoption Backlog")
 
     assert "/home/" not in backlog
-    assert Path("docs/project/reviews/dev-mvp-0.5-latest-review-evaluation.md").is_file()
     assert "**P0 completion gate.**" in backlog
     assert "independent users reproduce each" in backlog
     assert "must be repeated after the user-testing demonstrations" in backlog
@@ -477,73 +478,55 @@ def test_primary_adoption_cut_contains_only_the_core_command_story() -> None:
         assert advanced not in primary.lower()
 
 
-def test_ci_and_release_process_is_the_single_lifecycle_authority() -> None:
-    process_path = Path("docs/project/ci-and-release-process.md")
-    process = process_path.read_text(encoding="utf-8")
-
-    assert not Path("docs/project/release-process.md").exists()
-    for heading in (
-        "## Lifecycle at a glance",
-        "## Pull-request validation",
-        "## Ordinary merges: automated patch versions",
-        "## Intentional minor, major, and explicit versions",
-        "## Expected edge cases and recovery",
-        "## Publication and manual patch override",
-        "## Verify and consume a published release",
-        "## Integrity and rollback",
+def test_ci_and_release_policy_have_explicit_owners() -> None:
+    policy = Path("VERSIONING.md").read_text()
+    for term in (
+        "--merged",
+        "--github-output",
+        "--verify-only",
+        "superseded",
+        "atomic",
+        "merge base",
+        "Minor/major",
+        "Patch",
     ):
-        assert heading in process
-    for edge_case in (
-        "Two PRs merge close together",
-        "A stale PR changes no version field",
-        "A PR changes a version field",
-        "`main` moves during the push",
-        "The app patch commit starts CI",
-    ):
-        assert edge_case in process
+        assert term in policy
+    assert "Quality gate" in Path("CI.md").read_text()
+    assert "rollback" in Path("docs/user/release-verification.md").read_text().lower()
 
 
 def test_release_workflow_is_checksummed_versioned_and_quality_gated() -> None:
-    workflow = Path(".github/workflows/release.yml").read_text(encoding="utf-8")
-    setup = Path("docs/user/setup.md").read_text(encoding="utf-8")
-    process = Path("docs/project/ci-and-release-process.md").read_text(encoding="utf-8")
-
-    assert "run: scripts/check.sh" in workflow
-    assert "sha256sum aiplane-* > SHA256SUMS" in workflow
-    assert "sha256sum --check SHA256SUMS" in workflow
-    assert "Write generated release notes" in workflow
-    assert "RELEASE_NOTES.md" in workflow
-    assert "docs/project/releases" not in workflow
-    assert "--notes-file RELEASE_NOTES.md" in workflow
-    assert 'gh release create "${{ steps.tag.outputs.name }}"' in workflow
+    workflow = Path(".github/workflows/release.yml").read_text()
+    assert "uses: ./.github/workflows/ci.yml" in workflow
+    assert "needs.qualification.result == 'success' && needs.qualification.outputs.go == 'true'" in workflow
+    assert "ref: ${{ needs.classify.outputs.commit }}" in workflow
+    assert 'scripts/build_release.py --tag "$TAG" --output dist' in workflow
     assert "python scripts/verify_release_manifest.py dist" in workflow
-    assert "Verify published release assets" in workflow
-    assert "published-assets.txt" in workflow
-    assert "uses: actions/attest@v4" in workflow
     assert "subject-checksums: dist/SHA256SUMS" in workflow
-    assert "gh attestation verify dist/aiplane-*" in workflow
+    assert "for artifact in dist/*.whl dist/*.tar.gz dist/provenance.json; do" in workflow
     assert "python scripts/render_release_notes.py" in workflow
-    assert Path("CHANGELOG.md").is_file()
-    for text in (setup, process):
-        assert "SHA256SUMS" in text
-        assert "rollback" in text.lower()
+    assert "--notes-file RELEASE_NOTES.md" in workflow
+    assert "cmp dist/SHA256SUMS downloaded/SHA256SUMS" in workflow
+    assert "scripts/build_release.py --verify-only --output downloaded" in workflow
 
 
-def test_ci_exposes_one_stable_release_gate_and_documents_hosted_protection() -> None:
-    workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
-    protection = Path("docs/project/repository-protection.md").read_text(encoding="utf-8")
-
-    assert "  release-gate:" in workflow
+def test_ci_exposes_one_stable_quality_gate_and_documents_hosted_protection() -> None:
+    workflow = Path(".github/workflows/ci.yml").read_text()
+    protection = Path("docs/project/repository-protection.md").read_text()
+    assert "name: Quality gate" in workflow
     assert "needs: [checks, compatibility, install-channels]" in workflow
-    assert "name: Release gate" in workflow
-    assert "required-check value" in protection
-    assert "Release gate" in protection
-    assert "Require a pull request before merging" in protection
-    assert "Block force pushes" in protection
-    assert "aiplane-versioning" in protection
-    assert "GitHub App" in protection
-    assert "targeting `v*`" in protection
-    assert "branch ruleset is active" in protection
+    assert "name: quality-gate" in workflow
+    assert "steps.gate.outputs.go" in workflow
+    assert "merge_group:" in workflow
+    assert "workflow_dispatch:" in workflow
+    for term in (
+        "Release gate",
+        "Quality gate",
+        "Require a pull request before merging",
+        "Block force pushes",
+        "targeting `v*`",
+    ):
+        assert term in protection
 
 
 def test_preview_scope_freeze_keeps_advanced_surface_out_of_public_promise() -> None:
@@ -579,91 +562,34 @@ def test_every_demo_timeline_step_has_exact_commands_and_spoken_narration() -> N
         assert words / seconds * 60 <= 140, match.group(0)
 
 
-def test_successful_main_merge_versions_tags_and_uploads_a_bound_wheel() -> None:
-    workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
-    release = Path(".github/workflows/release.yml").read_text(encoding="utf-8")
-    documentation = Path("docs/project/ci-wheel-artifacts.md").read_text(encoding="utf-8")
-
-    assert "classify-main-push:" in workflow
-    assert "github.event_name == 'push' && github.ref == 'refs/heads/main'" in workflow
-    assert "Detect associated pull request" in workflow
-    assert "AIPLANE_ASSOCIATED_PR" in workflow
-    assert "python scripts/version.py classify-ci --github-output" in workflow
-    assert "Reject package-version changes in pull requests" in workflow
-    assert 'python scripts/version.py check-pr --base-ref "origin/$GITHUB_BASE_REF"' in workflow
-    assert "ci-version-bump-and-tag:" in workflow
-    assert "needs.classify-main-push.outputs.mode == 'ci_patch_after_merge'" in workflow
-    assert "python scripts/version.py patch" in workflow
-    assert "[skip ci-version]" in workflow
-    assert "aiplane-main-version-mutation" in workflow
-    assert "git checkout -B main origin/main" in workflow
-    assert "for attempt in 1 2 3" in workflow
-    assert "main moved during versioning; retrying" in workflow
-    assert "|| printf 'false'" not in workflow
-    assert "github.actor != 'aiplane-versioning[bot]'" in workflow
-    assert "!contains(github.event.head_commit.message, '[skip ci-version]')" in workflow
-    assert "python scripts/version.py tag --ci-artifact" in workflow
-    assert "git push origin HEAD:main" in workflow
-    assert "git push origin" in workflow
-    assert "direct-version-tag:" in workflow
-    assert "needs.classify-main-push.outputs.mode == 'maintainer_direct_main_version_commit'" in workflow
-    assert "main-versioned-wheel:" in workflow
-    assert (
-        "always() && (needs.ci-version-bump-and-tag.result == 'success' || needs.direct-version-tag.result == 'success')"
-        in workflow
-    )
-    assert "python -m build --wheel --outdir artifacts" in workflow
-    assert "python scripts/verify_install_channels.py artifacts --channel pip" in workflow
-    assert "sha256sum --check SHA256SUMS" in workflow
-    for workflow_text in (workflow, release):
-        assert "uses: actions/checkout@v7" in workflow_text
-        assert "uses: actions/setup-python@v6" in workflow_text
-        assert "uses: actions/checkout@v4" not in workflow_text
-        assert "uses: actions/setup-python@v5" not in workflow_text
-    assert "uses: astral-sh/setup-uv@v8.3.2" in workflow
-    assert "uses: astral-sh/setup-uv@v8.3.2" in release
-    assert "uses: astral-sh/setup-uv@v6" not in workflow
-    assert "uses: astral-sh/setup-uv@v6" not in release
-    assert "uses: actions/upload-artifact@v7" in workflow
-    assert "uses: actions/upload-artifact@v4" not in workflow
-    assert "version_commit_short" in workflow
-    assert "cut -c1-7" in workflow
-    assert (
-        "aiplane-wheel-v${{ steps.resolved.outputs.version }}-${{ steps.resolved.outputs.version_commit_short }}"
-        in workflow
-    )
-    assert "aiplane-wheel-v${{ steps.resolved.outputs.version }}-${{ steps.resolved.outputs.tag }}" not in workflow
-    assert (
-        "aiplane-wheel-v${{ steps.resolved.outputs.version }}-${{ steps.resolved.outputs.version_commit }}"
-        not in workflow
-    )
-    assert "retention-days: 30" in workflow
-    assert "uses: actions/create-github-app-token@v3" in workflow
+def test_successful_trunk_merge_versions_tags_and_uploads_a_bound_wheel() -> None:
+    ci = Path(".github/workflows/ci.yml").read_text()
+    workflow = Path(".github/workflows/version.yml").read_text()
+    assert "needs.quality-gate.result == 'success' && needs.quality-gate.outputs.go == 'true'" in ci
+    assert "github.event_name == 'push'" in ci
+    assert "github.sha == inputs.source" in workflow
+    assert "inputs.go == 'true'" in workflow
+    assert "scripts/merged_pr.py --source" in workflow
+    assert "github.workflow == 'CI'" in ci
+    assert "github.workflow == 'CI'" in workflow
+    assert "scripts/publish_version.py --source" in workflow
+    assert "ref: ${{ inputs.source }}" in workflow
+    assert "git checkout -B" not in workflow
+    assert "for attempt" not in workflow
     assert "AIPLANE_VERSIONING_APP_ID" in workflow
     assert "AIPLANE_VERSIONING_APP_PRIVATE_KEY" in workflow
-    assert "PRIVATE_KEY_CONFIGURED:" in workflow
-    assert "PRIVATE_KEY: ${{ secrets." not in workflow
-    assert "token: ${{ steps.versioning-token.outputs.token }}" in workflow
-    assert "aiplane-versioning[bot]" in workflow
-    assert "python scripts/version.py classify-release --previous-ref HEAD^1 --github-output" in release
-    assert "Skip automatic patch publication" in release
-    assert 'test "$tag" = "v$(python scripts/version.py current --plain)"' in release
-    assert "steps.tag.outputs.automatic_publish == 'true'" in release
-    assert "github.event_name == 'workflow_dispatch'" in release
-    assert 'gh workflow run verify-release.yml --ref main -f tag="$TAG"' in release
-    assert "not immutable public releases" in documentation
+    assert "needs.publish.outputs.status == 'published'" in workflow
+    assert 'scripts/build_release.py --tag "$TAG" --output artifacts' in workflow
+    assert "scripts/verify_install_channels.py artifacts --channel pip" in workflow
+    assert "retention-days: 30" in workflow
 
 
 def test_release_policy_auto_publishes_milestones_and_keeps_manual_patch_override() -> None:
-    workflow = Path(".github/workflows/release.yml").read_text(encoding="utf-8")
-
+    workflow = Path(".github/workflows/release.yml").read_text()
     assert 'tags:\n      - "v*"' in workflow
-    assert "python scripts/version.py classify-release --previous-ref HEAD^1 --github-output" in workflow
-    assert "steps.tag.outputs.automatic_publish == 'true'" in workflow
-    assert "Skip automatic patch publication" in workflow
-    assert "workflow_dispatch:" in workflow
-    assert "actions: write" in workflow
-    assert 'gh workflow run verify-release.yml --ref main -f tag="$TAG"' in workflow
+    assert 'classify-release --tag "$TAG" --github-output' in workflow
+    assert "needs.classify.outputs.publish == 'true' || github.event_name == 'workflow_dispatch'" in workflow
+    assert 'gh workflow run verify-release.yml --ref "$TRUNK" -f tag="$TAG"' in workflow
 
 
 def test_published_release_workflow_verifies_every_os_and_install_owner() -> None:
@@ -675,11 +601,12 @@ def test_published_release_workflow_verifies_every_os_and_install_owner() -> Non
     assert "gh release download" in workflow
     assert "python scripts/verify_release_manifest.py release" in workflow
     assert "attestations: read" in workflow
-    assert "gh attestation verify release/aiplane-*" in workflow
+    assert "for artifact in release/*.whl release/*.tar.gz release/provenance.json; do" in workflow
+    assert 'gh attestation verify "$artifact"' in workflow
     assert 'python scripts/verify_install_channels.py release --channel "$CHANNEL"' in workflow
     assert "python scripts/write_release_evidence.py" in workflow
     assert "python scripts/validate_trial_evidence.py" in workflow
-    assert "uses: actions/upload-artifact@v7" in workflow
+    assert "uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a" in workflow
     assert "retention-days: 90" in workflow
 
 
@@ -689,7 +616,6 @@ def test_profile_render_export_and_replay_terminology_is_consistent() -> None:
     schema = Path("docs/user/profile-schema.md").read_text(encoding="utf-8")
     demo = _project_plan_section("Public Demo Plan")
     roadmap = _project_plan_section("Roadmap")
-    backlog = _project_plan_section("Product Adoption Backlog")
 
     for document in (readme, overview, schema, demo):
         assert "editable" in document.lower()
@@ -716,15 +642,15 @@ def test_profile_render_export_and_replay_terminology_is_consistent() -> None:
         "unresolved evidence",
     ):
         assert classification in roadmap
-    assert "Do not copy credentials, model weights" in backlog
+    assert "Do not copy credentials, model weights" in Path("STATUS.md").read_text()
 
 
 def test_materialized_catalog_commands_and_hardware_limits_are_documented() -> None:
     readme = Path("README.md").read_text(encoding="utf-8")
     providers = Path("docs/user/providers.md").read_text(encoding="utf-8")
     hardware = Path("docs/user/hardware.md").read_text(encoding="utf-8")
-    development = Path("docs/project/development.md").read_text(encoding="utf-8")
-    plan = PROJECT_PLAN.read_text(encoding="utf-8")
+    development = Path("docs/development/setup.md").read_text(encoding="utf-8")
+    plan = Path("STATUS.md").read_text(encoding="utf-8")
 
     assert "models catalog-cache status" in readme
     for command in ("catalog-cache status", "catalog-cache rebuild", "catalog-cache clear"):
@@ -744,7 +670,7 @@ def test_multi_client_replay_and_recommendation_provenance_are_documented() -> N
     workflows = Path("docs/user/workflows.md").read_text(encoding="utf-8")
     machines = Path("docs/user/machines-and-stacks.md").read_text(encoding="utf-8")
     hardware = Path("docs/user/hardware.md").read_text(encoding="utf-8")
-    plan = PROJECT_PLAN.read_text(encoding="utf-8")
+    plan = Path("STATUS.md").read_text(encoding="utf-8")
 
     for document in (overview, schema, workflows, machines, plan):
         assert "profiles replay-check" in document

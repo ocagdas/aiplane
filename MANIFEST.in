@@ -1,0 +1,17 @@
+include PURPOSE.md STATUS.md VALIDATION.md ROADMAP.md TODO.md CONTRIBUTING.md
+include CI.md VERSIONING.md REPOSITORY_STRUCTURE.md AGENTS.md
+include CHANGELOG.md SECURITY.md CODE_OF_CONDUCT.md Makefile
+recursive-include docs *.md *.json
+recursive-include scripts *.py *.sh
+recursive-include tests *.py *.json *.yaml *.yml *.toml *.txt
+recursive-include skills *.md *.json
+prune docs/project/.strategy
+global-exclude __pycache__ *.py[cod]
+
+include HANDOFF.md NOTICE.md SUPPORT.md
+
+recursive-include standards *
+recursive-include .github *.yml *.md
+include .github/CODEOWNERS repository-standard.json
+
+include BRANCHING.md

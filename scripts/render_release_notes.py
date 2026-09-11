@@ -5,6 +5,11 @@ import argparse
 import re
 from pathlib import Path
 
+if __package__:
+    from .verify_release_manifest import ManifestError, parse_manifest
+else:
+    from verify_release_manifest import ManifestError, parse_manifest
+
 
 class ReleaseNotesError(ValueError):
     pass
@@ -25,9 +30,16 @@ def render_notes(tag: str, change_kind: str, commit: str, changelog: str, checks
         raise ReleaseNotesError(f"invalid release tag: {tag}")
     if not re.fullmatch(r"[0-9a-f]{40}", commit):
         raise ReleaseNotesError("commit must be a full lowercase Git SHA")
-    manifest_rows = [line for line in checksums.splitlines() if line.strip()]
-    if len(manifest_rows) != 2:
-        raise ReleaseNotesError("SHA256SUMS must identify exactly one wheel and one source distribution")
+    try:
+        entries = parse_manifest(checksums)
+    except ManifestError as exc:
+        raise ReleaseNotesError(str(exc)) from exc
+    wheels = [name for name in entries if name.endswith(".whl")]
+    sdists = [name for name in entries if name.endswith(".tar.gz")]
+    if len(wheels) != 1 or len(sdists) != 1 or set(entries) != {wheels[0], sdists[0], "provenance.json"}:
+        raise ReleaseNotesError(
+            "SHA256SUMS must identify exactly one wheel, one source distribution, and provenance.json"
+        )
     changes = unreleased_notes(changelog)
     return f"""# aiplane {tag}
 
@@ -41,18 +53,22 @@ Validated {change_kind} release artifacts for `{tag}` from commit `{commit}`.
 
 ## Verify before installation
 
-Download the wheel, source distribution, and `SHA256SUMS` from this release, then run:
+Download the wheel, source distribution, `provenance.json`, and `SHA256SUMS` from this release, then run:
 
 ```bash
-python scripts/verify_release_manifest.py .
-gh attestation verify aiplane-* --repo ocagdas/aiplane
+for artifact in ./*.whl ./*.tar.gz ./provenance.json; do
+  gh attestation verify "$artifact" --repo ocagdas/aiplane
+done
+verification_source="$(mktemp -d)"
+tar -xzf ./{sdists[0]} -C "$verification_source"
+python "$verification_source/{sdists[0].removesuffix(".tar.gz")}/scripts/verify_release_manifest.py" .
 ```
 
 The checksum manifest verifies file integrity. The GitHub artifact attestation separately verifies the repository and workflow that built the distributions.
 
 ## Upgrade and rollback
 
-Use the same installation owner for install, upgrade, and uninstall. The complete pip, pipx, and uv commands plus the rollback procedure are in `docs/user/setup.md`; release operations and recovery rules are in `docs/project/ci-and-release-process.md`.
+Use the same installation owner for install, upgrade, and uninstall. The complete pip, pipx, and uv commands plus the rollback procedure are in `docs/user/setup.md`; release operations and recovery rules are in `VERSIONING.md`.
 """
 
 

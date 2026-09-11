@@ -18,7 +18,7 @@ Use this path for first onboarding. It avoids advanced concepts and keeps every 
    Profile interchange: [public profile schema v1](profile-schema.md)
    Mutates state: no.
    Verifiable outcome: contract-v1 findings include stable IDs, severity, reason, impact, affected resources, remediation/mutation/dry-run metadata, and authoritative exit codes.
-4. [Recommend](hardware.md#hardware-aware-model-recommendations)
+4. [Recommend](hardware.md)
    Mutates state: no.
    Verifiable outcome: model rows are grouped into recommended, usable, remote/cloud, or not recommended with rationale.
 5. [Export](integrations.md)
@@ -84,7 +84,7 @@ aiplane export continue
 aiplane quickstart local-coding
 ```
 
-Project strategy, developer policy, and future roadmap details live under [docs/project](../project/README.md), not in the user documentation.
+Project strategy, developer policy, and future roadmap details live under [docs/project](../project/index.md), not in the user documentation.
 
 ## Profile selection
 

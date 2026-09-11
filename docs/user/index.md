@@ -87,7 +87,7 @@ aiplane export continue --model MODEL_ALIAS
 aiplane quickstart local-coding
 ```
 
-Project strategy, developer policy, and future roadmap details live under [Project docs](../project/README.md), not in the user documentation.
+Project strategy, developer policy, and future roadmap details live under [Project docs](../project/index.md), not in the user documentation.
 
 ## Profile selection
 
