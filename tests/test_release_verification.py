@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -9,6 +10,7 @@ import pytest
 
 from scripts.repository_provenance import write_provenance
 from scripts.render_release_notes import ReleaseNotesError, render_notes, unreleased_notes
+from scripts import verify_release as verify_release_script
 from scripts.verify_release_manifest import ManifestError, parse_manifest, verify_directory
 from scripts.write_release_evidence import main as write_evidence
 
@@ -97,11 +99,72 @@ def test_release_notes_are_rendered_from_tracked_unreleased_changes() -> None:
     assert unreleased_notes(changelog) in notes
     assert "pre-1.0" in notes
     assert "gh attestation verify" in notes
+    assert "tar -xzf ./aiplane-0.2.0.tar.gz" in notes
+    assert "python scripts/verify_release_manifest.py .." in notes
     assert "Upgrade and rollback" in notes
 
 
 def test_release_notes_reject_missing_changes_and_incomplete_manifests() -> None:
     with pytest.raises(ReleaseNotesError, match="at least one change"):
         unreleased_notes("# Changelog\n\n## Unreleased\n")
-    with pytest.raises(ReleaseNotesError, match="exactly one wheel"):
+    with pytest.raises(ReleaseNotesError, match="invalid SHA256SUMS line"):
         render_notes("v0.2.0", "minor", "c" * 40, "## Unreleased\n\n- change\n", "one row\n")
+    with pytest.raises(ReleaseNotesError, match="exactly one wheel"):
+        render_notes(
+            "v0.2.0",
+            "minor",
+            "c" * 40,
+            "## Unreleased\n\n- change\n",
+            f"{'a' * 64}  first.whl\n{'b' * 64}  second.whl\n{'c' * 64}  provenance.json\n",
+        )
+
+
+def _write_downloaded_provenance(directory: Path, **overrides: object) -> None:
+    payload = {
+        "schema_version": 1,
+        "build_kind": "release",
+        "tag": "v0.1.2",
+        "source_commit": "a" * 40,
+        "version_commit": "a" * 40,
+        "artifacts": {"aiplane-0.1.2-py3-none-any.whl": "digest"},
+    }
+    payload.update(overrides)
+    (directory / "provenance.json").write_text(json.dumps(payload), encoding="utf-8")
+
+
+def test_verify_release_checks_identity_and_emits_expected_report(monkeypatch, tmp_path: Path) -> None:
+    _write_downloaded_provenance(tmp_path)
+    monkeypatch.setattr(
+        verify_release_script.subprocess,
+        "run",
+        lambda command, check: subprocess.CompletedProcess(command, 0),
+    )
+    assert verify_release_script.verify(tmp_path, "v0.1.2", "a" * 40) == {
+        "schema_version": 1,
+        "tag": "v0.1.2",
+        "source_commit": "a" * 40,
+        "checks": {"downloaded_artifacts": "success"},
+        "artifacts": {"aiplane-0.1.2-py3-none-any.whl": "digest"},
+    }
+
+
+@pytest.mark.parametrize(
+    ("overrides", "tag", "commit"),
+    [
+        ({"build_kind": "candidate"}, "v0.1.2", "a" * 40),
+        ({"tag": "v0.1.3"}, "v0.1.2", "a" * 40),
+        ({"source_commit": "b" * 40}, "v0.1.2", "a" * 40),
+        ({"version_commit": "b" * 40}, "v0.1.2", "a" * 40),
+    ],
+)
+def test_verify_release_rejects_mismatched_or_nonrelease_provenance(
+    monkeypatch, tmp_path: Path, overrides: dict[str, object], tag: str, commit: str
+) -> None:
+    _write_downloaded_provenance(tmp_path, **overrides)
+    monkeypatch.setattr(
+        verify_release_script.subprocess,
+        "run",
+        lambda command, check: subprocess.CompletedProcess(command, 0),
+    )
+    with pytest.raises(ValueError, match="does not match"):
+        verify_release_script.verify(tmp_path, tag, commit)

@@ -4,14 +4,16 @@
 
 Successful publication dispatches **Verify published release** automatically. Each matrix job verifies both the SHA-256 manifest and GitHub build-provenance attestation before installation. Maintainers may also run it manually with the same tag. Its nine Linux/macOS/Windows x pip/pipx/uv jobs download the public assets, verify the manifest, exercise install/replacement/uninstall, and upload sanitized evidence.
 
-Manual smoke after downloading the wheel, source archive, `provenance.json` and `SHA256SUMS` into one clean directory:
+Manual smoke after downloading the wheel, source archive, `provenance.json` and `SHA256SUMS` into one clean directory, then extracting the source archive so the verifier script is available:
 
 ```bash
-python scripts/verify_release_manifest.py .
-for artifact in ./*.whl ./*.tar.gz ./provenance.json; do
+tar -xzf ./aiplane-VERSION.tar.gz
+cd ./aiplane-VERSION
+python scripts/verify_release_manifest.py ..
+for artifact in ../*.whl ../*.tar.gz ../provenance.json; do
   gh attestation verify "$artifact" --repo ocagdas/aiplane
 done
-python -m pip install ./aiplane-VERSION-py3-none-any.whl
+python -m pip install ../aiplane-VERSION-py3-none-any.whl
 python -m pip show aiplane
 aiplane --version
 aiplane quickstart local-coding --dry-run

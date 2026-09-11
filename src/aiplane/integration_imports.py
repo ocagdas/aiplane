@@ -205,11 +205,12 @@ def _normalize_models(candidates: list[dict[str, Any]]) -> tuple[dict[str, Any],
             item["preferred_runtime"] = runtime
         endpoint = candidate.get("endpoint")
         if endpoint:
-            if credential_url(str(endpoint)) or contains_secret(str(endpoint)):
+            endpoint_text = str(endpoint).strip()
+            if _invalid_import_endpoint(endpoint_text) or credential_url(endpoint_text) or contains_secret(endpoint_text):
                 raise ValueError(
                     "Imported endpoint contains credentials; use a credential-free endpoint and environment reference."
                 )
-            item["endpoint"] = str(endpoint)
+            item["endpoint"] = endpoint_text
         credential = candidate.get("credential")
         if credential:
             match = _ENV_REF.fullmatch(str(credential).strip())
@@ -220,3 +221,8 @@ def _normalize_models(candidates: list[dict[str, Any]]) -> tuple[dict[str, Any],
                 warnings.append(f"omitted a literal credential from imported model {alias}")
         models[alias] = item
     return models, redacted, warnings
+
+
+def _invalid_import_endpoint(value: str) -> bool:
+    lowered = value.lower()
+    return value.startswith("*") or "[redacted" in lowered

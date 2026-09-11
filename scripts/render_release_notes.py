@@ -5,6 +5,11 @@ import argparse
 import re
 from pathlib import Path
 
+if __package__:
+    from .verify_release_manifest import ManifestError, parse_manifest
+else:
+    from verify_release_manifest import ManifestError, parse_manifest
+
 
 class ReleaseNotesError(ValueError):
     pass
@@ -25,9 +30,14 @@ def render_notes(tag: str, change_kind: str, commit: str, changelog: str, checks
         raise ReleaseNotesError(f"invalid release tag: {tag}")
     if not re.fullmatch(r"[0-9a-f]{40}", commit):
         raise ReleaseNotesError("commit must be a full lowercase Git SHA")
-    manifest_rows = [line for line in checksums.splitlines() if line.strip()]
-    if len(manifest_rows) != 3 or not any(row.endswith("  provenance.json") for row in manifest_rows):
-        raise ReleaseNotesError("SHA256SUMS must identify exactly one wheel and one source distribution")
+    try:
+        entries = parse_manifest(checksums)
+    except ManifestError as exc:
+        raise ReleaseNotesError(str(exc)) from exc
+    wheels = [name for name in entries if name.endswith(".whl")]
+    sdists = [name for name in entries if name.endswith(".tar.gz")]
+    if len(wheels) != 1 or len(sdists) != 1 or set(entries) != {wheels[0], sdists[0], "provenance.json"}:
+        raise ReleaseNotesError("SHA256SUMS must identify exactly one wheel, one source distribution, and provenance.json")
     changes = unreleased_notes(changelog)
     return f"""# aiplane {tag}
 
@@ -44,8 +54,10 @@ Validated {change_kind} release artifacts for `{tag}` from commit `{commit}`.
 Download the wheel, source distribution, `provenance.json`, and `SHA256SUMS` from this release, then run:
 
 ```bash
-python scripts/verify_release_manifest.py .
-for artifact in ./*.whl ./*.tar.gz ./provenance.json; do
+tar -xzf ./{sdists[0]}
+cd ./{sdists[0].removesuffix(".tar.gz")}
+python scripts/verify_release_manifest.py ..
+for artifact in ../*.whl ../*.tar.gz ../provenance.json; do
   gh attestation verify "$artifact" --repo ocagdas/aiplane
 done
 ```

@@ -1,7 +1,9 @@
 """Public path regressions for safe search, imports, archives and disposable caches."""
 
+import importlib.util
 import json
 import shutil
+import sys
 import pytest
 from aiplane.audit import AuditLogger
 from aiplane.models import Profile
@@ -11,7 +13,23 @@ from aiplane.profile_archive import archive_profile
 from aiplane.config import create_profile
 from aiplane.model_catalog import ModelCatalog
 from aiplane.materialized_catalog import clear_materialized_memory_cache
+from aiplane.secrets import REDACTED, contains_secret, redact
 from tests.profile_fixtures import _isolated_test_profile
+
+
+def _load_script(name: str, path: str):
+    spec = importlib.util.spec_from_file_location(name, path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+check_repository_standard = _load_script(
+    "scripts.test_check_repository_standard",
+    "/home/runner/work/aiplane/aiplane/scripts/check_repository_standard.py",
+)
 
 
 @pytest.mark.skipif(not shutil.which("rg"), reason="Requires ripgrep")
@@ -55,10 +73,11 @@ def test_import_rejects_url_credentials_before_any_write(tmp_path, endpoint, yes
     assert not profiles.exists()
 
 
-def test_archive_rejects_subscription_key(tmp_path):
+@pytest.mark.parametrize("key", ["subscription_key", "oauth_token"])
+def test_archive_rejects_sensitive_mapping_keys(tmp_path, key):
     root = tmp_path / "profiles"
     profile = create_profile("test", profiles_dir=root)
-    (profile / "model-providers.yaml").write_text("demo:\n  subscription_key: synthetic-value\n")
+    (profile / "model-providers.yaml").write_text(f"demo:\n  {key}: synthetic-value\n")
     with pytest.raises(ValueError, match="credential material"):
         archive_profile("test", tmp_path / "archive.json", profiles_dir=root)
     assert not (tmp_path / "archive.json").exists()
@@ -84,7 +103,7 @@ def test_credentials_list_redacts_endpoint_and_notes(tmp_path, capsys):
     path.write_text(
         "providers:\n  demo:\n    accounts:\n      test:\n"
         "        endpoint: https://user:synthetic-password@example.invalid\n"
-        "        notes: 'token: synthetic-note-token'\n"
+        "        notes: 'oauth_token: synthetic-note-token'\n"
         "        api_key_env: DEMO_API_KEY\n",
         encoding="utf-8",
     )
@@ -94,6 +113,16 @@ def test_credentials_list_redacts_endpoint_and_notes(tmp_path, capsys):
     assert "synthetic-note-token" not in output
     assert "DEMO_API_KEY" in output
     assert "REDACTED" in output
+
+
+def test_secret_detectors_cover_serialized_and_textual_token_spellings() -> None:
+    assert contains_secret('{"subscription_key": "synthetic-secret"}')
+    assert redact("oauth_token: synthetic-note-token") == REDACTED
+
+
+def test_repository_standard_rejects_unsafe_version_mirror_paths(tmp_path) -> None:
+    with pytest.raises(ValueError, match="version_mirror"):
+        check_repository_standard.safe_repo_relative_path(tmp_path, "../../outside.txt")
 
 
 @pytest.mark.parametrize(

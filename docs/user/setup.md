@@ -14,7 +14,15 @@ Download the `.whl` attached to the [latest GitHub Release](https://github.com/o
 
 Download the source archive, `provenance.json` and `SHA256SUMS` from the same release into the same clean directory, and verify the complete set before installation. Linux can use `sha256sum --check SHA256SUMS`; macOS can use `shasum -a 256 --check SHA256SUMS`; on Windows compare `Get-FileHash -Algorithm SHA256` output with the manifest.
 
-Also verify its signed build provenance with GitHub CLI: `gh attestation verify "$artifact" --repo ocagdas/aiplane` once for each wheel, source archive and provenance file. The checksum detects a changed download; the attestation confirms which repository and workflow built it. Both checks run automatically in the published-release verification matrix.
+Also verify its signed build provenance with GitHub CLI:
+
+```bash
+for artifact in ./*.whl ./*.tar.gz ./provenance.json; do
+  gh attestation verify "$artifact" --repo ocagdas/aiplane
+done
+```
+
+The checksum detects a changed download; the attestation confirms which repository and workflow built it. Both checks run automatically in the published-release verification matrix.
 
 Choose one installation owner:
 

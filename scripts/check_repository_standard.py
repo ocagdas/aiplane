@@ -36,6 +36,17 @@ def validate(kind, value):
     Draft202012Validator(schema).validate(value)
 
 
+def safe_repo_relative_path(repo: Path, value: str) -> Path:
+    mirror = Path(value)
+    if mirror.is_absolute():
+        raise ValueError("version_mirror must be a safe repository-relative path")
+    resolved_repo = repo.resolve()
+    resolved = (resolved_repo / mirror).resolve()
+    if not resolved.is_relative_to(resolved_repo):
+        raise ValueError("version_mirror must be a safe repository-relative path")
+    return resolved.relative_to(resolved_repo)
+
+
 def check(repo):
     contract = json.loads((STANDARD / "contract.json").read_text(encoding="utf-8"))
     adapter = json.loads((repo / "repository-standard.json").read_text(encoding="utf-8"))
@@ -126,7 +137,7 @@ def check(repo):
         fixture.mkdir()
         shutil.copytree(repo / "scripts", fixture / "scripts", ignore=shutil.ignore_patterns("__pycache__"))
         shutil.copy2(repo / "pyproject.toml", fixture / "pyproject.toml")
-        mirror = Path(adapter["version_mirror"])
+        mirror = safe_repo_relative_path(repo, adapter["version_mirror"])
         (fixture / mirror).parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(repo / mirror, fixture / mirror)
         (fixture / ".gitignore").write_text("__pycache__/\n", encoding="utf-8")

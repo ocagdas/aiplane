@@ -183,6 +183,13 @@ def test_make_check_is_strict_and_contributor_commands_are_maintained() -> None:
     assert "environment doctor and configuration compiler" in contributing
 
 
+def test_documentation_split_points_to_canonical_development_and_architecture_docs() -> None:
+    development = Path("docs/development/setup.md").read_text(encoding="utf-8")
+
+    assert "`docs/development/setup.md`: dependency, test, and contributor workflows." in development
+    assert "`docs/architecture.md`: product strategy and architecture boundary." in development
+
+
 def test_external_io_calls_are_centralized_in_boundaries() -> None:
     violations = []
     for path in Path("src/aiplane").glob("*.py"):

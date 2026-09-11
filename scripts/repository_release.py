@@ -64,7 +64,7 @@ def publish(source, trunk, *, git, current, classify, write, tag, files, merged=
         if decision["mode"] == "patch":
             write(decision["version"])
             git("add", "--", *sorted(files))
-            git("commit", "-m", f"chore(release): {decision['tag']}")
+            git("commit", "-m", f"chore(release): v{decision['version']}")
         selected = tag()
     # Never convert a rejected push into success. A new run rechecks the remote tip.
     git("push", "--atomic", "origin", f"HEAD:refs/heads/{trunk}", f"refs/tags/{selected}")
