@@ -4,7 +4,7 @@ This is the sole actionable backlog. Completed work lives in [STATUS.md](STATUS.
 
 ## Repository standardization hosted gates
 
-- Run hosted CI and exact-tag reusable qualification on Linux, macOS and Windows.
+- Run exact-tag reusable release qualification on Linux, macOS and Windows; branch/PR CI has passed for the revision recorded in [VALIDATION.md](VALIDATION.md).
 - Once Quality gate exists, migrate the required check from Release gate and prove blocked merges without weakening branch/tag protection.
 - Prove the existing GitHub App and exact-tip atomic publication in hosted CI. No credential names were changed.
 - Complete public assets, attestations and independent-user evidence below. No publication was performed during this migration.
