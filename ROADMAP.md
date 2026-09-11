@@ -656,8 +656,7 @@ P0.8 public profile schema v1 is implemented with external validation and canoni
 
 #### Repository Safety Review Register
 
-The prioritized July 2026 code-quality and safety findings are tracked in
-[Code Quality and Safety Review — July 2026](docs/project/code-quality-review-2026-07.md).
+Current safety controls are documented in the [threat model](docs/project/threat-model.md); remaining work is maintained in [TODO.md](TODO.md).
 SEC-1 is implemented: `aiplane tool` no longer assumes approval; risky operations
 require an interactive confirmation or explicit per-invocation `--yes`, while
 read-only tools remain non-interactive.
@@ -720,7 +719,7 @@ The public demo plan is now a bounded three-video onboarding set: local Ollama r
 
 Packaging unit tests own installed resource contracts; full installer lifecycles belong to the separate installation matrix. Keep worker counts conservative for shared CI runners.
 
-The latest external dev/mvp_0.5 review is evaluated in `docs/project/reviews/dev-mvp-0.5-latest-review-evaluation.md`. The numbered P0 backlog is replaced with the remaining release/adoption work: adoption-cut hierarchy, first public artifact, no-clone public verification, mandatory release-path CI, standardized trial evidence, a breadth freeze, and portable review provenance. The two unnumbered P0 completion gates remain open. Drift moves to the front of P1, and schema tightening is explicitly evidence-led.
+The numbered P0 backlog is replaced with the remaining release/adoption work: adoption-cut hierarchy, first public artifact, no-clone public verification, mandatory release-path CI, standardized trial evidence, a breadth freeze, and portable review provenance. The two unnumbered P0 completion gates remain open. Drift moves to the front of P1, and schema tightening is explicitly evidence-led.
 
 Cross-platform install verification now uses an OS-neutral relative synthetic model ID for Tier-1 exports. It always checks tunnel planning without mutation, checks runtime-helper rejection on macOS/Windows, and checks tunnel-lifecycle rejection only on Windows. macOS is never asked to start an SSH tunnel during install verification. Current evidence is recorded in [VALIDATION.md](VALIDATION.md).
 P0.1 is complete: the public demo hierarchy now has one seven-command adoption cut, while privacy/replay and remote-GPU flows are explicitly validation recordings. P0.2 publication automation is hardened but remains open until a complete public GitHub Release has verified wheel/source/checksum assets; the release workflow now runs the full gate, generates preview notes, requires complete artifacts, verifies checksums, and post-verifies the published attachments.

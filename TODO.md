@@ -11,7 +11,7 @@ This is the sole actionable backlog. Completed work lives in [STATUS.md](STATUS.
 
 ## Product Adoption Backlog
 
-This backlog incorporates the original product/adoption review and the tracked [dev/mvp_0.5 latest-review evaluation](docs/project/reviews/dev-mvp-0.5-latest-review-evaluation.md). It is the persistent priority list; do not rerun the whole analysis merely to recover decisions.
+This is the current product and adoption priority list. Maintain remaining work here and current scope decisions in [adoption decisions](docs/project/adoption-decisions.md).
 
 See [adoption decisions](docs/project/adoption-decisions.md) for scope evaluation.
 

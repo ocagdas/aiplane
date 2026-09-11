@@ -451,11 +451,10 @@ def test_install_verifier_is_portable_and_never_starts_supported_tunnels() -> No
     assert '"tunnel",\n                "start"' in windows_guard
 
 
-def test_backlog_review_reference_is_portable_and_gates_remain_open() -> None:
+def test_backlog_is_portable_and_gates_remain_open() -> None:
     backlog = _project_plan_section("Product Adoption Backlog")
 
     assert "/home/" not in backlog
-    assert Path("docs/project/reviews/dev-mvp-0.5-latest-review-evaluation.md").is_file()
     assert "**P0 completion gate.**" in backlog
     assert "independent users reproduce each" in backlog
     assert "must be repeated after the user-testing demonstrations" in backlog

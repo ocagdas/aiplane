@@ -166,17 +166,17 @@ class CredentialStore:
                     continue
                 rows.append(
                     {
-                        "ref": f"{provider}.{account}",
-                        "provider": provider,
-                        "account": account,
-                        "endpoint": value.get("endpoint"),
-                        "api_key_env": value.get("api_key_env"),
+                        "ref": redact(f"{provider}.{account}"),
+                        "provider": redact(provider),
+                        "account": redact(account),
+                        "endpoint": redact(value.get("endpoint")),
+                        "api_key_env": redact(value.get("api_key_env")),
                         "has_api_key": bool(value.get("api_key")),
                         "has_token": bool(value.get("token") or value.get("bearer_token")),
-                        "notes": value.get("notes"),
+                        "notes": redact(value.get("notes")),
                     }
                 )
-        return {"name": "credentials", "credentials": redact(rows)}
+        return {"name": "credentials", "credentials": rows}
 
     def show(self, ref: str) -> dict[str, Any]:
         provider, account = parse_credential_ref(ref)

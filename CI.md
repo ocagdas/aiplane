@@ -36,3 +36,17 @@ product's publication/verification activation. All external Actions are pinned.
 
 Follow [BRANCHING.md](BRANCHING.md) for the shared trunk/dev branch convention,
 version/tag rules and REPOSITORY_VERSIONING_ENABLED activation setting.
+
+## Workflow dependency checks
+
+`python scripts/check_workflow_pins.py` requires full commit pins, exact version
+comments and identical revisions for repeated external actions. The managed repository
+conformance check runs it in the required gate. Update pins and their version comments
+together, review upstream compatibility, then run conformance and actionlint. Hosted
+execution still qualifies runner/action behavior; local syntax checks do not.
+
+The pin validator uses PyYAML from the developer dependencies to inspect action and
+reusable-workflow references structurally, including flow mappings and aliases. Put
+the exact `# vX.Y.Z` comment immediately after the pinned value (or its closing flow
+delimiters). Duplicate keys and YAML merge keys are rejected; shell-script contents
+are not treated as workflow actions.

@@ -226,6 +226,15 @@ def main(argv=None):
         verify_bundle()
         report["checks"] = ["bundle_integrity"]
         if not args.verify_bundle_only:
+            pins = subprocess.run(
+                [sys.executable, str(args.repo / "scripts/check_workflow_pins.py"), "--repo", str(args.repo)],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+            )
+            if pins.returncode:
+                raise ValueError(pins.stderr.strip() or "Workflow pin checks failed")
+            report["checks"].append("workflow_pins")
             report["checks"] += check(args.repo.resolve())
         report["go"] = True
     except Exception as error:

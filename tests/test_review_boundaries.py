@@ -154,3 +154,24 @@ def test_malformed_cached_rows_rebuild(tmp_path, field, value):
         repaired = ModelCatalog(profile)
         assert repaired.filter({}) == expected
         assert repaired.ensure_materialized()[1]["rebuilt"] is False
+
+
+def test_credentials_list_keeps_presence_flags_boolean(tmp_path, capsys):
+    from aiplane.cli import main
+
+    path = tmp_path / "credentials.yaml"
+    path.write_text(
+        "providers:\n  demo:\n    accounts:\n"
+        "      empty:\n        endpoint: https://example.invalid\n"
+        "      populated:\n        api_key: synthetic-key\n        token: synthetic-token\n",
+        encoding="utf-8",
+    )
+    assert main(["credentials", "list", "--path", str(path)]) == 0
+    output = capsys.readouterr().out
+    rows = {row["account"]: row for row in json.loads(output)["credentials"]}
+    assert rows["empty"]["has_api_key"] is False
+    assert rows["empty"]["has_token"] is False
+    assert rows["populated"]["has_api_key"] is True
+    assert rows["populated"]["has_token"] is True
+    assert "synthetic-key" not in output
+    assert "synthetic-token" not in output
