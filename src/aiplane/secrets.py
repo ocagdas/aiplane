@@ -134,9 +134,7 @@ def _is_sensitive_flag(value: str) -> bool:
 
 def _is_sensitive_key(value: str) -> bool:
     normalized = re.sub(r"[^a-z0-9]", "", value.lower())
-    return normalized in _SENSITIVE_KEY_MARKERS or any(
-        normalized.endswith(marker) for marker in _SENSITIVE_KEY_MARKERS
-    )
+    return normalized in _SENSITIVE_KEY_MARKERS or any(normalized.endswith(marker) for marker in _SENSITIVE_KEY_MARKERS)
 
 
 def _contains_secret_structure(value: Any) -> bool:

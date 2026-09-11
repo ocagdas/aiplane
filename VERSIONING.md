@@ -103,3 +103,9 @@ is true for aiplane, whose App settings already exist, and false for Repo Pilot 
 ACF until their repository-scoped App installation/key setup is complete. Disabled
 versioning does not fail ordinary CI and does not create commits/tags. It does not
 change the requirement for maintainer review before enabling automation.
+
+Downloaded-release verification checks checksums and the selected tag/commit identity.
+The published-release workflow separately verifies GitHub artifact attestations before
+installation. It does not compare a fresh cross-platform rebuild byte-for-byte with
+release archives. Local snapshot wheels use `scripts/build_local_wheel.py`; this
+project's release builder requires a clean annotated tag.

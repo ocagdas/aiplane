@@ -20,21 +20,6 @@
     },
     "publish": {
       "type": "boolean"
-    },
-    "previous_version": {
-      "type": "string",
-      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
-    },
-    "current_version": {
-      "type": "string",
-      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
-    },
-    "change_kind": {
-      "type": "string",
-      "enum": ["major", "minor", "patch"]
-    },
-    "automatic_publish": {
-      "type": "boolean"
     }
   },
   "required": [
@@ -42,11 +27,7 @@
     "version",
     "tag",
     "source_commit",
-    "publish",
-    "previous_version",
-    "current_version",
-    "change_kind",
-    "automatic_publish"
+    "publish"
   ],
   "additionalProperties": true
 }

@@ -39,7 +39,9 @@ Private repositories also need an explicit license/rights notice. ACF now uses L
 
 CI runs on PRs, all branch pushes, merge queues and manual dispatch, with reusable exact-commit qualification. Quality gate requires all required jobs and every supplied additional dependency to succeed. Emit boolean GO, commit, run_id and checks; local null identities are not hosted authorization.
 
-A reusable version workflow must be reachable only from a successful top-level CI push of the selected trunk and exact tested SHA. In aiplane the CI workflow calls `version.yml` directly through `workflow_call`, and the callee must still require `github.event_name == 'push'`, `github.workflow == 'CI'`, `github.ref_name == inputs.trunk`, `github.sha == inputs.source`, and `inputs.go == 'true'` before mutation. Manual/reusable release qualification must not invoke mutation; do not rely on a user-supplied go string alone. Restrict credentials to that exact dependency path.
+A reusable version workflow must be reachable only from a successful top-level CI push of the selected trunk and exact tested SHA. Manual/reusable release qualification must not invoke mutation; do not rely on a user-supplied go string alone. Restrict credentials to that dependency path.
+
+A workflow_run listener must check workflow name, success, push event, source repository, selected trunk and source SHA. Download only the quality-gate artifact from that exact run using read-only Actions permission; validate its schema, GO, commit, run ID and required/additional jobs with verify_quality_evidence.py before creating an App token. Never execute code from downloaded artifacts. Missing/expired/conflicting evidence fails closed.
 
 Merged-PR detection must paginate and filter merged status, target repository and selected trunk; malformed/API failures must fail rather than guess. Serialize per trunk, avoid cancelling an active mutation, and never refresh onto a newer untested revision.
 
@@ -47,7 +49,7 @@ Pin external Actions to reviewed immutable SHAs. Pin/checksum a validator versio
 
 ## Build and provenance contract
 
-Shared repositories may define a product-owned candidate-build path, but aiplane does not expose `scripts/build_release.py --candidate`. Local snapshot wheels come from `scripts/build_local_wheel.py`, while `scripts/build_release.py --tag` remains the clean annotated-tag release path. Candidate/local snapshot outputs are never public-release evidence.
+Candidate builds use --candidate explicitly and may contain working-tree changes. They are labeled candidate, record source_commit, dirty state and no tag/version_commit. A candidate is never public-release evidence.
 
 --tag builds require a clean exact annotated tag matching package mirrors. Provenance records build_kind release, dirty false, matching tag/version and version_commit equal to the checkout SHA. source_commit in a build record means the checkout used to build; in a publication result it means the pre-bump tested source. These are separate record types; do not silently equate them.
 

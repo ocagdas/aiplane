@@ -7,13 +7,13 @@ Successful publication dispatches **Verify published release** automatically. Ea
 Manual smoke after downloading the wheel, source archive, `provenance.json` and `SHA256SUMS` into one clean directory, then extracting the source archive so the verifier script is available:
 
 ```bash
-tar -xzf ./aiplane-VERSION.tar.gz
-cd ./aiplane-VERSION
-python scripts/verify_release_manifest.py ..
-for artifact in ../*.whl ../*.tar.gz ../provenance.json; do
+for artifact in ./*.whl ./*.tar.gz ./provenance.json; do
   gh attestation verify "$artifact" --repo ocagdas/aiplane
 done
-python -m pip install ../aiplane-VERSION-py3-none-any.whl
+verification_source="$(mktemp -d)"
+tar -xzf ./aiplane-VERSION.tar.gz -C "$verification_source"
+python "$verification_source/aiplane-VERSION/scripts/verify_release_manifest.py" .
+python -m pip install ./aiplane-VERSION-py3-none-any.whl
 python -m pip show aiplane
 aiplane --version
 aiplane quickstart local-coding --dry-run

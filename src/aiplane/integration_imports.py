@@ -206,7 +206,11 @@ def _normalize_models(candidates: list[dict[str, Any]]) -> tuple[dict[str, Any],
         endpoint = candidate.get("endpoint")
         if endpoint:
             endpoint_text = str(endpoint).strip()
-            if _invalid_import_endpoint(endpoint_text) or credential_url(endpoint_text) or contains_secret(endpoint_text):
+            if (
+                _invalid_import_endpoint(endpoint_text)
+                or credential_url(endpoint_text)
+                or contains_secret(endpoint_text)
+            ):
                 raise ValueError(
                     "Imported endpoint contains credentials; use a credential-free endpoint and environment reference."
                 )

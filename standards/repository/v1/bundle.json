@@ -10,15 +10,15 @@
     "BRANCHING.md": "74a756d918be4439da5bb5f65d1422c8064fd62affe416601ca03f068cf103e7",
     "CODE_OF_CONDUCT.md": "cd440550777ef686f44763bd5b2cc0f32c6a79fc91a5de86b2698b86c1088d32",
     "docs/development/github-policy-setup.md": "c248e31fb82385e973aa8ef49d815b0ebe31ad56aa8986a591ed66520b676002",
-    "docs/development/repository-standard-design.md": "f21fa0963ad7e5cad81312b4df8e251558d29669861b8506b53ed0225fd29441",
+    "docs/development/repository-standard-design.md": "d7c99bc74197b1378cab1e2132c4f24af3070b560cda085c4d120b08f23a6912",
     "scripts/check_branch_policy.py": "ad84de3bbcb0646184261aa9901e1d0ab17e3a3786fad1034754064b2b1d0694",
-    "scripts/check_repository_standard.py": "baaa521b63f05747ecb3b9c60a7a9527c3d7699548fc4eabcd235de2b2cad968",
+    "scripts/check_repository_standard.py": "d15c85ad9153bbd84c9fc3e5379f33eab333c5adf5fadc59b19d6111446d84f4",
     "scripts/check_workflow_pins.py": "78a6ac1990ba7ca80788c8a6064cfed0a425c38cdbb2e6d739f7805459e71fd8",
     "scripts/merged_pr.py": "6b8ed5dec9eab201a5f802b2a19f72daa62016211f1510fac469a6266588712e",
     "scripts/repository_provenance.py": "2446f70d83445dba2965bcd7b1c4ea8381204c17cfe664b8e750c10f9319cba2",
     "scripts/repository_release.py": "d5be7d193120b21471cbfa122d09c1b08c6f19ca870b7a0e7ab2441b7c1bc82d",
     "scripts/verify_quality_evidence.py": "1d916e817e635936b0b439911af6aad7dc72b4ad25ce4b0684003ca65393900f",
-    "scripts/verify_release.py": "30ad74ff94cce8bcaf1dd4c196f9eeac244016a743d720d6bd854081cecebfc5",
+    "scripts/verify_release.py": "1a159db4cb32669763aa175ca2aa8377b5d33842854addb071e3241033e33ca2",
     "standards/repository/v1/LICENSE": "ade6a7e096eda180ebcb99bedb94374c5e0bd4b0384136f83ddc48112aaaa853",
     "standards/repository/v1/README.md": "032e4a26a7ad49155ec54c7bc70e738d4b6d9aaa2a18f38bd5f0f32fe33ad453",
     "standards/repository/v1/adapter.schema.json": "8f9041766ed815b06bfb65a34566564f660121d79a97e1ddc56a0a975ae82550",
@@ -29,6 +29,6 @@
     "standards/repository/v1/provenance.schema.json": "2d58e76eb6ec31eafb9c6103560151dfde63318cfb8fdc71fa7880d6c7da3d7b",
     "standards/repository/v1/publication.schema.json": "651af070a77049c379bcc042f9390cd626b5a5bf7d35721fec67583e29252a54",
     "standards/repository/v1/quality-gate.schema.json": "1be83e03d09f8f27a1edb96e8d18fcc84eb256e0301aa2cf6119ba986d92a822",
-    "standards/repository/v1/release-plan.schema.json": "20bfdccb3c071ee2c9768e1d897a817a8c21893ec5a3a765934d7fc1b8378750"
+    "standards/repository/v1/release-plan.schema.json": "39eecf5dad7d4890a4b042ef45128b1f526861e0dd303dae47548202756140c8"
   }
 }

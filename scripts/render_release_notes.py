@@ -37,7 +37,9 @@ def render_notes(tag: str, change_kind: str, commit: str, changelog: str, checks
     wheels = [name for name in entries if name.endswith(".whl")]
     sdists = [name for name in entries if name.endswith(".tar.gz")]
     if len(wheels) != 1 or len(sdists) != 1 or set(entries) != {wheels[0], sdists[0], "provenance.json"}:
-        raise ReleaseNotesError("SHA256SUMS must identify exactly one wheel, one source distribution, and provenance.json")
+        raise ReleaseNotesError(
+            "SHA256SUMS must identify exactly one wheel, one source distribution, and provenance.json"
+        )
     changes = unreleased_notes(changelog)
     return f"""# aiplane {tag}
 
@@ -54,12 +56,12 @@ Validated {change_kind} release artifacts for `{tag}` from commit `{commit}`.
 Download the wheel, source distribution, `provenance.json`, and `SHA256SUMS` from this release, then run:
 
 ```bash
-tar -xzf ./{sdists[0]}
-cd ./{sdists[0].removesuffix(".tar.gz")}
-python scripts/verify_release_manifest.py ..
-for artifact in ../*.whl ../*.tar.gz ../provenance.json; do
+for artifact in ./*.whl ./*.tar.gz ./provenance.json; do
   gh attestation verify "$artifact" --repo ocagdas/aiplane
 done
+verification_source="$(mktemp -d)"
+tar -xzf ./{sdists[0]} -C "$verification_source"
+python "$verification_source/{sdists[0].removesuffix(".tar.gz")}/scripts/verify_release_manifest.py" .
 ```
 
 The checksum manifest verifies file integrity. The GitHub artifact attestation separately verifies the repository and workflow that built the distributions.

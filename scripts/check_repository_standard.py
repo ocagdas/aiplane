@@ -172,14 +172,13 @@ def check(repo):
         if plan["mode"] != "patch" or plan["source_commit"] != env["GITHUB_SHA"]:
             raise ValueError("Merged source plan differs")
         completed.append("merge_plan")
-        previous_ref = git("rev-parse", "HEAD^1")
         cli("set", current, good=False)
         cli("set", "01.2.3", good=False)
         cli("patch")
         git("add", ".")
         git("commit", "-m", "version bump")
         cli("tag")
-        selected = json.loads(cli("classify-release", "--tag", plan["tag"], "--previous-ref", previous_ref))
+        selected = json.loads(cli("classify-release", "--tag", plan["tag"]))
         validate("release-plan", selected)
         if selected["source_commit"] != git("rev-parse", "HEAD") or selected["publish"] is not False:
             raise ValueError("Patch release identity/policy differs")

@@ -175,7 +175,7 @@ def test_classify_release_reads_and_validates_the_previous_ref(monkeypatch) -> N
         version_script.classify_release("missing", tag="v0.2.0")
 
 
-def test_release_plan_schema_requires_classifier_policy_fields() -> None:
+def test_shared_release_schema_accepts_product_policy_extensions() -> None:
     schema = json.loads(Path("standards/repository/v1/release-plan.schema.json").read_text(encoding="utf-8"))
     valid = {
         "schema_version": 1,
@@ -188,11 +188,15 @@ def test_release_plan_schema_requires_classifier_policy_fields() -> None:
         "change_kind": "minor",
         "automatic_publish": True,
     }
-    Draft202012Validator(schema).validate(valid)
+    validator = Draft202012Validator(schema)
+    validator.validate(valid)
+    # Policy extensions belong to the product classifier tested above, not every adapter.
+    common = {key: value for key, value in valid.items() if key in schema["required"]}
+    validator.validate(common)
     with pytest.raises(ValidationError):
-        Draft202012Validator(schema).validate({key: value for key, value in valid.items() if key != "automatic_publish"})
+        validator.validate({key: value for key, value in common.items() if key != "publish"})
     with pytest.raises(ValidationError):
-        Draft202012Validator(schema).validate({**valid, "change_kind": "invalid"})
+        validator.validate({**common, "publish": "true"})
 
 
 def test_ci_rejects_a_direct_version_decrease() -> None:

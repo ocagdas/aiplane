@@ -4,6 +4,7 @@ import importlib.util
 import json
 import shutil
 import sys
+from pathlib import Path
 import pytest
 from aiplane.audit import AuditLogger
 from aiplane.models import Profile
@@ -28,7 +29,7 @@ def _load_script(name: str, path: str):
 
 check_repository_standard = _load_script(
     "scripts.test_check_repository_standard",
-    "/home/runner/work/aiplane/aiplane/scripts/check_repository_standard.py",
+    str(Path(__file__).resolve().parents[1] / "scripts/check_repository_standard.py"),
 )
 
 
