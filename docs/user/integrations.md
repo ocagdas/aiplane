@@ -507,3 +507,15 @@ aiplane integrations import continue ~/.continue/config.yaml --as continue-draft
 ~~~
 
 The command previews unless --yes is present and refuses an existing destination. It imports the supported identity/provider/endpoint/role subset and environment-variable credential references. Literal credentials are omitted. The resulting repository.yaml records an unapproved import review; validate it before team use.
+
+### Credential handling during import
+
+Client imports reject endpoint URLs containing userinfo passwords or credential query
+parameters before preview or profile creation. Use a credential-free endpoint and an
+environment-variable credential reference. Portable profile archives use the shared
+sensitive-field policy, including subscription keys, and reject literal credential
+material rather than copying it into a shared profile.
+
+`aiplane credentials list` redacts embedded credentials in endpoint URLs and notes
+while retaining account metadata and environment-variable reference names. As with
+`credentials show`, raw credential values are not suitable diagnostic output.

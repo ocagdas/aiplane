@@ -12,6 +12,7 @@ from typing import Any
 
 from .config import create_profile, dump_yaml, parse_yaml, profiles_root
 from .persistence import atomic_write_text, file_lock
+from .secrets import credential_url, contains_secret
 
 _ENV_REF = re.compile(r"^(?:\$\{([A-Z][A-Z0-9_]*)\}|\$([A-Z][A-Z0-9_]*))$")
 _ALIAS = re.compile(r"[^a-z0-9]+")
@@ -204,6 +205,10 @@ def _normalize_models(candidates: list[dict[str, Any]]) -> tuple[dict[str, Any],
             item["preferred_runtime"] = runtime
         endpoint = candidate.get("endpoint")
         if endpoint:
+            if credential_url(str(endpoint)) or contains_secret(str(endpoint)):
+                raise ValueError(
+                    "Imported endpoint contains credentials; use a credential-free endpoint and environment reference."
+                )
             item["endpoint"] = str(endpoint)
         credential = candidate.get("credential")
         if credential:

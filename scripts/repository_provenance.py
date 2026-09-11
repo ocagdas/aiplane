@@ -5,9 +5,9 @@ import json
 import os
 import re
 
-try:
-    from scripts import repository_release as shared
-except ModuleNotFoundError:
+if __package__:
+    from . import repository_release as shared
+else:
     import repository_release as shared
 
 

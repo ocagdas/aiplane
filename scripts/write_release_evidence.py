@@ -7,10 +7,10 @@ import platform
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-try:
-    from scripts.validate_trial_evidence import validate_record
-    from scripts.verify_release_manifest import parse_manifest
-except ModuleNotFoundError:  # Direct execution places scripts/ first on sys.path.
+if __package__:
+    from .validate_trial_evidence import validate_record
+    from .verify_release_manifest import parse_manifest
+else:  # Direct execution places scripts/ first on sys.path.
     from validate_trial_evidence import validate_record
     from verify_release_manifest import parse_manifest
 

@@ -1,5 +1,39 @@
 # Validation
 
+## Follow-up review fixes — 11 September 2026
+
+On the pending delta over a1d7f41, `credentials list` now redacts URL credentials and
+notes while preserving useful account metadata. Disk catalog rows are validated for
+numeric, capability, benchmark and collection shape before reuse; malformed values,
+NaN/infinity and oversized numeric values trigger rebuilding from authoritative sources.
+
+Actual full `make check`: **901 passed, 9 opt-in skips**, including formatting, lint,
+shared conformance and public CLI/cache regressions. Log: /tmp/followup-aiplane-full.log.
+Synthetic credentials and isolated profiles only; changed files contain no matched
+credential signatures. Hosted qualification of the pending revision remains outstanding;
+no commits, pushes, tags or publication were performed.
+
+## Review fixes — 11 September 2026
+
+The pending delta on a1d7f41 fixes option injection in read-only search, URL and
+subscription-key credential handling, malformed derived catalog indexes, and direct
+release-script imports. Tests exercise public import/archive paths before writes,
+option-like search expressions and rebuilding corrupted indexes from source data.
+
+- Actual `make check`: **890 passed, 9 opt-in skips**; formatting, lint and shared
+  conformance passed. Log: /tmp/review-fixes-aiplane-full2.log.
+- The first run found the versioning test loading a script outside its package
+  context; the fixture now loads it as a scripts submodule from its own file root.
+- No live credentials or providers were used. Synthetic credential values remain in
+  fixtures only. Changed files were scanned for credential signatures; none found.
+
+Existing hosted success for a1d7f41 does not qualify this pending delta. The owner
+must perform real commits/pushes and obtain candidate CI under repository guidance.
+
+All three pass shared managed-file hashes, actionlint and patch whitespace checks.
+Shared bundle SHA-256: `f907247d239cad6cb98efda366a5ba8e9c409d1d56621e8ebf7abb693a17220b`. No commits, pushes, tags, releases or hosted
+settings changes were made during this fix task.
+
 ## Final branch and consolidation review — 10 September 2026
 
 Full make check passed: 878 tests, 9 opt-in skips. The subsequent focused contracts and shell regressions passed 46 tests, including all eight clean-runner/workflow shell cases. Logs: /tmp/unified-policy-aiplane-full.log and /tmp/unified-policy-final-contracts.log.

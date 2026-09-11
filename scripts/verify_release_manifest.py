@@ -5,9 +5,9 @@ import argparse
 import hashlib
 import json
 
-try:
-    from scripts.repository_provenance import verify_provenance
-except ModuleNotFoundError:
+if __package__:
+    from .repository_provenance import verify_provenance
+else:
     from repository_provenance import verify_provenance
 import re
 from pathlib import Path, PurePosixPath

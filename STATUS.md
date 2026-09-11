@@ -119,3 +119,12 @@ The shared trunk/dev policy and audit fixes are implemented. Hosted branch/tag r
 are active in aiplane and Repo Pilot; ACF owner/admin and plan changes remain required. ACF retains master.
 See [GitHub policy setup](docs/development/github-policy-setup.md) for exact state and
 remaining App credentials. Automatic versioning is enabled only in aiplane for now.
+
+The review hardening closes option-like search patterns in read-only tools, centralizes
+credential-field checks for profile archives/imports, and validates derived catalog
+indexes before reuse. Invalid caches rebuild from authoritative model inputs. See
+VALIDATION.md for executed regression and full-suite evidence.
+
+Credential listings now redact endpoint and note values through the shared sanitizer.
+Disposable catalog caches reject malformed numeric, capability, benchmark and collection
+fields and rebuild from profile/discovery sources before queries consume them.

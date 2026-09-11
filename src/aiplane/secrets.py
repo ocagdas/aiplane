@@ -4,6 +4,7 @@ import os
 import re
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit, parse_qsl
 
 REDACTED = "[REDACTED_SECRET]"
 _PEM_PATTERN = re.compile(r"-----BEGIN (?:RSA |DSA |EC |OPENSSH |)PRIVATE KEY-----|-----BEGIN CERTIFICATE-----")
@@ -51,9 +52,40 @@ def credentials_path(path: Path | str | None = None, config_path: Path | str | N
     return project_root() / ".aiplane" / "credentials.yaml"
 
 
+def credential_url(value: str) -> bool:
+    """Recognize credential-bearing URLs without returning their sensitive values."""
+    try:
+        parsed = urlsplit(value)
+        return bool(
+            parsed.scheme
+            and (
+                parsed.username is not None
+                or parsed.password is not None
+                or any(
+                    is_sensitive_key(key) or key.lower() in {"key", "sig", "signature"}
+                    for key, _ in parse_qsl(parsed.query)
+                )
+            )
+        )
+    except ValueError:
+        return True
+
+
+def is_sensitive_key(value: str) -> bool:
+    return _is_sensitive_key(value)
+
+
+def _contains_credential_url(text: str) -> bool:
+    return any(credential_url(match.group(0)) for match in re.finditer(r"[A-Za-z][A-Za-z0-9+.-]*://[^\s<>\"']+", text))
+
+
 def contains_secret(value: Any) -> bool:
     text = _stringify(value)
-    return bool(_PEM_PATTERN.search(text)) or any(pattern.search(text) for pattern in SECRET_PATTERNS)
+    return (
+        _contains_credential_url(text)
+        or bool(_PEM_PATTERN.search(text))
+        or any(pattern.search(text) for pattern in SECRET_PATTERNS)
+    )
 
 
 def redact(value: Any) -> Any:
@@ -66,7 +98,7 @@ def redact(value: Any) -> Any:
         return _redact_sequence(value)
     if not isinstance(value, str):
         return value
-    if _PEM_PATTERN.search(value):
+    if _contains_credential_url(value) or _PEM_PATTERN.search(value):
         return REDACTED
     redacted = value
     for pattern in SECRET_PATTERNS:
@@ -131,7 +163,7 @@ class CredentialStore:
                         "notes": value.get("notes"),
                     }
                 )
-        return {"name": "credentials", "credentials": rows}
+        return {"name": "credentials", "credentials": redact(rows)}
 
     def show(self, ref: str) -> dict[str, Any]:
         provider, account = parse_credential_ref(ref)

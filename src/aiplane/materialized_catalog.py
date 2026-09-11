@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Mapping
@@ -63,13 +64,12 @@ class MaterializedCatalog:
             stat = self.path.stat()
             key = (self.path.resolve(), stat.st_mtime_ns, stat.st_size)
             payload = _MEMORY_CACHE.get(key)
+            validated = payload is not None
             if payload is None:
                 loaded = json.loads(self.path.read_text(encoding="utf-8"))
                 if not isinstance(loaded, dict):
                     return None
                 payload = loaded
-                _MEMORY_CACHE.clear()
-                _MEMORY_CACHE[key] = payload
         except (OSError, UnicodeDecodeError, json.JSONDecodeError):
             return None
         if payload.get("schema_version") != CATALOG_CACHE_SCHEMA_VERSION:
@@ -82,6 +82,17 @@ class MaterializedCatalog:
             return None
         if not isinstance(payload.get("rows"), list) or not isinstance(payload.get("indexes"), dict):
             return None
+        rows = payload["rows"]
+        if any(not isinstance(row, dict) for row in rows) or payload.get("row_count") != len(rows):
+            return None
+        # A cache is disposable: validate its complete derived index against its rows.
+        if not validated:
+            if not all(_valid_cached_row(row) for row in rows):
+                return None
+            if payload["indexes"] != self.build_payload(rows, expected_digest)["indexes"]:
+                return None
+            _MEMORY_CACHE.clear()
+            _MEMORY_CACHE[key] = payload
         return payload
 
     def write(self, rows: Iterable[Mapping[str, Any]], input_digest: str) -> dict[str, Any]:
@@ -320,3 +331,48 @@ def _string_list(value: Any) -> list[str]:
     if isinstance(value, str) and value:
         return [value]
     return []
+
+
+def _valid_cached_row(row: dict[str, Any]) -> bool:
+    """Reject malformed query fields before trusting a disposable disk projection."""
+    if not isinstance(row.get("name"), str) or not row["name"]:
+        return False
+    for field in (
+        "capability_avg_score",
+        "parameter_count_b",
+        "likes",
+        "downloads",
+        "min_ram_gb",
+        "recommended_ram_gb",
+        "min_vram_gb",
+        "recommended_vram_gb",
+    ):
+        value = row.get(field)
+        if value is None and field != "capability_avg_score":
+            continue
+        if not _finite_number(value):
+            return False
+    for field in ("roles", "supported_runtimes", "accelerator_api_requirements"):
+        values = row.get(field, [])
+        if not isinstance(values, list) or any(not isinstance(value, str) for value in values):
+            return False
+    capabilities = row.get("capabilities")
+    if not isinstance(capabilities, dict) or not isinstance(capabilities.get("scores"), dict):
+        return False
+    if any(not _finite_number(score) for score in capabilities["scores"].values()):
+        return False
+    benchmark = row.get("latest_benchmark")
+    if benchmark is not None:
+        if not isinstance(benchmark, dict):
+            return False
+        score = benchmark.get("average_score", 0)
+        if not _finite_number(score):
+            return False
+    return True
+
+
+def _finite_number(value: Any) -> bool:
+    try:
+        return type(value) in (int, float) and math.isfinite(value)
+    except OverflowError:
+        return False

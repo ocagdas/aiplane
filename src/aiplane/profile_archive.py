@@ -10,7 +10,7 @@ from typing import Any
 
 from .config import CONFIG_FILES, parse_yaml, profiles_root
 from .persistence import atomic_write_text, file_lock
-from .secrets import contains_secret
+from .secrets import contains_secret, is_sensitive_key
 
 
 PROFILE_ARCHIVE_KIND = "aiplane.profile-archive"
@@ -44,21 +44,6 @@ EXCLUDED_PROFILE_STATE = (
         "reason": "regenerate target-tool configuration from the restored profile",
     },
 )
-
-_RAW_SECRET_KEYS = {
-    "apikey",
-    "accesstoken",
-    "refreshtoken",
-    "token",
-    "bearertoken",
-    "password",
-    "secret",
-    "clientsecret",
-    "privatekey",
-    "authorization",
-    "connectionstring",
-    "sastoken",
-}
 
 
 def archive_profile(
@@ -349,9 +334,8 @@ def _validate_profile_content(filename: str, content: str) -> None:
 def _raw_secret_path(value: Any, path: str = "$") -> str | None:
     if isinstance(value, dict):
         for key, inner in value.items():
-            normalized = "".join(character for character in str(key).lower() if character.isalnum())
             current = f"{path}.{key}"
-            if normalized in _RAW_SECRET_KEYS and inner not in (None, "", [], {}):
+            if is_sensitive_key(str(key)) and inner not in (None, "", [], {}):
                 return current
             found = _raw_secret_path(inner, current)
             if found:

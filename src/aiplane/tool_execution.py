@@ -62,7 +62,7 @@ class ToolExecutor:
     def _tool_grep(self, args: list[str]) -> str:
         pattern = _arg(args, 0, "pattern")
         target = self._workspace_path(args[1] if len(args) > 1 else ".")
-        return self._command(["rg", pattern, str(target)], allow_failure=True)
+        return self._command(["rg", "--no-config", "-e", pattern, "--", str(target)], allow_failure=True)
 
     def _tool_git_status(self, args: list[str]) -> str:
         return self._command(["git", "status", "--short"], allow_failure=True)
