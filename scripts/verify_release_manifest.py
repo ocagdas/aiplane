@@ -54,7 +54,11 @@ def verify_directory(directory: Path, *, require_release_pair: bool = True) -> d
     sdists = [name for name in entries if name.endswith(".tar.gz")]
     if require_release_pair and (len(wheels) != 1 or len(sdists) != 1):
         raise ManifestError("release manifest must contain exactly one wheel and one source distribution")
-    unexpected = {p.name for p in directory.iterdir()} - set(entries) - {"SHA256SUMS"}
+    unexpected = {
+        p.name
+        for p in directory.iterdir()
+        if p.is_file() and p.name.endswith((".whl", ".tar.gz", ".json"))
+    } - set(entries) - {"SHA256SUMS"}
     if unexpected:
         raise ManifestError(f"unlisted release artifact in directory: {sorted(unexpected)}")
     actual_names = {p.name for p in directory.iterdir() if p.name.endswith((".whl", ".tar.gz"))}

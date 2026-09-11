@@ -36,6 +36,8 @@ def release_directory(tmp_path: Path) -> Path:
 
 def test_release_manifest_requires_and_verifies_one_wheel_and_sdist(tmp_path: Path) -> None:
     directory = release_directory(tmp_path)
+    (directory / "aiplane-0.1.2").mkdir()
+    (directory / "README.txt").write_text("ignored", encoding="utf-8")
     entries = verify_directory(directory)
     assert set(entries) == {"aiplane-0.1.2-py3-none-any.whl", "aiplane-0.1.2.tar.gz", "provenance.json"}
 

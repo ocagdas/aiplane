@@ -12,7 +12,7 @@
     "docs/development/github-policy-setup.md": "c248e31fb82385e973aa8ef49d815b0ebe31ad56aa8986a591ed66520b676002",
     "docs/development/repository-standard-design.md": "f21fa0963ad7e5cad81312b4df8e251558d29669861b8506b53ed0225fd29441",
     "scripts/check_branch_policy.py": "ad84de3bbcb0646184261aa9901e1d0ab17e3a3786fad1034754064b2b1d0694",
-    "scripts/check_repository_standard.py": "a133ac4489f8d7f15cb0824bf3b87500c7eb58fefb32670337c741a8cc9c27e3",
+    "scripts/check_repository_standard.py": "40b7cdc50072ed59796c4f6af87874e10cd26dea5d6d767528eb1d0c44a1f5e3",
     "scripts/merged_pr.py": "6b8ed5dec9eab201a5f802b2a19f72daa62016211f1510fac469a6266588712e",
     "scripts/repository_provenance.py": "2446f70d83445dba2965bcd7b1c4ea8381204c17cfe664b8e750c10f9319cba2",
     "scripts/repository_release.py": "e0e2b7e16cefa62825005cf5e16a5087903818425bd0884104b70f5d211b0905",
