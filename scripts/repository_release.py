@@ -52,7 +52,7 @@ def publish(source, trunk, *, git, current, classify, write, tag, files, merged=
         raise ValueError("Publication requires a clean disposable checkout")
     if git("rev-parse", "HEAD") != source or os.getenv("GITHUB_SHA") != source:
         raise ValueError("Checkout and GITHUB_SHA must match the exact tested source commit")
-    remote = "refs/remotes/origin/release-trunk"
+    remote = f"refs/remotes/origin/{trunk}"
     git("fetch", "origin", f"refs/heads/{trunk}:{remote}", "--tags")
     identity = {"schema_version": 1, "source_commit": source}
     if git("rev-parse", remote) != source:
