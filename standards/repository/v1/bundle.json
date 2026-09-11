@@ -17,7 +17,7 @@
     "scripts/repository_provenance.py": "2446f70d83445dba2965bcd7b1c4ea8381204c17cfe664b8e750c10f9319cba2",
     "scripts/repository_release.py": "e0e2b7e16cefa62825005cf5e16a5087903818425bd0884104b70f5d211b0905",
     "scripts/verify_quality_evidence.py": "1d916e817e635936b0b439911af6aad7dc72b4ad25ce4b0684003ca65393900f",
-    "scripts/verify_release.py": "1a159db4cb32669763aa175ca2aa8377b5d33842854addb071e3241033e33ca2",
+    "scripts/verify_release.py": "30ad74ff94cce8bcaf1dd4c196f9eeac244016a743d720d6bd854081cecebfc5",
     "standards/repository/v1/LICENSE": "ade6a7e096eda180ebcb99bedb94374c5e0bd4b0384136f83ddc48112aaaa853",
     "standards/repository/v1/README.md": "032e4a26a7ad49155ec54c7bc70e738d4b6d9aaa2a18f38bd5f0f32fe33ad453",
     "standards/repository/v1/adapter.schema.json": "8f9041766ed815b06bfb65a34566564f660121d79a97e1ddc56a0a975ae82550",

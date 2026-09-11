@@ -8,27 +8,41 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 
 
 def verify(directory, tag, commit):
     root = Path(__file__).resolve().parents[1]
-    subprocess.run(
+    downloaded = subprocess.run(
         [sys.executable, str(root / "scripts/build_release.py"), "--verify-only", "--output", str(directory)],
         check=True,
+        capture_output=True,
+        text=True,
     )
+    downloaded_artifacts = json.loads(downloaded.stdout)["artifacts"]
+    with tempfile.TemporaryDirectory(prefix="aiplane-release-verify-") as temp:
+        expected = subprocess.run(
+            [sys.executable, str(root / "scripts/build_release.py"), "--tag", tag, "--output", temp],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        expected_artifacts = json.loads(expected.stdout)["artifacts"]
     value = json.loads((directory / "provenance.json").read_text(encoding="utf-8"))
     if (
         value["build_kind"] != "release"
         or value["tag"] != tag
         or value["source_commit"] != commit
         or value["version_commit"] != commit
+        or value["artifacts"] != expected_artifacts
+        or downloaded_artifacts != expected_artifacts
     ):
         raise ValueError("Downloaded release does not match selected tag/commit")
     return {
         "schema_version": 1,
         "tag": tag,
         "source_commit": commit,
-        "checks": {"downloaded_artifacts": "success"},
+        "checks": {"downloaded_artifacts": "success", "local_rebuild": "success"},
         "artifacts": value["artifacts"],
     }
 

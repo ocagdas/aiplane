@@ -134,16 +134,21 @@ def _write_downloaded_provenance(directory: Path, **overrides: object) -> None:
 
 def test_verify_release_checks_identity_and_emits_expected_report(monkeypatch, tmp_path: Path) -> None:
     _write_downloaded_provenance(tmp_path)
+
+    def fake_run(command, check, capture_output, text):
+        payload = {"schema_version": 1, "artifacts": {"aiplane-0.1.2-py3-none-any.whl": "digest"}}
+        return subprocess.CompletedProcess(command, 0, stdout=json.dumps(payload), stderr="")
+
     monkeypatch.setattr(
         verify_release_script.subprocess,
         "run",
-        lambda command, check: subprocess.CompletedProcess(command, 0),
+        fake_run,
     )
     assert verify_release_script.verify(tmp_path, "v0.1.2", "a" * 40) == {
         "schema_version": 1,
         "tag": "v0.1.2",
         "source_commit": "a" * 40,
-        "checks": {"downloaded_artifacts": "success"},
+        "checks": {"downloaded_artifacts": "success", "local_rebuild": "success"},
         "artifacts": {"aiplane-0.1.2-py3-none-any.whl": "digest"},
     }
 
@@ -161,10 +166,36 @@ def test_verify_release_rejects_mismatched_or_nonrelease_provenance(
     monkeypatch, tmp_path: Path, overrides: dict[str, object], tag: str, commit: str
 ) -> None:
     _write_downloaded_provenance(tmp_path, **overrides)
+
+    def fake_run(command, check, capture_output, text):
+        payload = {"schema_version": 1, "artifacts": {"aiplane-0.1.2-py3-none-any.whl": "digest"}}
+        return subprocess.CompletedProcess(command, 0, stdout=json.dumps(payload), stderr="")
+
     monkeypatch.setattr(
         verify_release_script.subprocess,
         "run",
-        lambda command, check: subprocess.CompletedProcess(command, 0),
+        fake_run,
     )
     with pytest.raises(ValueError, match="does not match"):
         verify_release_script.verify(tmp_path, tag, commit)
+
+
+def test_verify_release_rejects_downloaded_artifacts_that_do_not_match_local_rebuild(
+    monkeypatch, tmp_path: Path
+) -> None:
+    _write_downloaded_provenance(tmp_path, artifacts={"aiplane-0.1.2-py3-none-any.whl": "downloaded"})
+
+    def fake_run(command, check, capture_output, text):
+        artifacts = {"aiplane-0.1.2-py3-none-any.whl": "downloaded"}
+        if "--tag" in command:
+            artifacts = {"aiplane-0.1.2-py3-none-any.whl": "rebuilt"}
+        payload = {"schema_version": 1, "artifacts": artifacts}
+        return subprocess.CompletedProcess(command, 0, stdout=json.dumps(payload), stderr="")
+
+    monkeypatch.setattr(
+        verify_release_script.subprocess,
+        "run",
+        fake_run,
+    )
+    with pytest.raises(ValueError, match="does not match"):
+        verify_release_script.verify(tmp_path, "v0.1.2", "a" * 40)
