@@ -6,7 +6,7 @@
     ".github/ISSUE_TEMPLATE/config.yml": "d2e226f777cdaa886b91ff92026d11e638203bc654223d9bfea50e129221ac03",
     ".github/ISSUE_TEMPLATE/feature_request.yml": "f53df95e1dad09a7bc1b552ca9e07f451cec87d5a2fd8e0e35f4986b708688f9",
     ".github/PULL_REQUEST_TEMPLATE.md": "6a1fe8c450c08df037bd80e49af417e332e055c41b0a20573d37c54c25373ace",
-    ".github/dependabot.yml": "f56546dbe4ea8e0f46c87fba3a390b90d9381493a642d6fabd5fc2d8a012650a",
+    ".github/dependabot.yml": "df126cb852f98520f0e0cfa0b4b24b924f01d25e53968f28202d5ab6396c0aa8",
     "BRANCHING.md": "74a756d918be4439da5bb5f65d1422c8064fd62affe416601ca03f068cf103e7",
     "CODE_OF_CONDUCT.md": "cd440550777ef686f44763bd5b2cc0f32c6a79fc91a5de86b2698b86c1088d32",
     "docs/development/github-policy-setup.md": "c248e31fb82385e973aa8ef49d815b0ebe31ad56aa8986a591ed66520b676002",
