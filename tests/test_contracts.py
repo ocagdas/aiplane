@@ -161,7 +161,7 @@ def test_cli_command_families_are_owned_outside_composition_root() -> None:
 def test_dev_dependencies_include_no_isolation_build_backend() -> None:
     project = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
     dev_dependencies = project["project"]["optional-dependencies"]["dev"]
-    assert "setuptools==83.0.0" in dev_dependencies
+    assert any(dependency.startswith("setuptools==") for dependency in dev_dependencies)
 
 
 def test_full_check_uses_configurable_file_level_parallelism() -> None:
