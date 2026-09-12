@@ -39,3 +39,7 @@ The merged MVP has enough surface area that maintainability now matters as much 
 - Treat orchestrators as external frameworks. `aiplane` should generate role/endpoint/policy config and readiness checks, not run autonomous agent conversations itself.
 - Keep tests close to behavior boundaries. As the code is split, tests should move from one large MVP file into focused modules for profiles/config, provider/model catalog, runtimes, integrations, MCP, orchestrators, stacks, and CLI smoke coverage.
 
+
+## Installed documentation
+
+`aiplane.documentation` resolves product guides from the owning checkout or installed distribution metadata. Wheels carry curated documentation and complete skill files under `share/aiplane`; MCP uses that index independently of profile workspace selection. The packaging regression builds a source archive and installs its wheel in a separate environment. Install-channel checks exercise the same docs tools through MCP stdio.

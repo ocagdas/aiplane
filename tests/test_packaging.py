@@ -5,6 +5,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tarfile
 from pathlib import Path
 
 
@@ -20,15 +21,42 @@ def test_wheel_install_includes_templates_helpers_and_preserves_profiles(tmp_pat
     repository = Path.cwd()
     build_root = tmp_path / "source"
     build_root.mkdir()
-    for filename in ("pyproject.toml", "README.md", "LICENSE"):
+    for filename in (
+        "pyproject.toml",
+        "MANIFEST.in",
+        "LICENSE",
+        "Makefile",
+        "repository-standard.json",
+        *[p.name for p in repository.glob("*.md")],
+    ):
         shutil.copy2(repository / filename, build_root / filename)
-    for directory in ("src", "scripts", "profile-templates", "config-templates", "schemas"):
+    for directory in (
+        "src",
+        "scripts",
+        "profile-templates",
+        "config-templates",
+        "schemas",
+        "docs",
+        "skills",
+        "standards",
+        ".github",
+    ):
         shutil.copytree(repository / directory, build_root / directory)
+
+    private = build_root / "docs/project/.strategy/private.md"
+    private.parent.mkdir(parents=True, exist_ok=True)
+    private.write_text("private sentinel", encoding="utf-8")
+    _run([sys.executable, "-c", "from setuptools.build_meta import build_sdist; build_sdist('dist')"], cwd=build_root)
+    archive = next((build_root / "dist").glob("*.tar.gz"))
+    with tarfile.open(archive) as source:
+        names = source.getnames()
+        assert any(name.endswith("/skills/aiplane/agents/openai.yaml") for name in names)
+        assert not any("/.strategy/" in name for name in names)
 
     wheel_dir = tmp_path / "wheels"
     wheel_dir.mkdir()
     _run(
-        [sys.executable, "-m", "pip", "wheel", ".", "--no-deps", "--no-build-isolation", "-w", str(wheel_dir)],
+        [sys.executable, "-m", "pip", "wheel", str(archive), "--no-deps", "--no-build-isolation", "-w", str(wheel_dir)],
         cwd=build_root,
     )
     wheel = next(wheel_dir.glob("aiplane-*.whl"))
@@ -51,7 +79,37 @@ def test_wheel_install_includes_templates_helpers_and_preserves_profiles(tmp_pat
     env = os.environ.copy()
     env.pop("AIPLANE_PROFILES_DIR", None)
     env.pop("AIPLANE_CONFIG", None)
+    env.pop("PYTHONPATH", None)
     env["PATH"] = f"{bin_dir}{os.pathsep}{env.get('PATH', '')}"
+
+    (workspace / "README.md").write_text("unrelated workspace sentinel", encoding="utf-8")
+    installed_docs = _run(
+        [
+            str(python),
+            "-c",
+            """
+import json
+from pathlib import Path
+from importlib.metadata import version
+from aiplane.mcp import AiplaneMcpServer
+server = AiplaneMcpServer(Path.cwd())
+response = server.handle_message({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})
+assert response["result"]["serverInfo"]["version"] == version("aiplane")
+response = server.handle_message({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "aiplane.docs.list", "arguments": {}}})
+paths = [row["path"] for row in response["result"]["structuredContent"]["docs"]]
+for path in paths:
+    response = server.handle_message({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "aiplane.docs.read", "arguments": {"path": path}}})
+    content = response["result"]["structuredContent"]["content"]
+    assert content and "unrelated workspace sentinel" not in content
+print(json.dumps(paths))
+""",
+        ],
+        cwd=workspace,
+        env=env,
+    )
+    from aiplane.documentation import documentation_paths
+
+    assert json.loads(installed_docs.stdout) == documentation_paths(repository)
 
     assert _run([str(aiplane), "profiles", "templates"], cwd=workspace, env=env).stdout.splitlines() == ["local-dev"]
     assert "local" in _run([str(aiplane), "config", "templates"], cwd=workspace, env=env).stdout.splitlines()

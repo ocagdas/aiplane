@@ -22,7 +22,7 @@ aiplane mcp serve
 
 The current read tools are:
 
-- `aiplane.docs.list` and `aiplane.docs.read` for project docs/help text
+- `aiplane.docs.list` and `aiplane.docs.read` for bundled product documentation and skill files
 - `aiplane.profiles.list`
 - `aiplane.providers.list` with `status`, `runtime`, and `group_by` filters for ownership/runtime grouping
 - `aiplane.providers.models` and `aiplane.providers.diagnose`
@@ -59,11 +59,23 @@ New CLI features are not automatically MCP tools. MCP coverage is reviewed durin
 
 `models list --offline-catalog PATH` accepts a filesystem path and remains CLI-only. This prevents an MCP caller from reading arbitrary local files; use a checked-out, reviewed fixture for offline planning.
 
+## Bundled documentation
+
+Documentation tools expose canonical root guides, `docs/index.md`, `docs/architecture.md`, Markdown guides in `docs/user`, `docs/development`, `docs/project`, trial-evidence guidance, and the skill files. Call `aiplane.docs.list` for exact accepted paths. Reads support `start` and `max_chars` pagination. Private/hidden directories, symlinks, and arbitrary workspace files are excluded.
+
+A source checkout serves its own documentation. Wheel installations locate `share/aiplane` through installed package metadata, so help works from an unrelated or empty workspace. Missing installed resources produce an error requesting reinstallation. To locate the skill for manual registration, run:
+
+```bash
+python -c "from aiplane.documentation import documentation_root; print(documentation_root() / 'skills/aiplane')"
+```
+
+Use the Python interpreter in the aiplane installation environment.
+
 ## MCP And Agent Skills
 
 MCP and agent skills solve different problems. MCP is a live protocol surface: an IDE or agent calls `aiplane` tools over stdio and receives structured results. An agent skill is an instruction/playbook package for a coding assistant: it tells the assistant how to approach an `aiplane` task, which commands to prefer, which safety boundaries matter, and when to use MCP.
 
-The repository ships a versioned starter skill at `skills/aiplane/SKILL.md`. A useful `aiplane` skill can reference the MCP server, but it should not duplicate MCP. The skill should teach workflow and judgment; MCP should expose current structured state and guarded operations.
+Source archives and wheels ship the complete versioned skill, including `skills/aiplane/SKILL.md` and `skills/aiplane/agents/openai.yaml`. Installing aiplane does not register the skill with an assistant automatically. A useful `aiplane` skill can reference the MCP server, but it should not duplicate MCP. The skill should teach workflow and judgment; MCP should expose current structured state and guarded operations.
 
 ## Generate Client Config
 

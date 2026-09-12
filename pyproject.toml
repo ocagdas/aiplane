@@ -55,6 +55,18 @@ markers = [
 script-files = ["scripts/provider_helper.sh", "scripts/ollama_helper.sh"]
 
 [tool.setuptools.data-files]
+"share/aiplane" = [
+  "README.md", "PURPOSE.md", "STATUS.md", "VALIDATION.md", "ROADMAP.md", "TODO.md",
+  "CONTRIBUTING.md", "CI.md", "VERSIONING.md", "REPOSITORY_STRUCTURE.md", "BRANCHING.md",
+  "AGENTS.md", "SECURITY.md", "CODE_OF_CONDUCT.md", "SUPPORT.md", "NOTICE.md", "CHANGELOG.md",
+]
+"share/aiplane/docs" = ["docs/index.md", "docs/architecture.md"]
+"share/aiplane/docs/user" = ["docs/user/*.md"]
+"share/aiplane/docs/development" = ["docs/development/*.md"]
+"share/aiplane/docs/project" = ["docs/project/*.md"]
+"share/aiplane/docs/project/trial-evidence" = ["docs/project/trial-evidence/*.md", "docs/project/trial-evidence/template.json"]
+"share/aiplane/skills/aiplane" = ["skills/aiplane/SKILL.md"]
+"share/aiplane/skills/aiplane/agents" = ["skills/aiplane/agents/openai.yaml"]
 "config-templates" = [
   "config-templates/local.yaml",
   "config-templates/credentials.example.yaml",

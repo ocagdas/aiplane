@@ -2,10 +2,16 @@
 
 This is the sole actionable backlog. Completed work lives in [STATUS.md](STATUS.md).
 
-## Repository standardization hosted gates
+## Remaining review and release gates
+
+The packaging, installed-help, version metadata, YAML onboarding, and README scope fixes are implemented in [STATUS.md](STATUS.md), with results in [VALIDATION.md](VALIDATION.md). Remaining qualification is external:
+
+- Run hosted Windows/macOS/Linux CI on the review fixes after the owner publishes the branch; the existing channel matrix now checks installed docs, skill files, and MCP version metadata.
+
+### Repository standardization hosted gates
 
 - Run exact-tag reusable release qualification on Linux, macOS and Windows; branch/PR CI has passed for the revision recorded in [VALIDATION.md](VALIDATION.md).
-- Once Quality gate exists, migrate the required check from Release gate and prove blocked merges without weakening branch/tag protection.
+- Prove the active Quality gate blocks a non-bypass merge when checks fail or review is missing.
 - Prove the existing GitHub App and exact-tip atomic publication in hosted CI. No credential names were changed.
 - Complete public assets, attestations and independent-user evidence below. No publication was performed during this migration.
 
@@ -19,8 +25,8 @@ See [adoption decisions](docs/project/adoption-decisions.md) for scope evaluatio
 
 #### P0 — Developer preview coherence
 
-2. **Publish the first complete developer-preview release artifact — selective publication automation implemented; hosted app proof and complete public assets pending.** A dedicated short-lived GitHub App token owns patch commits/tags, PR version edits and non-increasing versions are rejected, patches remain CI artifacts unless manually selected, and intentional minor/major versions publish automatically with complete wheel/source/checksum validation. Completion: a public immutable release URL contains exactly one wheel, one source distribution, `SHA256SUMS`, supported-platform/upgrade/rollback guidance, and metadata matching its tag.
-3. **Verify the public no-clone path — cross-platform workflow implemented and automatically dispatched after publication; successful public run pending.** `Verify published release` downloads the actual named release on Linux, macOS, and Windows, verifies the portable manifest, exercises pip/pipx/uv independently, and uploads canonical sanitized evidence. Final evidence still requires a complete P0.2 release and a successful hosted run. Completion: the nine evidence records identify release URL, checksum, tag commit, commands, results, and platform limitations.
+2. **Qualify a complete developer-preview release of the current implementation — selective publication automation implemented; current hosted App proof and exact-release qualification pending.** A dedicated short-lived GitHub App token owns patch commits/tags, PR version edits and non-increasing versions are rejected, patches remain CI artifacts unless manually selected, and intentional minor/major versions publish automatically with complete wheel/source/checksum validation. Completion: a public immutable release URL contains exactly one wheel, one source distribution, `SHA256SUMS`, supported-platform/upgrade/rollback guidance, and metadata matching its tag.
+3. **Verify the public no-clone path — cross-platform workflow implemented and automatically dispatched after publication; current-release public run pending.** `Verify published release` downloads the actual named release on Linux, macOS, and Windows, verifies the portable manifest, exercises pip/pipx/uv independently, and uploads canonical sanitized evidence. Earlier public release evidence is recorded in VALIDATION.md; current qualification still requires a complete P0.2 release and its successful hosted run. Completion: the nine evidence records identify release URL, checksum, tag commit, commands, results, and platform limitations.
 4. **Make CI mandatory on the release path — repository implementation and exact settings guide complete; rulesets active; hosted App and blocked-merge proof pending.** The PR UI shows `CI / Quality gate` while the ruleset requires the exact job name `Quality gate`; the guide covers reviews, main-only force/deletion protection, the narrow `aiplane-versioning` bypass, tag immutability, and audit commands. The hosted rulesets are active; completion still requires a blocked-merge test.
 5. **Standardize external-trial evidence — standard implemented; trial adoption pending.** The canonical JSON template, recording guidance, sanitizer/shape validator, and regression tests cover one sanitized record format for commit/version, OS, installation channel, Python/runtime/model, start state, commands, elapsed time, first failure, assistance, written files, final outcome, and participant feedback. Completion: every P0 workflow trial uses the same record and distinguishes rehearsal from independent completion.
 
@@ -116,7 +122,7 @@ gh api repos/ocagdas/aiplane/branches/main/protection
 gh api repos/ocagdas/aiplane/rulesets --jq '.[] | {id, name, target, enforcement}'
 ```
 
-### 3. Publish one complete developer-preview release
+### 3. Qualify the current developer-preview release
 
 For an intentional minor or major release, follow [CI and Release Process](VERSIONING.md); publication should start automatically after the app creates the tag. A selected patch may instead be published through **Actions -> Release artifacts -> Run workflow**.
 

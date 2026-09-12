@@ -31,6 +31,10 @@ from .runtime_pull import ollama_model_id, runtime_pull_support
 from .secrets import CredentialStore
 
 
+# Continue configuration-document version; independent of the aiplane package.
+CONTINUE_CONFIG_VERSION = "0.1.0"
+
+
 @dataclass(frozen=True)
 class IntegrationExport:
     tool: str
@@ -943,7 +947,7 @@ class IntegrationManager:
         embedding = selection["embedding"]
         yaml = (
             "name: aiplane\n"
-            "version: 0.1.0\n"
+            f"version: {CONTINUE_CONFIG_VERSION}\n"
             "schema: v1\n"
             "models:\n"
             f"  - name: {chat['name']}\n"
@@ -1005,7 +1009,7 @@ class IntegrationManager:
 
         yaml = (
             "name: aiplane\n"
-            "version: 0.1.0\n"
+            f"version: {CONTINUE_CONFIG_VERSION}\n"
             "schema: v1\n"
             "models:\n"
             f"  - name: {chat_name}\n"
@@ -1098,7 +1102,7 @@ class IntegrationManager:
         elif tool == "continue-mcp":
             content = (
                 "name: aiplane\n"
-                "version: 0.1.0\n"
+                f"version: {CONTINUE_CONFIG_VERSION}\n"
                 "schema: v1\n"
                 "mcpServers:\n"
                 "  - name: aiplane\n"

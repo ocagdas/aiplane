@@ -317,3 +317,5 @@ Current suite evidence is maintained in [VALIDATION.md](../../VALIDATION.md). Us
 The packaging test builds and installs one wheel in an isolated venv and owns wheel-content, helper, schema, bootstrap, and preservation contracts. Upgrade/replacement/uninstall lifecycle verification is intentionally separate in `scripts/verify_install_channels.py`, the cross-platform CI matrix, and the release workflow; do not nest that complete lifecycle inside the packaging unit again.
 
 Four file-scheduled workers remain the portable default. On a suitably provisioned local machine, `AIPLANE_TEST_WORKERS=6 scripts/check.sh` is a measured optional speedup. Keep the default conservative for shared CI runners, and retain `AIPLANE_TEST_WORKERS=0` for serial diagnosis.
+
+Profiles and local configuration use the dependency-free [restricted YAML subset](../user/profile-schema.md#yaml-parser-subset-limits). Use inline lists; general-purpose YAML serializers may emit unsupported syntax.

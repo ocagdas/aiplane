@@ -112,7 +112,7 @@ def test_aiplane_skill_is_versioned_and_not_template_text() -> None:
     skill = Path("skills/aiplane/SKILL.md")
     text = skill.read_text(encoding="utf-8")
     assert "name: aiplane" in text
-    assert "Version: 0.1.0" in text
+    assert re.search(r"Skill version: \d+\.\d+\.\d+", text)
     assert "TODO" not in text
     assert "environment doctor and configuration compiler" in text
     assert "control-plane" not in text

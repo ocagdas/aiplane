@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import Any
 from urllib.request import Request
 
+from . import __version__
 from .boundaries import HttpTransport, UrllibHttpTransport
 from .persistence import atomic_write_text
 from .config import dump_yaml, parse_yaml
@@ -1192,7 +1193,7 @@ def _text_get(
     transport: HttpTransport | None = None,
 ) -> str:
     transport = transport or UrllibHttpTransport()
-    request_headers = {"Accept": accept, "User-Agent": "aiplane/0.1", **(headers or {})}
+    request_headers = {"Accept": accept, "User-Agent": f"aiplane/{__version__}", **(headers or {})}
     request = Request(url, headers=request_headers)
     with transport.open(request, timeout=timeout) as response:
         return response.read().decode("utf-8", errors="replace")

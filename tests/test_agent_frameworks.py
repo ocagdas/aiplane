@@ -13,6 +13,7 @@ from aiplane.agent_frameworks import (
     render_framework_starter,
 )
 from aiplane.agents import AgentManager
+from aiplane import __version__
 from tests.boundary_fakes import FakeHttpTransport
 from aiplane.machines import MachineManager
 from aiplane.stacks import StackManager
@@ -250,6 +251,7 @@ def test_agent_doctor_probe_verifies_anonymous_models_response(tmp_path: Path, m
     assert payload["ready"] is True
     assert probe["model_available"] is True
     assert request.full_url == "http://localhost:11434/v1/models"
+    assert request.get_header("User-agent") == f"aiplane/{__version__}"
     assert request.headers.get("Authorization") is None
     assert request.headers.get("X-api-key") is None
     assert timeout == 5
@@ -288,6 +290,7 @@ def test_agent_doctor_chat_probe_is_explicit_credential_free_and_model_gated(tmp
     assert payload["execution_boundary"]["runs_model_prompts"] is True
     assert inventory_request.get_method() == "GET"
     assert chat_request.get_method() == "POST"
+    assert chat_request.get_header("User-agent") == f"aiplane/{__version__}"
     assert chat_request.full_url == "http://localhost:11434/v1/chat/completions"
     assert json.loads(chat_request.data.decode("utf-8")) == {
         "model": "provider-chat-small:8b",

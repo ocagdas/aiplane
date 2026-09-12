@@ -1,26 +1,34 @@
 ---
 name: aiplane
-description: Work safely in the aiplane repository and CLI. Use when Codex is asked to modify, review, test, document, or plan aiplane features involving profiles, providers, models, runtimes, machines, stacks, MCP tools, integrations, security/contributor docs, or roadmap/handoff updates.
+description: Inspect and configure AI development environments with the aiplane CLI or MCP tools. Use for aiplane profiles, environment diagnosis, model recommendations, integration exports, or contributions to the aiplane repository.
 ---
 
 # aiplane
 
-Version: 0.1.0
+Skill version: 0.2.0
+
+This version tracks the playbook independently of the application version.
 
 ## Operating Boundary
 
 Treat `aiplane` as an environment doctor and configuration compiler. It plans, checks, prepares, and exports configuration for AI development environments. It must not become a coding agent, model runtime, model proxy, IDE extension, hidden cloud deployment engine, or broad MCP shell executor.
 
-## First Steps
+## Installed CLI Use
+
+Start with `aiplane quickstart local-coding --dry-run`. Use `aiplane --help` for available commands and `aiplane.docs.list` / `aiplane.docs.read` through MCP for bundled guides. Product help comes from the installation, independently of the selected profile workspace. Preview recommendations and exports before applying changes.
+
+## Repository Contributions
+
+These steps require a source checkout; they do not apply to ordinary installed CLI use.
 
 1. Read `docs/project/agent-guidance.md` before changing files.
 2. Check `git status --short --untracked-files=all` and avoid reverting user changes.
-3. Read the relevant user docs, command coverage, roadmap, and handoff before changing behavior.
+3. Read the relevant user docs, command coverage, roadmap, and backlog before changing behavior.
 4. Prefer existing managers and CLI patterns over new parallel logic.
 
 ## Change Rules
 
-- Keep behavior, docs, roadmap/handoff, command coverage, MCP surfaces, and tests aligned.
+- Keep behavior, docs, roadmap/backlog, command coverage, MCP surfaces, and tests aligned.
 - Add or update tests for behavior changes unless there is a clear engineering reason not to; tests should prove real behavior, contracts, regressions, or failure modes rather than increase counts; still run focused tests.
 - Keep tests deterministic and avoid live cloud/provider/runtime dependency unless mocked or explicitly requested.
 - Use plan, doctor, dry-run, and export flows before mutation.
@@ -32,8 +40,8 @@ Treat `aiplane` as an environment doctor and configuration compiler. It plans, c
 Run focused tests for the changed area, then run the full check before calling a milestone done:
 
 ```bash
-conda run -n aiplane python -m pytest tests/test_contracts.py -q
-conda run -n aiplane python -m pytest tests/test_quick_smoke.py -q
+python -m pytest tests/test_contracts.py -q
+python -m pytest tests/test_quick_smoke.py -q
 conda run -n aiplane scripts/check.sh
 ```
 
@@ -57,7 +65,7 @@ MCP should mirror useful inspection, planning, recommendation, and export surfac
 2. Add an input schema.
 3. Delegate to the existing manager method.
 4. Add focused schema and behavior tests.
-5. Update command coverage, handoff, skill guidance, and user docs when user-visible.
+5. Update command coverage, backlog, skill guidance, and user docs when user-visible.
 
 ## Skill Versus MCP
 

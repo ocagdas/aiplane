@@ -22,7 +22,7 @@ touching an external service.
 aiplane quickstart local-coding --dry-run
 ```
 
-Profiles are declarative YAML. Output is available as readable text or
+Profiles use a [restricted YAML subset](docs/user/profile-schema.md#yaml-parser-subset-limits): nested mappings, scalars, and inline lists. Dash lists, document markers, block scalars, and anchors/tags are unsupported. Output is available as readable text or
 deterministic JSON. Secrets stay in ignored local files or environment
 variables.
 
@@ -63,19 +63,6 @@ notes.
 > deliberately narrow: discover -> doctor -> recommend -> export. Supporting
 > commands are tested, but their maturity varies and is documented in
 > [command coverage](STATUS.md#command-coverage).
-
-
-Advanced, review-first workflows are available without turning Aiplane into a model server or cluster controller:
-
-~~~bash
-aiplane integrations import continue ~/.continue/config.yaml --as imported-draft
-aiplane support list --kind runtime
-aiplane providers adapter-validate tests/fixtures/adapter-v1.json
-aiplane runtimes pull docker_model_runner --model ai/model-id --dry-run
-aiplane stacks render-kubernetes STACK --image IMAGE --device-class DEVICE_CLASS
-~~~
-
-Literal credentials are never imported, lifecycle mutations require confirmation, support records do not claim unverified upstream versions, and Kubernetes application remains outside this command surface.
 
 Aiplane does not replace your coding assistant, model runtime, chat interface,
 inference server, model registry, gateway, or cloud platform. It makes the
@@ -294,6 +281,18 @@ Command categories are explicit in [command coverage](STATUS.md#command-coverage
 ## Advanced and experimental commands
 
 The repository contains additional tested commands for specialised environment troubleshooting, integration planning, and guarded operations. They remain subordinate to the profile → discover → doctor → recommend → export workflow. They remain implementation details rather than additional product promises. See [command coverage](STATUS.md#command-coverage) for the exact maturity boundary and [Roadmap](ROADMAP.md#roadmap) for future decisions.
+
+Advanced, review-first workflows are available without turning Aiplane into a model server or cluster controller:
+
+~~~bash
+aiplane integrations import continue ~/.continue/config.yaml --as imported-draft
+aiplane support list --kind runtime
+aiplane providers adapter-validate tests/fixtures/adapter-v1.json
+aiplane runtimes pull docker_model_runner --model ai/model-id --dry-run
+aiplane stacks render-kubernetes STACK --image IMAGE --device-class DEVICE_CLASS
+~~~
+
+Literal credentials are never imported, lifecycle mutations require confirmation, support records do not claim unverified upstream versions, and Kubernetes application remains outside this command surface.
 
 ## Safety, governance, and trust model
 
