@@ -2,7 +2,9 @@
 
 Developer preview; external-beta evidence gates remain open. See [validation](VALIDATION.md), [priorities](ROADMAP.md), and [open work](TODO.md).
 
-Repository automation now uses exact-tested-tip atomic publication, a boolean Quality gate, and exact-tag reusable release qualification. Hosted App, ruleset and public-release evidence remain unverified.
+Repository automation now uses exact-tested-tip atomic publication, a boolean Quality gate, and exact-tag reusable release qualification. Rulesets are active; blocked-merge proof, current hosted App publication, and current exact-release evidence remain open. Earlier public releases do not qualify the current implementation.
+
+Complete skills and product guides ship in source archives and wheels. MCP documentation is installation-owned and includes canonical, development, architecture, and skill guides; private paths and symlinks are excluded. Application metadata follows the package version while skill, configuration, and protocol versions remain independent. Onboarding identifies the restricted YAML syntax and keeps advanced workflows separate.
 
 ## Current Public Status
 

@@ -9,6 +9,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit, urlunsplit
 from urllib.request import Request
 
+from . import __version__
 from .boundaries import HttpTransport, UrllibHttpTransport
 from .config import agent_artifacts_root, dump_yaml
 from .agent_frameworks import (
@@ -285,7 +286,7 @@ class AgentManager:
                 "ok": False,
                 "reason": str(exc),
             }
-        request = Request(models_url, headers={"Accept": "application/json", "User-Agent": "aiplane/0.1"})
+        request = Request(models_url, headers={"Accept": "application/json", "User-Agent": f"aiplane/{__version__}"})
         try:
             with self.http_transport.open(request, timeout=timeout_seconds) as response:
                 payload = json.loads(response.read().decode("utf-8"))
@@ -383,7 +384,7 @@ class AgentManager:
             headers={
                 "Accept": "application/json",
                 "Content-Type": "application/json",
-                "User-Agent": "aiplane/0.1",
+                "User-Agent": f"aiplane/{__version__}",
             },
             method="POST",
         )

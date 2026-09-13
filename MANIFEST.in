@@ -4,11 +4,11 @@ include CHANGELOG.md SECURITY.md CODE_OF_CONDUCT.md Makefile
 recursive-include docs *.md *.json
 recursive-include scripts *.py *.sh
 recursive-include tests *.py *.json *.yaml *.yml *.toml *.txt
-recursive-include skills *.md *.json
+recursive-include skills *.md *.json *.yaml
 prune docs/project/.strategy
 global-exclude __pycache__ *.py[cod]
 
-include HANDOFF.md NOTICE.md SUPPORT.md
+include NOTICE.md SUPPORT.md
 
 recursive-include standards *
 recursive-include .github *.yml *.md

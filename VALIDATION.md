@@ -2,7 +2,19 @@
 
 [CI.md](CI.md) owns check commands; [STATUS.md](STATUS.md) owns capabilities.
 
-## Qualified scope
+## Current working-tree validation
+
+On 12 September 2026, the review changes based on `9b25137362e079c35371c7aff98998e5acb98bd8` passed local Linux validation:
+
+- `make check`: formatting, Ruff, shared repository conformance, and **927 passed, 9 opt-in skips**, using four file-scheduled workers. Log: `/tmp/aiplane-review-check.log`; JUnit: `/tmp/aiplane-review-tests.xml`.
+- Packaging regression builds an sdist, builds its wheel, and installs into an isolated environment. Every published documentation path is listed and readable through MCP from an unrelated workspace; complete skill files are present and private strategy files excluded.
+- Real pip, pipx, and uv installation, replacement, and uninstall checks passed, including MCP stdio documentation reads and matching CLI/server versions. Log: `/tmp/aiplane-review-channels.log`; built artifacts: `/tmp/aiplane-review-dist`.
+- Profile validation and required-only environment doctor passed in text and JSON with temporary shipped profiles. Logs: `/tmp/aiplane-review-profile.log`, `/tmp/aiplane-review-doctor.log`, `/tmp/aiplane-review-doctor-json.log`.
+- Skill validation, changed-document local links, patch whitespace checks, and a credential-pattern scan passed. HTTP metadata tests use synthetic transports; no live provider requests were required.
+
+These are uncommitted working-tree results. Windows/macOS and hosted publication checks have not run on this patch. The existing OS/channel workflow will exercise the expanded installed-help checks when the owner publishes the branch. The earlier hosted results below remain baseline evidence only.
+
+## Earlier qualified revision
 
 On 11 September 2026, commit `b843589b331716fbc7e2f799ebc3c7a40db257f6`
 passed local and hosted validation. The working tree was clean when testing began;
@@ -37,6 +49,10 @@ the only subsequent changes from this task update validation evidence and the ba
   passed with temporary shipped profiles. No live credentials or provider requests
   were needed. Local smoke logs: `/tmp/aiplane-current-profile.log`,
   `/tmp/aiplane-current-doctor.log`, `/tmp/aiplane-current-doctor-json.log`.
+
+## Earlier public baseline
+
+The public [v0.2.0 release](https://github.com/ocagdas/aiplane/releases/tag/v0.2.0) has a wheel, source archive, and checksum manifest. An earlier [published-release verification run](https://github.com/ocagdas/aiplane/actions/runs/29414203549) passed all nine OS/channel jobs. This establishes earlier public-path evidence, not qualification of the current publication implementation or this working tree.
 
 ## Unverified scope
 

@@ -173,6 +173,41 @@ def verify_tier1_exports(
         )
         if initialized.get("result", {}).get("serverInfo", {}).get("name") != "aiplane-mcp":
             raise RuntimeError("installed MCP server failed the initialize exchange")
+        version_output = cli("--version").stdout.splitlines()[0]
+        if version_output != "aiplane " + initialized["result"]["serverInfo"]["version"]:
+            raise RuntimeError("installed MCP version differs from CLI version")
+        listing = _mcp_request(
+            process,
+            {
+                "jsonrpc": "2.0",
+                "id": 3,
+                "method": "tools/call",
+                "params": {"name": "aiplane.docs.list", "arguments": {}},
+            },
+        )
+        paths = {row["path"] for row in listing.get("result", {}).get("structuredContent", {}).get("docs", [])}
+        required = {
+            "README.md",
+            "STATUS.md",
+            "docs/architecture.md",
+            "docs/development/setup.md",
+            "skills/aiplane/SKILL.md",
+            "skills/aiplane/agents/openai.yaml",
+        }
+        if not required <= paths:
+            raise RuntimeError("installed MCP documentation or skill files are missing")
+        for path in sorted(required):
+            response = _mcp_request(
+                process,
+                {
+                    "jsonrpc": "2.0",
+                    "id": 4,
+                    "method": "tools/call",
+                    "params": {"name": "aiplane.docs.read", "arguments": {"path": path}},
+                },
+            )
+            if not response.get("result", {}).get("structuredContent", {}).get("content"):
+                raise RuntimeError(f"installed MCP documentation is unreadable: {path}")
         tools = _mcp_request(process, {"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
         names = {row.get("name") for row in tools.get("result", {}).get("tools", [])}
         if "aiplane.integrations.export" not in names:

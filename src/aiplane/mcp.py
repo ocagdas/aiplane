@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import json
 import sys
-from pathlib import Path as FsPath
 from typing import Any
 
+from . import __version__
+from .documentation import documentation_paths, documentation_root
 from .agents import AgentManager
 from .agent_frameworks import FRAMEWORK_SPECS
 from .audit import AuditLogger
@@ -37,12 +38,12 @@ _PICK_INTENTS = ("balanced", "coding", "chat", "reasoning", "quality", "throughp
 READ_ONLY_TOOLS: list[dict[str, Any]] = [
     {
         "name": "aiplane.docs.list",
-        "description": "List project documentation and guidance files available to MCP clients.",
+        "description": "List bundled aiplane documentation and skill files, independently of the workspace.",
         "mutates": False,
     },
     {
         "name": "aiplane.docs.read",
-        "description": "Read one documentation/help file by relative path.",
+        "description": "Read one bundled aiplane document or skill file by its listed relative path.",
         "mutates": False,
     },
     {
@@ -1062,7 +1063,7 @@ class AiplaneMcpServer:
     def _initialize_result(self) -> dict[str, Any]:
         return {
             "protocolVersion": "2024-11-05",
-            "serverInfo": {"name": "aiplane-mcp", "version": "0.1.0"},
+            "serverInfo": {"name": "aiplane-mcp", "version": __version__},
             "capabilities": {"tools": {}},
         }
 
@@ -1077,9 +1078,9 @@ class AiplaneMcpServer:
         ]
 
     def _doc_index(self) -> list[dict[str, Any]]:
-        root = FsPath(self.workspace).resolve()
+        root = documentation_root()
         docs: list[dict[str, Any]] = []
-        for rel in _allowed_doc_paths(root):
+        for rel in documentation_paths(root):
             path = root / rel
             title = rel
             try:
@@ -1093,8 +1094,8 @@ class AiplaneMcpServer:
         return docs
 
     def _read_doc(self, path: str, start: int, max_chars: int) -> dict[str, Any]:
-        root = FsPath(self.workspace).resolve()
-        allowed = set(_allowed_doc_paths(root))
+        root = documentation_root()
+        allowed = set(documentation_paths(root))
         rel = path.strip()
         if rel not in allowed:
             raise ValueError("unknown doc path; call aiplane.docs.list first")
@@ -1102,7 +1103,7 @@ class AiplaneMcpServer:
         try:
             target.relative_to(root)
         except ValueError as exc:
-            raise ValueError("doc path escapes workspace") from exc
+            raise ValueError("doc path escapes the documentation root") from exc
         text = target.read_text(encoding="utf-8", errors="replace")
         safe_start = max(0, int(start))
         safe_max = max(1, min(int(max_chars), 50000))
@@ -1292,29 +1293,3 @@ def _string_list(value: object) -> list[str]:
     if isinstance(value, str) and value:
         return [value]
     return []
-
-
-def _allowed_doc_paths(workspace: FsPath) -> list[str]:
-    roots = [
-        workspace / "docs" / "user",
-        workspace / "docs" / "project",
-    ]
-    paths: list[str] = []
-    for root in roots:
-        if not root.exists():
-            continue
-        for item in sorted(root.rglob("*.md")):
-            if item.is_file():
-                paths.append(str(item.relative_to(workspace)))
-    for single in [workspace / "README.md", workspace / "skills" / "aiplane" / "SKILL.md"]:
-        if single.is_file():
-            paths.append(str(single.relative_to(workspace)))
-    # Deduplicate while preserving deterministic order.
-    seen: set[str] = set()
-    ordered: list[str] = []
-    for path in paths:
-        if path in seen:
-            continue
-        seen.add(path)
-        ordered.append(path)
-    return ordered

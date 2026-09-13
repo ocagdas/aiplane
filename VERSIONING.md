@@ -2,6 +2,10 @@
 
 `pyproject.toml [project].version` is authoritative; `src/aiplane/__init__.py` mirrors it. Versions are numeric `MAJOR.MINOR.PATCH`, with no leading zeros or prerelease suffixes. Equal/decreasing changes and inconsistent mirrors fail. GitHub Releases remain the no-clone distribution channel; package-index publication is not enabled by this change.
 
+## Version namespaces
+
+MCP `serverInfo.version` and outbound HTTP User-Agent identify the application using `aiplane.__version__`. MCP protocol versions and profile/artifact schema versions identify their respective contracts. The skill has its own playbook version. Continue exports use `CONTINUE_CONFIG_VERSION` for the generated configuration document; this is independent of the application release. These versions must not be synchronized indiscriminately.
+
 ## Commands
 
 ```bash
