@@ -34,7 +34,7 @@ aiplane = "aiplane.cli:main"
 
 [project.optional-dependencies]
 dev = [
-  "pytest==8.4.2",
+  "pytest==9.1.1",
   "pytest-xdist==3.8.0",
   "setuptools==84.0.0",
   "ruff==0.12.0",
