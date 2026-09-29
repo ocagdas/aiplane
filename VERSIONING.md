@@ -103,7 +103,7 @@ Follow [BRANCHING.md](BRANCHING.md) for the shared trunk/dev branch convention,
 version/tag rules and REPOSITORY_VERSIONING_ENABLED activation setting.
 
 Automatic mutation additionally requires REPOSITORY_VERSIONING_ENABLED=true. This
-is true for aiplane, whose App settings already exist, and false for Repo Pilot and
+is true for aiplane, whose App settings already exist, and false for codebase-agent-setup and
 ACF until their repository-scoped App installation/key setup is complete. Disabled
 versioning does not fail ordinary CI and does not create commits/tags. It does not
 change the requirement for maintainer review before enabling automation.

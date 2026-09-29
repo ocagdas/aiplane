@@ -9,7 +9,7 @@ or upgrade a billing plan. Read the final readiness record before enabling mutat
 - aiplane: main default branch, common branch/tag rules active, Quality gate required,
   corrected v* target, squash-only merges. Existing App settings retained; automatic
   versioning enabled through REPOSITORY_VERSIONING_ENABLED=true.
-- repo_pilot: main default branch, equivalent branch/tag rules active, squash-only
+- codebase-agent-setup: main default branch, equivalent branch/tag rules active, squash-only
   merges. Automatic versioning disabled until its App/key setup is complete.
 - AI_Content_Factory: remains private; default branch stays master by owner choice. The available
   login lacks administrator access to change repository settings, and
@@ -47,7 +47,7 @@ review approval; an administrator bypass must remain an explicit reviewed action
 
 Existing local dev branches and the master trunk remain intact.
 
-## Repo Pilot and ACF: configure the versioning App
+## codebase-agent-setup and ACF: configure the versioning App
 
 Create/install a repository-scoped GitHub App with Contents read/write and Metadata
 read-only, webhooks disabled. Store the private PEM only as an Actions secret.
@@ -55,12 +55,12 @@ Settings names are intentionally preserved for each application's identity:
 
 | Repository | Actions variable | Actions secret |
 | --- | --- | --- |
-| repo_pilot | REPO_PILOT_VERSIONING_APP_ID | REPO_PILOT_VERSIONING_APP_PRIVATE_KEY |
+| codebase-agent-setup | CBSETUP_VERSIONING_APP_ID | CBSETUP_VERSIONING_APP_PRIVATE_KEY |
 | AI_Content_Factory | ACF_VERSIONING_APP_CLIENT_ID | ACF_VERSIONING_APP_PRIVATE_KEY |
 | aiplane (already configured) | AIPLANE_VERSIONING_APP_ID | AIPLANE_VERSIONING_APP_PRIVATE_KEY |
 
 Configure its allowed trunk/tag updates, then set REPOSITORY_VERSIONING_ENABLED=true.
-Repo Pilot/aiplane use REPOSITORY_TRUNK=main; ACF uses master. Do not copy credentials from another
+codebase-agent-setup/aiplane use REPOSITORY_TRUNK=main; ACF uses master. Do not copy credentials from another
 repository or enable version mutation before App access is actually working.
 
 ## Hosted acceptance

@@ -117,7 +117,7 @@ are integrated; product tests and publication policy remain adapters. VALIDATION
 records local qualification separately from the outstanding hosted activation.
 
 The shared trunk/dev policy and audit fixes are implemented. Hosted branch/tag rules
-are active in aiplane and Repo Pilot; ACF owner/admin and plan changes remain required. ACF retains master.
+are active in aiplane and codebase-agent-setup; ACF owner/admin and plan changes remain required. ACF retains master.
 See [GitHub policy setup](docs/development/github-policy-setup.md) for exact state and
 remaining App credentials. Automatic versioning is enabled only in aiplane for now.
 

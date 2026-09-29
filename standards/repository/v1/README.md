@@ -19,7 +19,7 @@ Run only a trusted/reviewed helper, never executable code from arbitrary CI arti
 
 Create a repository-owned `repository-standard.json` with contract_version 1.0.0,
 project, required_jobs, version_mirror, trunk_variable, publication and license_profile.
-Repo Pilot's file is an example, not something to overwrite onto another product.
+codebase-agent-setup's file is an example, not something to overwrite onto another product.
 The design at docs/development/repository-standard-design.md defines exact semantics,
 including superseded status for any advanced remote and explicit candidate builds.
 

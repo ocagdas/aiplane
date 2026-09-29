@@ -2,7 +2,7 @@
 
 ## Objective and authority
 
-Make repo_pilot, aiplane and AI Content Factory interoperable at their maintenance interfaces while preserving product behavior, installed resources, legal rights and publication policy. This is the implementation design and migration specification. TODO.md owns remaining repo_pilot work; each sibling owns its own acceptance record. The parent handoff is a replaceable delivery instruction, not the contract authority.
+Make codebase-agent-setup, aiplane and AI Content Factory interoperable at their maintenance interfaces while preserving product behavior, installed resources, legal rights and publication policy. This is the implementation design and migration specification. TODO.md owns remaining codebase-agent-setup work; each sibling owns its own acceptance record. The parent handoff is a replaceable delivery instruction, not the contract authority.
 
 The canonical local baseline is `standards/repository/v1/contract.json`, its JSON schemas and fixtures, plus the small portable check helpers. The contract version is independent of each product version. Wire payloads use integer schema_version 1. Incompatible fields/semantics require a new major contract directory; additive optional fields can be a compatible minor version. Freeze and checksum a reviewed bundle before copying it. Do not depend on sibling directories at runtime or in CI.
 
@@ -17,7 +17,7 @@ The canonical local baseline is `standards/repository/v1/contract.json`, its JSO
 | Quality success/identity and immutable-tag rules | scripts/ci_gate.py: repository's required job set |
 | Documentation roles | Actual docs, licensing, contacts, App variables/secrets, triggers and supported platform matrix |
 
-Never copy repo_pilot's LICENSE over ACF's proprietary license. Never replace aiplane's install-channel/attestation/rollback coverage or ACF's media exclusions with the smaller repo_pilot payload adapter. Templates can provide structure, never claims of approval or completed qualification.
+Never copy codebase-agent-setup's LICENSE over ACF's proprietary license. Never replace aiplane's install-channel/attestation/rollback coverage or ACF's media exclusions with the smaller codebase-agent-setup payload adapter. Templates can provide structure, never claims of approval or completed qualification.
 
 ## Documentation contract
 
@@ -30,7 +30,7 @@ Private repositories also need an explicit license/rights notice. ACF now uses L
 - current defaults to JSON; --json is explicit JSON and --plain is the shell interface.
 - classify-ci is a read-only classification of the selected checkout. --merged records independently verified PR association; multi-parent merge commits count too. It does not require GitHub event variables. Workflow guards own authorization/trunk selection.
 - classify-ci emits mode patch/tag/none, target version/tag and source_commit under schema 1. Reject PR version changes and non-increasing manual changes. Version mirrors must agree. A matching existing tag produces none.
-- classify-release emits schema_version, version, tag, source_commit and publish. It validates exact tag/HEAD/version identity. Repo Pilot always returns false. aiplane retains minor/major automatic, deliberate manual patch publication. ACF retains this version selection for private internal GitHub Releases; its proprietary policy blocks public publication.
+- classify-release emits schema_version, version, tag, source_commit and publish. It validates exact tag/HEAD/version identity. codebase-agent-setup always returns false. aiplane retains minor/major automatic, deliberate manual patch publication. ACF retains this version selection for private internal GitHub Releases; its proprietary policy blocks public publication.
 - publisher requires a clean disposable checkout and exact HEAD/GITHUB_SHA/source agreement. Validate the selected trunk ref and remote tip before mutation. Only mirror files may enter the automatic patch commit. Push branch and annotated tag atomically without force.
 - status unchanged means the requested source remains the remote tip and needs no mutation. Any advanced remote, including a previously created patch child, means superseded. Neither status is an error or permission to rebase. Push rejection exits nonzero; a fresh retry rechecks remote state. This deliberately replaces aiplane's special patch-child/race classification.
 - A same-tag/different-commit conflict is always an error. Do not delete/move tags to recover. A missing publication response may mean the atomic push succeeded; inspect through a fresh checkout, never repeat mutations in the dirty failed checkout.
@@ -55,7 +55,7 @@ Candidate builds use --candidate explicitly and may contain working-tree changes
 
 Each artifact directory contains the adapter's complete payload set, provenance.json and SHA256SUMS. Provenance includes schema_version, distribution, version, tag, source_commit, version_commit, run_id, dirty/build_kind and payload SHA-256 digests. SHA256SUMS covers payloads plus provenance; it does not checksum itself. Verify exact membership, regular files, portable names, digest format, data identity and bytes. Additional attestation files must be explicitly included by the adapter, not exempted as unchecked extras.
 
-Checksums are integrity evidence, not publisher authentication. aiplane retains signed attestations and public-download verification. Shared provenance does not require repo_pilot to enable public releases or ACF to qualify standalone wheels.
+Checksums are integrity evidence, not publisher authentication. aiplane retains signed attestations and public-download verification. Shared provenance does not require codebase-agent-setup to enable public releases or ACF to qualify standalone wheels.
 
 ## Conformance and local acceptance
 
@@ -65,7 +65,7 @@ Run `python scripts/check_repository_standard.py --report .quality/repository-st
 
 ## Delivery and migration sequence
 
-1. Implement/freeze the contract, schemas, portable checks and repo_pilot adapter; validate and build its candidate and clean-tag fixtures.
+1. Implement/freeze the contract, schemas, portable checks and codebase-agent-setup adapter; validate and build its candidate and clean-tag fixtures.
 2. Apply ACF private licensing/metadata and internal-only publication guard; verify metadata and included legal files. Leave media/runtime behavior untouched.
 3. Replace the parent handoff completely with the tested source bundle, hash/copy procedure, per-repository adapter changes and exact qualification commands.
 4. Sibling agents preserve their existing changes, copy only managed common files, adapt local code/policies, then run conformance plus their complete product gates. Record baseline commit and dirty delta explicitly.
@@ -91,7 +91,7 @@ remain adapters for each product's tests, distribution and authorization model.
 aiplane additionally owns copilot-instructions.md. Its
 existing user/README.md is a product onboarding guide covered by product contracts;
 user/index.md remains the canonical navigation entry. CHANGELOG.md remains its
-release-note input. Repo Pilot retains root QUICKSTART.md and INSTALLATION.md because
+release-note input. codebase-agent-setup retains root QUICKSTART.md and INSTALLATION.md because
 installed metadata and setup output refer to them. ACF keeps private/proprietary
 LICENSE, private reporting routes, media exclusions and internal-release guard.
 

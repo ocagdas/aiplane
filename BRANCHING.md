@@ -1,6 +1,6 @@
 # Shared branch, version and tag policy
 
-Repo Pilot and aiplane use `main` as the integration and release trunk. ACF uses
+codebase-agent-setup and aiplane use `main` as the integration and release trunk. ACF uses
 `master` by owner choice. Work in short-lived `dev/<topic>` branches, then open a
 PR to the repository's trunk. There is no separate
 long-lived develop branch. Fork contributors use the same naming convention.
@@ -39,7 +39,7 @@ and review pass, and delete the completed dev branch when appropriate.
 
 ## Common GitHub settings
 
-`REPOSITORY_TRUNK` is the common Actions variable: `main` for Repo Pilot/aiplane,
+`REPOSITORY_TRUNK` is the common Actions variable: `main` for codebase-agent-setup/aiplane,
 `master` for ACF. Workflows default to main when it is absent; retain ACF's explicit
 master setting. Change it consistently with branch protection and the GitHub
 default branch only for an intentional shared-policy change.
