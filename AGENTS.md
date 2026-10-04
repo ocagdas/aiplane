@@ -1,7 +1,1 @@
-# Agent Instructions
-
-Read `docs/project/agent-guidance.md` before making changes in this repository. That file is the master guidance for Codex-style agents and other coding assistants.
-
-Use `docs/project/project-plan.md` to find each canonical plan owner.
-
-Keep documentation, the unified project plan, and tests aligned with any behavior change.
+Read `AI_CONTEXT.md` completely and follow its loading order. It is the single guide for every coding assistant in this repository; repository-specific rules are in `ai_workflow/project_guide.md`. This file only provides discovery.

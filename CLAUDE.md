@@ -1,3 +1,1 @@
-# Claude Instructions
-
-Use `docs/project/agent-guidance.md` as the master project guidance. Do not duplicate or override it here unless the master document is updated in the same change.
+Read `AI_CONTEXT.md` completely and follow its loading order. It is the single guide for every coding assistant in this repository; repository-specific rules are in `ai_workflow/project_guide.md`. This file only provides discovery.

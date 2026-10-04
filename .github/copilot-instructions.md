@@ -1,5 +1,1 @@
-# GitHub Copilot Instructions
-
-Use `docs/project/agent-guidance.md` as the master project guidance for this repository.
-
-When changing behavior, keep docs, the unified project plan, and tests aligned in the same change.
+Read `AI_CONTEXT.md` completely and follow its loading order. It is the single guide for every coding assistant in this repository; repository-specific rules are in `ai_workflow/project_guide.md`. This file only provides discovery.

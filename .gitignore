@@ -55,3 +55,34 @@ Thumbs.db
 
 # Generated local quality reports and release candidates
 .quality/
+
+# Local-only CAS installation and assistant configuration (never product templates)
+# Root anchoring keeps CAS's project/ payload source version-controlled.
+/AI_CONTEXT.md
+/AGENTS.md
+/CLAUDE.md
+/GEMINI.md
+/ai_workflow/
+/.cbsetup/
+/.github/copilot-instructions.md
+/.cursor/rules/
+/.claude/
+/.codex/
+/.gemini/
+/.ai_cache/
+/.ai_migration_backup/
+# Local secrets; intentionally share only reviewed, sanitized example files.
+/.env
+/.env.*
+!/.env.example
+!/.env.template
+/credentials.yaml
+/credentials.local.yaml
+/*.credentials.yaml
+/.cbsetup/install.lock
+/.cbsetup/transaction/
+/.cbsetup/retired-*/
+.ai_cache/
+.ai_migration_backup/
+/ai_workflow/settings.local.json
+/.cursor/rules/engineering.mdc
