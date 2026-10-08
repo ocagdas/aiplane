@@ -170,3 +170,9 @@ Only after public verification and independent demonstrations:
 - [ ] run public example, link, help, contract, packaging, and full test gates;
 - [ ] update the P0 backlog with evidence paths and final counts.
 
+
+## Ensemble execution follow-up
+
+- [ ] Implement and qualify one external graph-runner adapter for the ensemble handoff schema.
+- [ ] Collect harness-version, account-access and tool-calling evidence for a two-role cloud/local example.
+- [ ] Qualify Claude alternative hosting routes and additional protocols separately before expanding the curated matrix.

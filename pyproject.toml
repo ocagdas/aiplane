@@ -80,6 +80,7 @@ script-files = ["scripts/provider_helper.sh", "scripts/ollama_helper.sh"]
   "schemas/aiplane-runtime-launch-v1.schema.json",
   "schemas/aiplane-runtime-bundle-v1.schema.json",
   "schemas/aiplane-agent-environment-v1.schema.json",
+  "schemas/aiplane-ensemble-handoff-v1.schema.json",
   "schemas/aiplane-agent-guardrails-v1.schema.json",
   "schemas/aiplane-agent-guardrails-receipt-v1.schema.json",
   "schemas/aiplane-model-handoff-v1.schema.json",

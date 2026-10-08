@@ -372,3 +372,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 MIT. See [LICENSE](LICENSE).
 
 Development uses `main` and `dev/<topic>` PR branches; see [BRANCHING.md](BRANCHING.md).
+
+## Agent ensemble configuration
+
+Use `aiplane harnesses list` and `aiplane ensembles template` to describe role-based cloud/local or mixed-harness ensembles. Aiplane checks and exports configuration; an external runner executes collaboration. See [ensemble usage and compatibility](docs/user/ensembles.md).

@@ -10,3 +10,5 @@ This navigation file unifies the plan through one owner per concern. Update the 
 - [Agent guidance](agent-guidance.md): workflow conventions and protected inputs.
 - [Integration design](integration-design.md), [preview scope](preview-scope.md), and [launch criteria](launch-criteria.md).
 - [Trial evidence](trial-evidence/recording-guide.md) and [public demo](../user/demo.md).
+
+- [Ensemble design](ensemble-design.md): role configuration, compatibility catalog and execution boundary.

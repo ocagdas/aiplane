@@ -788,3 +788,7 @@ The earlier provider, endpoint, runner-manifest, Codex configuration, and test-i
 
 Each milestone must retain CLI/MCP read-plan boundaries, secret-free artifacts, deterministic fixtures, and explicit external-evidence follow-up.
 
+
+## Ensemble adapter follow-up
+
+Owner-authorized scope exception (2026-10-04): add the offline ensemble configuration compiler as an experimental supporting surface. This adds configuration contracts, not a runner or production collaboration promise. The compiler is implemented. Next gate: qualify a runner consuming its neutral manifest, enforcing policy/approvals, role isolation, dependency/artifact exchange and bounded execution. Model/provider listings must not be promoted to verified tool-calling or entitlement claims without evidence.

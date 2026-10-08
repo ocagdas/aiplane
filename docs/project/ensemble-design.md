@@ -1,0 +1,13 @@
+# Ensemble configuration design
+
+This increment keeps ensemble configuration separate from execution and existing single-client stack exports. A standalone restricted-YAML/JSON spec names roles, dependencies, a shared artifact directory, harness/surface and one of a profile model alias or a harness-native model ID. It leaves canonical profile files and portable profile archive contracts unchanged.
+
+`harness_catalog.py` owns stable harness IDs, documentation review dates, sources, transport/auth scope and model discovery instructions. Its public API returns copies. Empty tested-version lists distinguish source review from execution evidence. The catalog is deliberately conservative; it is not an executable plugin registry. New versions/providers require source review and adapter qualification.
+
+`ensembles.py` resolves only reviewed profile aliases, retaining per-role endpoint/protocol/auth references. Native namespaces never become invented provider endpoints. Existing policy gates apply to aliases and native provider/cloud access. Input validation rejects unknown fields, raw credential patterns, endpoint credentials/query strings, path traversal, duplicate YAML/JSON fields and cyclic/unknown role dependencies. `none` authentication requires explicit local ownership and a loopback endpoint. Standard-library-only runtime code uses existing restricted YAML and policy utilities.
+
+The deterministic `aiplane-ensemble-handoff` v1 JSON includes a sorted role mapping, dependency order, compatibility and policy decisions, spec/catalog/binding SHA-256 hashes and qualification requirements. The companion JSON Schema is packaged with aiplane. Hashes capture resolved configuration, not live availability, native defaults or account entitlement. Unknown integration families remain reviewable but never execution-ready. Unsupported or policy-blocked selections prevent export. All handoffs explicitly have `execution_ready: false` until an external runner qualifies them.
+
+`cli_ensembles.py` provides offline `harnesses list/show/models` and `ensembles template/plan/doctor/export`. Doctor observes PATH and env presence without executing subprocesses or contacting endpoints. It reports SDK/account/endpoint/tool capability as unverified. No task scheduler, process supervisor, live worker registry, native configuration adapter or fleet manager is introduced.
+
+Next acceptance gate: a separately scoped runner adapter consuming this schema, implementing policy/approvals, version and tool qualification, role isolation, artifact exchange, dependency enforcement and bounded execution. Do not advertise native framework importability or production ensembles before that gate has evidence.

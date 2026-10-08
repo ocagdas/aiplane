@@ -111,6 +111,9 @@ print(json.dumps(paths))
 
     assert json.loads(installed_docs.stdout) == documentation_paths(repository)
 
+    assert "cursor" in json.loads(_run([str(aiplane), "harnesses", "list"], cwd=workspace, env=env).stdout)["harnesses"]
+    assert (venv / "schemas" / "aiplane-ensemble-handoff-v1.schema.json").is_file()
+
     assert _run([str(aiplane), "profiles", "templates"], cwd=workspace, env=env).stdout.splitlines() == ["local-dev"]
     assert "local" in _run([str(aiplane), "config", "templates"], cwd=workspace, env=env).stdout.splitlines()
     schema = json.loads(_run([str(aiplane), "profiles", "schema"], cwd=workspace, env=env).stdout)

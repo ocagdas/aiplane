@@ -2,7 +2,30 @@
 
 [CI.md](CI.md) owns check commands; [STATUS.md](STATUS.md) owns capabilities.
 
-## Current working-tree validation
+## Pre-commit qualification (8 October 2026)
+
+The ensemble increment and retained CAS naming/ignore updates passed
+`PATH=/tmp/aiplane-ensemble-dev/bin:$PATH make check` on Linux/Python 3.12.12:
+formatting, Ruff, repository conformance, **960 passed, 9 skipped, 44 subtests passed**.
+Log: `/tmp/aiplane-precommit-2026-10-08.log`. Changed/new product files passed a
+credential-pattern scan and patch whitespace checks. This is local qualification;
+no live provider/agent execution or new hosted/platform result is established.
+Package version remains 0.2.26; current main reconciliation and release qualification
+remain separate from committing this increment.
+
+## Ensemble configuration validation (4 October 2026)
+
+Uncommitted ensemble changes on the shared checkout (HEAD `ec31867`; branch `dev/mvp_0.2.27` at completion) passed local Linux checks using Python 3.12.12 and Ruff 0.16.10 in the disposable `/tmp/aiplane-ensemble-dev` environment. The owner changed the branch/baseline externally during the session; no assistant Git writes occurred. The repository `.venv` was not changed.
+
+- `PATH=/tmp/aiplane-ensemble-dev/bin:$PATH make check`: formatting, lint and shared repository conformance passed; **960 passed, 9 skipped, 44 subtests passed**. Log: `/tmp/aiplane-ensemble-check.log`.
+- Ensemble, governance and contract subset: **88 passed**. The 33 ensemble cases cover role resolution, endpoint isolation, native namespaces, policy, unsafe bindings, duplicate fields, dependency cycles, deterministic manifests, CLI exit codes and schema conformance.
+- Documentation/contract verification after final guide clarifications: **48 passed**. Log: `/tmp/aiplane-ensemble-doc-check.log`.
+- Installed-wheel regression includes the harness catalog command and packaged ensemble schema. Representative source CLI `harnesses show/models` and `ensembles plan/doctor/export` ran against a synthetic disposable profile, with artifacts under `/tmp/aiplane-ensemble-demo`. Doctor returned the documented qualification-required exit code 2. The demo model ID is synthetic, not a claim of an installed/available model.
+- Changed-document local links, patch whitespace and credential-pattern review passed. Catalog sources were reviewed; no external agent process, model call, account entitlement check or real collaboration was exercised.
+
+No runner adapters or native framework exporters are included. Windows/macOS, live cloud/local combinations, harness version compatibility and tool calling remain unqualified for this increment. An initial full run found missing CLI help categorization; that defect was corrected before the successful gate.
+
+## Earlier working-tree validation (12 September 2026)
 
 On 12 September 2026, the review changes based on `9b25137362e079c35371c7aff98998e5acb98bd8` passed local Linux validation:
 

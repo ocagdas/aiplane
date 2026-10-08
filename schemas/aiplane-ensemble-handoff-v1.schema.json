@@ -1,0 +1,239 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "kind": {
+      "const": "aiplane-ensemble-handoff"
+    },
+    "name": {
+      "type": "string"
+    },
+    "profile": {
+      "type": "string"
+    },
+    "artifact_directory": {
+      "type": "string"
+    },
+    "roles": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 64,
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "harness": {
+            "type": "string"
+          },
+          "surface": {
+            "type": "string"
+          },
+          "guidance": {
+            "type": "string"
+          },
+          "binding": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "namespace": {
+                "enum": [
+                  "profile",
+                  "harness_native"
+                ]
+              },
+              "alias": {
+                "type": "string"
+              },
+              "model_id": {
+                "type": "string"
+              },
+              "provider": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "protocol": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "endpoint": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "auth": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "mode": {
+                    "enum": [
+                      "provider_env",
+                      "product_env",
+                      "harness_login",
+                      "none"
+                    ]
+                  },
+                  "credential_env": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "mode",
+                  "credential_env"
+                ]
+              }
+            },
+            "required": [
+              "namespace",
+              "model_id",
+              "provider",
+              "protocol",
+              "endpoint",
+              "auth"
+            ]
+          },
+          "depends_on": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "uniqueItems": true
+          },
+          "compatibility": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "status": {
+                "enum": [
+                  "documented",
+                  "unsupported",
+                  "unknown"
+                ]
+              },
+              "reason": {
+                "type": "string"
+              },
+              "sources": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "status",
+              "reason",
+              "sources"
+            ]
+          },
+          "policy": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "allowed": {
+                "type": "boolean"
+              },
+              "requires_approval": {
+                "type": "boolean"
+              },
+              "reasons": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "allowed",
+              "requires_approval",
+              "reasons"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "harness",
+          "surface",
+          "binding",
+          "depends_on",
+          "compatibility",
+          "policy"
+        ]
+      }
+    },
+    "dependency_order": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "configuration_status": {
+      "enum": [
+        "blocked",
+        "review_required"
+      ]
+    },
+    "execution_ready": {
+      "const": false
+    },
+    "qualification_required": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "spec_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "catalog_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "binding_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      },
+      "required": [
+        "spec_sha256",
+        "catalog_sha256",
+        "binding_sha256"
+      ]
+    }
+  },
+  "required": [
+    "schema_version",
+    "kind",
+    "name",
+    "profile",
+    "artifact_directory",
+    "roles",
+    "dependency_order",
+    "configuration_status",
+    "execution_ready",
+    "qualification_required",
+    "provenance"
+  ],
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aiplane.dev/schemas/aiplane-ensemble-handoff-v1.schema.json",
+  "title": "Aiplane ensemble handoff v1"
+}

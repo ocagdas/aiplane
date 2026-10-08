@@ -17,6 +17,7 @@ from .cli_public import add_public_parsers
 from .cli_runtimes import add_runtimes_parser
 from .cli_setup import add_setup_parsers
 from .cli_stacks import add_stack_parsers
+from .cli_ensembles import add_ensemble_parsers
 from .cli_support_catalog import add_support_parser
 from .cli_version import add_version_argument
 from .integration_contracts import ALL_INTEGRATION_TOOLS
@@ -148,4 +149,5 @@ def build_parser() -> argparse.ArgumentParser:
     add_setup_parsers(subparsers, **common)
     add_governance_parsers(subparsers, **common)
     add_support_parser(subparsers, command_factory=_command, formatter_class=HelpFormatter)
+    add_ensemble_parsers(subparsers, command_factory=_command, profile_arg=_profile_arg, formatter_class=HelpFormatter)
     return parser

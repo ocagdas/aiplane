@@ -108,3 +108,5 @@ aiplane recommend
 ```
 
 Use `--profile` only when you need to override the default for one command.
+
+- [Role-based ensembles](ensembles.md): harness/model names, BYOK scope, offline planning/export and runner responsibilities.

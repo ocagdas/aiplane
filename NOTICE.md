@@ -4,7 +4,7 @@ The aiplane project is distributed under [LICENSE](LICENSE). External tools, mod
 providers and dependencies retain their own licenses and service terms; this project
 license does not grant rights to their code, model weights or hosted services.
 
-Shared community scaffolding was adapted from repo_pilot. Its MIT notice is retained
+Shared community scaffolding was adapted from codebase-agent-setup (formerly repo_pilot). Its MIT notice is retained
 below. Preserve additional applicable notices when importing shared helper code.
 
 MIT License

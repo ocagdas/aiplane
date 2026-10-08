@@ -45,6 +45,7 @@ from .cli_public_workflows import (
 )
 from .cli_stacks import handle_stack_command
 from .cli_setup import handle_setup_command
+from .cli_ensembles import handle_ensemble_command
 from .cli_support_catalog import handle_support_command
 from .cli_providers import handle_providers_command
 from .cli_runtimes import handle_runtimes_command
@@ -159,6 +160,10 @@ def _main(argv: list[str] | None = None) -> int:
     )
     if profile_result is not None:
         return profile_result
+
+    ensemble_result = handle_ensemble_command(args, workspace=workspace, profiles_dir=profiles_dir, json_dumps=_json)
+    if ensemble_result is not None:
+        return ensemble_result
 
     support_result = handle_support_command(args, _json)
     if support_result is not None:
