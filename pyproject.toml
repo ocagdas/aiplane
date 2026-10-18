@@ -38,7 +38,7 @@ dev = [
   "pytest-xdist==3.8.0",
   "setuptools==84.0.0",
   "ruff==0.16.9",
-  "black==26.5.1",
+  "black==26.10.1",
   "jsonschema==4.26.0",
   "PyYAML==6.0.3",
 ]
