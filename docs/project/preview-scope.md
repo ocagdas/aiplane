@@ -22,3 +22,13 @@ Approved exceptions:
 
 - [Host-client model exports](host-client-export-scope-exception.md) - Codex, Copilot CLI, and Copilot-in-VS-Code deterministic print-only exports.
 
+
+### Bounded selection/evaluation development — revised 2026-10-18
+
+[AP0–AP6](../../ROADMAP.md#current-development-plan--2026-10-17) owns the engineering sequence. AP0/AP1 are complete locally. The owner removed AP2 to avoid a custom wrapper protocol and external process manager. Preserve the existing standard model API paths, smoke/custom suites, command graders and data-only measurement import/comparison.
+
+AP3 is narrowed to useful external results and manual task review. Run benchmark tools through their own CLI/API. Add a format converter only when an actual native result file demonstrates a need; no generic wrapper framework or mandatory pair of maintained launch adapters. Optional llmfit candidate input remains AP4. This is workflow/learning work, not a promotion into README onboarding, package metadata or the Core category.
+
+Account for producer format/version maintenance and private prompt/output handling. Keep raw results and source/version identity. Do not install all evaluation dependencies into the base package or add a hidden executor through MCP.
+
+Success/removal: apply AP0–AP6 exits. If an adapter cannot preserve native measurement semantics or supplies no useful result beyond import-only conversion, narrow it to conversion or remove it from the supported path; keep an optional learning fixture where useful. More adapters, a TUI, load-engine rewrite and benchmark services are outside this exception.

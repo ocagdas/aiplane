@@ -14,7 +14,11 @@ Good design choices flow from that standard:
 
 ## Positioning
 
-`aiplane` is a local-first configuration and operations environment doctor and configuration compiler for AI workflow environments across local, remote, VM, and cloud-adjacent machines. Its sharpest wedge is making local and hybrid AI workflow stacks reproducible, inspectable, policy-aware, and portable from one profile.
+`aiplane` is an environment doctor and configuration compiler: it checks declared settings and turns them into configuration files. It reads profile files naming models, provider endpoints, runtimes, machines and local/cloud rules. It checks
+the declared setup and prints supported configuration for another tool to consume. For example, it can resolve
+the alias `local_coder` to a provider-native model ID and endpoint, report readiness evidence, and include that
+binding in a client export or an offline role handoff. It also archives/restores the declared profile files;
+the archive does not include model weights, credentials or a running agent's checkpoints.
 
 It is not a coding agent, IDE assistant, full chat UI, inference server, model marketplace, model proxy, or cloud platform. Existing tools such as Continue, Cline, Cursor, Codex-like CLIs, Claude Code, Aider, OpenHands, Ollama, LM Studio, vLLM, TGI, llama.cpp, LocalAI, OpenAI, Anthropic, and Azure OpenAI already cover large parts of those domains. `aiplane` should configure, check, plan, export, and govern those pieces rather than replacing them.
 The aim of `aiplane` is to make environment setup, migration, and model/runtime pairing an explicit, repeatable operations layer so teams can focus on AI experiments, model work, and code outcomes instead.
@@ -62,15 +66,22 @@ These implemented and planned surfaces support specialist users, but remain subo
 
 ### Agentic Environments and Workflows
 
-Create, configure, and validate external agent applications that use model endpoints and credentials managed by `aiplane`. Current support includes starter agent templates and non-mutating `agents templates/plan/export` commands. Future work should generate fuller project directories, add run/test checks, and cover richer research, news, coding, and multi-agent workflows.
+Current support includes starter agent templates, non-mutating `agents templates/plan/export` commands and the
+experimental ensemble configuration handoff. Growth should first prove that an existing external harness consumes
+these exports. Task loops, role scheduling, checkpoint databases and live approval enforcement belong to that
+harness; adding more scaffold families before an end-to-end trial is deferred.
 
 ### Provisioning and Automation Tools
 
-Interface cleanly with tools that prepare machines and environments instead of replacing them. Current support includes readiness checks plus non-mutating plans and starter exports for Vagrant, Packer, OpenTofu/Terraform, Pulumi, Dev Containers, Ansible, and related infrastructure tools. Future work should harden provider-specific modules and keep remote mutation behind explicit plans, SSH controls, and audit output.
+Current readiness checks, plans and starter exports support external tools including Vagrant, Packer,
+OpenTofu/Terraform, Pulumi, Dev Containers and Ansible. Preserve those explicit tool boundaries. New provider modules
+or deployment controls are deferred until a specific setup/restore trial demonstrates a missing input or check.
 
 ### Benchmarking and Evaluation
 
-Benchmark models and endpoints using the right tool in the right place. Current support includes smoke/custom model checks plus benchmark framework list, doctor, install-plan, and plan helpers. Future work should add placement metadata, latency/throughput/token metrics, repeated-run summaries, and comparison views.
+Keep explicit model/endpoint checks and benchmark planning useful for the selected workflow. Reuse external
+evaluation tools for specialized suites. Add measurement adapters only for documented endpoint telemetry or a
+defined comparison; a general benchmark platform, community exchange or scheduler remains outside this work.
 
 ## Success Criteria
 

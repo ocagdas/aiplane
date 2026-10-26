@@ -1,0 +1,7 @@
+{
+  "name": "support-category-review",
+  "version": "1.0",
+  "instructions": "Score explanation accuracy, clarity and usefulness from 0 to 5. Set passed independently according to whether category and urgency satisfy the task rules; note ambiguous cases. In pairwise review prefer the more accurate and useful answer; tie for equal quality and abstain when unable to judge.",
+  "score_min": 0,
+  "score_max": 5
+}

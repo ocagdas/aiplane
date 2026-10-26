@@ -8,7 +8,7 @@ version = "0.2.26"
 description = "Environment doctor and configuration compiler for local and hybrid AI development"
 readme = "README.md"
 license = { file = "LICENSE" }
-requires-python = ">=3.11"
+requires-python = ">=3.13"
 dependencies = []
 keywords = ["ai-development", "environment", "configuration", "diagnostics", "reproducibility", "local-ai", "cli"]
 classifiers = [
@@ -17,8 +17,6 @@ classifiers = [
   "Intended Audience :: Developers",
   "License :: OSI Approved :: MIT License",
   "Programming Language :: Python :: 3",
-  "Programming Language :: Python :: 3.11",
-  "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
   "Topic :: Software Development :: Build Tools",
 ]
@@ -61,6 +59,7 @@ script-files = ["scripts/provider_helper.sh", "scripts/ollama_helper.sh"]
   "AGENTS.md", "SECURITY.md", "CODE_OF_CONDUCT.md", "SUPPORT.md", "NOTICE.md", "CHANGELOG.md",
 ]
 "share/aiplane/docs" = ["docs/index.md", "docs/architecture.md"]
+"share/aiplane/docs/examples/task-evaluation" = ["docs/examples/task-evaluation/*.py", "docs/examples/task-evaluation/*.json", "docs/examples/task-evaluation/*.md"]
 "share/aiplane/docs/user" = ["docs/user/*.md"]
 "share/aiplane/docs/development" = ["docs/development/*.md"]
 "share/aiplane/docs/project" = ["docs/project/*.md"]
@@ -108,7 +107,7 @@ where = ["src"]
 
 [tool.ruff]
 line-length = 120
-target-version = "py311"
+target-version = "py313"
 
 [tool.ruff.lint]
 select = ["E", "F"]

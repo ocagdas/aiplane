@@ -3,6 +3,20 @@
 This guide is for contributors working on the `aiplane` codebase. End-user
 installation and usage stays in the top-level `README.md`.
 
+## Python requirement
+
+Aiplane requires **Python 3.13 or newer**. Package installation and source execution reject older versions. The setup helper checks the selected local/venv/Conda interpreter before installing packages; an old existing environment must be recreated or explicitly upgraded. A venv keeps its original interpreter even if `--python` selects a newer one.
+
+For a new venv, select the interpreter explicitly:
+
+```bash
+scripts/setup_env.sh --mode venv --python python3.13 --action install
+.venv/bin/python -m pip install -e ".[dev]"
+PATH="$PWD/.venv/bin:$PATH" make check PYTHON=.venv/bin/python
+```
+
+If `.venv` already uses an older Python, deactivate it, retain it under a backup name, and create a fresh `.venv` using the command above. Do not copy its `site-packages` into the new environment. Conda creation and the default Docker image already select Python 3.13; a custom Docker base must also provide Python 3.13+. This raises aiplane’s own requirement, not the interpreter requirements of external tools in separate environments.
+
 ## Python Dependencies
 
 The MVP currently has no third-party Python package dependencies; it uses only
@@ -80,6 +94,41 @@ When new dependencies are added, update the active conda environment with:
 conda activate aiplane
 python -m pip install -e .
 ```
+
+### Refreshing an existing installation
+
+The helper now supports `--action refresh` in all four modes. It reinstalls the current checkout, reconciles its declared package requirements and runs `pip check`. It does not fetch Git changes, replace Python, update all Conda packages, prune unrelated packages, bootstrap profiles or activate a shell. Existing venv/Conda environments must already exist and meet the Python minimum; otherwise it refuses and points to install/recreation.
+
+Preview first, then refresh the local development venv:
+
+```bash
+scripts/setup_env.sh --mode venv --action refresh --dev --dry-run
+scripts/setup_env.sh --mode venv --action refresh --dev
+```
+
+Other selections:
+
+```bash
+scripts/setup_env.sh --mode conda --conda-env aiplane --action refresh --dev
+scripts/setup_env.sh --mode local --python python3.13 --action refresh --dev
+scripts/setup_env.sh --mode docker --action refresh --dev --docker-image aiplane:dev
+```
+
+For local mode, select your actual supported interpreter; it must exist on PATH or be given as an absolute path. `--dev` includes the pinned test/lint dependencies. Omit it for base runtime requirements. Editable/source-linked installation is the default; add `--static` to install a snapshot instead. Base/dev selection adds or reconciles requirements; it does not remove previously installed development tools.
+
+| Option | Effect |
+| --- | --- |
+| No upgrade option | Reconcile requirements from this checkout; already satisfying dependencies can remain installed. Exact pins are respected. |
+| `--upgrade-deps` | Ask pip to upgrade the selected dependencies and their dependencies within repository constraints. Exact pins still win; this is not an unconstrained update. |
+| `--upgrade-pip` | Upgrade pip explicitly; refresh leaves pip alone by default. Existing install retains its previous pip-upgrade default. |
+| `--docker-pull` | Check for a newer selected Docker base image during the build. |
+| `--docker-no-cache` | Rebuild Docker layers without using cache. |
+
+`--dev` and upgrade/build options apply to install/refresh, not doctor/test. Docker build options are refused outside Docker mode. `--no-pip-upgrade` remains available. Combining install with `--dev` provisions development dependencies in the first operation.
+
+Docker refresh rebuilds the selected image tag; it does not restart existing containers. Editable images install selected dependencies from `pyproject.toml`, then use the mounted source when run. Static images install a package snapshot. Changed requirement files invalidate the dependency layer; explicit dependency/pip upgrades force that layer to run again. Base image checks and full cache bypass remain separate options. Docker previews print the Dockerfile without creating directories or overwriting an existing generated file. The source distribution includes `.dockerignore` to exclude common local environments, profiles, caches and credential/state files from the build context; review other private files before building a shareable image.
+
+A package conflict or failed build returns failure. Refresh is not a transactional environment backup: pip may already have changed packages before a later check fails. Capture the environment separately when rollback is required.
 
 ### Development and Test Dependencies
 
@@ -196,7 +245,7 @@ suite runs. Mock those boundaries and assert planned commands, parser behavior,
 failure handling, and contracts. Keep real checks as explicit manual or
 integration smoke commands.
 
-Test profiles are materialized on disk under a temporary `AIPLANE_PROFILES_DIR` using shipped templates and synthetic model data. Tests must call the real production profile loader; do not replace loader functions globally in CLI or MCP modules. CI runs the full gate on Python 3.11 and a focused contract plus clean-wheel installation check on Python 3.12 and 3.13. The main automated suite owns synthetic platform contracts. A separate operating-system matrix builds the wheel and, on Linux, macOS, and Windows, validates actual installed `aiplane` executables through isolated `pip`, `pipx`, and `uv tool` homes. Each channel gets one full clean-workspace lifecycle (bootstrap, profile validation, hardware discovery, recommendation, policy explanation, deterministic exports, and MCP stdio) plus a smaller install-replacement smoke for wheel identity, templates, persisted-profile readability, and MCP manifest before uninstall. The matrix asserts actual-platform safety behavior but never installs runtimes, opens SSH connections, contacts providers, or launches IDE clients. Unsupported runtime mutations and Windows SSH lifecycle operations are required to return `unsupported_platform` before executing helpers, processes, or state access. Use `scripts/verify_install_channels.py WHEEL_OR_DIST_DIR` for the same local release rehearsal. The dev dependency set includes the pinned setuptools build backend because the clean-wheel test deliberately uses `--no-build-isolation`.
+Test profiles are materialized on disk under a temporary `AIPLANE_PROFILES_DIR` using shipped templates and synthetic model data. Tests must call the real production profile loader; do not replace loader functions globally in CLI or MCP modules. CI runs the full gate and a separate focused contract plus clean-wheel installation check on Python 3.13. The main automated suite owns synthetic platform contracts. A separate operating-system matrix builds the wheel and, on Linux, macOS, and Windows, validates actual installed `aiplane` executables through isolated `pip`, `pipx`, and `uv tool` homes. Each channel gets one full clean-workspace lifecycle (bootstrap, profile validation, hardware discovery, recommendation, policy explanation, deterministic exports, and MCP stdio) plus a smaller install-replacement smoke for wheel identity, templates, persisted-profile readability, and MCP manifest before uninstall. The matrix asserts actual-platform safety behavior but never installs runtimes, opens SSH connections, contacts providers, or launches IDE clients. Unsupported runtime mutations and Windows SSH lifecycle operations are required to return `unsupported_platform` before executing helpers, processes, or state access. Use `scripts/verify_install_channels.py WHEEL_OR_DIST_DIR` for the same local release rehearsal. The dev dependency set includes the pinned setuptools build backend because the clean-wheel test deliberately uses `--no-build-isolation`.
 
 All external command and HTTP calls use injectable `CommandRunner` and `HttpTransport` boundaries. Production uses `subprocess` and `urllib`; focused tests should use the recording fakes in `tests/boundary_fakes.py` instead of patching implementation modules. CLI tests that only need in-process dispatch and output capture should use `tests/cli_fixtures.py`; isolated profile materialization remains in `tests/profile_fixtures.py`.
 

@@ -1,0 +1,357 @@
+{
+  "schema_version": "1.0",
+  "name": "support-categories",
+  "version": "1.0",
+  "kind": "quality",
+  "repeats": 1,
+  "allow_command_evaluators": true,
+  "decoding": {
+    "temperature": 0.0
+  },
+  "metrics": [
+    "quality_score",
+    "client_elapsed_ms"
+  ],
+  "tasks": {
+    "case-01": {
+      "prompt": "Classify this support message as billing, access or feedback. Set urgent to true only if the customer currently cannot sign in, their account is locked, or signing in redirects back to login. Otherwise set urgent to false. Return JSON with category, urgent (boolean) and a brief explanation grounded in the message.\nMessage: I was charged twice this month.",
+      "evaluator": {
+        "type": "command",
+        "command": [
+          "python",
+          "evaluation/grade.py",
+          "{output_file}",
+          "billing",
+          "false"
+        ]
+      },
+      "metadata": {
+        "expected_category": "billing",
+        "expected_urgent": false
+      }
+    },
+    "case-02": {
+      "prompt": "Classify this support message as billing, access or feedback. Set urgent to true only if the customer currently cannot sign in, their account is locked, or signing in redirects back to login. Otherwise set urgent to false. Return JSON with category, urgent (boolean) and a brief explanation grounded in the message.\nMessage: Please send a copy of my invoice.",
+      "evaluator": {
+        "type": "command",
+        "command": [
+          "python",
+          "evaluation/grade.py",
+          "{output_file}",
+          "billing",
+          "false"
+        ]
+      },
+      "metadata": {
+        "expected_category": "billing",
+        "expected_urgent": false
+      }
+    },
+    "case-03": {
+      "prompt": "Classify this support message as billing, access or feedback. Set urgent to true only if the customer currently cannot sign in, their account is locked, or signing in redirects back to login. Otherwise set urgent to false. Return JSON with category, urgent (boolean) and a brief explanation grounded in the message.\nMessage: My refund has not arrived.",
+      "evaluator": {
+        "type": "command",
+        "command": [
+          "python",
+          "evaluation/grade.py",
+          "{output_file}",
+          "billing",
+          "false"
+        ]
+      },
+      "metadata": {
+        "expected_category": "billing",
+        "expected_urgent": false
+      }
+    },
+    "case-04": {
+      "prompt": "Classify this support message as billing, access or feedback. Set urgent to true only if the customer currently cannot sign in, their account is locked, or signing in redirects back to login. Otherwise set urgent to false. Return JSON with category, urgent (boolean) and a brief explanation grounded in the message.\nMessage: The price on my receipt is wrong.",
+      "evaluator": {
+        "type": "command",
+        "command": [
+          "python",
+          "evaluation/grade.py",
+          "{output_file}",
+          "billing",
+          "false"
+        ]
+      },
+      "metadata": {
+        "expected_category": "billing",
+        "expected_urgent": false
+      }
+    },
+    "case-05": {
+      "prompt": "Classify this support message as billing, access or feedback. Set urgent to true only if the customer currently cannot sign in, their account is locked, or signing in redirects back to login. Otherwise set urgent to false. Return JSON with category, urgent (boolean) and a brief explanation grounded in the message.\nMessage: How do I change my payment card?",
+      "evaluator": {
+        "type": "command",
+        "command": [
+          "python",
+          "evaluation/grade.py",
+          "{output_file}",
+          "billing",
+          "false"
+        ]
+      },
+      "metadata": {
+        "expected_category": "billing",
+        "expected_urgent": false
+      }
+    },
+    "case-06": {
+      "prompt": "Classify this support message as billing, access or feedback. Set urgent to true only if the customer currently cannot sign in, their account is locked, or signing in redirects back to login. Otherwise set urgent to false. Return JSON with category, urgent (boolean) and a brief explanation grounded in the message.\nMessage: There is an unexpected charge.",
+      "evaluator": {
+        "type": "command",
+        "command": [
+          "python",
+          "evaluation/grade.py",
+          "{output_file}",
+          "billing",
+          "false"
+        ]
+      },
+      "metadata": {
+        "expected_category": "billing",
+        "expected_urgent": false
+      }
+    },
+    "case-07": {
+      "prompt": "Classify this support message as billing, access or feedback. Set urgent to true only if the customer currently cannot sign in, their account is locked, or signing in redirects back to login. Otherwise set urgent to false. Return JSON with category, urgent (boolean) and a brief explanation grounded in the message.\nMessage: Can you explain the tax on my bill?",
+      "evaluator": {
+        "type": "command",
+        "command": [
+          "python",
+          "evaluation/grade.py",
+          "{output_file}",
+          "billing",
+          "false"
+        ]
+      },
+      "metadata": {
+        "expected_category": "billing",
+        "expected_urgent": false
+      }
+    },
+    "case-08": {
+      "prompt": "Classify this support message as billing, access or feedback. Set urgent to true only if the customer currently cannot sign in, their account is locked, or signing in redirects back to login. Otherwise set urgent to false. Return JSON with category, urgent (boolean) and a brief explanation grounded in the message.\nMessage: I cannot sign in.",
+      "evaluator": {
+        "type": "command",
+        "command": [
+          "python",
+          "evaluation/grade.py",
+          "{output_file}",
+          "access",
+          "true"
+        ]
+      },
+      "metadata": {
+        "expected_category": "access",
+        "expected_urgent": true
+      }
+    },
+    "case-09": {
+      "prompt": "Classify this support message as billing, access or feedback. Set urgent to true only if the customer currently cannot sign in, their account is locked, or signing in redirects back to login. Otherwise set urgent to false. Return JSON with category, urgent (boolean) and a brief explanation grounded in the message.\nMessage: The password reset link expired.",
+      "evaluator": {
+        "type": "command",
+        "command": [
+          "python",
+          "evaluation/grade.py",
+          "{output_file}",
+          "access",
+          "false"
+        ]
+      },
+      "metadata": {
+        "expected_category": "access",
+        "expected_urgent": false
+      }
+    },
+    "case-10": {
+      "prompt": "Classify this support message as billing, access or feedback. Set urgent to true only if the customer currently cannot sign in, their account is locked, or signing in redirects back to login. Otherwise set urgent to false. Return JSON with category, urgent (boolean) and a brief explanation grounded in the message.\nMessage: My account is locked.",
+      "evaluator": {
+        "type": "command",
+        "command": [
+          "python",
+          "evaluation/grade.py",
+          "{output_file}",
+          "access",
+          "true"
+        ]
+      },
+      "metadata": {
+        "expected_category": "access",
+        "expected_urgent": true
+      }
+    },
+    "case-11": {
+      "prompt": "Classify this support message as billing, access or feedback. Set urgent to true only if the customer currently cannot sign in, their account is locked, or signing in redirects back to login. Otherwise set urgent to false. Return JSON with category, urgent (boolean) and a brief explanation grounded in the message.\nMessage: I lost my second-factor device.",
+      "evaluator": {
+        "type": "command",
+        "command": [
+          "python",
+          "evaluation/grade.py",
+          "{output_file}",
+          "access",
+          "false"
+        ]
+      },
+      "metadata": {
+        "expected_category": "access",
+        "expected_urgent": false
+      }
+    },
+    "case-12": {
+      "prompt": "Classify this support message as billing, access or feedback. Set urgent to true only if the customer currently cannot sign in, their account is locked, or signing in redirects back to login. Otherwise set urgent to false. Return JSON with category, urgent (boolean) and a brief explanation grounded in the message.\nMessage: My login code never arrived.",
+      "evaluator": {
+        "type": "command",
+        "command": [
+          "python",
+          "evaluation/grade.py",
+          "{output_file}",
+          "access",
+          "false"
+        ]
+      },
+      "metadata": {
+        "expected_category": "access",
+        "expected_urgent": false
+      }
+    },
+    "case-13": {
+      "prompt": "Classify this support message as billing, access or feedback. Set urgent to true only if the customer currently cannot sign in, their account is locked, or signing in redirects back to login. Otherwise set urgent to false. Return JSON with category, urgent (boolean) and a brief explanation grounded in the message.\nMessage: Please help me recover account access.",
+      "evaluator": {
+        "type": "command",
+        "command": [
+          "python",
+          "evaluation/grade.py",
+          "{output_file}",
+          "access",
+          "false"
+        ]
+      },
+      "metadata": {
+        "expected_category": "access",
+        "expected_urgent": false
+      }
+    },
+    "case-14": {
+      "prompt": "Classify this support message as billing, access or feedback. Set urgent to true only if the customer currently cannot sign in, their account is locked, or signing in redirects back to login. Otherwise set urgent to false. Return JSON with category, urgent (boolean) and a brief explanation grounded in the message.\nMessage: Signing in sends me back to the login page.",
+      "evaluator": {
+        "type": "command",
+        "command": [
+          "python",
+          "evaluation/grade.py",
+          "{output_file}",
+          "access",
+          "true"
+        ]
+      },
+      "metadata": {
+        "expected_category": "access",
+        "expected_urgent": true
+      }
+    },
+    "case-15": {
+      "prompt": "Classify this support message as billing, access or feedback. Set urgent to true only if the customer currently cannot sign in, their account is locked, or signing in redirects back to login. Otherwise set urgent to false. Return JSON with category, urgent (boolean) and a brief explanation grounded in the message.\nMessage: I would like a dark theme.",
+      "evaluator": {
+        "type": "command",
+        "command": [
+          "python",
+          "evaluation/grade.py",
+          "{output_file}",
+          "feedback",
+          "false"
+        ]
+      },
+      "metadata": {
+        "expected_category": "feedback",
+        "expected_urgent": false
+      }
+    },
+    "case-16": {
+      "prompt": "Classify this support message as billing, access or feedback. Set urgent to true only if the customer currently cannot sign in, their account is locked, or signing in redirects back to login. Otherwise set urgent to false. Return JSON with category, urgent (boolean) and a brief explanation grounded in the message.\nMessage: The new layout looks great.",
+      "evaluator": {
+        "type": "command",
+        "command": [
+          "python",
+          "evaluation/grade.py",
+          "{output_file}",
+          "feedback",
+          "false"
+        ]
+      },
+      "metadata": {
+        "expected_category": "feedback",
+        "expected_urgent": false
+      }
+    },
+    "case-17": {
+      "prompt": "Classify this support message as billing, access or feedback. Set urgent to true only if the customer currently cannot sign in, their account is locked, or signing in redirects back to login. Otherwise set urgent to false. Return JSON with category, urgent (boolean) and a brief explanation grounded in the message.\nMessage: Please add keyboard shortcuts.",
+      "evaluator": {
+        "type": "command",
+        "command": [
+          "python",
+          "evaluation/grade.py",
+          "{output_file}",
+          "feedback",
+          "false"
+        ]
+      },
+      "metadata": {
+        "expected_category": "feedback",
+        "expected_urgent": false
+      }
+    },
+    "case-18": {
+      "prompt": "Classify this support message as billing, access or feedback. Set urgent to true only if the customer currently cannot sign in, their account is locked, or signing in redirects back to login. Otherwise set urgent to false. Return JSON with category, urgent (boolean) and a brief explanation grounded in the message.\nMessage: The navigation is confusing.",
+      "evaluator": {
+        "type": "command",
+        "command": [
+          "python",
+          "evaluation/grade.py",
+          "{output_file}",
+          "feedback",
+          "false"
+        ]
+      },
+      "metadata": {
+        "expected_category": "feedback",
+        "expected_urgent": false
+      }
+    },
+    "case-19": {
+      "prompt": "Classify this support message as billing, access or feedback. Set urgent to true only if the customer currently cannot sign in, their account is locked, or signing in redirects back to login. Otherwise set urgent to false. Return JSON with category, urgent (boolean) and a brief explanation grounded in the message.\nMessage: I suggest adding a calendar view.",
+      "evaluator": {
+        "type": "command",
+        "command": [
+          "python",
+          "evaluation/grade.py",
+          "{output_file}",
+          "feedback",
+          "false"
+        ]
+      },
+      "metadata": {
+        "expected_category": "feedback",
+        "expected_urgent": false
+      }
+    },
+    "case-20": {
+      "prompt": "Classify this support message as billing, access or feedback. Set urgent to true only if the customer currently cannot sign in, their account is locked, or signing in redirects back to login. Otherwise set urgent to false. Return JSON with category, urgent (boolean) and a brief explanation grounded in the message.\nMessage: Thank you for improving the search.",
+      "evaluator": {
+        "type": "command",
+        "command": [
+          "python",
+          "evaluation/grade.py",
+          "{output_file}",
+          "feedback",
+          "false"
+        ]
+      },
+      "metadata": {
+        "expected_category": "feedback",
+        "expected_urgent": false
+      }
+    }
+  }
+}

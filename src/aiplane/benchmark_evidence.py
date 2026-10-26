@@ -12,8 +12,11 @@ from pathlib import Path
 from typing import Any
 
 from .config import parse_yaml
+from .benchmark_identity import METRIC_DEFINITIONS
 from .persistence import atomic_write_text
 from .secrets import contains_secret
+from .decoding import validate_decoding
+from .telemetry import throughput_rates
 
 CONTRACT_VERSION = "1.0"
 SUITE_KINDS = {"smoke", "quality", "performance", "mixed"}
@@ -22,12 +25,18 @@ METRICS = {
     "quality_score",
     "performance_score",
     "elapsed_ms",
+    "task_elapsed_ms",
     "load_duration_ms",
     "ttft_ms",
     "prompt_tokens",
     "prompt_tokens_per_second",
     "output_tokens",
-    "tokens_per_second",
+    "server_tokens_per_second",
+    "client_tokens_per_second",
+    "average_tokens_per_second",
+    "client_elapsed_ms",
+    "server_elapsed_ms",
+    "server_generation_ms",
 }
 
 
@@ -116,6 +125,9 @@ def validate_measurement_record(payload: dict[str, Any], *, source: str = "inlin
             raise ValueError("controlled calibration requires telemetry_source for every ttft_ms measurement")
     provenance = _mapping(payload.get("provenance"), "benchmark measurement provenance")
     _required_text(provenance, "source", "benchmark measurement provenance")
+    runtime = _mapping(payload.get("runtime", {}), "benchmark measurement runtime")
+    if "settings" in runtime:
+        runtime = {**runtime, "settings": _mapping(runtime["settings"], "benchmark runtime settings")}
     record = {
         "contract_version": CONTRACT_VERSION,
         "record_type": "benchmark_measurements",
@@ -129,8 +141,18 @@ def validate_measurement_record(payload: dict[str, Any], *, source: str = "inlin
             "version": suite_version,
             "kind": kind,
             "comparability": comparability,
+            "content_sha256": suite.get("content_sha256"),
         },
-        "runtime": _mapping(payload.get("runtime", {}), "benchmark measurement runtime"),
+        "comparison_context": {
+            str(key): _mapping(value, f"benchmark comparison context {key}")
+            for key, value in _mapping(payload.get("comparison_context", {}), "benchmark comparison context").items()
+        },
+        "metric_definitions": {
+            str(key): _mapping(value, f"benchmark metric definition {key}")
+            for key, value in _mapping(payload.get("metric_definitions", {}), "benchmark metric definitions").items()
+        },
+        "dry_run": bool(payload.get("dry_run", False)),
+        "runtime": runtime,
         "environment": _validate_environment(payload.get("environment", {})),
         "calibration": calibration,
         "decoding": _validate_decoding(payload.get("decoding", {})),
@@ -161,6 +183,8 @@ def calibration_plan(
         "record_type": "benchmark_calibration_plan",
         "profile": profile,
         "model_name": model_name,
+        "metric_definitions": METRIC_DEFINITIONS,
+        "comparison_context": {},
         "runtime": runtime,
         "repeats": repeats,
         "calibration": {
@@ -322,8 +346,18 @@ def summarize_runs(runs: list[dict[str, Any]], *, kind: str, comparable: bool) -
     prompt_throughput = [value for value in prompt_throughput if value is not None]
     ttft = [_finite(run.get("ttft_ms")) for run in runs]
     ttft = [value for value in ttft if value is not None]
-    throughput = [_finite(run.get("tokens_per_second")) for run in runs]
+    throughput = [
+        throughput_rates(run.get("server_tokens_per_second"), run.get("client_tokens_per_second"))[
+            "average_tokens_per_second"
+        ]
+        for run in runs
+    ]
     throughput = [value for value in throughput if value is not None]
+    server_rates = [value for run in runs if (value := _finite(run.get("server_tokens_per_second"))) is not None]
+    client_rates = [value for run in runs if (value := _finite(run.get("client_tokens_per_second"))) is not None]
+    server_average = _mean(server_rates)
+    client_average = _mean(client_rates)
+    summary_rates = throughput_rates(server_average, client_average)
     benchmark_kind = (
         f"comparable_{kind}" if comparable and kind in {"quality", "performance", "mixed"} else f"local_{kind}"
     )
@@ -351,8 +385,13 @@ def summarize_runs(runs: list[dict[str, Any]], *, kind: str, comparable: bool) -
         "median_prompt_tokens_per_second": _median(prompt_throughput),
         "average_ttft_ms": _mean(ttft),
         "median_ttft_ms": _median(ttft),
-        "average_tokens_per_second": _mean(throughput),
-        "median_tokens_per_second": _median(throughput),
+        "average_tokens_per_second": summary_rates["average_tokens_per_second"],
+        "median_run_average_tokens_per_second": _median(throughput),
+        "average_server_tokens_per_second": server_average,
+        "average_client_tokens_per_second": client_average,
+        "throughput_average_sources": summary_rates["throughput_average_sources"],
+        "server_throughput_samples": len(server_rates),
+        "client_throughput_samples": len(client_rates),
     }
     if len(quality) > 1:
         summary["quality_standard_error"] = round(statistics.stdev(quality) / math.sqrt(len(quality)), 4)
@@ -376,6 +415,14 @@ def benchmark_record_from_runs(
     kind = str(suite["kind"])
     comparability = suite.get("comparability")
     summary = summarize_runs(runs, kind=kind, comparable=bool(comparability))
+    selected = {run["task"] for run in runs}
+    workload = {name: spec for name, spec in suite["tasks"].items() if name in selected}
+    suite = {
+        **suite,
+        "content_sha256": hashlib.sha256(
+            json.dumps(workload, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest(),
+    }
     return {
         "contract_version": CONTRACT_VERSION,
         "record_type": "benchmark_measurements",
@@ -390,7 +437,10 @@ def benchmark_record_from_runs(
             "version": suite["version"],
             "kind": kind,
             "comparability": comparability,
+            "content_sha256": suite.get("content_sha256"),
         },
+        "metric_definitions": METRIC_DEFINITIONS,
+        "comparison_context": {},
         "runtime": runtime,
         "environment": environment,
         "calibration": {"status": "uncontrolled"},
@@ -409,6 +459,8 @@ def benchmark_record_from_runs(
 def _validate_run(raw: object, index: int) -> dict[str, Any]:
     if not isinstance(raw, dict):
         raise ValueError(f"benchmark run {index} must be a mapping")
+    if "tokens_per_second" in raw:
+        raise ValueError("tokens_per_second is ambiguous; use server_tokens_per_second or client_tokens_per_second")
     task = _required_text(raw, "task", f"benchmark run {index}")
     repeat_index = _bounded_int(raw.get("repeat_index", index + 1), f"benchmark run {index} repeat_index", minimum=1)
     passed = raw.get("passed")
@@ -435,12 +487,29 @@ def _validate_run(raw: object, index: int) -> dict[str, Any]:
         if not field.endswith("_score") and value < 0:
             raise ValueError(f"benchmark run {index} {field} must be non-negative")
         result[field] = value
+    rates = throughput_rates(result["server_tokens_per_second"], result["client_tokens_per_second"])
+    supplied_average = result["average_tokens_per_second"]
+    if supplied_average is not None and round(supplied_average, 3) != rates["average_tokens_per_second"]:
+        raise ValueError(
+            f"benchmark run {index} average_tokens_per_second must equal the mean of available source rates"
+        )
+    if "throughput_average_sources" in raw and raw["throughput_average_sources"] != rates["throughput_average_sources"]:
+        raise ValueError(f"benchmark run {index} throughput_average_sources disagrees with available rates")
+    result.update(rates)
     result["seed"] = _optional_int(raw.get("seed"), f"benchmark run {index} seed")
     telemetry_source = raw.get("telemetry_source")
     if telemetry_source is not None and (not isinstance(telemetry_source, str) or not telemetry_source.strip()):
         raise ValueError(f"benchmark run {index} telemetry_source must be a non-empty string or null")
     result["telemetry_source"] = telemetry_source
+    result["decoding_evidence"] = _mapping(raw.get("decoding_evidence", {}), f"benchmark run {index} decoding evidence")
     result["metadata"] = _mapping(raw.get("metadata", {}), f"benchmark run {index} metadata")
+    if "evaluation" in raw:
+        result["evaluation"] = _mapping(raw["evaluation"], f"benchmark run {index} evaluation")
+    if raw.get("artifact") is not None:
+        from .benchmark_review import validate_artifact
+
+        result["artifact"] = validate_artifact(raw["artifact"])
+
     return result
 
 
@@ -475,25 +544,7 @@ def _validate_evaluator(task: dict[str, Any], allow_commands: bool, task_name: s
     return result
 
 
-def _validate_decoding(raw: object) -> dict[str, Any]:
-    value = _mapping(raw, "benchmark decoding")
-    result: dict[str, Any] = {}
-    for field, minimum, maximum in (
-        ("temperature", 0.0, 2.0),
-        ("top_p", 0.0, 1.0),
-    ):
-        if field in value:
-            number = _finite(value[field])
-            if number is None or not minimum <= number <= maximum:
-                raise ValueError(f"benchmark decoding {field} must be between {minimum:g} and {maximum:g}")
-            result[field] = number
-    if "seed" in value:
-        result["seed"] = _optional_int(value["seed"], "benchmark decoding seed")
-    if "max_output_tokens" in value:
-        result["max_output_tokens"] = _bounded_int(
-            value["max_output_tokens"], "benchmark decoding max_output_tokens", minimum=1
-        )
-    return result
+_validate_decoding = validate_decoding
 
 
 def _validate_comparability(raw: object) -> dict[str, Any] | None:
@@ -617,7 +668,7 @@ def _finite(value: object) -> float | None:
         return None
     try:
         number = float(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return None
     return number if math.isfinite(number) else None
 

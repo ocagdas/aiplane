@@ -15,3 +15,7 @@ recursive-include .github *.yml *.md
 include .github/CODEOWNERS repository-standard.json
 
 include BRANCHING.md
+
+include .dockerignore
+
+recursive-include docs/examples/task-evaluation *.py *.json *.md

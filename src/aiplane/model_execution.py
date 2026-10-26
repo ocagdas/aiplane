@@ -177,27 +177,30 @@ class ModelExecution:
         prompt: str,
         timeout_seconds: int | None = None,
         purpose: str = "chat",
+        *,
+        decoding: dict[str, Any] | None = None,
     ) -> BackendResult:
         model = self.get(name)
         self.require_execution_capability(name, model, purpose)
         provider_name = self._runtime_for_model(name, model)
+        controls = {"decoding": decoding} if decoding is not None else {}
         if provider_name in {"ollama", "ollama_cloud"}:
             backend = self._ollama_backend(provider_name, timeout_seconds=timeout_seconds)
             model_id = self._execution_model_id(provider_name, model)
             if purpose == "benchmark":
-                return backend.chat(model_id, prompt, measure_ttft=True)
-            return backend.chat(model_id, prompt)
+                return backend.chat(model_id, prompt, measure_ttft=True, **controls)
+            return backend.chat(model_id, prompt, **controls)
         if self._is_openai_compatible(provider_name):
             return self._openai_compatible_backend(provider_name, model, timeout_seconds=timeout_seconds).chat(
-                str(model.get("model")), prompt
+                str(model.get("model")), prompt, **controls
             )
         if self._is_azure_openai(provider_name):
             return self._azure_openai_backend(provider_name, model, timeout_seconds=timeout_seconds).chat(
-                str(model.get("model")), prompt
+                str(model.get("model")), prompt, **controls
             )
         if self._is_anthropic(provider_name):
             return self._anthropic_backend(provider_name, model, timeout_seconds=timeout_seconds).chat(
-                str(model.get("model")), prompt
+                str(model.get("model")), prompt, **controls
             )
         raise ValueError(
             f"execution is not wired for runtime/provider: {provider_name}; "

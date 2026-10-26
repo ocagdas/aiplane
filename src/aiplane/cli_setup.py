@@ -13,6 +13,7 @@ from .benchmark_evidence import (
 )
 from .benchmark_comparison import DIMENSIONS, compare_benchmarks
 from .benchmark_tools import BenchmarkToolManager
+from .benchmark_review import export_review, import_review
 from .config import load_profile
 from .env import EnvironmentManager
 from .tools import ToolchainManager
@@ -107,8 +108,8 @@ def add_setup_parsers(
     benchmarks_cmd = command_factory(
         subparsers,
         "benchmarks",
-        "Plan/install benchmark frameworks",
-        "Inspect optional benchmark frameworks and render commands for aiplane smoke benchmarks, lm-evaluation-harness, vLLM serving benchmarks, and endpoint load tests.",
+        "Evaluate tasks and inspect benchmark tools",
+        "Inspect benchmark tools, validate suites, import measurements and exchange human reviews of saved answers. External benchmark plans do not execute their producer.",
         "Examples:\n  aiplane benchmarks list\n  aiplane benchmarks doctor\n  aiplane benchmarks install lm-evaluation-harness --dry-run\n  aiplane benchmarks plan aiplane-smoke --model MODEL_ALIAS",
     )
     benchmarks_sub = benchmarks_cmd.add_subparsers(dest="benchmarks_command", required=True, metavar="command")
@@ -233,6 +234,28 @@ def add_setup_parsers(
     benchmarks_import_bundle.add_argument(
         "--yes", action="store_true", help="Write validated records under .aiplane/benchmarks"
     )
+
+    for action in ("review-export", "review-import"):
+        review = benchmarks_sub.add_parser(
+            action,
+            help="Export fixed answers for review"
+            if action == "review-export"
+            else "Validate/import completed human judgments",
+            description="File-only human review bound to source records, answer hashes and a versioned rubric. Preview is default.",
+            formatter_class=formatter_class,
+            allow_abbrev=False,
+        )
+        profile_arg(review)
+        review.add_argument(
+            "path", help="Output review path" if action == "review-export" else "Completed review JSON path"
+        )
+        review.add_argument(
+            "--record", action="append", required=True, help="Source measurement JSON; repeat for multiple records"
+        )
+        review.add_argument("--rubric", required=True, help="Rubric JSON with instructions and score bounds")
+        review.add_argument("--yes", action="store_true", help="Write the validated file")
+        if action == "review-export":
+            review.add_argument("--mode", choices=("score", "pairwise"), default="score")
 
     benchmarks_compare = benchmarks_sub.add_parser(
         "compare",
@@ -389,6 +412,14 @@ def handle_setup_command(
             payload = export_calibration_bundle(profile.workspace, Path(args.path).resolve(), dry_run=not args.yes)
         elif args.benchmarks_command == "calibration-import":
             payload = import_calibration_bundle(profile.workspace, Path(args.path).resolve(), dry_run=not args.yes)
+        elif args.benchmarks_command in {"review-export", "review-import"}:
+            records = [Path(path).resolve() for path in args.record]
+            rubric = Path(args.rubric).resolve()
+            path = Path(args.path).resolve()
+            if args.benchmarks_command == "review-export":
+                payload = export_review(records, rubric, path, mode=args.mode, dry_run=not args.yes)
+            else:
+                payload = import_review(profile.workspace, path, records, rubric, dry_run=not args.yes)
         elif args.benchmarks_command == "compare":
             payload = compare_benchmarks(
                 profile,

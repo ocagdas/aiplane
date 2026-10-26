@@ -23,6 +23,7 @@ def test_wheel_install_includes_templates_helpers_and_preserves_profiles(tmp_pat
     build_root.mkdir()
     for filename in (
         "pyproject.toml",
+        ".dockerignore",
         "MANIFEST.in",
         "LICENSE",
         "Makefile",
@@ -51,6 +52,7 @@ def test_wheel_install_includes_templates_helpers_and_preserves_profiles(tmp_pat
     with tarfile.open(archive) as source:
         names = source.getnames()
         assert any(name.endswith("/skills/aiplane/agents/openai.yaml") for name in names)
+        assert any(name.endswith("/.dockerignore") for name in names)
         assert not any("/.strategy/" in name for name in names)
 
     wheel_dir = tmp_path / "wheels"
@@ -143,6 +145,46 @@ print(json.dumps(paths))
         env=env,
     )
     assert sentinel_path.read_text(encoding="utf-8") == "keep me\n"
+
+    example = venv / "share" / "aiplane" / "docs" / "examples" / "task-evaluation"
+    assert (venv / "share" / "aiplane" / "docs" / "user" / "benchmark-review.md").is_file()
+    external = workspace / "external-evaluation"
+    evaluated = _run(
+        [
+            str(python),
+            str(example / "evaluate.py"),
+            str(example / "answers-fixture.json"),
+            "--model",
+            "synthetic-fixture",
+            "--output-dir",
+            str(external),
+        ],
+        cwd=workspace,
+        env=env,
+    )
+    assert json.loads(evaluated.stdout) == {"passed": 18, "total": 20}
+    review_path = workspace / "human-review.json"
+    review_args = [
+        str(review_path),
+        "--record",
+        str(external / "measurements.json"),
+        "--rubric",
+        str(example / "rubric.json"),
+    ]
+    preview = json.loads(
+        _run([str(aiplane), "benchmarks", "review-export", *review_args], cwd=workspace, env=env).stdout
+    )
+    assert not preview["written"] and not review_path.exists()
+    _run([str(aiplane), "benchmarks", "review-export", *review_args, "--yes"], cwd=workspace, env=env)
+    review = json.loads(review_path.read_text(encoding="utf-8"))
+    review.update(reviewer="synthetic-reviewer", reviewed_at="2026-10-18T10:00:00+00:00")
+    for judgment in review["judgments"]:
+        judgment.update(score=1, passed=True, notes="Synthetic packaging check.")
+    review_path.write_text(json.dumps(review), encoding="utf-8")
+    imported = json.loads(
+        _run([str(aiplane), "benchmarks", "review-import", *review_args, "--yes"], cwd=workspace, env=env).stdout
+    )
+    assert imported["judgment_count"] == 20 and Path(imported["destination"]).is_file()
 
     _run([str(aiplane), "config", "init", "--template", "local"], cwd=workspace, env=env)
     helper_path = _run(

@@ -60,31 +60,12 @@ def _unique_json(pairs):
     return result
 
 
-def _ensemble_yaml(text: str) -> dict[str, Any]:
-    # Match the restricted parser's mapping scopes while rejecting silent overwrites.
-    scopes: list[tuple[int, set[str]]] = [(-1, set())]
-    for raw in text.splitlines():
-        if not raw.strip() or raw.lstrip().startswith("#") or ":" not in raw:
-            continue
-        indent = len(raw) - len(raw.lstrip(" "))
-        key, value = raw.strip().split(":", 1)
-        while len(scopes) > 1 and indent <= scopes[-1][0]:
-            scopes.pop()
-        keys = scopes[-1][1]
-        if key.strip() in keys:
-            raise ValueError("duplicate YAML field in ensemble specification")
-        keys.add(key.strip())
-        if not value.strip():
-            scopes.append((indent, set()))
-    return parse_yaml(text)
-
-
 def load_ensemble(path: Path) -> dict[str, Any]:
     if path.stat().st_size > 1024 * 1024:
         raise ValueError("ensemble specification exceeds 1 MiB")
     text = path.read_text(encoding="utf-8")
     try:
-        spec = json.loads(text, object_pairs_hook=_unique_json) if path.suffix == ".json" else _ensemble_yaml(text)
+        spec = json.loads(text, object_pairs_hook=_unique_json) if path.suffix == ".json" else parse_yaml(text)
     except (json.JSONDecodeError, UnicodeError):
         raise ValueError("invalid ensemble specification") from None
     if contains_secret(spec):

@@ -18,10 +18,10 @@ Please read:
 
 ## Development Setup
 
-Use the project setup helper:
+Use Python 3.13 or newer and the existing project setup helper. Install `.[dev]` in the selected environment before running checks:
 
 ```bash
-scripts/setup_env.sh --mode conda --conda-env aiplane --action install
+scripts/setup_env.sh --mode conda --conda-env aiplane --action install --dev
 conda activate aiplane
 ```
 
@@ -93,3 +93,5 @@ MCP and future agent-skill support are synchronized at periodic checkpoints and 
 
 Follow [BRANCHING.md](BRANCHING.md) for the shared trunk/dev branch convention,
 version/tag rules and REPOSITORY_VERSIONING_ENABLED activation setting.
+
+Refresh an existing development environment with `scripts/setup_env.sh --mode venv --action refresh --dev --dry-run`, then repeat without `--dry-run` to apply. See [refresh options](docs/development/setup.md#refreshing-an-existing-installation) for upgrades and Docker behavior.

@@ -1,5 +1,155 @@
 # Roadmap
 
+## Current development plan — 2026-10-17
+
+This section owns the execution order for the current aiplane phase. [TODO](TODO.md#current-development-checklist) owns the tasks; [evaluation boundaries](docs/project/benchmark-evaluation-boundaries.md) defines the smaller execution/import scope; [VALIDATION](VALIDATION.md) owns executed evidence. Older priority lists below remain reference and release context. They do not create parallel implementation queues.
+
+**October 18 revision:** AP2 is removed at the owner's request. Use established model APIs and external tools directly; no custom executable protocol or process manager. AP0/AP1 remain complete; AP3 implementation and synthetic qualification are now complete locally. Milestone IDs are retained so other sessions can follow earlier discussion.
+
+### Development goal
+
+Given a user's task, local/hosted constraints and candidate models, aiplane should let a script or assistant obtain candidate information, run or import explicitly selected evaluations, inspect comparable evidence, and export the chosen model/setup for an external client or harness. It must explain unknowns and rejected candidates. The same inputs and evidence must reproduce the selection explanation; model answers themselves need not be identical.
+
+Keep each repository independent. Aiplane owns model/setup configuration and evidence handoff; CAS owns installation and selected-file capture; optional CIK owns source lookup. The external harness owns task execution and runtime recovery. No TUI, gateway, general scheduler, hosted benchmark service or new deployment controller belongs to this phase.
+
+### A concrete example of the finished workflow
+
+Use this example to understand the milestones. It is an illustrative fixture, not an already performed benchmark or a fixed requirement for every user.
+
+The user has 20 synthetic support messages and wants a model to return a JSON object containing `category` and `urgent`. Each message has a reviewed expected answer. The user supplies these requirements: keep messages local, return valid JSON, get at least 18 of 20 answers correct, and keep median request time below five seconds. These numbers are example user choices; aiplane must not impose them on unrelated tasks. A human also reviews whether explanations are useful. A different user can supply another task, test program, rubric and limits.
+
+The finished workflow should let the user choose a candidate source, choose an evaluation tool, inspect exactly what will execute, run it explicitly or import existing results, review correctness and timings, and export a chosen model binding. Using the example, a report might say: “A passed 18/20 and the time limit; B failed valid JSON on four messages; C was excluded because it uses a hosted endpoint.” Those are synthetic examples of report contents, not measured model results. The report must also say when no candidate passes.
+
+### AP0 explained: verify an existing setup option for this checkout
+
+**What changes:** use the existing setup helper rather than build another setup system. `scripts/setup_env.sh` already supports `local` (current/native Python), `venv`, `conda` and `docker`, plus install/doctor/test actions. Verify one selected development mode with the declared development dependencies and the current source. Preserve the dirty checkout and record the branch/package discrepancy for the owner.
+
+**What is delivered:** a validated invocation of an existing setup mode and a validation record naming the interpreter, dependencies, source state, command and result. Correct existing instructions only where the check finds a defect. `.[dev]` supplies test/lint dependencies; installing the base package alone does not. No new setup system or benchmark command is added.
+
+**What proves completion:** prepare the chosen existing mode with supported Python, install the documented `.[dev]` dependencies, and run the full gate. The setup helper also supports explicit base/dev refresh and separate dependency/Docker upgrade controls (see STATUS and development setup). The checkout’s `.venv` has been rebuilt with Python 3.13.14 and declared dev dependencies; the previous Python 3.7 environment is retained under an ignored backup name. Qualifying this venv or another supported Conda/native/container environment is sufficient; all four modes need not be reimplemented or live-qualified before AP1. Record which mode actually ran.
+
+### AP1 explained: make the numbers mean what they say
+
+**What changes:** send requested model settings to the provider when supported; distinguish server generation time from the time a user waits; stop grouping unlike results into the same comparison.
+
+**What is delivered:** corrected request construction, explicit timing/count fields, and a comparison report that states why records can or cannot be compared. Each result distinguishes requested settings from settings confirmed sent; provider-reported applied values are recorded separately when available. Sending a seed does not prove the provider honored it.
+
+**What proves completion:** a fake provider captures the actual request and verifies the selected temperature/seed/output limit. An unsupported option produces an explicit refusal or unsupported result. In another fixture the server generates 100 tokens in two seconds, while the client waits 2.5 seconds: the result reports server rate 50, client rate 40, average rate 45 and 2.5-second client request latency. If one rate is unavailable, the average is the other value; both missing means unavailable, and zero is a real observation. The comparison must not treat the two rates as equivalent. Change the task version or leave a required runtime setting unknown: inspection still works, but automatic ranking refuses with a reason. These are synthetic tests, so no real inference is needed.
+
+### AP2: removed
+
+The owner removed the generic external-wrapper subsystem on 2026-10-18. Its protocol, configuration, process manager, CLI/MCP additions, schemas, examples and dedicated tests are deleted. This milestone is not a dependency or deferred implementation queue.
+
+### AP3 explained: use existing evaluators and review task results
+
+**What changes:** use existing OpenAI-compatible/native Ollama endpoints and the selected evaluator's own CLI/API. Keep aiplane's existing measurement import and comparison. Add a data-only format converter only when a real result file cannot otherwise be consumed. No wrapper process manager or mandatory vLLM/Promptfoo launch adapters.
+
+**What is delivered:** a reproducible 20-message task with expected answers; documented native evaluator commands and versions; native results plus converted records where needed; and a file-based manual review linked to task/output/rubric identity. Our existing smoke runner and command graders remain optional learning tools.
+
+**What proves completion:** demonstrate correctness/JSON checks on the fixed task. Where conversion is needed, a pinned native-output fixture must preserve counts, units, unknowns and failures. A review imports only against matching task/output/rubric identities and rejects changed outputs. Actual model/tool trials remain AP6 evidence. New converters need a demonstrated gap in the existing import path.
+
+### AP4 explained: use llmfit without making it compulsory
+
+**What changes:** call the selected llmfit JSON recommendation command instead of requiring aiplane's own selector for that step. Keep profile/offline candidates and our selector available.
+
+**What is delivered:** a supported llmfit version/output reader, explicit source selection and candidate records retaining its model identity, estimates and assumptions. Candidate records do not automatically become approved model bindings.
+
+**What proves completion:** import a fixed llmfit result and preserve the native IDs and estimate labels. Simulate a missing executable, incompatible output and a recommendation that exceeds the requested context/memory constraint. Show the exact failure or explicit alternative the user can select. The offline/profile path works with llmfit absent. None of these steps downloads weights, changes the profile's approved model or sends task data to a provider.
+
+### AP5 explained: answer “which setup should I use for this task?”
+
+**What changes:** combine the user's requirements with the AP3 evidence and AP4 candidates. Apply exclusions first, then show separate correctness, latency and cost results. Let the user select a passing candidate; automatic choice needs an explicit user ordering rule.
+
+**What is delivered:** a text/JSON decision report and a validated export naming the chosen model alias, native ID, endpoint/credential reference and relevant role binding. The report points to the task, setup and result records behind the choice. Profile changes, if needed, are explicit; reviewing a comparison must not silently change a default model.
+
+**What proves completion:** use synthetic results in which A passes 18/20 within five seconds, B returns invalid JSON four times, and hosted C has the highest quality. Under local-only policy C is excluded and B fails the task requirement. A remains eligible. Change the requirements so nobody passes: report “no passing candidate.” Remove quality evidence: report “not evaluated,” not zero quality. With two passing candidates and no preference rule, show both rather than inventing a winner. Export the selected eligible binding and validate it using the existing handoff contract.
+
+### AP6 explained: do the workflow for real, then give CAS a precise job
+
+**What changes:** fill the gap between synthetic tests and a usable workflow. Run the chosen tools against a real local endpoint, record limitations, and test relocation of the chosen setup files. This adds evidence and a runbook, not another benchmark engine.
+
+**What is delivered:** real raw results, normalized results, the human review, the decision/export, exact tool/model/setup versions, and a file inventory for CAS. That inventory says which inputs must be saved, which outputs can be regenerated, which paths must change and which secrets/weights/runtime state are excluded.
+
+**What proves completion:** run the fixed task and selected external tools with explicit limits; import and inspect their real results; repeat planning without llmfit; restore the profile plus declared suite/evidence inputs into another directory and regenerate a valid handoff. If moving to another host changes an endpoint/path/hardware assumption, require an explicit binding change or report the incompatibility. A directory relocation is not claimed as a second-machine test. One model proves operation; at least two actual candidates are needed before claiming measured model-selection benefit. Missing hardware/provider access leaves that comparison marked pending.
+
+**What happens next:** move the main development focus to CAS after the bounded implementation and recorded local trial/relocation outcome. CAS must then prove it can install/capture/restore those declared files while preserving local edits. A running harness's checkpoints/database need their own later backup/restore trial; AP6 does not supply that capability.
+
+
+### Baseline and scope decision
+
+As of October 17, parser fixes are local and the full local code gate passed (971 tests, 9 opt-in skips, 44 subtests). Existing suites, trusted command graders, import/comparison, profile archives and offline ensemble exports are building blocks, not completion of the milestones below. AP2 has been removed. A llmfit candidate adapter is not implemented; file-based human-rating exchange is implemented in AP3. AP0/AP1/AP3 are complete locally; the current full-gate evidence is in VALIDATION. Native adapter, adoption and live qualification remain separate.
+
+The owner's current priority is correctness plus a bounded selection/evaluation workflow, then CAS maturity. This moves the specific reliability/interop tasks below ahead of the broad placement/adoption expansion in older Priority 14/P2. It does not waive release, platform or independent-user gates. Any demonstrated result-conversion work stays advanced/experimental; README onboarding and package metadata retain the current public promise. The scope exception in [preview scope](docs/project/preview-scope.md) records that distinction.
+
+### Milestones and exit evidence
+
+| ID | Deliverable and development boundary | Dependencies | Exit evidence | Current state |
+| --- | --- | --- | --- | --- |
+| AP0 | Verify one existing local/venv/Conda/Docker setup mode and review the audit delta | None | A selected supported environment has declared dev dependencies and passes the full gate; preserve edits and record branch/version discrepancy. | Four-mode setup helper implemented; `.venv` rebuilt with Python 3.13.14; final gate and review evidence recorded in VALIDATION. |
+| AP1 | Correct measurement semantics and comparison rules | AP0 | Model-call tests prove supported decoding settings are submitted and unsupported settings are reported/refused. Native server timing, client request timing and task timing are distinct. Tests refuse ranking rates with different intervals/counting methods or unresolved essential controls. | Complete locally: captured provider requests, refusal/rejection evidence, separate timing/rates and strict comparison identities. Synthetic qualification; no live model trial. |
+| AP2 | Removed custom wrapper subsystem | None | No generic runner protocol, configuration, launcher or wrapper CLI/MCP commands remain. | Removed by owner direction, 2026-10-18. |
+| AP3 | External result use and task automatic/manual evaluation | AP1 | Use native evaluator CLI/API and existing measurement import. Add only demonstrated data converters; preserve native units/version/failures. Manual review binds task/output/rubric hashes. | Complete locally: 20-case value grader, native/external answer retention and numeric/pairwise review. Live trials remain AP6. |
+| AP4 | Optional external candidate input | AP1; may follow AP3 | A pinned llmfit JSON recommendation adapter preserves native identity, estimate source and hardware/context assumptions; absent/incompatible executable has an explicit outcome. Profile-owned/offline candidates remain usable. Recommendations never silently pull models or override approved bindings. | Planned; compare against native selector on the same request. |
+| AP5 | Task-specific selection explanation and export | AP3 + AP4 | Hard policy/protocol/resource constraints are checked before evidence ranking. A report names task/suite, setup identity, metrics, missing evidence and rejection reasons. Different task/rubric evidence is not silently pooled. A selected alias/role binding exports through existing contracts and validates offline. | Planned; no universal best-model score. |
+| AP6 | Qualify the complete path and hand work to CAS | AP5 | One local real endpoint trial, automatic/custom/manual evaluation, absent-backend fallback and relocated-profile replay are recorded. Source/config/evidence/tool versions identify the run. Setup exports validate after relocation; credentials are rebound explicitly. CAS receives a documented file inventory and refusal cases. | Not started; needs actual runtime/hardware and reviewed execution limits. |
+
+Implement one milestone at a time. AP4 may be developed independently after AP1, but do not start it while AP3 defects are unresolved merely to increase parallel surface area. Do not claim AP3 is live-qualified from fixture tests or AP6 is full harness recovery.
+
+### AP0: start with the existing checkout
+
+- Select an existing setup mode from [development setup](docs/development/setup.md): `local`, `venv`, `conda` or `docker`. Repair/recreate only an unsuitable selected environment and add the declared dev dependencies. This is checkout qualification, not missing setup functionality or a new four-mode implementation project.
+- Inspect and retain the existing parser, ensemble, CAS-pointer and documentation changes. Keep unrelated work separate in review; the owner performs commits/publication.
+- Run the full documented gate and record interpreter/dependency versions and counts. Check the source distribution includes any new design/schema fixtures when implementation adds them.
+- Record current dev/package/main discrepancy; do not reset, bump or merge merely to start development.
+
+### AP1: fix correctness before adding adapters
+
+- Trace decoding fields from suite through `BenchmarkRunner`, `ModelCatalog` and provider requests. Record requested versus submitted/unsupported/rejected values; server-applied values remain unknown unless independently confirmed. A stored seed is not proof the provider used it.
+- Replace ambiguous elapsed/rate meanings with explicit metric scope, unit, numerator/denominator and telemetry provenance. Retain native decode rate and client-observed first content separately; unavailable values stay unknown.
+- Strengthen comparison identity: suite/input/rubric, model artifact/tokenizer, runtime/build/settings, hardware, route, relevant harness/tool/prompt settings, cache/concurrency and timing definitions. Name the dimension allowed to vary. Missing essential identity blocks ranking, not inspection.
+- Regression fixtures must include misleadingly identical aliases, different native/client timing, incompatible suites and unknown telemetry. Follow the pre-1.0 interface policy rather than adding unnecessary compatibility shims.
+
+### AP3: external evaluation without a launcher framework
+
+**Completed locally, 2026-10-18.** The [20-case example](docs/examples/task-evaluation/README.md) checks category and boolean urgency, retains native grading output/version and writes the existing import contract. No format converter was needed. Native runs retain full hashed answers; [review commands](docs/user/benchmark-review.md) validate source/rubric identity and preserve numeric/pass and pairwise judgments separately. Full gate and installed-wheel/CLI round trips are recorded in VALIDATION. Synthetic answers/ratings prove the mechanism, not live model quality or real human agreement.
+
+- Use the external tool's documented CLI/API and existing model endpoints. Command templates remain optional starting points.
+- Retain native result files and producer versions. Convert into existing measurement records only for formats required by the demonstrated task.
+- Keep converters data-only; loading/importing results must not execute their producer or install dependencies.
+- Document manual review against fixed outputs/rubrics. Preserve numeric judgments and pairwise preference separately.
+- Do not rebuild AP2 under another name: no runner registry, generic subprocess protocol, executable version probes or managed benchmark process lifecycle.
+
+### AP4–AP5: reuse discovery, preserve the user's decisions
+
+- Try llmfit through its non-interactive JSON command; do not require its TUI or fork its engine. Test the exact supported version/output and missing executable behavior.
+- Keep an explicit backend selection and offline/profile path. Backend failure must not silently substitute a different model or change local/cloud policy.
+- Use metadata catalogs only for fields needed by the demonstrated task. A broader Models.dev ingestion project is deferred unless llmfit/profile inputs leave a concrete gap.
+- Filter by constraints, then compare task-specific quality, latency and cost separately. Unknown cost is unknown; throughput is not a correctness grade. Equal or incomparable evidence produces ties/refusals with reasons, not fabricated precision.
+- Print/export a decision record that names selected bindings and evidence references. The client/harness remains responsible for actual execution; aiplane does not install the client export itself.
+
+### AP6: acceptance scenario and transition to CAS
+
+Use a small repository-analysis or structured-extraction task with a fixed fixture and explicit success rubric. Pick a task for which one existing local model and a read-only workload are sufficient. A second local or approved hosted candidate is needed before claiming comparative model-selection value; if unavailable, record that part as pending rather than inventing a winner.
+
+Run the selected external performance tool, the task evaluator and a manual review. Change one relevant setup variable and verify the comparison explains the difference or refuses the comparison. Repeat planning with the optional candidate executable absent. Archive the profile and referenced suite/evidence/tool inventory; restore to a separate path and regenerate the handoff with explicit path/credential rebinding. Run a second-host replay when available; a second directory alone is only a relocation test.
+
+**Switch the main development focus to CAS after the bounded AP0–AP5 implementation and a recorded AP6 local trial/relocation outcome.** If second-host, hosted-provider or independent-user access is unavailable, list those external checks as pending; do not fill the wait with more aiplane frameworks. CAS work can complete the installation/capture/relocation side and feed findings back into aiplane. Full two-machine harness crash/backup/restore remains a later shared acceptance gate.
+
+CAS handoff must list owned input/export files, versions/hashes, generated versus authored data, evidence references, exclusions, secret references and machine-specific fields. Do not claim the aiplane archive contains weights, credentials or a running task database.
+
+### Done, deferred and learning work
+
+**This phase is done** when a separately installed aiplane can demonstrate the bounded selection/evaluation/export path, with externally produced and custom/manual evidence, explicit missing-backend behavior and reproducible decision provenance. Passing synthetic tests alone is implementation evidence; live and cross-host results must carry their own status. Public beta/release completion still follows the existing external gates below.
+
+**Deferred:** TUI; unneeded format converters; inference/load-engine rewrites; automatic model downloads; autonomous model switching; general harness execution; node scheduler/API; community benchmark exchange; centralized registry/commercial features; broad cloud deployment and new provider/runtime families.
+
+**Learning track:** retain our selector and small runner against the same fixture set. A proposed native benchmark addition must identify a missing metric/workload, compare the external option and state its maintenance cost. Learning value justifies an optional implementation; it does not justify requiring it in every workflow.
+
+### Reviewable implementation increments
+
+Use one reviewable change per coherent slice: AP0 baseline; AP1 request/measurement/comparison fixes; AP3 demonstrated result conversion or task-review workflow; AP4 candidate input; AP5 decision handoff; AP6 runbook/evidence. Add focused behavior checks for implemented work, then the full gate before a milestone closes. AP2 is removed; no substitute plugin framework is planned.
+
+
 ## Roadmap
 
 This document is the developer-facing status map. It separates what is implemented from what is in progress, planned, or deferred. For product boundary and architecture direction, see [Strategy](PURPOSE.md).
@@ -388,7 +538,7 @@ Provide a safe, reviewable workflow to back up and replay profile configuration 
 
 #### Priority 14: Make model placement evidence measurable and explainable
 
-**Status: Planned after the P0 evidence gate; existing hardware bands, catalog capability hints, and smoke/custom benchmark results remain separate signals today.**
+**Status: broad placement expansion remains after the P0 evidence gate. The bounded correctness/runner/selection work in AP0–AP6 above is the current engineering priority; it does not complete this broader milestone. Existing hardware bands and catalog hints remain estimates.**
 
 **Target**
 
@@ -466,7 +616,7 @@ Exit target: deterministic fixtures plus repeated performance and quality runs o
 
 Exit target: At least two organisations agree that team governance capability is valuable enough to pay for.
 
-#### Immediate next sprint (high-priority and blocking)
+#### Earlier adoption sprint (release/reference context; AP0–AP6 owns current development order)
 
 1. Implemented: add `aiplane discover`
 2. Implemented: make `aiplane quickstart local-coding` consume discovery output automatically
@@ -477,9 +627,9 @@ Exit target: At least two organisations agree that team governance capability is
 
 #### Scope freeze until the sprint completes
 
-Do not add new orchestrators, cloud providers, benchmark frameworks or runtime types until those six targets are complete.
+Do not add new orchestrators, cloud providers or runtime types until those six targets are complete. The bounded benchmark interop work in AP0–AP6 is the recorded owner-directed exception; it stays subordinate to the public onboarding promise.
 
-### Current Milestone: External Beta Readiness
+### Separate release gate: External Beta Readiness
 
 The roadmap is now actively executing the priorities above; completed work in each earlier milestone is being stabilized as execution hardens. P0 quickstart sufficiency is implemented with offline-safe defaults, idempotent profile preservation, bounded no-model guidance, and one exact next action.
 
@@ -627,7 +777,7 @@ P0.8 public profile schema v1 is implemented with external validation and canoni
    - Shared injectable command/HTTP boundaries now cover every production process and HTTP owner; only `boundaries.py` calls `subprocess` or `urllib` directly, enforced by a contract test.
    - Model refresh reconciliation, stack lifecycle, static tool catalog data, and provider-registry tests now live in focused modules instead of their former large mixed owners.
    - Model pull/execution/endpoint readiness now lives in `model_execution.py`; stack role normalization/policy checks live in `stack_roles.py`. Oversized model and profile/config test owners are split into focused refresh, mutation, listing, lifecycle, config, and governance modules.
-   - CI keeps the full Python 3.11 gate and validates contracts plus clean static-wheel installation on Python 3.12 and 3.13.
+   - CI runs the full gate and separate contracts plus clean static-wheel installation on the minimum supported Python 3.13.
    - Split the large MVP test module into focused files by area so slow tests and ownership are easier to see. Start with behavior boundaries that already exist in code: profiles/config, providers/models, runtimes/execution, integrations/chat, MCP, machines/stacks, deployment, and CLI smoke coverage.
    - Shared test infrastructure now separates isolated profile/model materialization (`profile_fixtures.py`), recording process/HTTP fakes (`boundary_fakes.py`), and in-process CLI output capture (`cli_fixtures.py`). Continue migrating repeated local doubles when touching their owning suites.
    - Keep the full automated suite useful as a PR gate without letting local discovery caches or external-machine state dominate runtime.

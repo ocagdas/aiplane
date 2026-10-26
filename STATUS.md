@@ -1,5 +1,33 @@
 # Status
 
+## Benchmark scope — 2026-10-18
+
+The generic AP2 wrapper subsystem was removed at the owner's request. Aiplane retains its existing model API clients, native smoke/custom suites, explicit trusted command graders, measurement import and comparison. External tools run through their own CLI/API; aiplane can inspect the resulting evidence through its existing import format. There is no runner registry, custom executable protocol, external process manager, runner-selection flag or wrapper MCP surface. AP1 timing, throughput and comparison safeguards remain. See [boundaries](docs/project/benchmark-evaluation-boundaries.md) and the [user guide](docs/user/benchmarks.md).
+
+## Server/client throughput and available-value average — 2026-10-17
+
+Provider responses and benchmark JSON now distinguish native server generation rate from client-observed request rate. `average_tokens_per_second` is the mean of available server/client values: one available value is used unchanged, neither yields null, and zero is retained. Summary output reports source means/sample counts and the mean of those source means. Ollama supplies native generation timing; OpenAI-compatible, Anthropic and Azure paths supply usage-based client rate while native server rate stays unknown. Imports recompute/check averages and refuse ambiguous old per-run rates. Different availability combinations are not ranked together. AP1 implementation is complete locally: requests carry validated controls; submission evidence, timing definitions and comparison identity checks are enforced. Live qualification remains AP6 work.
+
+## Setup refresh — 2026-10-17
+
+`scripts/setup_env.sh --action refresh` reconciles the current checkout’s package requirements in local/native, existing venv and existing Conda environments, or rebuilds a selected Docker image. `--dev` includes development requirements; `--upgrade-deps`, `--upgrade-pip`, `--docker-pull` and `--docker-no-cache` make upgrades/rebuild choices explicit. Python migration, Git updates, unrelated package pruning, profile writes and container restarts are outside refresh. Failed `pip check` propagates failure. Docker previews do not write files. [Development setup](docs/development/setup.md#refreshing-an-existing-installation) owns usage and limitations.
+
+## Python minimum and local setup — 2026-10-17
+
+Aiplane now requires Python 3.13+: package metadata, source import, setup interpreter checks, Ruff target and CI minimum agree. Local `.venv` was rebuilt using Python 3.13.14 and declared dev dependencies. Local/native, venv and Conda setup refuse an older selected Python before package installation or workloads; generated Docker builds check their base interpreter. The setup helper now has an explicit refresh action; see the refresh section below. Hosted CI remains unverified for this local delta.
+
+## Task evaluation and human review — 2026-10-18
+
+AP3 implementation provides retained prompt/answer artifacts and hashes per completed call/repeat; isolated transient command-grader files; preserved grader evidence/failures; and preview-first `benchmarks review-export` / `review-import`. Human numeric/pass ratings and pairwise preferences bind source/task/output/rubric identity and stay separate from automatic scores. A 20-case support-category/urgency example checks values and independently writes native results plus existing import records. Its supplied answers are synthetic, not live model evidence. No speculative format converters, runner framework, service or TUI were added. [Review guide](docs/user/benchmark-review.md) owns commands and limitations; VALIDATION owns executed checks.
+
+## Benchmark reliability limits — 2026-10-17
+
+Custom suites, command graders and measurement import exist. AP2 is removed. External tools use their own interfaces; result conversion remains data-only when a demonstrated format needs it, and bounded manual review is implemented in AP3. The [benchmark guide](docs/user/benchmarks.md) owns current commands and record fields. AP1 sends validated suite controls, records requested/submitted/unsupported/rejected settings, and separates client/server/model-call timing. Comparisons include workload/model/runtime/machine/execution/metric identities and refuse leaders for missing controls, execution errors or previews. Built-in smoke records do not invent missing revisions/host state or declare themselves controlled. A submitted request still does not prove server compliance; real cross-tool trials remain AP6 work.
+
+## Restricted-YAML audit — 2026-10-17
+
+Local parser changes reject duplicate keys and malformed indentation, preserve quoted comment markers and URL fragments, and round-trip finite numeric values and numeric-looking strings. Ensemble loading uses the shared parser instead of a separate duplicate-key scanner. This remains a restricted YAML implementation, not general YAML support. No agent execution or deployment capability was added.
+
 Developer preview; external-beta evidence gates remain open. See [validation](VALIDATION.md), [priorities](ROADMAP.md), and [open work](TODO.md).
 
 Repository automation now uses exact-tested-tip atomic publication, a boolean Quality gate, and exact-tag reusable release qualification. Rulesets are active; blocked-merge proof, current hosted App publication, and current exact-release evidence remain open. Earlier public releases do not qualify the current implementation.

@@ -143,6 +143,7 @@ Do not add this flag to routine client configuration unless that client is inten
 - pulling/downloading models;
 - installing runtimes;
 - running real benchmarks;
+- writing benchmark review exports/imports (use the preview-first CLI commands);
 - applying cloud deployments;
 - writing secrets;
 - arbitrary shell execution.

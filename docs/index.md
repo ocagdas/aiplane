@@ -10,3 +10,7 @@ Start with the [README](../README.md) and [user guides](user/index.md).
 - [Public demo](user/demo.md), [trial evidence](project/trial-evidence/recording-guide.md), and [launch criteria](project/launch-criteria.md).
 
 See [support](../SUPPORT.md), [security](../SECURITY.md), [conduct](../CODE_OF_CONDUCT.md) and [notices](../NOTICE.md).
+
+- [Model benchmarks](user/benchmarks.md): native smoke/custom suites, external measurement import and comparison.
+
+- [Benchmark answer review](user/benchmark-review.md): fixed-output scoring and pairwise judgments, with preview-first JSON export/import.

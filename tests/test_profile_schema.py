@@ -221,6 +221,41 @@ def test_parse_yaml_rejects_malformed_inline_lists() -> None:
         parse_yaml('values: ["one,two]\n')
 
 
+@pytest.mark.parametrize(
+    "text", ["allow_cloud: false\nallow_cloud: true\n", "policy:\n  enabled: false\n  enabled: true\n"]
+)
+def test_yaml_duplicate_settings_are_rejected(text: str) -> None:
+    with pytest.raises(ValueError, match="duplicate YAML"):
+        parse_yaml(text)
+
+
+@pytest.mark.parametrize(
+    "text", ["\tallow_cloud: true\n", "policy:\n\tallow_cloud: true\n", "enabled: true\n  nested: false\n"]
+)
+def test_yaml_invalid_indentation_is_rejected(text: str) -> None:
+    with pytest.raises(ValueError, match="indent"):
+        parse_yaml(text)
+
+
+def test_yaml_comments_preserve_types_and_quoted_hashes() -> None:
+    assert parse_yaml(
+        'allow_cloud: false # local only\nname: "hash # inside" # note\nitems: [1, "a # b"] # note\n'
+    ) == {
+        "allow_cloud": False,
+        "name": "hash # inside",
+        "items": [1, "a # b"],
+    }
+
+
+def test_yaml_mapping_separator_can_follow_a_colon_inside_a_key() -> None:
+    assert parse_yaml("checks:\n  package:example:\n    ok: true\n") == {"checks": {"package:example": {"ok": True}}}
+
+
+@pytest.mark.parametrize("document", [{"threshold": 0.75}, {"value": "123"}, {"value": "1e3"}, {"value": "-0.5"}])
+def test_yaml_dump_preserves_numeric_types(document: dict[str, object]) -> None:
+    assert parse_yaml(dump_yaml(document)) == document
+
+
 def test_public_profile_schema_validates_canonical_documents_and_rejects_invalid_ones(tmp_path) -> None:
     profiles = tmp_path / "profiles"
     create_profile("schema-instance", profiles_dir=profiles)

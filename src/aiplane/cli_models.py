@@ -643,7 +643,7 @@ def add_models_parser(
     models_benchmark = models_sub.add_parser(
         "benchmark",
         help="Run smoke benchmark tasks",
-        description="Run small analysis/completion/generation/reasoning tasks and save a benchmark JSON unless --no-save is used.",
+        description="Run built-in or custom tasks. Saved benchmark JSON includes full prompts and answers; use --no-save to avoid saving results.",
         formatter_class=formatter_class,
         epilog="Examples:\n  aiplane models benchmark MODEL_ALIAS\n  aiplane models benchmark --task completion --no-save MODEL_ALIAS\n  aiplane models benchmark --dry-run MODEL_ALIAS",
     )
@@ -662,7 +662,11 @@ def add_models_parser(
         choices=["system", "venv", "conda", "docker"],
         help="Environment mode used for custom evaluator commands; defaults to the active profile environment",
     )
-    models_benchmark.add_argument("--timeout-seconds", type=int, help="Timeout for each custom evaluator command")
+    models_benchmark.add_argument(
+        "--timeout-seconds",
+        type=int,
+        help="Timeout for the model request and each custom evaluator command",
+    )
     models_benchmark.add_argument(
         "--repeats",
         type=int,

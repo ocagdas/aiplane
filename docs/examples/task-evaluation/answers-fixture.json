@@ -1,0 +1,22 @@
+{
+  "case-01": "{\"category\": \"billing\", \"urgent\": false, \"explanation\": \"The customer reports: I was charged twice this month.\"}",
+  "case-02": "{\"category\": \"billing\", \"urgent\": false, \"explanation\": \"The customer reports: Please send a copy of my invoice.\"}",
+  "case-03": "{\"category\": \"billing\", \"urgent\": false, \"explanation\": \"The customer reports: My refund has not arrived.\"}",
+  "case-04": "{\"category\": \"billing\", \"urgent\": false, \"explanation\": \"The customer reports: The price on my receipt is wrong.\"}",
+  "case-05": "{\"category\": \"billing\", \"urgent\": false, \"explanation\": \"The customer reports: How do I change my payment card?\"}",
+  "case-06": "{\"category\": \"billing\", \"urgent\": false, \"explanation\": \"The customer reports: There is an unexpected charge.\"}",
+  "case-07": "{\"category\": \"billing\", \"urgent\": false, \"explanation\": \"The customer reports: Can you explain the tax on my bill?\"}",
+  "case-08": "{\"category\": \"access\", \"urgent\": true, \"explanation\": \"The customer reports: I cannot sign in.\"}",
+  "case-09": "{\"category\": \"access\", \"urgent\": false, \"explanation\": \"The customer reports: The password reset link expired.\"}",
+  "case-10": "{\"category\": \"access\", \"urgent\": true, \"explanation\": \"The customer reports: My account is locked.\"}",
+  "case-11": "{\"category\": \"access\", \"urgent\": false, \"explanation\": \"The customer reports: I lost my second-factor device.\"}",
+  "case-12": "{\"category\": \"access\", \"urgent\": false, \"explanation\": \"The customer reports: My login code never arrived.\"}",
+  "case-13": "{\"category\": \"access\", \"urgent\": false, \"explanation\": \"The customer reports: Please help me recover account access.\"}",
+  "case-14": "{\"category\": \"access\", \"urgent\": true, \"explanation\": \"The customer reports: Signing in sends me back to the login page.\"}",
+  "case-15": "{\"category\": \"feedback\", \"urgent\": false, \"explanation\": \"The customer reports: I would like a dark theme.\"}",
+  "case-16": "{\"category\": \"feedback\", \"urgent\": false, \"explanation\": \"The customer reports: The new layout looks great.\"}",
+  "case-17": "{\"category\": \"feedback\", \"urgent\": false, \"explanation\": \"The customer reports: Please add keyboard shortcuts.\"}",
+  "case-18": "{\"category\": \"feedback\", \"urgent\": false, \"explanation\": \"The customer reports: The navigation is confusing.\"}",
+  "case-19": "{\"category\": \"billing\", \"urgent\": false, \"explanation\": \"The customer reports: I suggest adding a calendar view.\"}",
+  "case-20": "not JSON"
+}

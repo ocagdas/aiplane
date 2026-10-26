@@ -53,6 +53,7 @@ For docs-only contributor/security changes, also run a Markdown sanity check for
 - Use `aiplane runtimes inventory RUNTIME` to distinguish runner-reported installed/served IDs from profile aliases.
 - Use `aiplane runtimes capacity-plan RUNTIME --model MODEL_ALIAS` before changing context, parallelism, cache, or offload settings.
 - Use `aiplane benchmarks calibration-plan` and preview-first calibration export/import for repeatable measurement evidence.
+- Use CLI-only `aiplane benchmarks review-export` / `review-import` for human judgments bound to saved answers and a versioned rubric. Preview first; `--yes` writes files. Human ratings do not replace automatic scores.
 - Use `aiplane models handoff-plan --role ROLE --model MODEL_ALIAS --runtime RUNTIME` to compose routing, calibration status, capacity, client, and optional agent handoffs without applying them; validate a saved artifact with `aiplane models handoff-validate PATH`.
 - For external agent frameworks, export `guardrails.py`, follow the framework starter’s `guardrail_integration` guidance, and set `AIPLANE_GUARDRAILS_RECEIPT_PATH` only when a secret-free local receipt is wanted. Inspect it with `aiplane agents guardrails receipt PATH`.
 - Use `aiplane models list --machine-file PATH` for a read-only named-machine simulation; do not mistake a fixture for target-host discovery.

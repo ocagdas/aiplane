@@ -27,6 +27,11 @@ DOCKER_BASE_IMAGE="python:3.13-slim"
 PYTHON_BIN="python"
 DRY_RUN=0
 UPDATE_PIP=1
+PIP_CHOICE=default
+INCLUDE_DEV=0
+UPGRADE_DEPS=0
+DOCKER_PULL=0
+DOCKER_NO_CACHE=0
 INSTALL_MODE="editable"
 ACTIVATE_AFTER_INSTALL=1
 
@@ -36,6 +41,7 @@ Usage: scripts/setup_env.sh [options]
 
 Actions:
   --action install     Create/configure the selected environment and install aiplane (default)
+  --action refresh     Reinstall this checkout and reconcile dependencies in an existing environment
   --action doctor      Verify the selected environment can import and run aiplane
   --action test        Run the unit test suite in the selected environment
 
@@ -50,18 +56,26 @@ Options:
   --conda-env NAME     Conda env name for --mode conda (default: aiplane)
   --docker-image TAG   Docker image tag for --mode docker (default: aiplane:local)
   --docker-base IMAGE  Base image for --mode docker builds (default: python:3.13-slim)
-  --python PATH        Python executable for local/venv creation (default: python)
+  --python PATH        Python 3.13+ executable for local/venv creation (default: python)
   --install-mode MODE  Package install mode: editable/source-linked or static/snapshot (default: editable)
   --editable           Shortcut for --install-mode editable
   --static             Shortcut for --install-mode static
   --activate 0|1       For Conda install, activate env after install when sourced (default: 1)
+  --dev                Include declared development/test dependencies
+  --upgrade-deps       Upgrade dependencies within repository constraints (install/refresh only)
+  --upgrade-pip        Upgrade pip explicitly (refresh leaves pip alone by default)
   --no-pip-upgrade     Skip pip upgrade before package install
+  --docker-pull       Check for a newer Docker base image (Docker install/refresh only)
+  --docker-no-cache   Rebuild Docker layers without cache (Docker install/refresh only)
   --dry-run            Print commands without executing them
   -h, --help           Show this help
 
 Examples:
   scripts/setup_env.sh --mode venv --action install --editable
   scripts/setup_env.sh --mode venv --action install --static
+  scripts/setup_env.sh --mode venv --action refresh --dev --dry-run
+  scripts/setup_env.sh --mode venv --action refresh --dev
+  scripts/setup_env.sh --mode docker --action refresh --dev --upgrade-deps --docker-pull
   scripts/setup_env.sh --mode venv --action doctor
   scripts/setup_env.sh --mode conda --conda-env aiplane --action test
   source scripts/setup_env.sh --mode conda --conda-env aiplane --action install --editable
@@ -89,6 +103,17 @@ run_shell() {
 }
 
 
+require_supported_python() {
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    return 0
+  fi
+  if ! "$@" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 13) else 2)'; then
+    echo "aiplane requires Python 3.13 or newer in the selected environment." >&2
+    echo "Select --python /path/to/python3.13 for local/venv setup, or recreate the selected environment." >&2
+    return 2
+  fi
+}
+
 conda_available() {
   command -v conda >/dev/null 2>&1
 }
@@ -102,11 +127,13 @@ ensure_conda_python() {
     return 0
   fi
   if conda run -n "$CONDA_ENV" python --version >/dev/null 2>&1; then
-    return 0
+    require_supported_python conda run -n "$CONDA_ENV" python
+    return $?
   fi
   echo "Conda environment exists but does not contain Python: $CONDA_ENV" >&2
   echo "Installing python=3.13 into the existing Conda environment." >&2
   run conda install -n "$CONDA_ENV" python=3.13 -y || return $?
+  require_supported_python conda run -n "$CONDA_ENV" python
 }
 
 write_conda_activation_helper() {
@@ -174,7 +201,29 @@ while [[ $# -gt 0 ]]; do
       ACTIVATE_AFTER_INSTALL="${2:?missing value for --activate}"
       shift 2
       ;;
+    --dev)
+      INCLUDE_DEV=1
+      shift
+      ;;
+    --upgrade-deps)
+      UPGRADE_DEPS=1
+      shift
+      ;;
+    --upgrade-pip)
+      UPDATE_PIP=1
+      PIP_CHOICE=explicit
+      shift
+      ;;
+    --docker-pull)
+      DOCKER_PULL=1
+      shift
+      ;;
+    --docker-no-cache)
+      DOCKER_NO_CACHE=1
+      shift
+      ;;
     --no-pip-upgrade)
+      PIP_CHOICE=explicit
       UPDATE_PIP=0
       shift
       ;;
@@ -200,7 +249,7 @@ case "$MODE" in
 esac
 
 case "$ACTION" in
-  install|doctor|test) ;;
+  install|refresh|doctor|test) ;;
   *) echo "Unsupported action: $ACTION" >&2; return 2 ;;
 esac
 
@@ -215,25 +264,52 @@ case "$INSTALL_MODE" in
   *) echo "Unsupported install mode: $INSTALL_MODE" >&2; return 2 ;;
 esac
 
-if [[ "$ACTION" == "install" && "$(uname -s)" != "Linux" ]]; then
-  echo "aiplane setup_env.sh install is not supported on this platform: $(uname -s)" >&2
+if [[ "$ACTION" == "refresh" && "$PIP_CHOICE" == "default" ]]; then
+  UPDATE_PIP=0
+fi
+if [[ "$ACTION" != "install" && "$ACTION" != "refresh" ]] &&
+   [[ "$INCLUDE_DEV" -eq 1 || "$UPGRADE_DEPS" -eq 1 || "$DOCKER_PULL" -eq 1 || "$DOCKER_NO_CACHE" -eq 1 ]]; then
+  echo "Dependency/build options require --action install or refresh." >&2
+  return 2
+fi
+if [[ "$MODE" != "docker" && ( "$DOCKER_PULL" -eq 1 || "$DOCKER_NO_CACHE" -eq 1 ) ]]; then
+  echo "Docker build options require --mode docker." >&2
+  return 2
+fi
+
+if [[ ( "$ACTION" == "install" || "$ACTION" == "refresh" ) && "$(uname -s)" != "Linux" ]]; then
+  echo "aiplane setup_env.sh install/refresh is not supported on this platform: $(uname -s)" >&2
   echo "Install aiplane with the platform-native Python/Conda workflow, then use aiplane discover, doctor, recommend, and export." >&2
   return 2
 fi
 
+DOCKER_RUNTIME_TARGET=.
+if [[ "$INCLUDE_DEV" -eq 1 ]]; then DOCKER_RUNTIME_TARGET='.[dev]'; fi
+
 cd "$PROJECT_ROOT"
 
-pip_install_args() {
-  case "$INSTALL_MODE" in
-    editable)
-      printf '%s
-' -e .
-      ;;
-    static)
-      printf '%s
-' .
-      ;;
-  esac
+install_python_package() {
+  local args=()
+  local target=.
+  if [[ "$INCLUDE_DEV" -eq 1 ]]; then target='.[dev]'; fi
+  if [[ "$INSTALL_MODE" == "editable" ]]; then args+=(-e); fi
+  if [[ "$UPGRADE_DEPS" -eq 1 ]]; then args+=(--upgrade --upgrade-strategy eager); fi
+  if [[ "$UPDATE_PIP" -eq 1 ]]; then
+    run "$@" -m pip install --upgrade pip || return $?
+  fi
+  run "$@" -m pip install "${args[@]}" "$target" || return $?
+  run "$@" -m pip check || return $?
+}
+
+require_existing_environment() {
+  if [[ "$MODE" == "venv" && ! -x "$VENV_PATH/bin/python" ]]; then
+    echo "Refresh requires an existing venv: $VENV_PATH. Use --action install first." >&2
+    return 2
+  fi
+  if [[ "$MODE" == "conda" ]] && { ! conda_available || ! conda_env_exists; }; then
+    echo "Refresh requires an existing Conda environment: $CONDA_ENV. Use --action install first." >&2
+    return 2
+  fi
 }
 
 install_label() {
@@ -267,22 +343,19 @@ python_for_mode() {
 }
 
 install_local() {
+  require_supported_python "$PYTHON_BIN" || return $?
   echo "Installing aiplane in $(install_label) mode into the current Python environment."
-  if [[ "$UPDATE_PIP" -eq 1 ]]; then
-    run "$PYTHON_BIN" -m pip install --upgrade pip || return $?
-  fi
-  run "$PYTHON_BIN" -m pip install $(pip_install_args) || return $?
+  install_python_package "$PYTHON_BIN" || return $?
 }
 
 install_venv() {
   echo "Installing aiplane in $(install_label) mode into venv: $VENV_PATH"
   if [[ ! -d "$VENV_PATH" ]]; then
+    require_supported_python "$PYTHON_BIN" || return $?
     run "$PYTHON_BIN" -m venv "$VENV_PATH" || return $?
   fi
-  if [[ "$UPDATE_PIP" -eq 1 ]]; then
-    run "$VENV_PATH/bin/python" -m pip install --upgrade pip || return $?
-  fi
-  run "$VENV_PATH/bin/python" -m pip install $(pip_install_args) || return $?
+  require_supported_python "$VENV_PATH/bin/python" || return $?
+  install_python_package "$VENV_PATH/bin/python" || return $?
 }
 
 install_conda() {
@@ -302,10 +375,7 @@ install_conda() {
     return 1
   fi
   ensure_conda_python || return $?
-  if [[ "$UPDATE_PIP" -eq 1 ]]; then
-    run conda run -n "$CONDA_ENV" python -m pip install --upgrade pip || return $?
-  fi
-  run conda run -n "$CONDA_ENV" python -m pip install $(pip_install_args) || return $?
+  install_python_package conda run -n "$CONDA_ENV" python || return $?
   if [[ "$DRY_RUN" -eq 0 ]]; then
     write_conda_activation_helper
   fi
@@ -317,36 +387,63 @@ install_docker() {
     echo "docker is not on PATH" >&2
     return 1
   fi
-  mkdir -p "$PROJECT_ROOT/.aiplane/docker"
   local dockerfile="$PROJECT_ROOT/.aiplane/docker/setup_env.Dockerfile"
+  local pip_flags=""
+  local pip_update=""
+  local target="/opt/aiplane"
+  local contents=""
+  local refresh_token=stable
+  if [[ "$UPGRADE_DEPS" -eq 1 ]]; then
+    pip_flags="--upgrade --upgrade-strategy eager"
+  fi
+  if [[ "$UPGRADE_DEPS" -eq 1 || ( "$PIP_CHOICE" == "explicit" && "$UPDATE_PIP" -eq 1 ) ]]; then
+    refresh_token="$(date +%s%N)"
+  fi
+  if [[ "$UPDATE_PIP" -eq 1 ]]; then pip_update="python -m pip install --upgrade pip && "; fi
+  if [[ "$INCLUDE_DEV" -eq 1 ]]; then target='/opt/aiplane[dev]'; fi
+  contents="$(cat <<EOF
+FROM $DOCKER_BASE_IMAGE
+ARG AIPLANE_DEPENDENCY_REFRESH=stable
+WORKDIR /workspace
+RUN python -c "import sys; assert sys.version_info >= (3, 13), 'aiplane requires Python 3.13 or newer'"
+EOF
+)"
   case "$INSTALL_MODE" in
     editable)
-      cat >"$dockerfile" <<EOF
-FROM $DOCKER_BASE_IMAGE
-WORKDIR /workspace
-RUN python -m pip install --upgrade pip
-# Editable/source-linked mode mounts the host checkout at /workspace when the container runs.
+      contents+="$(cat <<EOF
+
+COPY pyproject.toml /tmp/aiplane-pyproject.toml
+RUN echo "\$AIPLANE_DEPENDENCY_REFRESH" >/dev/null && ${pip_update}python -c "import pathlib, tomllib; p = tomllib.loads(pathlib.Path('/tmp/aiplane-pyproject.toml').read_text())['project']; requirements = list(p.get('dependencies', [])) + (p.get('optional-dependencies', {}).get('dev', []) if $INCLUDE_DEV else []); pathlib.Path('/tmp/aiplane-requirements.txt').write_text('\\n'.join(requirements))" && python -m pip install $pip_flags -r /tmp/aiplane-requirements.txt && python -m pip check
+# Source is mounted at /workspace when the container runs.
 EOF
+)"
       ;;
     static)
-      cat >"$dockerfile" <<EOF
-FROM $DOCKER_BASE_IMAGE
-WORKDIR /opt/aiplane
+      contents+="$(cat <<EOF
+
 COPY . /opt/aiplane
-RUN python -m pip install --upgrade pip \
-    && python -m pip install -e /opt/aiplane \
-    && python -m aiplane profiles bootstrap-local --no-overwrite --no-discovery
+RUN echo "\$AIPLANE_DEPENDENCY_REFRESH" >/dev/null && ${pip_update}python -m pip install $pip_flags '$target' && python -m pip check
 WORKDIR /opt/aiplane
 EOF
+)"
       ;;
   esac
-  run docker build -t "$DOCKER_IMAGE" -f "$dockerfile" "$PROJECT_ROOT" || return $?
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    printf 'Dockerfile preview (not written):\n%s\n' "$contents"
+  else
+    mkdir -p "$(dirname "$dockerfile")"
+    printf '%s\n' "$contents" >"$dockerfile"
+  fi
+  local build_args=(--build-arg "AIPLANE_DEPENDENCY_REFRESH=$refresh_token")
+  if [[ "$DOCKER_PULL" -eq 1 ]]; then build_args+=(--pull); fi
+  if [[ "$DOCKER_NO_CACHE" -eq 1 ]]; then build_args+=(--no-cache); fi
+  run docker build "${build_args[@]}" -t "$DOCKER_IMAGE" -f "$dockerfile" "$PROJECT_ROOT" || return $?
 }
 
 docker_run_aiplane() {
   case "$INSTALL_MODE" in
     editable)
-      run docker run --rm -v "$PROJECT_ROOT:/workspace" -w /workspace "$DOCKER_IMAGE" sh -lc "python -m pip install -e . >/tmp/aiplane-install.log && python -m aiplane $*"
+      run docker run --rm -v "$PROJECT_ROOT:/workspace" -w /workspace "$DOCKER_IMAGE" sh -lc "python -m pip install -e '${DOCKER_RUNTIME_TARGET}' >/tmp/aiplane-install.log && python -m aiplane $*"
       ;;
     static)
       run docker run --rm "$DOCKER_IMAGE" python -m aiplane "$@"
@@ -357,7 +454,7 @@ docker_run_aiplane() {
 docker_run_shell() {
   case "$INSTALL_MODE" in
     editable)
-      run docker run --rm -v "$PROJECT_ROOT:/workspace" -w /workspace "$DOCKER_IMAGE" sh -lc "python -m pip install -e . >/tmp/aiplane-install.log && $*"
+      run docker run --rm -v "$PROJECT_ROOT:/workspace" -w /workspace "$DOCKER_IMAGE" sh -lc "python -m pip install -e '${DOCKER_RUNTIME_TARGET}' >/tmp/aiplane-install.log && $*"
       ;;
     static)
       run docker run --rm "$DOCKER_IMAGE" sh -lc "$*"
@@ -419,7 +516,7 @@ activation_hint() {
     docker)
       echo "Docker image $DOCKER_IMAGE is ready. Run a CLI command with:"
       if [[ "$INSTALL_MODE" == "editable" ]]; then
-        printf '  docker run --rm -v %q:/workspace -w /workspace %q sh -lc %q\n' "$PROJECT_ROOT" "$DOCKER_IMAGE" "python -m pip install -e . >/tmp/aiplane-install.log && python -m aiplane profiles list"
+        printf '  docker run --rm -v %q:/workspace -w /workspace %q sh -lc %q\n' "$PROJECT_ROOT" "$DOCKER_IMAGE" "python -m pip install -e '${DOCKER_RUNTIME_TARGET}' >/tmp/aiplane-install.log && python -m aiplane profiles list"
       else
         echo "  docker run --rm $DOCKER_IMAGE python -m aiplane profiles list"
       fi
@@ -474,7 +571,33 @@ test_mode() {
   esac
 }
 
+if [[ "$ACTION" == "doctor" || "$ACTION" == "test" ]]; then
+  case "$MODE" in
+    local) require_supported_python "$PYTHON_BIN" || return $? ;;
+    venv) require_supported_python "$VENV_PATH/bin/python" || return $? ;;
+    conda) require_supported_python conda run -n "$CONDA_ENV" python || return $? ;;
+  esac
+fi
+
 case "$ACTION" in
+  refresh)
+    require_existing_environment || return $?
+    case "$MODE" in
+      local)
+        require_supported_python "$PYTHON_BIN" || return $?
+        install_python_package "$PYTHON_BIN" || return $?
+        ;;
+      venv)
+        require_supported_python "$VENV_PATH/bin/python" || return $?
+        install_python_package "$VENV_PATH/bin/python" || return $?
+        ;;
+      conda)
+        require_supported_python conda run -n "$CONDA_ENV" python || return $?
+        install_python_package conda run -n "$CONDA_ENV" python || return $?
+        ;;
+      docker) install_docker || return $? ;;
+    esac
+    ;;
   install)
     echo "Install mode: $(install_label)"
     case "$MODE" in

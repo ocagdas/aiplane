@@ -3,12 +3,14 @@ from __future__ import annotations
 import json
 import time
 from dataclasses import dataclass, field
-from urllib.error import URLError
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request
 from typing import Any, Mapping
 
 from .boundaries import HttpTransport, UrllibHttpTransport
+from .decoding import DecodingRejected, decoding_request
+from .telemetry import rate_from_milliseconds, throughput_rates
 
 
 @dataclass(frozen=True)
@@ -61,12 +63,16 @@ class OllamaBackend:
         except (URLError, TimeoutError, OSError, ConnectionError) as exc:
             return False, f"Ollama is not reachable: {exc}"
 
-    def chat(self, model: str, prompt: str, *, measure_ttft: bool = False) -> BackendResult:
+    def chat(
+        self, model: str, prompt: str, *, measure_ttft: bool = False, decoding: dict[str, Any] | None = None
+    ) -> BackendResult:
+        settings, decoding_evidence = decoding_request("ollama_api", decoding)
         payload = {
             "model": model,
             "stream": measure_ttft,
             "messages": [{"role": "user", "content": prompt}],
         }
+        payload.update(settings)
         request = Request(
             f"{self.endpoint}/api/chat",
             data=json.dumps(payload).encode("utf-8"),
@@ -77,8 +83,12 @@ class OllamaBackend:
         try:
             with self.http_transport.open(request, timeout=self.timeout_seconds) as response:
                 if measure_ttft:
-                    return self._stream_chat_response(response, started_at)
+                    result = self._stream_chat_response(response, started_at)
+                    result.telemetry["decoding_evidence"] = decoding_evidence
+                    return result
                 body = json.loads(response.read().decode("utf-8"))
+        except HTTPError as exc:
+            raise DecodingRejected(decoding_evidence, exc.code) from exc
         except (URLError, TimeoutError, OSError, ConnectionError) as exc:
             detail = str(exc)
             if isinstance(exc, TimeoutError) or "timed out" in detail.lower():
@@ -94,6 +104,7 @@ class OllamaBackend:
                 f"then `aiplane runtimes pull ollama --model {model}`, or use `--dry-run` to preview prompts. "
                 f"Details: {exc}"
             ) from exc
+        client_elapsed_ms = round((time.perf_counter() - started_at) * 1000, 3)
         message = body.get("message", {})
         prompt_tokens = body.get("prompt_eval_count")
         output_tokens = body.get("eval_count")
@@ -103,16 +114,18 @@ class OllamaBackend:
         tokens_per_second = _tokens_per_second(output_tokens, eval_duration_ns)
         prompt_tokens_per_second = _tokens_per_second(prompt_tokens, prompt_eval_duration_ns)
         telemetry = {
-            "elapsed_ms": round(float(body["total_duration"]) / 1_000_000, 3)
-            if isinstance(body.get("total_duration"), (int, float))
-            else None,
+            "elapsed_ms": client_elapsed_ms,
+            "client_elapsed_ms": client_elapsed_ms,
+            "server_elapsed_ms": _nanoseconds_to_milliseconds(body.get("total_duration")),
+            "server_generation_ms": _nanoseconds_to_milliseconds(eval_duration_ns),
             "load_duration_ms": _nanoseconds_to_milliseconds(load_duration_ns),
             "ttft_ms": None,
             "prompt_tokens": prompt_tokens,
             "prompt_tokens_per_second": prompt_tokens_per_second,
             "output_tokens": output_tokens,
-            "tokens_per_second": tokens_per_second,
+            **throughput_rates(tokens_per_second, rate_from_milliseconds(output_tokens, client_elapsed_ms)),
             "source": "ollama_native_response",
+            "decoding_evidence": decoding_evidence,
         }
         return BackendResult(self.name, str(message.get("content", "")), False, telemetry)
 
@@ -146,25 +159,32 @@ class OllamaBackend:
                 break
         if not final:
             raise RuntimeError("Ollama stream ended before its final telemetry record")
+        client_elapsed_ms = round((time.perf_counter() - started_at) * 1000, 3)
         prompt_tokens = final.get("prompt_eval_count")
         output_tokens = final.get("eval_count")
         telemetry = {
-            "elapsed_ms": _nanoseconds_to_milliseconds(final.get("total_duration")),
+            "elapsed_ms": client_elapsed_ms,
+            "client_elapsed_ms": client_elapsed_ms,
+            "server_elapsed_ms": _nanoseconds_to_milliseconds(final.get("total_duration")),
+            "server_generation_ms": _nanoseconds_to_milliseconds(final.get("eval_duration")),
             "load_duration_ms": _nanoseconds_to_milliseconds(final.get("load_duration")),
             "ttft_ms": round((first_content_at - started_at) * 1000, 3) if first_content_at is not None else None,
             "prompt_tokens": prompt_tokens,
             "prompt_tokens_per_second": _tokens_per_second(prompt_tokens, final.get("prompt_eval_duration")),
             "output_tokens": output_tokens,
-            "tokens_per_second": _tokens_per_second(output_tokens, final.get("eval_duration")),
+            **throughput_rates(
+                _tokens_per_second(output_tokens, final.get("eval_duration")),
+                rate_from_milliseconds(output_tokens, client_elapsed_ms),
+            ),
             "source": "ollama_stream_client_timing",
         }
         return BackendResult(self.name, "".join(parts), False, telemetry)
 
 
 def _tokens_per_second(tokens: object, duration_ns: object) -> float | None:
-    if not isinstance(tokens, (int, float)) or not isinstance(duration_ns, (int, float)) or duration_ns <= 0:
+    if isinstance(duration_ns, bool) or not isinstance(duration_ns, (int, float)):
         return None
-    return round(float(tokens) / (float(duration_ns) / 1_000_000_000), 3)
+    return rate_from_milliseconds(tokens, float(duration_ns) / 1_000_000)
 
 
 def _nanoseconds_to_milliseconds(value: object) -> float | None:
@@ -202,42 +222,37 @@ class OpenAICompatibleBackend:
         except (URLError, TimeoutError, OSError, ConnectionError) as exc:
             return False, f"OpenAI-compatible endpoint is not reachable: {exc}"
 
-    def chat(self, model: str, prompt: str) -> BackendResult:
+    def chat(self, model: str, prompt: str, *, decoding: dict[str, Any] | None = None) -> BackendResult:
+        settings, decoding_evidence = decoding_request("openai_compatible", decoding)
         payload = {
             "model": model,
             "stream": False,
             "messages": [{"role": "user", "content": prompt}],
         }
+        payload.update(settings)
         request = Request(
             f"{self.endpoint}/chat/completions",
             data=json.dumps(payload).encode("utf-8"),
             headers={"Content-Type": "application/json", **self.headers},
             method="POST",
         )
+        started_at = time.perf_counter()
         try:
             with self.http_transport.open(request, timeout=self.timeout_seconds) as response:
                 body = json.loads(response.read().decode("utf-8"))
+        except HTTPError as exc:
+            raise DecodingRejected(decoding_evidence, exc.code) from exc
         except (URLError, TimeoutError, OSError, ConnectionError) as exc:
             raise RuntimeError(
                 f"OpenAI-compatible endpoint is not reachable at {self.endpoint}. "
                 f"Start the runtime or configure a reachable local/remote endpoint. Details: {exc}"
             ) from exc
+        client_elapsed_ms = round((time.perf_counter() - started_at) * 1000, 3)
         choices = body.get("choices", [])
-        usage = body.get("usage") if isinstance(body.get("usage"), dict) else {}
-        telemetry = {
-            "elapsed_ms": None,
-            "load_duration_ms": None,
-            "ttft_ms": None,
-            "prompt_tokens": usage.get("prompt_tokens"),
-            "prompt_tokens_per_second": None,
-            "output_tokens": (
-                usage.get("completion_tokens")
-                if usage.get("completion_tokens") is not None
-                else usage.get("output_tokens")
-            ),
-            "tokens_per_second": None,
-            "source": "openai_compatible_usage" if usage else None,
-        }
+        telemetry = _usage_telemetry(
+            body.get("usage"), source="openai_compatible_usage", client_elapsed_ms=client_elapsed_ms
+        )
+        telemetry["decoding_evidence"] = decoding_evidence
         if not choices:
             return BackendResult(self.name, "", False, telemetry)
         first = choices[0]
@@ -249,16 +264,22 @@ class OpenAICompatibleBackend:
         return BackendResult(self.name, str(first.get("text", "")), False, telemetry)
 
 
-def _usage_telemetry(usage: object, *, source: str) -> dict[str, Any]:
+def _usage_telemetry(usage: object, *, source: str, client_elapsed_ms: float) -> dict[str, Any]:
     values = usage if isinstance(usage, dict) else {}
+    output_tokens = values.get("completion_tokens")
+    if output_tokens is None:
+        output_tokens = values.get("output_tokens")
     return {
-        "elapsed_ms": None,
+        "elapsed_ms": client_elapsed_ms,
+        "client_elapsed_ms": client_elapsed_ms,
+        "server_elapsed_ms": None,
+        "server_generation_ms": None,
         "load_duration_ms": None,
         "ttft_ms": None,
         "prompt_tokens": values.get("prompt_tokens", values.get("input_tokens")),
         "prompt_tokens_per_second": None,
-        "output_tokens": values.get("completion_tokens", values.get("output_tokens")),
-        "tokens_per_second": None,
+        "output_tokens": output_tokens,
+        **throughput_rates(None, rate_from_milliseconds(output_tokens, client_elapsed_ms)),
         "source": source if values else None,
     }
 
@@ -280,12 +301,14 @@ class AnthropicMessagesBackend:
         self.api_version = api_version
         self.http_transport = http_transport or UrllibHttpTransport()
 
-    def chat(self, model: str, prompt: str) -> BackendResult:
+    def chat(self, model: str, prompt: str, *, decoding: dict[str, Any] | None = None) -> BackendResult:
+        settings, decoding_evidence = decoding_request("anthropic_api", decoding)
         payload = {
             "model": model,
             "max_tokens": 1024,
             "messages": [{"role": "user", "content": prompt}],
         }
+        payload.update(settings)
         headers = {
             "Content-Type": "application/json",
             "anthropic-version": self.api_version,
@@ -297,15 +320,23 @@ class AnthropicMessagesBackend:
             headers=headers,
             method="POST",
         )
+        started_at = time.perf_counter()
         try:
             with self.http_transport.open(request, timeout=self.timeout_seconds) as response:
                 body = json.loads(response.read().decode("utf-8"))
+        except HTTPError as exc:
+            raise DecodingRejected(decoding_evidence, exc.code) from exc
         except (URLError, TimeoutError, OSError, ConnectionError) as exc:
             raise RuntimeError(
                 f"Anthropic Messages endpoint is not reachable at {self.endpoint}. "
                 f"Check provider credentials and endpoint configuration. Details: {exc}"
             ) from exc
-        telemetry = _usage_telemetry(body.get("usage"), source="anthropic_messages_usage")
+        telemetry = _usage_telemetry(
+            body.get("usage"),
+            source="anthropic_messages_usage",
+            client_elapsed_ms=round((time.perf_counter() - started_at) * 1000, 3),
+        )
+        telemetry["decoding_evidence"] = decoding_evidence
         chunks = body.get("content", [])
         if isinstance(chunks, list):
             return BackendResult(
@@ -334,7 +365,8 @@ class AzureOpenAIBackend:
         self.headers = dict(headers or {})
         self.http_transport = http_transport or UrllibHttpTransport()
 
-    def chat(self, deployment: str, prompt: str) -> BackendResult:
+    def chat(self, deployment: str, prompt: str, *, decoding: dict[str, Any] | None = None) -> BackendResult:
+        settings, decoding_evidence = decoding_request("azure_openai", decoding)
         payload = {
             "stream": False,
             "messages": [{"role": "user", "content": prompt}],
@@ -342,22 +374,31 @@ class AzureOpenAIBackend:
         base = self.endpoint[:-7] if self.endpoint.endswith("/openai") else self.endpoint
         query = urlencode({"api-version": self.api_version})
         url = f"{base}/openai/deployments/{deployment}/chat/completions?{query}"
+        payload.update(settings)
         request = Request(
             url,
             data=json.dumps(payload).encode("utf-8"),
             headers={"Content-Type": "application/json", **self.headers},
             method="POST",
         )
+        started_at = time.perf_counter()
         try:
             with self.http_transport.open(request, timeout=self.timeout_seconds) as response:
                 body = json.loads(response.read().decode("utf-8"))
+        except HTTPError as exc:
+            raise DecodingRejected(decoding_evidence, exc.code) from exc
         except (URLError, TimeoutError, OSError, ConnectionError) as exc:
             raise RuntimeError(
                 f"Azure OpenAI endpoint is not reachable at {self.endpoint}. "
                 f"Check the resource endpoint, deployment name, api-version, and credentials. Details: {exc}"
             ) from exc
         choices = body.get("choices", [])
-        telemetry = _usage_telemetry(body.get("usage"), source="azure_openai_usage")
+        telemetry = _usage_telemetry(
+            body.get("usage"),
+            source="azure_openai_usage",
+            client_elapsed_ms=round((time.perf_counter() - started_at) * 1000, 3),
+        )
+        telemetry["decoding_evidence"] = decoding_evidence
         if not choices or not isinstance(choices[0], dict):
             return BackendResult(self.name, "", True, telemetry)
         message = choices[0].get("message")

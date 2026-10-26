@@ -39,7 +39,27 @@
       "type": "boolean"
     },
     "decoding": {
-      "type": "object"
+      "type": "object",
+      "properties": {
+        "temperature": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 2
+        },
+        "top_p": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "seed": {
+          "type": "integer"
+        },
+        "max_output_tokens": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "additionalProperties": false
     },
     "metrics": {
       "type": "array",
@@ -54,7 +74,13 @@
           "prompt_tokens",
           "prompt_tokens_per_second",
           "output_tokens",
-          "tokens_per_second"
+          "server_tokens_per_second",
+          "client_tokens_per_second",
+          "average_tokens_per_second",
+          "client_elapsed_ms",
+          "server_elapsed_ms",
+          "server_generation_ms",
+          "task_elapsed_ms"
         ]
       }
     },

@@ -1068,9 +1068,15 @@ class ModelCatalog:
         return self._execution().pull(name)
 
     def complete(
-        self, name: str, prompt: str, timeout_seconds: int | None = None, purpose: str = "chat"
+        self,
+        name: str,
+        prompt: str,
+        timeout_seconds: int | None = None,
+        purpose: str = "chat",
+        *,
+        decoding: dict[str, Any] | None = None,
     ) -> BackendResult:
-        return self._execution().complete(name, prompt, timeout_seconds, purpose)
+        return self._execution().complete(name, prompt, timeout_seconds, purpose, decoding=decoding)
 
     def require_execution_capability(self, name: str, model: dict[str, Any], purpose: str) -> None:
         self._execution().require_execution_capability(name, model, purpose)

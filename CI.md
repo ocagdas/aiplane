@@ -8,8 +8,8 @@ Run `make check` or `scripts/check.sh` from an environment installed with `pytho
 
 Required jobs:
 
-- `checks`: checksum-pinned actionlint 1.7.12 workflow validation, formatting, Ruff, isolated-profile full pytest suite on Python 3.11, with JUnit evidence.
-- `compatibility`: packaging and command contracts on Python 3.12 and 3.13.
+- `checks`: checksum-pinned actionlint 1.7.12 workflow validation, formatting, Ruff, isolated-profile full pytest suite on Python 3.13, with JUnit evidence.
+- `compatibility`: packaging and command contracts on the minimum supported Python 3.13.
 - `install-channels`: real pip, pipx and uv installed-wheel lifecycle checks on Linux, macOS and Windows, using Python 3.13. These exercise installed resources, replacement and uninstall without starting providers, model runtimes, tunnels or IDE clients.
 
 **Quality gate** requires every required job to succeed. Missing, failed, skipped or cancelled results block; additional failed dependencies also block. Its `go=true|false` output is also exposed by reusable CI. Consumers require both successful qualification and `go == 'true'` on the same commit.

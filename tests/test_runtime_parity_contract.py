@@ -59,7 +59,7 @@ def test_mlx_and_vllm_launch_manifests_use_current_entrypoints() -> None:
     assert mlx["launch"]["environment"] == {}
 
 
-def test_benchmark_prefers_runtime_native_measurements() -> None:
+def test_benchmark_preserves_server_client_rates_and_their_average() -> None:
     profile = load_profile("local-dev", Path.cwd())
     runner = BenchmarkRunner(profile)
     native = BackendResult(
@@ -67,11 +67,14 @@ def test_benchmark_prefers_runtime_native_measurements() -> None:
         "add returns a sum and an edge case is mixed types",
         False,
         {
-            "elapsed_ms": 12.5,
+            "client_elapsed_ms": 1000.0,
+            "server_elapsed_ms": 750.0,
+            "server_generation_ms": 400.0,
             "ttft_ms": 3.5,
             "prompt_tokens": 10,
             "output_tokens": 8,
-            "tokens_per_second": 20.0,
+            "server_tokens_per_second": 20.0,
+            "client_tokens_per_second": 8.0,
             "source": "fixture_native",
         },
     )
@@ -79,11 +82,15 @@ def test_benchmark_prefers_runtime_native_measurements() -> None:
         result = runner.run("fixture-analysis-small", save=False)
     assert complete.call_args.kwargs["purpose"] == "benchmark"
     row = result["results"][0]
-    assert row["elapsed_ms"] == 12.5
+    assert row["elapsed_ms"] == 1000.0
+    assert row["server_elapsed_ms"] == 750.0
+    assert row["server_generation_ms"] == 400.0
     assert row["ttft_ms"] == 3.5
     assert row["prompt_tokens"] == 10
     assert row["output_tokens"] == 8
-    assert row["tokens_per_second"] == 20.0
+    assert row["server_tokens_per_second"] == 20.0
+    assert row["client_tokens_per_second"] == 8.0
+    assert row["average_tokens_per_second"] == 14.0
     assert row["telemetry_source"] == "fixture_native"
     assert result["runtime_evidence"]["artifact_lock"]["record_type"] == "model_artifact_lock"
 
@@ -159,16 +166,31 @@ def test_ollama_backend_preserves_native_token_and_duration_fields() -> None:
             }
         )
     )
-    result = backend.chat("model", "hello")
+    with patch("aiplane.backends.time.perf_counter", side_effect=[10.0, 11.0]):
+        result = backend.chat("model", "hello")
     assert result.telemetry == {
-        "elapsed_ms": 750.0,
+        "elapsed_ms": 1000.0,
+        "client_elapsed_ms": 1000.0,
+        "server_elapsed_ms": 750.0,
+        "server_generation_ms": 400.0,
         "load_duration_ms": 125.0,
         "ttft_ms": None,
         "prompt_tokens": 12,
         "prompt_tokens_per_second": 20.0,
         "output_tokens": 8,
-        "tokens_per_second": 20.0,
+        "server_tokens_per_second": 20.0,
+        "client_tokens_per_second": 8.0,
+        "average_tokens_per_second": 14.0,
+        "throughput_average_sources": ["server", "client"],
         "source": "ollama_native_response",
+        "decoding_evidence": {
+            "protocol": "ollama_api",
+            "requested": {},
+            "submitted": {},
+            "unsupported": [],
+            "status": "submitted",
+            "provider_confirmed": None,
+        },
     }
 
 
@@ -189,19 +211,33 @@ def test_ollama_streamed_benchmark_telemetry_records_observed_ttft() -> None:
         ]
     )
     backend = OllamaBackend(http_transport=transport)
-    with patch("aiplane.backends.time.perf_counter", side_effect=[10.0, 10.025]):
+    with patch("aiplane.backends.time.perf_counter", side_effect=[10.0, 10.025, 10.1]):
         result = backend.chat("model", "hello", measure_ttft=True)
 
     assert result.text == "hello world"
     assert result.telemetry == {
-        "elapsed_ms": 80.0,
+        "elapsed_ms": 100.0,
+        "client_elapsed_ms": 100.0,
+        "server_elapsed_ms": 80.0,
+        "server_generation_ms": 40.0,
         "load_duration_ms": 10.0,
         "ttft_ms": 25.0,
         "prompt_tokens": 4,
         "prompt_tokens_per_second": 200.0,
         "output_tokens": 2,
-        "tokens_per_second": 50.0,
+        "server_tokens_per_second": 50.0,
+        "client_tokens_per_second": 20.0,
+        "average_tokens_per_second": 35.0,
+        "throughput_average_sources": ["server", "client"],
         "source": "ollama_stream_client_timing",
+        "decoding_evidence": {
+            "protocol": "ollama_api",
+            "requested": {},
+            "submitted": {},
+            "unsupported": [],
+            "status": "submitted",
+            "provider_confirmed": None,
+        },
     }
     payload = json.loads(transport.requests[0].data.decode("utf-8"))
     assert payload["stream"] is True

@@ -62,6 +62,12 @@
             "object",
             "null"
           ]
+        },
+        "content_sha256": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       }
     },
@@ -72,7 +78,27 @@
       "type": "object"
     },
     "decoding": {
-      "type": "object"
+      "type": "object",
+      "properties": {
+        "temperature": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 2
+        },
+        "top_p": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "seed": {
+          "type": "integer"
+        },
+        "max_output_tokens": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "additionalProperties": false
     },
     "runs": {
       "type": "array",
@@ -163,20 +189,167 @@
             ],
             "minimum": 0
           },
-          "tokens_per_second": {
-            "type": [
-              "number",
-              "null"
-            ],
-            "minimum": 0
-          },
           "telemetry_source": {
             "type": [
               "string",
               "null"
             ],
             "minLength": 1
+          },
+          "server_tokens_per_second": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "description": "Native output-token count divided by server generation duration, excluding client request overhead."
+          },
+          "client_tokens_per_second": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "description": "Reported output-token count divided by client-observed request duration, including request and response processing overhead."
+          },
+          "average_tokens_per_second": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0,
+            "description": "Arithmetic mean of available server/client rates, or null when neither exists; not aggregate throughput."
+          },
+          "client_elapsed_ms": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "server_elapsed_ms": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "server_generation_ms": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "throughput_average_sources": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "server",
+                "client"
+              ]
+            },
+            "uniqueItems": true
+          },
+          "decoding_evidence": {
+            "type": "object",
+            "properties": {
+              "protocol": {
+                "type": "string"
+              },
+              "requested": {
+                "type": "object",
+                "properties": {
+                  "temperature": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 2
+                  },
+                  "top_p": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "seed": {
+                    "type": "integer"
+                  },
+                  "max_output_tokens": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                },
+                "additionalProperties": false
+              },
+              "submitted": {
+                "type": "object"
+              },
+              "unsupported": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "status": {
+                "enum": [
+                  "planned",
+                  "submitted",
+                  "unsupported",
+                  "unverified",
+                  "rejected"
+                ]
+              },
+              "provider_confirmed": {
+                "type": [
+                  "object",
+                  "null"
+                ]
+              }
+            }
+          },
+          "task_elapsed_ms": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "artifact": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "prompt",
+              "output",
+              "prompt_sha256",
+              "output_sha256"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "prompt": {
+                "type": "string"
+              },
+              "output": {
+                "type": "string"
+              },
+              "prompt_sha256": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "output_sha256": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              }
+            }
+          },
+          "evaluation": {
+            "type": "object"
           }
+        },
+        "not": {
+          "required": [
+            "tokens_per_second"
+          ]
         }
       }
     },
@@ -229,6 +402,33 @@
           "minimum": 1
         }
       }
+    },
+    "comparison_context": {
+      "type": "object",
+      "description": "Declared workload/model/runtime/execution identities; missing essential controls prevent ranking, not import.",
+      "properties": {
+        "workload": {
+          "type": "object"
+        },
+        "model": {
+          "type": "object"
+        },
+        "runtime": {
+          "type": "object"
+        },
+        "execution": {
+          "type": "object"
+        }
+      }
+    },
+    "metric_definitions": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object"
+      }
+    },
+    "dry_run": {
+      "type": "boolean"
     }
   },
   "additionalProperties": true

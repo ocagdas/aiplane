@@ -1,20 +1,25 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import re
 import time
+import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from .benchmark_evidence import benchmark_record_from_runs, load_suite, validate_suite
+from .benchmark_review import answer_artifact
 from .boundaries import CommandRunner, SubprocessCommandRunner
 from .persistence import atomic_write_text
 from .env import EnvironmentManager
 from .model_catalog import ModelCatalog, capability_profile
 from .models import Profile
 from .runtime_catalog import RuntimeCatalog
+from .decoding import DecodingRejected, UnsupportedDecoding
+from .telemetry import throughput_rates
 
 
 BUILTIN_SUITE = {
@@ -109,6 +114,16 @@ class BenchmarkRunner:
             runs=results,
             dry_run=dry_run,
         )
+        payload["comparison_context"] = {
+            "workload": {
+                "inputs": payload["suite"]["content_sha256"],
+                "rubric": None
+                if any(spec["evaluator"]["type"] == "command" for _, spec in tasks)
+                else payload["suite"]["content_sha256"],
+                "prompt": payload["suite"]["content_sha256"],
+                "harness": _harness_digest(),
+            }
+        }
         runtime_name = str(model.get("preferred_runtime") or model.get("provider") or "")
         try:
             payload["runtime_evidence"] = RuntimeCatalog(self.profile).evidence_bundle(runtime_name, model_name)
@@ -157,7 +172,9 @@ class BenchmarkRunner:
             backend = "dry_run"
         else:
             try:
-                result = self.catalog.complete(model_name, prompt, purpose="benchmark")
+                result = self.catalog.complete(
+                    model_name, prompt, timeout_seconds=timeout, purpose="benchmark", decoding=suite["decoding"]
+                )
                 text = result.text
                 backend = result.backend
                 telemetry = dict(result.telemetry)
@@ -165,6 +182,9 @@ class BenchmarkRunner:
                 text = ""
                 backend = str(model.get("provider", "unknown"))
                 error = str(exc)
+                if isinstance(exc, (UnsupportedDecoding, DecodingRejected)):
+                    telemetry["decoding_evidence"] = exc.evidence
+        model_failed = error is not None
         elapsed_ms = round((time.perf_counter() - started) * 1000, 2)
         output_length = len(text)
         lower = text.lower()
@@ -187,9 +207,15 @@ class BenchmarkRunner:
                 "expected_terms": expected_terms,
             }
         else:
-            evaluation = self._evaluate(task, prompt, text, evaluator, dry_run, environment_mode, timeout)
+            try:
+                evaluation = self._evaluate(task, prompt, text, evaluator, dry_run, environment_mode, timeout)
+            except Exception as exc:  # noqa: BLE001 - retain outputs and continue after grader failures.
+                error = f"grader failed: {exc}"
+                evaluation = {"type": "command", "passed": False, "score": 0, "error": error}
+            if evaluation.get("returncode") not in (None, 0):
+                error = f"grader exited with status {evaluation['returncode']}"
             task_passed = None if dry_run else bool(evaluation.get("passed"))
-            score = int(evaluation.get("score", 0)) if not dry_run else 0
+            score = float(evaluation.get("score", 0)) if not dry_run else 0
         quality_score = evaluation.get("quality_score")
         if quality_score is None and suite["kind"] in {"quality", "mixed"}:
             quality_score = score
@@ -205,15 +231,29 @@ class BenchmarkRunner:
             "score": score,
             "quality_score": quality_score,
             "performance_score": performance_score,
-            "elapsed_ms": telemetry.get("elapsed_ms") or elapsed_ms,
+            "elapsed_ms": telemetry.get("client_elapsed_ms"),
+            "client_elapsed_ms": telemetry.get("client_elapsed_ms"),
+            "server_elapsed_ms": telemetry.get("server_elapsed_ms"),
+            "server_generation_ms": telemetry.get("server_generation_ms"),
             "load_duration_ms": telemetry.get("load_duration_ms"),
             "ttft_ms": telemetry.get("ttft_ms"),
             "prompt_tokens": telemetry.get("prompt_tokens"),
             "prompt_tokens_per_second": telemetry.get("prompt_tokens_per_second"),
             "output_tokens": telemetry.get("output_tokens"),
-            "tokens_per_second": telemetry.get("tokens_per_second"),
+            **throughput_rates(telemetry.get("server_tokens_per_second"), telemetry.get("client_tokens_per_second")),
             "telemetry_source": telemetry.get("source"),
-            "seed": suite.get("decoding", {}).get("seed"),
+            "decoding_evidence": telemetry.get(
+                "decoding_evidence",
+                {
+                    "requested": suite["decoding"],
+                    "submitted": {},
+                    "unsupported": [],
+                    "status": "planned" if dry_run else "unverified",
+                    "provider_confirmed": None,
+                },
+            ),
+            "task_elapsed_ms": None if dry_run else elapsed_ms,
+            "artifact": answer_artifact(prompt, text) if not dry_run and not model_failed else None,
             "output_chars": output_length,
             "matched_terms": matched_terms,
             "expected_terms": expected_terms,
@@ -262,8 +302,28 @@ class BenchmarkRunner:
             }
         workdir = self.profile.workspace / ".aiplane" / "benchmarks" / "work"
         safe_task = "".join(ch if ch.isalnum() or ch in {"-", "_"} else "_" for ch in task) or "task"
-        prompt_file = workdir / f"{safe_task}-prompt.txt"
-        output_file = workdir / f"{safe_task}-output.txt"
+        if dry_run:
+            return self._grade_command(
+                command, workdir / safe_task, prompt, output, True, environment_mode, timeout_seconds
+            )
+        workdir.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix=f"{safe_task}-", dir=workdir) as temporary:
+            return self._grade_command(
+                command, Path(temporary), prompt, output, False, environment_mode, timeout_seconds
+            )
+
+    def _grade_command(
+        self,
+        command: list[object],
+        workdir: Path,
+        prompt: str,
+        output: str,
+        dry_run: bool,
+        environment_mode: str | None,
+        timeout_seconds: int,
+    ) -> dict[str, Any]:
+        prompt_file = workdir / "prompt.txt"
+        output_file = workdir / "output.txt"
         if not dry_run:
             workdir.mkdir(parents=True, exist_ok=True)
             atomic_write_text(prompt_file, prompt)
@@ -294,21 +354,33 @@ class BenchmarkRunner:
         stdout = completed.stdout.strip()
         parsed = _json_object(stdout)
         if parsed and "score" in parsed:
-            score = _clamp_score(parsed.get("score"))
+            raw_score = parsed["score"]
+            if isinstance(raw_score, bool) or not isinstance(raw_score, (int, float)) or not 0 <= raw_score <= 100:
+                raise ValueError("grader score must be finite numeric data between 0 and 100")
+            if "passed" in parsed and not isinstance(parsed["passed"], bool):
+                raise ValueError("grader passed must be true or false")
+            score = raw_score
             passed = bool(parsed.get("passed", score > 0)) and completed.returncode == 0
+        elif parsed and "passed" in parsed:
+            if not isinstance(parsed["passed"], bool):
+                raise ValueError("grader passed must be true or false")
+            passed = parsed["passed"] and completed.returncode == 0
+            score = 100 if passed else 0
         else:
             passed = completed.returncode == 0
             score = 100 if passed else 0
+        for field in ("quality_score", "performance_score"):
+            value = parsed.get(field) if parsed else None
+            if value is not None and (
+                isinstance(value, bool) or not isinstance(value, (int, float)) or not 0 <= value <= 100
+            ):
+                raise ValueError(f"grader {field} must be finite numeric data between 0 and 100")
         return {
             "type": "command",
             "passed": passed,
             "score": score,
-            "quality_score": _clamp_score(parsed.get("quality_score"))
-            if parsed and parsed.get("quality_score") is not None
-            else None,
-            "performance_score": _clamp_score(parsed.get("performance_score"))
-            if parsed and parsed.get("performance_score") is not None
-            else None,
+            "quality_score": parsed.get("quality_score") if parsed else None,
+            "performance_score": parsed.get("performance_score") if parsed else None,
             "command": plan.command,
             "cwd": str(plan.cwd),
             "returncode": completed.returncode,
@@ -319,7 +391,7 @@ class BenchmarkRunner:
     def _save(self, payload: dict[str, Any], model_name: str) -> Path:
         root = self.profile.workspace / ".aiplane" / "benchmarks"
         root.mkdir(parents=True, exist_ok=True)
-        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
         path = root / f"{timestamp}-{model_name}.json"
         atomic_write_text(path, json.dumps(payload, indent=2))
         self.catalog.rebuild_materialized()
@@ -428,8 +500,24 @@ def _json_object(text: str) -> dict[str, Any] | None:
     return payload if isinstance(payload, dict) else None
 
 
-def _clamp_score(value: object) -> int:
+def _harness_digest() -> str | None:
+    """Identify the installed measurement/grading implementation, including local edits."""
+    digest = hashlib.sha256()
+    modules = (
+        "benchmarks",
+        "benchmark_evidence",
+        "benchmark_identity",
+        "benchmark_review",
+        "backends",
+        "decoding",
+        "telemetry",
+        "model_catalog",
+        "model_execution",
+    )
     try:
-        return max(0, min(100, int(float(value))))
-    except (TypeError, ValueError):
-        return 0
+        for name in modules:
+            digest.update(name.encode())
+            digest.update(Path(__file__).with_name(f"{name}.py").read_bytes())
+    except OSError:
+        return None
+    return digest.hexdigest()

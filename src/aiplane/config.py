@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 import os
+import re
 import shutil
 import sys
 from typing import Any
@@ -610,16 +612,13 @@ def parse_yaml(text: str) -> dict[str, Any]:
     runnable immediately in a clean Python environment.
     """
     root: dict[str, Any] = {}
-    stack: list[tuple[int, dict[str, Any]]] = [(-1, root)]
-    lines = text.splitlines()
-    index = 0
-
-    while index < len(lines):
-        raw = lines[index]
-        line_number = index + 1
-        index += 1
+    stack: list[tuple[int, dict[str, Any], int | None]] = [(-1, root, 0)]
+    for line_number, raw in enumerate(text.splitlines(), 1):
         if not raw.strip() or raw.lstrip().startswith("#"):
             continue
+        if "\t" in raw[: len(raw) - len(raw.lstrip())]:
+            raise ValueError(f"unsupported YAML tab indentation at line {line_number}; use spaces")
+        raw = _strip_yaml_comment(raw)
         indent = len(raw) - len(raw.lstrip(" "))
         stripped = raw.strip()
         if stripped.startswith("---") or stripped.startswith("..."):
@@ -630,28 +629,37 @@ def parse_yaml(text: str) -> dict[str, Any]:
             raise ValueError(
                 f"unsupported YAML dash-list syntax at line {line_number}; use inline lists like [item1, item2]"
             )
-        if ":" not in stripped:
+        separator = re.search(r":(?=\s|$)", stripped)
+        if separator is None:
             raise ValueError(
                 f"unsupported YAML subset at line {line_number}: expected a mapping entry in the form key: value"
             )
 
-        key, value = stripped.split(":", 1)
-        key = key.strip()
-        value = value.strip()
+        key = stripped[: separator.start()].strip()
+        value = stripped[separator.end() :].strip()
+        if not key:
+            raise ValueError(f"empty YAML key at line {line_number}")
         if value.startswith(("|", ">")):
             raise ValueError(f"unsupported YAML block scalar at line {line_number}; use a quoted single-line scalar")
         if value.startswith(("&", "*", "!")):
             raise ValueError(
                 f"unsupported YAML anchor/alias/tag syntax at line {line_number}; use plain scalars and mappings"
             )
-        while stack and indent <= stack[-1][0]:
+        while len(stack) > 1 and indent <= stack[-1][0]:
             stack.pop()
         parent = stack[-1][1]
+        entry_indent = stack[-1][2]
+        if entry_indent is None:
+            stack[-1] = (stack[-1][0], parent, indent)
+        elif indent != entry_indent:
+            raise ValueError(f"inconsistent YAML indentation at line {line_number}")
+        if key in parent:
+            raise ValueError(f"duplicate YAML key {key!r} at line {line_number}")
 
         if value == "":
             child: dict[str, Any] = {}
             parent[key] = child
-            stack.append((indent, child))
+            stack.append((indent, child, None))
             continue
 
         if value == "[]":
@@ -662,6 +670,30 @@ def parse_yaml(text: str) -> dict[str, Any]:
             parent[key] = _parse_scalar(value)
 
     return root
+
+
+def _strip_yaml_comment(line: str) -> str:
+    quote: str | None = None
+    escaped = False
+    index = 0
+    while index < len(line):
+        character = line[index]
+        if quote:
+            if quote == "'" and line[index : index + 2] == "''":
+                index += 2
+                continue
+            if escaped:
+                escaped = False
+            elif quote == '"' and character == "\\":
+                escaped = True
+            elif character == quote:
+                quote = None
+        elif character == "#" and (index == 0 or line[index - 1].isspace()):
+            return line[:index].rstrip()
+        elif character in {"'", '"'} and (index == 0 or line[index - 1].isspace() or line[index - 1] in "[,:"):
+            quote = character
+        index += 1
+    return line
 
 
 def _parse_scalar(value: str) -> Any:
@@ -688,7 +720,13 @@ def _parse_scalar(value: str) -> Any:
     try:
         return int(value)
     except ValueError:
-        return value
+        pass
+    if re.fullmatch(r"[-+]?(?:\d+\.\d*|\.\d+|\d+)(?:[eE][-+]?\d+)?", value):
+        number = float(value)
+        if not math.isfinite(number):
+            raise ValueError("YAML numeric value must be finite")
+        return number
+    return value
 
 
 def _split_inline_list(value: str, line_number: int) -> list[str]:
@@ -773,6 +811,8 @@ def _format_scalar(value: Any) -> str:
     if isinstance(value, list):
         return "[" + ", ".join(_format_scalar(item) for item in value) + "]"
     if isinstance(value, (int, float)):
+        if isinstance(value, float) and not math.isfinite(value):
+            raise ValueError("YAML numeric value must be finite")
         return str(value)
     text = str(value)
     if (
@@ -786,4 +826,8 @@ def _format_scalar(value: Any) -> str:
         or text.startswith(("&", "*", "!", "[", "{", "- ", "'", '"'))
     ):
         return json.dumps(text, ensure_ascii=False)
-    return text
+    try:
+        parsed = _parse_scalar(text)
+    except ValueError:
+        return json.dumps(text, ensure_ascii=False)
+    return text if isinstance(parsed, str) else json.dumps(text, ensure_ascii=False)

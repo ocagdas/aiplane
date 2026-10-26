@@ -42,7 +42,7 @@ The temporary example has this layout:
 To test configuration **for the aiplane folder itself**, keep the demo settings under `/tmp` and select the checkout as the workspace:
 
 ```sh
-# Run from the aiplane repository root with Python 3.11+.
+# Run from the aiplane repository root with Python 3.13+.
 PYTHONPATH=src python -m aiplane \
   --profiles-dir /tmp/aiplane-ensemble-demo/profiles \
   --workspace "$PWD" \

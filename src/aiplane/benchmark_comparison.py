@@ -7,6 +7,8 @@ from typing import Any
 
 from .benchmark_evidence import validate_measurement_record
 from .models import Profile
+from .benchmark_identity import METRIC_DEFINITIONS, REQUIRED_CONTEXT, known
+from .decoding import decoding_request
 
 DIMENSIONS = {"runtime", "model", "machine", "quantization", "context"}
 
@@ -46,6 +48,7 @@ def compare_benchmarks(
     groups: dict[str, dict[str, Any]] = {}
     for row in rows:
         basis = _comparison_basis(row, by)
+        row["varying_identity"] = _varying_identity(row, by)
         key = hashlib.sha256(json.dumps(basis, sort_keys=True, separators=(",", ":")).encode()).hexdigest()[:12]
         group = groups.setdefault(
             key,
@@ -63,18 +66,26 @@ def compare_benchmarks(
     result_groups = []
     for group in groups.values():
         group["rows"].sort(key=lambda row: (str(row.get(by) or ""), row["created_at"], row["path"]))
+        identity_blockers = sorted({reason for row in group["rows"] for reason in row["identity_blockers"]})
         group["comparison_ready"] = (
-            group["comparable"] and group["calibrated"] and len({str(row.get(by)) for row in group["rows"]}) >= 2
+            not identity_blockers
+            and group["comparable"]
+            and group["calibrated"]
+            and len({json.dumps(row["varying_identity"], sort_keys=True) for row in group["rows"]}) >= 2
         )
         group["comparison_blockers"] = [
             blocker
             for blocker, applies in (
                 ("suite has no explicit comparability contract", not group["comparable"]),
                 ("records do not declare controlled calibration", not group["calibrated"]),
-                (f"fewer than two distinct {by} values", len({str(row.get(by)) for row in group["rows"]}) < 2),
+                (
+                    f"fewer than two distinct {by} values",
+                    len({json.dumps(row["varying_identity"], sort_keys=True) for row in group["rows"]}) < 2,
+                ),
             )
             if applies
         ]
+        group["comparison_blockers"].extend(identity_blockers)
         group["leaders"] = _leaders(group["rows"]) if group["comparison_ready"] else {}
         result_groups.append(group)
     result_groups.sort(key=lambda group: group["id"])
@@ -97,6 +108,7 @@ def compare_benchmarks(
             "Leaders require matching displayed basis, an explicit suite comparability contract, and controlled calibration metadata.",
             "Quality, throughput, latency, placement, and policy remain separate; no universal score is calculated.",
             "TTFT leaders use only samples carrying explicit native telemetry provenance.",
+            "Throughput average is a display mean of available server/client rates, not aggregate task throughput; source combinations are grouped separately.",
         ],
     }
 
@@ -140,7 +152,12 @@ def _row(path: Path, record: dict[str, Any]) -> dict[str, Any]:
             if isinstance(run.get("telemetry_source"), str) and run["telemetry_source"]
         }
     )
+    blockers = _identity_blockers(record)
     return {
+        "identity_blockers": blockers,
+        "runtime_identity": runtime,
+        "comparison_context": record.get("comparison_context", {}),
+        "metric_definitions": record.get("metric_definitions", {}),
         "path": str(path),
         "created_at": str(record.get("created_at") or ""),
         "model": str(record.get("model_name") or ""),
@@ -153,6 +170,7 @@ def _row(path: Path, record: dict[str, Any]) -> dict[str, Any]:
         "decoding": record.get("decoding", {}),
         "runtime_settings": settings,
         "summary": summary,
+        "executed_tasks": sorted({run["task"] for run in runs}),
         "telemetry": {
             "sources": telemetry_sources,
             "ttft_exact_samples": len(exact_ttft),
@@ -165,23 +183,111 @@ def _row(path: Path, record: dict[str, Any]) -> dict[str, Any]:
             "software": environment.get("software", {}),
         },
         "provenance": record.get("provenance", {}),
+        "throughput_average_sources": sorted({tuple(run["throughput_average_sources"]) for run in runs}),
     }
+
+
+def _identity_blockers(record: dict[str, Any]) -> list[str]:
+    blockers = []
+    context = record.get("comparison_context", {})
+    for section, fields in REQUIRED_CONTEXT.items():
+        part = context.get(section, {})
+        for field in fields:
+            if not isinstance(part, dict) or not known(part.get(field)):
+                blockers.append(f"unknown comparison_context.{section}.{field}")
+    for label, value in (
+        ("suite.content_sha256", record["suite"].get("content_sha256")),
+        ("runtime.version", record.get("runtime", {}).get("version")),
+        ("runtime.settings", record.get("runtime", {}).get("settings")),
+        ("runtime.settings.quantization", record.get("runtime", {}).get("settings", {}).get("quantization")),
+        ("runtime.settings.context_tokens", record.get("runtime", {}).get("settings", {}).get("context_tokens")),
+        ("environment.fingerprint", record.get("environment", {}).get("fingerprint")),
+        ("environment.hardware", record.get("environment", {}).get("hardware")),
+        ("environment.software", record.get("environment", {}).get("software")),
+    ):
+        if not known(value):
+            blockers.append(f"unknown {label}")
+    if record.get("dry_run"):
+        blockers.append("preview is not measured evidence")
+    for run in record["runs"]:
+        if run.get("error"):
+            blockers.append("run contains an execution error")
+        evidence = run.get("decoding_evidence", {})
+        protocol = evidence.get("protocol")
+        try:
+            expected, _ = decoding_request(str(protocol), record["decoding"])
+            submitted = (
+                protocol in {"ollama_api", "openai_compatible", "azure_openai", "anthropic_api"}
+                and evidence.get("status") == "submitted"
+                and evidence.get("requested") == record["decoding"]
+                and evidence.get("unsupported") == []
+                and evidence.get("submitted") == expected
+            )
+        except ValueError:
+            submitted = False
+        if not submitted:
+            blockers.append("requested decoding has no matching submission evidence")
+    metrics = record.get("metric_definitions", {})
+    for field in (
+        "quality_score",
+        "performance_score",
+        "elapsed_ms",
+        "ttft_ms",
+        "server_tokens_per_second",
+        "client_tokens_per_second",
+        "average_tokens_per_second",
+    ):
+        if any(run.get(field) is not None for run in record["runs"]) and (
+            not isinstance(metrics.get(field), dict)
+            or any(not known(metrics[field].get(key)) for key in METRIC_DEFINITIONS[field])
+        ):
+            blockers.append(f"unknown metric_definitions.{field}")
+    return sorted(set(blockers))
+
+
+def _varying_identity(row: dict[str, Any], dimension: str) -> Any:
+    if dimension == "runtime":
+        return {"runtime": row["runtime_identity"], "build": row["comparison_context"].get("runtime")}
+    if dimension == "model":
+        return {"model": row["provider_model"], "artifact": row["comparison_context"].get("model")}
+    if dimension == "machine":
+        return {"fingerprint": row["machine"], "hardware": row["environment"]["hardware"]}
+    return row[dimension]
 
 
 def _comparison_basis(row: dict[str, Any], dimension: str) -> dict[str, Any]:
-    dimensions = {
-        name: row.get(name) for name in ("runtime", "model", "machine", "quantization", "context") if name != dimension
-    }
+    # Remove only the declared variable; all other submitted controls remain visible.
+    context = dict(row["comparison_context"])
+    context.pop(dimension, None)
+    runtime = dict(row["runtime_identity"])
+    settings = dict(row["runtime_settings"])
+    if dimension == "quantization":
+        settings.pop("quantization", None)
+    if dimension == "context":
+        settings.pop("context_tokens", None)
+        settings.pop("context", None)
+    runtime["settings"] = settings
+    if dimension == "runtime":
+        runtime = {}
+    environment = dict(row["environment"])
+    if dimension == "machine":
+        environment.pop("fingerprint", None)
+        environment.pop("hardware", None)
+    calibration = dict(row["calibration"])
+    if dimension == "context":
+        calibration.pop("context_tokens", None)
     return {
-        "suite": {
-            "name": row["suite"].get("name"),
-            "version": row["suite"].get("version"),
-            "kind": row["suite"].get("kind"),
-            "comparability": row["suite"].get("comparability"),
-        },
-        "decoding": row.get("decoding", {}),
-        "calibration": row.get("calibration", {}),
-        "dimensions": dimensions,
+        "suite": row["suite"],
+        "executed_tasks": row["executed_tasks"],
+        "provider_model": None if dimension == "model" else row["provider_model"],
+        "decoding": row["decoding"],
+        "comparison_context": context,
+        "runtime": runtime,
+        "environment": environment,
+        "metric_definitions": row["metric_definitions"],
+        "throughput_average_sources": row["throughput_average_sources"],
+        "calibration": calibration,
+        "dimensions": {name: row.get(name) for name in DIMENSIONS if name != dimension},
     }
 
 
@@ -207,7 +313,9 @@ def _leaders(rows: list[dict[str, Any]]) -> dict[str, Any]:
     return {
         "quality_score": best("quality_score"),
         "performance_score": best("performance_score"),
-        "tokens_per_second": best("average_tokens_per_second"),
+        "server_tokens_per_second": best("average_server_tokens_per_second"),
+        "client_tokens_per_second": best("average_client_tokens_per_second"),
+        "average_tokens_per_second": best("average_tokens_per_second"),
         "elapsed_ms": best("average_elapsed_ms", lower=True),
         "ttft_ms": ttft,
     }

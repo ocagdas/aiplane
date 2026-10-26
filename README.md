@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/ocagdas/aiplane/actions/workflows/ci.yml/badge.svg)](https://github.com/ocagdas/aiplane/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/python-3.11%2B-3776AB.svg)](pyproject.toml)
+[![Python](https://img.shields.io/badge/python-3.13%2B-3776AB.svg)](pyproject.toml)
 
 **Know what fits. See what is missing. Generate the right config.**
 

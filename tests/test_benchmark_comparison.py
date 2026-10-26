@@ -1,6 +1,11 @@
 from __future__ import annotations
 
 import json
+import copy
+import pytest
+
+from aiplane.benchmark_identity import METRIC_DEFINITIONS
+from aiplane.decoding import decoding_request
 from pathlib import Path
 
 from aiplane.benchmark_comparison import compare_benchmarks
@@ -11,6 +16,7 @@ from tests.profile_fixtures import _isolated_profiles_dir, _isolated_test_profil
 def _record(runtime: str, *, quality: float, ttft: float, source: str | None) -> dict:
     run = {
         "task": "chat",
+        "decoding_evidence": decoding_request("ollama_api", {"temperature": 0, "seed": 7})[1],
         "repeat_index": 1,
         "passed": True,
         "score": quality,
@@ -20,7 +26,7 @@ def _record(runtime: str, *, quality: float, ttft: float, source: str | None) ->
         "ttft_ms": ttft if source else None,
         "prompt_tokens": 10,
         "output_tokens": 20,
-        "tokens_per_second": 40,
+        "server_tokens_per_second": 40,
         "telemetry_source": source,
     }
     return {
@@ -33,6 +39,7 @@ def _record(runtime: str, *, quality: float, ttft: float, source: str | None) ->
         "model": "provider-chat:1b",
         "suite": {
             "name": "chat-quality",
+            "content_sha256": "a" * 64,
             "version": "1.0",
             "kind": "mixed",
             "comparability": {
@@ -49,7 +56,7 @@ def _record(runtime: str, *, quality: float, ttft: float, source: str | None) ->
         "environment": {
             "fingerprint": "same-host",
             "hardware": {"name": "test-gpu"},
-            "software": {},
+            "software": {"os": "synthetic-os", "driver": "synthetic-driver"},
         },
         "decoding": {"temperature": 0, "seed": 7},
         "calibration": {
@@ -62,6 +69,18 @@ def _record(runtime: str, *, quality: float, ttft: float, source: str | None) ->
         },
         "runs": [run],
         "provenance": {"source": "test_lab"},
+        "metric_definitions": METRIC_DEFINITIONS,
+        "comparison_context": {
+            "workload": {
+                "inputs": "sha256:inputs",
+                "rubric": "sha256:rubric",
+                "prompt": "sha256:prompt",
+                "harness": "synthetic-1",
+            },
+            "model": {"artifact": "sha256:weights", "tokenizer": "sha256:tokenizer"},
+            "runtime": {"build": "synthetic-build"},
+            "execution": {"route": "direct-runtime", "cache": "disabled", "concurrency": 1, "tools": "none"},
+        },
     }
 
 
@@ -178,3 +197,126 @@ def test_benchmark_compare_cli_dispatches_filters(tmp_path: Path, monkeypatch) -
     assert payload["dimension"] == "runtime"
     assert payload["filters"]["models"] == ["fixture-chat-small"]
     assert payload["filters"]["runtimes"] == ["ollama"]
+
+
+def test_throughput_average_with_different_available_sources_is_not_ranked_together(tmp_path: Path) -> None:
+    with _isolated_test_profile(workspace=tmp_path) as profile:
+        root = profile.workspace / ".aiplane/benchmarks"
+        root.mkdir(parents=True, exist_ok=True)
+        server_only = _record("ollama", quality=70, ttft=20, source="native")
+        both = _record("vllm", quality=80, ttft=30, source="native")
+        both["runs"][0]["client_tokens_per_second"] = 20
+        for name, record in [("server", server_only), ("both", both)]:
+            (root / f"{name}.json").write_text(json.dumps(record))
+        result = compare_benchmarks(profile, by="runtime")
+        assert len(result["groups"]) == 2
+        assert all(not group["comparison_ready"] for group in result["groups"])
+
+
+def _compare_pair(tmp_path, first, second, *, by="runtime"):
+    with _isolated_test_profile(workspace=tmp_path) as profile:
+        root = tmp_path / ".aiplane/benchmarks"
+        root.mkdir(parents=True, exist_ok=True)
+        for name, record in [("first", first), ("second", second)]:
+            (root / f"{name}.json").write_text(json.dumps(record))
+        return compare_benchmarks(profile, by=by)
+
+
+@pytest.mark.parametrize(
+    "path,value",
+    [
+        (("suite", "content_sha256"), "different-input-or-rubric"),
+        (("comparison_context", "model", "artifact"), "different-weight-revision"),
+        (("comparison_context", "model", "tokenizer"), "different-tokenizer"),
+        (("comparison_context", "execution", "route"), "proxy"),
+        (("comparison_context", "execution", "cache"), "enabled"),
+        (("comparison_context", "execution", "concurrency"), 2),
+        (("comparison_context", "execution", "tools"), "toolset-v2"),
+        (("comparison_context", "workload", "harness"), "harness-v2"),
+        (("environment", "software", "driver"), "different-driver"),
+        (("environment", "hardware", "name"), "different-gpu"),
+        (("metric_definitions", "client_tokens_per_second"), {"unit": "tokens/s", "denominator": "decode-only"}),
+    ],
+)
+def test_non_varied_controls_split_groups(tmp_path, path, value):
+    first = _record("ollama", quality=70, ttft=20, source="native")
+    second = copy.deepcopy(_record("vllm", quality=80, ttft=10, source="native"))
+    node = second
+    for key in path[:-1]:
+        node = node[key]
+    node[path[-1]] = value
+    result = _compare_pair(tmp_path, first, second)
+    assert len(result["groups"]) == 2
+    assert all(not group["comparison_ready"] and group["leaders"] == {} for group in result["groups"])
+
+
+@pytest.mark.parametrize(
+    "change,blocker",
+    [
+        ("model", "unknown comparison_context.model.artifact"),
+        ("metrics", "unknown metric_definitions.elapsed_ms"),
+        ("submission", "requested decoding has no matching submission evidence"),
+        ("error", "run contains an execution error"),
+        ("preview", "preview is not measured evidence"),
+    ],
+)
+def test_unknown_or_invalid_evidence_is_visible_without_leaders(tmp_path, change, blocker):
+    first = _record("ollama", quality=70, ttft=20, source="native")
+    second = _record("vllm", quality=80, ttft=10, source="native")
+    for record in (first, second):
+        if change == "model":
+            record["comparison_context"]["model"]["artifact"] = None
+        elif change == "metrics":
+            record["metric_definitions"] = {}
+        elif change == "submission":
+            record["runs"][0]["decoding_evidence"]["submitted"] = {"options": {"temperature": 1}}
+        elif change == "error":
+            record["runs"][0]["error"] = "endpoint failed"
+        else:
+            record["dry_run"] = True
+    if change == "preview":
+        with _isolated_test_profile(workspace=tmp_path) as profile:
+            root = tmp_path / ".aiplane/benchmarks"
+            root.mkdir(parents=True)
+            for name, record in [("first", first), ("second", second)]:
+                (root / f"{name}.json").write_text(json.dumps(record))
+            assert compare_benchmarks(profile)["records_matched"] == 0
+            result = compare_benchmarks(profile, include_dry_run=True)
+    else:
+        result = _compare_pair(tmp_path, first, second)
+    assert result["records_matched"] == 2
+    group = result["groups"][0]
+    assert blocker in group["comparison_blockers"]
+    assert group["comparison_ready"] is False and group["leaders"] == {}
+
+
+def test_model_comparison_holds_runtime_build_and_settings_fixed(tmp_path):
+    first = _record("ollama", quality=70, ttft=20, source="native")
+    second = copy.deepcopy(first)
+    second["model_name"] = "other-alias"
+    second["model"] = "different-model"
+    second["comparison_context"]["model"] = {"artifact": "different-weights", "tokenizer": "different-tokenizer"}
+    assert _compare_pair(tmp_path, first, second, by="model")["groups"][0]["comparison_ready"]
+    second["runtime"]["version"] = "different-build"
+    result = _compare_pair(tmp_path, first, second, by="model")
+    assert len(result["groups"]) == 2
+    assert all(not group["comparison_ready"] for group in result["groups"])
+
+
+def test_same_alias_different_artifacts_are_distinct_models(tmp_path):
+    first = _record("ollama", quality=70, ttft=20, source="native")
+    second = copy.deepcopy(first)
+    second["comparison_context"]["model"]["artifact"] = "other-revision"
+    group = _compare_pair(tmp_path, first, second, by="model")["groups"][0]
+    assert group["comparison_ready"] is True
+    assert group["rows"][0]["varying_identity"] != group["rows"][1]["varying_identity"]
+
+
+def test_malformed_runtime_settings_become_warning_instead_of_crashing_comparison(tmp_path):
+    first = _record("ollama", quality=70, ttft=20, source="native")
+    second = _record("vllm", quality=80, ttft=10, source="native")
+    second["runtime"]["settings"] = ["invalid"]
+    result = _compare_pair(tmp_path, first, second)
+    assert result["records_matched"] == 1
+    assert len(result["warnings"]) == 1
+    assert "runtime settings" in result["warnings"][0]["reason"]

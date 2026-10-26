@@ -87,9 +87,9 @@ def test_suite_contract_is_versioned_and_command_evaluators_are_opt_in() -> None
 
 def test_suite_accepts_native_load_and_prompt_throughput_metrics() -> None:
     suite = validate_suite(
-        _suite(metrics=["load_duration_ms", "prompt_tokens_per_second", "tokens_per_second"]), source="test"
+        _suite(metrics=["load_duration_ms", "prompt_tokens_per_second", "server_tokens_per_second"]), source="test"
     )
-    assert suite["metrics"] == ["load_duration_ms", "prompt_tokens_per_second", "tokens_per_second"]
+    assert suite["metrics"] == ["load_duration_ms", "prompt_tokens_per_second", "server_tokens_per_second"]
 
 
 def test_runner_repeats_suite_and_records_uncertainty(tmp_path: Path) -> None:

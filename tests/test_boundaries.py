@@ -118,4 +118,6 @@ def test_managed_backends_preserve_exact_response_usage_without_inventing_timing
     assert anthropic.telemetry["ttft_ms"] is None
     assert azure.telemetry["prompt_tokens"] == 4
     assert azure.telemetry["output_tokens"] == 6
-    assert azure.telemetry["tokens_per_second"] is None
+    assert azure.telemetry["server_tokens_per_second"] is None
+    assert azure.telemetry["client_tokens_per_second"] is not None
+    assert azure.telemetry["average_tokens_per_second"] == azure.telemetry["client_tokens_per_second"]
